@@ -1,6 +1,6 @@
 """Crystal orientation estimates, competing models and measured ring moments in the report."""
 
-from .report_numbers import _number, _pm
+from src.gimap.shared.numbers import format_number
 
 
 def compact_crystal(phase):
@@ -15,7 +15,7 @@ def compact_crystal(phase):
     return {**phase, "rings": rings}
 
 
-def crystal_lines(phases: list[dict]) -> list[str]:
+def crystal_lines(phases: list[dict], word=str) -> list[str]:
     def axes_text(axes):
         if axes is None:
             return "unavailable"
@@ -29,52 +29,54 @@ def crystal_lines(phases: list[dict]) -> list[str]:
         if phase["ok"]:
             near_random = phase.get("near_random", [])
             if near_random:
-                lines.append(f"The two best profile models differ by ΔBIC = {_number(phase.get('delta_bic'))}.")
+                lines.append(f"The two best profile models differ by ΔBIC = {format_number(phase.get('delta_bic'))}.")
             else:
                 lines.append(f"Best model {axes_text(phase['axes'])}, runner-up {axes_text(phase['runner_up_axes'])}, "
-                             f"ΔBIC = {_number(phase.get('delta_bic'))}.")
+                             f"ΔBIC = {format_number(phase.get('delta_bic'))}.")
             if phase.get("runner_up_tied_axes"):
                 tied = ", ".join(axes_text(axes) for axes in phase["runner_up_tied_axes"])
                 lines.append(f"The model {tied} ties with the runner-up.")
             if phase["axes"]:
                 if "populations" in phase:
+                    columns = ("Planes parallel to substrate", "Mosaic FWHM (°)", "Fraction of phase")
+                    lines += ["", "| " + " | ".join(map(word, columns)) + " |", "|---|---:|---:|"]
                     for population in phase["populations"]:
                         plane = axes_text([population["axis"]])
-                        width = _pm(population["fwhm_deg"], population["fwhm_err_deg"], 2)
-                        fraction = _pm(population["fraction"], population["fraction_err"], 3)
-                        lines.append(f"Fitted {plane} planes parallel to the substrate, mosaic FWHM {width}°, "
-                                     f"fraction of this phase {fraction}.")
+                        width = format_number(population["fwhm_deg"], population["fwhm_err_deg"], compact=True)
+                        fraction = format_number(population["fraction"], population["fraction_err"], compact=True)
+                        lines.append(f"| {plane} | {width} | {fraction} |")
+                    lines.append("")
                 else:
                     # Archived reports used a common mosaic width for all populations.
-                    lines.append(f"Shared mosaic FWHM {_pm(phase['fwhm_deg'], phase['fwhm_err_deg'], 2)}°.")
+                    lines.append(f"Shared mosaic FWHM {format_number(phase['fwhm_deg'], phase['fwhm_err_deg'])}°.")
                     if len(phase["axes"]) == 2:
                         shares = phase["axis_fractions"]
                         errors = phase.get("axis_fractions_err", [None, None])
-                        ratios = [_pm(s, e, 3) for s, e in zip(shares, errors)]
+                        ratios = [format_number(s, e) for s, e in zip(shares, errors)]
                         lines.append(f"The fitted axes account for fractions {' and '.join(ratios)} "
                                      "of the oriented population.")
             if phase["axes"] or near_random:
                 for p in near_random:
                     lines.append(f"A near-random component is grouped with the isotropic fraction "
                                  f"({p['reason']}, ΔBIC for replacing it with isotropic material "
-                                 f"{_number(p['delta_bic_vs_isotropic_replacement'])}).")
+                                 f"{format_number(p['delta_bic_vs_isotropic_replacement'])}).")
                 category = "isotropic including near-random" if near_random else "isotropic fraction"
-                lines.append(f"Total oriented fraction {_pm(phase['oriented_fraction'], phase['oriented_fraction_err'], 3)}, "
-                             f"{category} {_pm(phase['fraction_iso'], phase['fraction_iso_err'], 3)}. "
+                lines.append(f"Total oriented fraction {format_number(phase['oriented_fraction'], phase['oriented_fraction_err'])}, "
+                             f"{category} {format_number(phase['fraction_iso'], phase['fraction_iso_err'])}. "
                              f"The fit uses {phase['family_weights']} reflection-family weights.")
-            lines += [f"Crystal f = {_number(phase.get('herman_crystal'))}, "
-                      f"joint χ²_red = {_number(phase.get('reduced_chi2'))}.", ""]
+            lines += [f"Crystal f = {format_number(phase.get('herman_crystal'))}, "
+                      f"joint χ²_red = {format_number(phase.get('reduced_chi2'))}.", ""]
             optics = phase.get("film_optics")
             if optics:
                 if optics.get("model") in ("refracted waves", "frame corrected with refracted waves"):
                     context = ("The frame was corrected for" if optics["model"].startswith("frame corrected")
                                else "The orientation model includes")
                     lines += [f"{context} refraction and attenuation of the incident and exit waves in the film "
-                              f"(δ = {_number(optics['delta'])}, β = {_number(optics['beta'])}, "
+                              f"(δ = {format_number(optics['delta'])}, β = {format_number(optics['beta'])}, "
                               f"{optics['depth_source']}).", ""]
                 elif optics["available"]:
                     lines += [f"The fit includes the film's exit transmission |T|² "
-                              f"(δ = {_number(optics['delta'])}, β = {_number(optics['beta'])}).", ""]
+                              f"(δ = {format_number(optics['delta'])}, β = {format_number(optics['beta'])}).", ""]
                 else:
                     lines += [f"Film optics unavailable. {optics.get('reason', '')}".rstrip(), ""]
             if phase.get("search_settings", {}).get("noncollinear_poles_available") is False:
@@ -82,14 +84,14 @@ def crystal_lines(phases: list[dict]) -> list[str]:
             elif len(phase["rings"]) == 1:
                 lines += ["Only one ring constrains this phase. Its polar angles provide the axis comparison.", ""]
             for ring in phase["rings"]:
-                line = (f"- q = {_number(ring['q'])} Å⁻¹, χ²_red = {_number(ring['reduced_chi2'])}, "
-                        f"measured ring f = {_number(ring['herman_measured'])}.")
+                line = (f"- q = {format_number(ring['q'])} Å⁻¹, χ²_red = {format_number(ring['reduced_chi2'])}, "
+                        f"measured ring f = {format_number(ring['herman_measured'], ring.get('herman_measured_err'))}.")
                 residual = ring.get("largest_residual")
                 if residual and ring["reduced_chi2"] is not None and ring["reduced_chi2"] > phase["max_reduced_chi2"]:
                     line += (f" Largest observed minus fitted difference {residual['observed_minus_fit_sigma']:+.1f}σ "
                              f"at χ = {residual['chi_deg']:.1f}°.")
                 lines.append(line)
         for item in phase.get("excluded_rings", []):
-            lines.append(f"- q = {_number(item['q'])} Å⁻¹ excluded. {item['reason']}")
+            lines.append(f"- q = {format_number(item['q'])} Å⁻¹ excluded. {item['reason']}")
         lines.append("")
     return lines

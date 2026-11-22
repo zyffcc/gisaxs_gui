@@ -35,6 +35,7 @@ from ..application import (
     ring_overlays,
     series_markdown,
 )
+from ..application.gisaxs_choice import population_values
 from ..application.run_record import run_record
 from ..application.report_language import CHINESE, ENGLISH, heading
 from .guided_words import words
@@ -209,9 +210,9 @@ def fit_png(report: dict, width: int = 1000) -> Optional[bytes]:
     axes.loglog(q[shown], intensity[shown], ".", color=FIT_COLOURS[0], markersize=2.5, label="data")
     fitted = shown & np.isfinite(model) & (model > 0)
     if fitted.any():
-        radii = sorted(float(c["R"]) for c in top.get("components") or () if c.get("R") is not None)
+        radii = population_values(top, "R")
         name = str(top.get("model") or "").replace("_", " ")
-        detail = f" R {' / '.join(f'{radius:.3g}' for radius in radii)} nm" if radii else ""  # every population
+        detail = f" R {radii} nm" if radii != "—" else ""
         chance = probability(top)
         by_bic = fit_names.weight_key(top) == "bic_weight"
         which = "best fit" if math.isnan(chance) or by_bic else "most probable fit"

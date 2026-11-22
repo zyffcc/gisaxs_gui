@@ -1,22 +1,24 @@
-"""Numerical precision and uncertainties in the automatic analysis report."""
+"""Formatting measurement records for human-readable reports."""
 
-def _number(value, digits: int = 4) -> str:
-    if value is None:
-        return "—"
-    if isinstance(value, float):
-        return f"{value:.{digits}g}"
-    return str(value)
+from math import isfinite
+
+from src.gimap.shared.numbers import format_number
 
 
-def _fixed(value, decimals: int) -> str:
-    """A number with a fixed number of decimals ("—" when there is none): one precision per table column."""
-    return "—" if value is None else f"{float(value):.{decimals}f}"
+def peak_value(peak, key, *, compact=False, value_only=False):
+    errors = {"q": "q_err", "d_A": "d_err_A", "fwhm": "fwhm_err"}
+    error = (peak.get("fit") or {}).get(errors[key])
+    return format_number(peak.get(key), error, compact=compact, value_only=value_only)
 
 
-def _pm(value, error, decimals: int) -> str:
-    """``value ± error`` with the column's decimals; an error smaller than they show keeps one significant digit."""
-    text = _fixed(value, decimals)
-    if value is None or not isinstance(error, (int, float)) or not error > 0:
-        return text
-    shown = f"{float(error):.{decimals}f}"
-    return f"{text} ± {shown if float(shown) > 0 else f'{float(error):.1g}'}"
+def peak_shift(first, last):
+    """Display the shift to the precision of the less precise q, in Å⁻¹ and percent of its initial q."""
+    errors = [(peak.get("fit") or {}).get("q_err") for peak in (first, last)]
+    precision = max(errors) if all(error is not None and isfinite(error) and error > 0 for error in errors) else None
+    delta = last["q"] - first["q"]
+    sign = "+" if delta >= 0 else "-"
+    absolute = format_number(abs(delta), precision, value_only=True, digits=2)
+    relative = abs(delta / first["q"])
+    percent = (format_number(100 * relative, 100 * precision / first["q"], value_only=True)
+               if precision is not None else f"{100 * relative:.1f}")
+    return sign + absolute, sign + percent + "%"

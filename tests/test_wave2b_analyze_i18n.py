@@ -314,9 +314,13 @@ def _english(node) -> bool:
 def _has_formatted_words(node) -> bool:
     if not isinstance(node, ast.JoinedStr):
         return False
-    # In both languages the water reference reads dΣ/dΩ = <value> cm⁻¹.
+    # Mathematical labels have the same symbols and units in both languages.
     parts = [part.value if isinstance(part, ast.Constant) else None for part in node.values]
-    return parts != ["dΣ/dΩ = ", None, " cm⁻¹"]
+    return parts not in (
+        ["dΣ/dΩ = ", None, " cm⁻¹"],
+        ["ψ ", None, "°"],
+        [None, " · q = ", None, "–", None, " Å⁻¹"],
+    )
 
 
 def test_no_text_on_screen_is_formatted_before_its_translation() -> None:

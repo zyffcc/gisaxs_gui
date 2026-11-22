@@ -17,6 +17,7 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
+from src.gimap.shared.numbers import format_number
 from src.gimap.shared.radial_peaks import orientation_half_width
 
 from ..domain import (
@@ -415,7 +416,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
             )
         cut = f" (the {search.max_peaks} most prominent of {search.candidates} candidates)" if search.truncated else ""
         summary = (
-            f"{len(search.peaks)} peak(s) on {curve}{cut}: " + ", ".join(f"{peak.q:.3g}" for peak in search.peaks[:6])
+            f"{len(search.peaks)} peak(s) on {curve}{cut}: " + ", ".join(format_number(p.q, p.q_err, value_only=True) for p in search.peaks[:6])
             if search.peaks else f"no peaks on {curve}"
         )
         return self._ok(payload, summary)
@@ -511,7 +512,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
             raise ToolInputError(f"Run find_peaks on '{curve}' first.")
         peak = self._nearest_peak(search, float(q_center))
         if peak is None:
-            listed = ", ".join(f"{item.q:.4g}" for item in search.peaks) or "none"
+            listed = ", ".join(format_number(p.q, p.q_err, value_only=True) for p in search.peaks) or "none"
             raise ToolInputError(f"No fitted peak near q = {q_center:g} Å⁻¹ on '{curve}' (peaks: {listed}).")
         size = scherrer_size(
             peak.q, peak.fwhm, peak.fwhm_err if math.isfinite(peak.fwhm_err) else None,
@@ -520,10 +521,12 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         )
         self.results.sizes.append(size)
         payload = clean(size.record())  # size_A and size_nm: every length names its unit
-        summary = (
-            f"q = {peak.q:.3g}: L {'≥ ' if size.lower_bound else ''}{size.size / 10.0:.3g} nm"
-            if size.size is not None else f"q = {peak.q:.3g}: {size.reason}"
-        )
+        centre = format_number(peak.q, peak.q_err, value_only=True)
+        if size.size is None:
+            summary = f"q = {centre}: {size.reason}"
+        else:
+            length = format_number(size.size / 10, None if size.size_err is None else size.size_err / 10)
+            summary = f"q = {centre}: L {'≥ ' if size.lower_bound else ''}{length} nm"
         return ToolOutcome(json.dumps(payload, ensure_ascii=False), summary, data=payload)
 
     def _tool_show_view(self, view=None, lower_plot=None) -> ToolOutcome:

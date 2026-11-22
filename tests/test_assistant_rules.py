@@ -272,10 +272,10 @@ def test_a_peak_at_the_end_of_the_data_builds_no_ring_size_or_series() -> None:
               "steps": [], "geometry": {"distance_mm": 811.8, "beam_center_px": [545.458310126973, 1826.94747674757],
                                         "wavelength_A": 0.6888, "incidence_deg": 0.075}}
     text = pipeline_markdown(report)
-    # One precision per column, each number rounded once from its full value (29.348: 29.3, not 29.35 → 29.4).
-    assert "| 0.8601 | 7.305 | 0.0300 | 25.0 | — | ≥ 29.3 |  |" in text
-    assert "| 1.9000 | 3.307 | 0.0240 | 18.0 | — | — | overlaps a neighbouring peak |" in text
-    assert f"| 2.5799 | 2.435 | 0.0517 | 7.0 | — | — | {AT_EDGE} |" in text and "at_edge" not in text
+    # Without a reported error, use three significant digits, rounded once from the stored value.
+    assert "| 0.86 | 7.31 | 0.03 | 25 | — | ≥ 29.3 |  |" in text
+    assert "| 1.9 | 3.31 | 0.024 | 18 | — | — | overlaps a neighbouring peak |" in text
+    assert f"| 2.58 | 2.44 | 0.0517 | 7.03 | — | — | {AT_EDGE} |" in text and "at_edge" not in text
     assert "beam centre (545.46, 1826.95) px" in text  # to 0.01 px, as the cuts and decisions give it
     assert [marker["reliable"] for marker in peak_markers(report)] == [True, True, False]
 
@@ -292,15 +292,15 @@ def test_a_ring_line_gives_f_its_uncertainty_and_the_same_coverage_reference() -
     full = {**ring, "q": 1.989, "coverage": 1.0, "herman_isotropic": 0.0, "herman_excess": 0.13921}
     text = pipeline_markdown({"ok": True, "procedure": "giwaxs", "peaks": [], "rings": [ring, full], "decisions": [],
                               "steps": [], "geometry": {"distance_mm": 811.8}})
-    assert "coverage 0.97: f = 0.139 ± 0.00270 (stat), f_iso = −0.00136 — oriented" in text
-    assert "coverage 1.00: f = 0.139 ± 0.00270 (stat), f_iso = 0.00" in text
+    assert "coverage 0.97: f = 0.1392 ± 0.0027 (stat), f_iso = −0.00136 — oriented" in text
+    assert "coverage 1.00: f = 0.1392 ± 0.0027 (stat), f_iso = 0.00" in text
     assert "f − f_iso =" not in text
-    # The note of a ring with a missing wedge: f_iso with those decimals and the Unicode minus (it read f = -0.00).
+    # The same-coverage reference has no uncertainty of its own.
     ring = _ring(lambda chi: np.ones_like(chi))
     cut = ring_orientation(Profile.of(ring.x, ring.y, ring.sigma, np.where(np.abs(ring.x) < 6.0, 0.0, 300.0)),
                            q_window=(1.6, 1.8), background=10.0)
     (note,) = [note for note in cut.notes if note.startswith("A random (isotropic) ring")]
-    value = signed(cut.herman_isotropic, herman_decimals(cut.herman_err))
+    value = f"{cut.herman_isotropic:.3g}".replace("-", "−")
     assert value.startswith("−0.0") and f"would give f = {value}: compare" in note and "-" not in value
 
 

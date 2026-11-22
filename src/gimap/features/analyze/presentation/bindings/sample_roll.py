@@ -3,6 +3,7 @@
 from PyQt5.QtCore import QSignalBlocker
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import applied_angle, format_number
 
 from ...application.incidence_record import frame_incidence_record, incidence_choice, nominal_incidence
 from ...application.sample_roll import MATERIALS, critical_angle_deg, measure_frame_angles
@@ -12,7 +13,7 @@ from .incidence_text import incidence_text
 def _estimate_text(estimate):
     if not estimate:
         return tr("Unavailable")
-    return f"{estimate['deg']:.2f} ± {estimate['error_deg']:.2f}°"
+    return format_number(estimate["deg"], estimate.get("error_deg")) + "°"
 
 
 def _measurement_text(measured, kind):
@@ -139,7 +140,7 @@ class SampleRollMixin:
             self.sample_roll_spin.setValue(value)
         with QSignalBlocker(self.incidence_lock_check):
             self.incidence_lock_check.setChecked(model.state.incidence_locked)
-        self.roll_step_button.setText(f"ψ {value:.4f}".rstrip("0").rstrip(".") + "°")
+        self.roll_step_button.setText(f"ψ {applied_angle(value, measured)}°")
         kind = analysis.kind if analysis else None
         self._show_yoneda_source(analysis)
         self.measure_roll_button.setText(tr("Cancel measurement" if self._roll_pending else "Measure from frame"))

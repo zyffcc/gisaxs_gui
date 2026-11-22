@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from src.gimap.shared.numbers import format_number
+
 from ..domain import (
     FAR_FOLDER,
     GIMAP_CALIBRATION,
@@ -441,7 +443,8 @@ class CalibrationToolsMixin:
             result = self.calibrator.calibrate(path, standard=standard, **options)
             self.results.calibrations.append(result)
             payload = {**result, "calibration_index": len(self.results.calibrations) - 1, "assessment": assessment(result)}
-            summary = f"{result.get('standard')}: {fitted_rings(result)}, {result.get('distance_mm', 0):.1f} mm"
+            distance = format_number(result.get("distance_mm"), (result.get("uncertainty") or {}).get("distance_mm"))
+            summary = f"{result.get('standard')}: {fitted_rings(result)}, {distance} mm"
             return self._ok(payload, summary)
         fits, failures = [], []
         for key in SUPPORTED_STANDARDS:

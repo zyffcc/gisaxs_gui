@@ -80,10 +80,7 @@ def posterior_by_path(solution) -> dict:
 
 def half_width(values) -> Optional[float]:
     """Half the width of a 68 % interval (``None`` when it has no ends)."""
-    low, high = values[2], values[3]
-    if low is None or high is None or not np.isfinite(low) or not np.isfinite(high):
-        return None
-    return 0.5 * (float(high) - float(low))
+    return fit_names.interval_half_width(values[2], values[3])
 
 
 def composition_of(solution) -> str:

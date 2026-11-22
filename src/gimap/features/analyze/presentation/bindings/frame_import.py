@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import QDialog, QShortcut
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.question_box import ACCEPT, ACTION, REJECT, ask_choice
+from src.gimap.shared.numbers import applied_angle
 from ...application.frame_import import ImportSource, other_detector, prepare_frame_import
 from ...application.ports import source_name
 from ..frame_import_dialog import FrameImportDialog
@@ -195,7 +196,8 @@ class FrameImportMixin:
         elif self.view_model.state.yoneda_critical_deg is not None:
             kept.append(f"{tr('Yoneda critical angle')}  {self.view_model.state.yoneda_critical_deg:g}°")
         if self.view_model.state.sample_roll_deg is not None:
-            kept.append(f"ψ {self.view_model.state.sample_roll_deg:g}°")
+            state = self.view_model.state
+            kept.append(f"ψ {applied_angle(state.sample_roll_deg, state.sample_roll_measurement)}°")
         phases = self.indexing.phases
         if phases:
             kept.append(trf("Phases shown: {names}", names=", ".join(p.name for p in phases if p.visible) or "—"))

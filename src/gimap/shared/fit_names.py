@@ -13,6 +13,8 @@ import math
 import re
 from typing import Iterable, Optional
 
+from .numbers import format_number
+
 NAMES = {
     "R": "R", "sigma_R": "σR/R", "h": "h", "sigma_h": "σh/h", "D": "D", "sigma_nn": "σnn/D", "sigma_D": "σD/D",
     "Int": "Scale", "amplitude": "Scale",
@@ -65,7 +67,7 @@ SPARSE_SAMPLING = "Fewer than 80 fitted points. Check whether the measured featu
 DENSE_SAMPLING = ("With more than 400 fitted points, sampling may fail and the fits may be compared by BIC. "
                   "Try rebinning to 150–250 log-spaced points.")
 BIC_WEIGHT = "BIC weight"
-MC_ERROR = "Mode log evidence {z} ± {error} (bootstrap Monte Carlo error)."
+MC_ERROR = "Mode log evidence {estimate} (bootstrap Monte Carlo error)."
 COMPOSITION_RANGE = "Composition probability {p} (68 % Monte Carlo range {low}–{high})."
 ESS_TEXT = "Effective sample size {ess}."
 TEMPERED = "Posterior quantiles use tempered importance weights."
@@ -81,18 +83,18 @@ def diagnostic_lines(diagnostics, ess=None):
     if d.get("posterior_kind") == "tempered":
         lines.append((TEMPERED, {}))
     if d.get("log_evidence_mc_error") is not None:
-        estimate = ("Network-proposal log evidence {z} ± {error} (bootstrap Monte Carlo error)."
+        template = ("Network-proposal log evidence {estimate} (bootstrap Monte Carlo error)."
                     if d.get("log_evidence_source") == "network" else MC_ERROR)
-        lines.append((estimate, {"z": f"{d['log_evidence']:.6g}", "error": f"{d['log_evidence_mc_error']:.2g}"}))
+        lines.append((template, {"estimate": format_number(d["log_evidence"], d["log_evidence_mc_error"])}))
     if d.get("composition_bic_weight") is not None:
         lines.append(("Composition BIC weight {weight}.", {"weight": f"{d['composition_bic_weight']:.4g}"}))
     if d.get("composition_modes", 1) > 1 and d.get("composition_log_evidence_mc_error") is not None:
-        lines.append(("Composition log evidence {z} ± {error} (bootstrap Monte Carlo error).",
-                      {"z": f"{d['composition_log_evidence']:.6g}", "error": f"{d['composition_log_evidence_mc_error']:.2g}"}))
+        lines.append(("Composition log evidence {estimate} (bootstrap Monte Carlo error).", {
+            "estimate": format_number(d["composition_log_evidence"], d["composition_log_evidence_mc_error"])}))
     if d.get("composition_probability_mc68") and d.get("composition_count") != 1:
         low, high = d["composition_probability_mc68"]
-        lines.append((COMPOSITION_RANGE, {"p": f"{d['composition_probability']:.4g}",
-                                          "low": f"{low:.4g}", "high": f"{high:.4g}"}))
+        probability, low, high = interval_values(d["composition_probability"], low, high)
+        lines.append((COMPOSITION_RANGE, {"p": probability, "low": low, "high": high}))
     count = d.get("point_count")
     if count is not None:
         lines.append((DENSITY_NOTICE, {"count": count}))
@@ -249,24 +251,23 @@ def clean_flags(flags: Iterable[str], amplitudes: dict) -> tuple:
     return tuple(kept) + tuple(f"absent:{slot}" for slot in sorted(gone))
 
 
-def interval_digits(best: float, low: float, high: float, significant: int = 3, most: int = 8) -> int:
-    """Decimals with which ``best [low, high]`` is printed: ``significant`` digits of the value, and more until the
-    three numbers differ where they differ (``6.00 [5.99, 6.01]``, not ``6 [5.99, 6.01]``)."""
-    scale = abs(best) if best else max(abs(low), abs(high), 1e-300)
-    decimals = max(0, significant - 1 - int(math.floor(math.log10(scale)))) if scale > 0 else significant
-    decimals = min(decimals, most)
-    while decimals < most:
-        texts = [f"{value:.{decimals}f}" for value in (low, best, high)]
-        if (low == best or texts[0] != texts[1]) and (high == best or texts[2] != texts[1]):
-            break
-        decimals += 1
-    return decimals
+def interval_half_width(low, high):
+    """The half-width used to display a reported interval and its estimate."""
+    if low is None or high is None or not (math.isfinite(low) and math.isfinite(high)):
+        return None
+    return (float(high) - float(low)) * 0.5
+
+
+def interval_values(best, low, high) -> tuple[str, str, str]:
+    """An estimate and both ends rounded to the precision of the interval's half-width."""
+    width = interval_half_width(low, high)
+    return tuple(format_number(value, width, value_only=True) for value in (best, low, high))
 
 
 def interval_text(best: float, low: float, high: float, unit: str = "") -> str:
-    """``6.00 [5.99, 6.01] nm``: a value with its interval, all three with the same decimals."""
-    decimals = interval_digits(float(best), float(low), float(high))
-    return (f"{best:.{decimals}f} [{low:.{decimals}f}, {high:.{decimals}f}]" + (f" {unit}" if unit else ""))
+    """A value followed by the reported interval and unit."""
+    best, low, high = interval_values(best, low, high)
+    return f"{best} [{low}, {high}]" + (f" {unit}" if unit else "")
 
 
 def at_edge(best: float, low: float, high: float, tolerance: float = 1e-6) -> bool:
@@ -322,6 +323,6 @@ def legend(populations: int = 1) -> str:
 
 __all__ = [
     "BELOW_WINDOW", "CHI2_DEFINITION", "EDGE", "MORE", "NAMES", "ONLY_ONE", "POINTS", "RELATIVE", "SENTENCES", "UNUSABLE",
-    "at_edge", "clean_flags", "display_name", "flag_names", "grouped", "interval_digits", "interval_text", "legend", "of_population",
+    "at_edge", "clean_flags", "display_name", "flag_names", "grouped", "interval_half_width", "interval_values", "interval_text", "legend", "of_population",
     "points_text", "sentence", "sentences", "sizes_text", "split_flags", "split_name", "unit_of",
 ]

@@ -68,7 +68,8 @@ continue. Report which file, standard and values gave the geometry. Only when no
 exists, report exactly what was searched and what is missing.
 4. Measured values come from tools: never estimate, extrapolate or invent one; quote them as the \
 tools give them, with units. Values you derive from them (ratios, d spacings, lattice constants) \
-are welcome when you show the tool values they come from.
+are welcome when you show the tool values they come from. In findings, round each statistical error to two \
+significant digits and its value to the same decimal place. Repeat applied angles at the precision of their measurement.
 5. Step by step: find_peaks on 'radial'; compare_sectors for orientation; ring_orientation for \
 the requested ring (or the most intense well-separated ring); crystallite_size for sharp, \
 well-fitted peaks. Change settings when a result shows the need, e.g. background_window for a \

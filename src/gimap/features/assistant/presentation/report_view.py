@@ -7,11 +7,11 @@ model wrote, so every number in them is the one the tools computed.
 from __future__ import annotations
 
 import html
-import math
 from pathlib import Path
 from typing import Optional
 
 from src.gimap.app.presentation.i18n import translate
+from src.gimap.shared.numbers import format_number
 from src.gimap.shared.orientation_notes import coverage_warning, measured_f_text, orientation_notes
 
 from ..application.calibration_report import calibration_rms
@@ -66,21 +66,7 @@ def _e(text) -> str:
 
 
 def _n(value, digits: int = 4) -> str:
-    if value is None:
-        return "–"
-    try:
-        value = float(value)
-    except (TypeError, ValueError):
-        return _e(value)
-    if not math.isfinite(value):
-        return "–"
-    return f"{value:.{digits}g}"
-
-
-def _pm(value, error, digits: int = 4) -> str:
-    if error is None or (isinstance(error, float) and not math.isfinite(error)):
-        return _n(value, digits)
-    return f"{_n(value, digits)} ± {_n(error, 2)}"
+    return format_number(value, digits=digits)
 
 
 def _table(headers, rows) -> str:
@@ -98,7 +84,7 @@ def _peak_tables(results) -> str:
             continue
         rows = [
             [
-                str(index + 1), _pm(peak.q, peak.q_err), _pm(peak.d, peak.d_err), _pm(peak.fwhm, peak.fwhm_err),
+                str(index + 1), format_number(peak.q, peak.q_err), format_number(peak.d, peak.d_err), format_number(peak.fwhm, peak.fwhm_err),
                 _n(peak.height), _n(peak.area), _n(peak.snr, 3), _e(", ".join(peak.flags)),
             ]
             for index, peak in enumerate(search.peaks)
@@ -119,8 +105,8 @@ def _sector_table(results) -> str:
         return ""
     rows = [
         [
-            _n(row.q), _pm(row.in_plane, row.in_plane_err, 3), _pm(row.out_of_plane, row.out_of_plane_err, 3),
-            _pm(row.ratio, row.ratio_err, 3), _e(row.preference), _e(row.note),
+            _n(row.q), format_number(row.in_plane, row.in_plane_err), format_number(row.out_of_plane, row.out_of_plane_err),
+            format_number(row.ratio, row.ratio_err), _e(row.preference), _e(row.note),
         ]
         for row in results.sector_rows
     ]
@@ -187,7 +173,7 @@ def _size_table(results) -> str:
         if size.size is None:
             rows.append([_n(size.q), _n(size.fwhm), "–", _e(size.reason)])
             continue
-        value = _pm(size.size / 10.0, None if size.size_err is None else size.size_err / 10.0, 3)
+        value = format_number(size.size / 10.0, None if size.size_err is None else size.size_err / 10.0)
         rows.append([_n(size.q), _n(size.fwhm), ("≥ " if size.lower_bound else "") + value, _e(" ".join(size.notes[1:]))])
     return "<h4>Crystallite size (Scherrer, K = 0.9)</h4>" + _table(["q (Å⁻¹)", "FWHM (Å⁻¹)", "L (nm)", "note"], rows)
 
@@ -213,7 +199,7 @@ def _geometry_section(results, language) -> str:
             [
                 str(index), _e(item.get("standard", "")), _e(Path(str(item.get("source_image", ""))).name),
                 str(item.get("matched_rings", "–")), _e(calibration_rms(item, label)) or "–", _e(item.get("confidence", "")),
-                _n(item.get("distance_mm")),
+                format_number(item.get("distance_mm"), (item.get("uncertainty") or {}).get("distance_mm")),
             ]
             for index, item in enumerate(results.calibrations)
         ]

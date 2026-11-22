@@ -28,6 +28,10 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.components import AdvancedSection
 from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, tr, trf
 
+from src.gimap.shared.numbers import applied_angle, format_number
+
+from ..application.calibration_report import geometry_estimates
+from ..application.report_numbers import peak_value
 from ..application import found_by_search, reliable_row, ring_overlays, series_changes
 from ..application.giwaxs_summary import result_lines
 from .guided_details import PeakDetails, SolutionDetails, method_text
@@ -420,8 +424,8 @@ class GuidedResultsPanel(QWidget):
             found += 1
         for peak in report.get("peaks") or ():
             if peak.get("caveat"):
-                self.layout_.addWidget(badge(trf("q = {q} Å⁻¹: {caveat}", q=f"{peak['q']:.4g}", caveat=tr(peak["caveat"])),
-                                             WARN, self))
+                text = trf("q = {q} Å⁻¹: {caveat}", q=peak_value(peak, "q", value_only=True), caveat=tr(peak["caveat"]))
+                self.layout_.addWidget(badge(text, WARN, self))
                 found += 1
         for text, detail in coverage_notes(report.get("rings") or ()):
             note = badge(text, NOTE, self)
@@ -455,14 +459,13 @@ class GuidedResultsPanel(QWidget):
             assessment = str(quality.get("assessment") or "")
             color = GOOD if assessment.startswith(("good", "a saved")) or not assessment else NOTE if assessment.startswith("usable") else WARN
             self.layout_.addWidget(badge(words(assessment) or tr("Instrument profile of this detector"), color, self))
-            # To 0.01 px, as the report and the cuts give it (the record keeps the coordinates applied).
-            centre = ["—" if value is None else f"{float(value):.2f}" for value in (geometry.get("beam_center_px") or [None, None])]
+            distance, centre = geometry_estimates(geometry, report.get("calibration"))
             form = QFormLayout()
             for name, value in (
                 ("From", source_text(geometry.get("source"))),
-                ("Distance", f"{float(geometry.get('distance_mm')):.6g} mm"),  # the record keeps every digit
+                ("Distance", f"{distance} mm"),
                 ("Beam centre", f"({centre[0]}, {centre[1]}) px"),
-                ("Wavelength", f"{float(geometry.get('wavelength_A') or 0):.6g} Å"),
+                ("Wavelength", f"{format_number(geometry.get('wavelength_A'))} Å"),
             ):
                 form.addRow(tr(name), label(str(value), self))
             self._incidence_label = label(self._incidence_text(report), self)
@@ -497,9 +500,10 @@ class GuidedResultsPanel(QWidget):
         shown, ran = status.get("path"), report.get("frame")
         if shown and (not ran or Path(str(shown)).resolve() == Path(str(ran)).resolve()):
             now = (status.get("geometry") or {}).get("incidence_deg")
+        recorded = applied_angle(used, report.get("incidence_measurement"))
         if now is None or abs(float(now) - used) < 1e-9:
-            return f"{used:.6g}°"
-        return trf("{now}° (the run used {used}°)", now=f"{float(now):.6g}", used=f"{used:.6g}")
+            return f"{recorded}°"
+        return trf("{now}° (the run used {used}°)", now=applied_angle(now, status.get("incidence_measurement")), used=recorded)
 
     def refresh_incidence(self) -> None:
         """Analyze shows its frame again (αi may have changed): the geometry block says the αi in use."""
@@ -524,8 +528,9 @@ class GuidedResultsPanel(QWidget):
         self.layout_.addWidget(compare, 0, Qt.AlignLeft)
         if self.start_report is None or not self.start_report.get("ok"):
             return
-        changes = sorted(series_changes(self.start_report, report), key=lambda item: item["change"] == "present at both")
-        rows = [[f"{item['q']:.4g}", tr(item["start"]), tr(item["end"]), change_text(item["change"])]
+        changes = series_changes(self.start_report, report, display=True)
+        changes.sort(key=lambda item: item["change"] == "present at both")
+        rows = [[item["q_text"], tr(item["start"]), tr(item["end"]), change_text(item["change"])]
                 for item in changes]
         series_table = table(SERIES_HEADERS, rows, self, "guidedSeriesTable", numbers=(0,), single=False)
         series_table.setMinimumHeight(min(300, 60 + 30 * len(rows)))

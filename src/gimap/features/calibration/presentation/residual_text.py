@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import format_number
 
 POINTS = "ring points"
 RADII = "ring radii"
@@ -20,9 +21,9 @@ TITLES = {POINTS: "Ring-point RMS:", RADII: "Ring-radius RMS:"}
 """The title of the RMS row: which residual the value is."""
 
 
-def rms_text(candidate, digits: int = 3) -> str:
+def rms_text(candidate) -> str:
     value, _kind = shown_rms(candidate)
-    return f"{value:.{digits}f} px"
+    return f"{format_number(value)} px"
 
 
 def rms_title(candidate) -> str:
@@ -35,10 +36,10 @@ def rms_tip(candidate) -> str:
         tip = tr("RMS distance of the fitted ring points from the rings of this geometry.")
         initial = getattr(candidate, "initial_point_rms_px", None)
         if initial is not None:
-            tip += "\n" + trf("Before refinement, the RMS on these points was {rms} px.", rms=f"{initial:.3f}")
+            tip += "\n" + trf("Before refinement, the RMS on these points was {rms} px.", rms=format_number(initial))
             flat = candidate.untilted_point_rms_px
             if flat is not None:
-                tip += "\n" + trf("Fitting the same points with zero tilt gives {rms} px.", rms=f"{flat:.3f}")
+                tip += "\n" + trf("Fitting the same points with zero tilt gives {rms} px.", rms=format_number(flat))
         return tip
     return tr("RMS difference between observed and predicted ring radii at the automatic ring-matching step "
               "(azimuthal average).")

@@ -16,6 +16,7 @@ from typing import Optional
 
 import numpy as np
 
+from src.gimap.shared.fit_names import interval_values
 from src.gimap.shared.version import SOFTWARE
 
 from ..domain import mcmc
@@ -159,9 +160,11 @@ def report_blocks(result: CheckResult, checked: Checked) -> list:
         parts.append(("p", BIC_REFERENCE))
     if result.stopped:
         parts.append(("p", "Stopped before the requested number of steps."))
-    parts.append(("table", ["Parameter", "MCMC median", "MCMC 68 %", "τ (steps)", "split R̂"],
-                  [[r["name"], f"{r['median']:.6g}", f"{r['low68']:.6g} – {r['high68']:.6g}", f"{r['tau']:.1f}",
-                    f"{r['rhat']:.3f}"] for r in rows(result, checked.reference)]))
+    table = []
+    for row in rows(result, checked.reference):
+        median, low, high = interval_values(row["median"], row["low68"], row["high68"])
+        table.append([row["name"], median, f"{low} – {high}", f"{row['tau']:.1f}", f"{row['rhat']:.3f}"])
+    parts.append(("table", ["Parameter", "MCMC median", "MCMC 68 %", "τ (steps)", "split R̂"], table))
     return parts
 
 

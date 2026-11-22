@@ -785,6 +785,7 @@ def test_the_public_agbh_calibration_reads_the_same_in_calibration_analyze_and_x
     from src.gimap.features.analyze.bootstrap import create_analyze_view_model
     from src.gimap.features.analyze.presentation.page import AnalyzePage
     from src.gimap.features.calibration.presentation.dialog import GeometryCalibrationDialog
+    from src.gimap.shared.numbers import format_number
 
     monkeypatch.setattr(QMessageBox, "question", lambda *_args, **_kwargs: QMessageBox.Yes)
     monkeypatch.setattr(QMessageBox, "warning", lambda *_args, **_kwargs: pytest.fail("no warning expected"))
@@ -827,10 +828,10 @@ def test_the_public_agbh_calibration_reads_the_same_in_calibration_analyze_and_x
         _settle(app, 0.1)
         shown = (xrr.center_x_spin.text(), xrr.center_y_spin.text())
         assert shown == (f"{saved[0]:.2f}", f"{saved[1]:.2f}")
-        # Compare each display to the full-precision centre. Rounding a three-decimal
-        # label a second time can give a different hundredth than the XRR field.
+        # Each display starts from the full-precision centre. Calibration also uses its fitted error.
         assert (calibration.result_center_x.text(), calibration.result_center_y.text()) == (
-            f"{saved[0]:.3f} px", f"{saved[1]:.3f} px"
+            format_number(saved[0], fitted.center_x_sigma_px, value_only=True, digits=7) + " px",
+            format_number(saved[1], fitted.center_y_sigma_px, value_only=True, digits=7) + " px",
         )
         assert xrr.center_x_spin.toolTip() == calibration.manual_x.toolTip() == PIXEL_NOTE
         geometry = xrr._geometry()

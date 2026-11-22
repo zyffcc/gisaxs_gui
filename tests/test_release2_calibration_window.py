@@ -36,6 +36,7 @@ from src.gimap.integrations.state import (
     InMemoryUserPreferencesRepository,
 )
 from src.gimap.shared.geometry import transmission_map
+from src.gimap.shared.numbers import format_number
 
 ROOT = Path(__file__).resolve().parents[1]
 AGBH = ROOT / "tests/data/external/saxs_agbh_pyfai/Pilatus1M.edf"
@@ -176,18 +177,21 @@ def test_every_number_of_the_window_is_the_centre_of_the_saved_profile(window, y
     assert saved == pytest.approx((179.78, 264.03), abs=0.05)
     assert profile.geometry.distance_m == pytest.approx(fitted[2] * 1e-3)
 
-    assert dialog.result_center_x.text() == f"{saved[0]:.3f} px"
-    assert dialog.result_center_y.text() == f"{saved[1]:.3f} px"
-    assert dialog.result_distance.text() == f"{fitted[2]:.3f} mm"
+    x = format_number(saved[0], candidate.center_x_sigma_px, value_only=True, digits=7)
+    y = format_number(saved[1], candidate.center_y_sigma_px, value_only=True, digits=7)
+    distance = format_number(fitted[2], candidate.distance_sigma_mm, value_only=True, digits=6)
+    assert dialog.result_center_x.text() == f"{x} px"
+    assert dialog.result_center_y.text() == f"{y} px"
+    assert dialog.result_distance.text() == f"{distance} mm"
     assert (dialog.manual_x.value(), dialog.manual_y.value()) == pytest.approx(saved, abs=5e-4)
     assert dialog.manual_distance.value() == pytest.approx(fitted[2], abs=5e-4)
-    assert dialog.candidate_table.item(0, 2).text() == f"{saved[0]:.1f}, {saved[1]:.1f}"
+    assert dialog.candidate_table.item(0, 2).text() == f"{x}, {y}"
     for row, other in enumerate(dialog.result.candidates):
         assert _numbers(dialog.candidate_table.item(row, 2).text()) == pytest.approx(
             (other.center_x_px + 0.5, other.center_y_px + 0.5), abs=0.05
         )
     (toast,) = visible_toasts(dialog.right)
-    assert f"centre ({saved[0]:.2f}, {saved[1]:.2f}) px, distance {fitted[2]:.2f} mm." in toast.text()
+    assert f"centre ({x}, {y}) px, distance {distance} mm." in toast.text()
 
     # The settings other tools read keep the calibration's own numbers, as before.
     settings = window.context.settings
@@ -255,15 +259,14 @@ def test_analyze_shows_the_numbers_of_the_window_for_the_applied_profile(window,
         geometry = analysis.geometry
         assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == saved
         assert geometry.distance_m == profile.geometry.distance_m
-        # The same numbers on both screens. Analyze's beam-centre button shows four decimals (its centre step
-        # goes down to 0.0001 px); the window's table rounds the same numbers to one decimal.
+        # Analyze's button follows its 0.0001 px editor step. Calibration reports the fitted precision.
         button = page.center_button.text()
         assert button == f"Beam {saved[0]:.4f}, {saved[1]:.4f} px · profile"
-        shown = _numbers(button.removeprefix("Beam ").removesuffix(" · profile"))
-        assert dialog.candidate_table.item(0, 2).text() == f"{shown[0]:.1f}, {shown[1]:.1f}"
-        assert (dialog.result_center_x.text(), dialog.result_center_y.text()) == (
-            f"{geometry.beam_center_x_px:.3f} px", f"{geometry.beam_center_y_px:.3f} px"
-        )
+        best = dialog.result.selected_candidate
+        x = format_number(saved[0], best.center_x_sigma_px, value_only=True, digits=7)
+        y = format_number(saved[1], best.center_y_sigma_px, value_only=True, digits=7)
+        assert dialog.candidate_table.item(0, 2).text() == f"{x}, {y}"
+        assert (dialog.result_center_x.text(), dialog.result_center_y.text()) == (f"{x} px", f"{y} px")
     finally:
         page.dispose()
         page.close()
@@ -294,7 +297,7 @@ def test_a_centre_typed_in_the_window_lands_on_that_pixel_in_analyze(window, yes
         assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == (column + 0.5, row + 0.5)
         assert geometry.distance_m == pytest.approx(before[2] * 1e-3, abs=1e-6)  # the distance was not typed
         (toast,) = visible_toasts(dialog.right)
-        assert "centre (200.50, 300.50) px" in toast.text()
+        assert "centre (200.5, 300.5) px" in toast.text()
         # Inside, the fit's own pixels: the index of that pixel.
         committed = dialog.result.selected_candidate
         assert (committed.center_x_px, committed.center_y_px) == (float(column), float(row))
@@ -343,7 +346,7 @@ def test_a_typed_centre_is_saved_and_exported_as_the_same_point(window, yes, tmp
         geometry = _apply(dialog).geometry
         assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == pytest.approx(typed, abs=1e-9)
         (toast,) = visible_toasts(dialog.right)
-        assert "centre (411.24, 512.86) px" in toast.text()
+        assert "centre (411.237, 512.864) px" in toast.text()
 
         # The exported file holds the same point in its own convention (half a pixel lower), and says so.
         dialog.export_result()

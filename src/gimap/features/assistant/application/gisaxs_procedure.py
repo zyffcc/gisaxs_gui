@@ -29,6 +29,8 @@ from .gisaxs_choice import (
     bounds_text,
     chance,
     chosen,
+    component_estimate,
+    component_number,
     interface_caveat,
     interval,
     poor_fit,
@@ -117,7 +119,7 @@ def _interval_text(solution: dict) -> str:
         for key in INTERVAL_KEYS:
             found = interval(solution, key, number) if component.get(key) is not None else None
             if found is not None:
-                best = float(component[key])  # an interval always holds its refined value (rounding apart)
+                best = component_estimate(solution, key, number)  # an interval always holds its refined value (rounding apart)
                 parts.append(f"{fit_names.display_name(f'{key}_{number + 1}', many)} "
                              + fit_names.interval_text(best, min(found[0], best), max(found[1], best), "nm"))
     return ", ".join(parts)
@@ -174,7 +176,8 @@ class GisaxsProcedureMixin:
         if not getattr(self, "_transmission_frame", None):
             choose_frame_angles(self)
         status = results.status or {}
-        self._decide(**refraction_decision(status.get("geometry"), "gisaxs", given=self._incidence is not None))
+        self._decide(**refraction_decision(status.get("geometry"), "gisaxs", given=self._incidence is not None,
+                                          incidence_measurement=status.get("incidence_measurement")))
         self._decide(**uncertainty_decision(status.get("error_model"), "gisaxs", corrections=status.get("corrections")))
         flat = flat_field_decision(status)
         if flat is not None:
@@ -275,7 +278,7 @@ class GisaxsProcedureMixin:
         distance = _distance(best)
         if distance is not None and distance >= UNCORRELATED_D_NM:
             self._decide(
-                "fit caveat", f"D = {distance:.3g} nm: this solution has no interparticle correlation in the q range",
+                "fit caveat", f"D = {component_number(best, 'D', 0)} nm: this solution has no interparticle correlation in the q range",
                 "a structure factor that is flat here; D itself is not determined by the curve",
             )
         others = rivals(solutions)

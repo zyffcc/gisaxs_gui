@@ -207,7 +207,8 @@ def test_run_time_texts_are_in_the_interface_language_and_follow_a_switch(chines
     chinese.apply_language("zh")
     try:
         chinese.apply_to(dialog, "zh")
-        result = SimpleNamespace(succeeded=True, value=dict(candidates=[_candidate()], output_dir=str(tmp_path),
+        candidate = dict(_candidate(), posterior={"R_1": (4.2157, 4.2, 4.1653, 4.2617, 4.12, 4.3, 0.045)})
+        result = SimpleNamespace(succeeded=True, value=dict(candidates=[candidate], output_dir=str(tmp_path),
                                                             records=[dict(status="complete")],
                                                             summary=dict(runtime_seconds=1.5)))
         dialog._completed(result)
@@ -215,6 +216,7 @@ def test_run_time_texts_are_in_the_interface_language_and_follow_a_switch(chines
         assert dialog.table.item(0, 0).text() == "当前 / +" and dialog.table.item(0, 5).text() == "网络 + 后验"
         assert dialog.table.item(0, 5).toolTip() == "阶段：posterior\nfew effective samples"
         assert dialog.parameters.toPlainText().startswith("长度：nm。")
+        assert "最小二乘值 [报告的 68 % 区间]：R 4.216 [4.165, 4.262] nm。" in dialog.parameters.toPlainText()
         chinese.apply_language("en")  # the window follows a switch while open
         assert dialog.status.text() == "Finished in 1.50 s · 0 failed files · 1 candidates saved."
         assert dialog.table.item(0, 5).text() == "Network + posterior" and dialog.table.currentRow() == 0
@@ -222,6 +224,7 @@ def test_run_time_texts_are_in_the_interface_language_and_follow_a_switch(chines
         assert dialog.table.horizontalHeaderItem(0).text() == "Curve / side"
         assert dialog.table.horizontalHeaderItem(3).toolTip().startswith("Natural-log RMSE")
         assert dialog.parameters.toPlainText().startswith("Lengths: nm.")
+        assert "Least-squares value [reported 68 % interval] — R 4.216 [4.165, 4.262] nm." in dialog.parameters.toPlainText()
     finally:
         chinese.apply_language("en")
         _close(dialog)

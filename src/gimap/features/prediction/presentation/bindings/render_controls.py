@@ -20,6 +20,7 @@ from PyQt5.QtWidgets import (
 
 
 from src.gimap.app.presentation.i18n import trf
+from src.gimap.shared.numbers import format_number
 
 
 class RenderControlsMixin:
@@ -94,7 +95,7 @@ class RenderControlsMixin:
                 ax.text(
                     bar.get_x() + bar.get_width() / 2.0,
                     bar.get_height(),
-                    f"{float(value):.5g}",
+                    format_number(value),
                     ha="center",
                     va="bottom",
                     fontsize=9,

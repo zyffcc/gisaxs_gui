@@ -3,6 +3,7 @@
 A new feature adds its table here, not in ``zh.py`` (which is near the size limit of a runtime module)."""
 
 from .zh_absolute_scale import ABSOLUTE_SCALE_ZH
+from .zh_analyze_numbers import ANALYZE_NUMBERS_ZH
 from .zh_app_session import APP_SESSION_ZH
 from .zh_assistant_service import ASSISTANT_SERVICE_ZH
 from .zh_calibration_residuals import CALIBRATION_RESIDUALS_ZH
@@ -16,6 +17,7 @@ from .zh_crystal_orientation import CRYSTAL_ORIENTATION_ZH
 from .zh_crystal_film import STRINGS as CRYSTAL_FILM_ZH
 from .zh_refracted_film import REFRACTED_FILM_ZH
 from .zh_fit_data import FIT_DATA_ZH
+from .zh_fitting_numbers import FITTING_NUMBERS_ZH
 from .zh_flat_field import FLAT_FIELD_ZH
 from .zh_geometry import GEOMETRY_ZH
 from .zh_geometry_cuts import ZH_GEOMETRY_CUTS
@@ -41,6 +43,7 @@ from .zh_predict_report import PREDICT_REPORT_ZH
 from .zh_predict_sampling import PREDICT_SAMPLING_ZH
 from .zh_reduction_errors import REDUCTION_ERRORS_ZH
 from .zh_reproduction import REPRODUCTION_ZH
+from .zh_report_numbers import REPORT_NUMBERS_ZH
 from .zh_review_phases import REVIEW_PHASES_ZH
 from .zh_ring_assignment import RING_ASSIGNMENT_ZH
 from .zh_roll_check import ROLL_CHECK_ZH
@@ -60,6 +63,7 @@ from .zh_usability_giwaxs import USABILITY_GIWAXS_ZH
 from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 
 FEATURES_ZH = {
+    **ANALYZE_NUMBERS_ZH, **FITTING_NUMBERS_ZH, **REPORT_NUMBERS_ZH,
     **CELL_REFINEMENT_ZH, **CELL_ORIENTATION_ZH, **CELL_SERIES_ZH,
     **SAMPLE_ROLL_ZH,
     **FRAME_INCIDENCE_ZH,

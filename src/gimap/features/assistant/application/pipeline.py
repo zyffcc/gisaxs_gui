@@ -21,6 +21,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from src.gimap.shared.numbers import format_number
+
 from ..domain import AT_EDGE, MAX_PEAKS, caveat, energy_from_notes, incidence_from_notes, pixel_size_from_notes
 from ..domain import reliable as is_reliable
 from ..domain.notes import calibrants_in_notes
@@ -453,7 +455,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
 
     def _analyse(self) -> None:
         status = self.catalog.results.status or {}
-        self._run.decisions.append(refraction_decision(status.get("geometry"), given=self._incidence is not None))
+        self._run.decisions.append(refraction_decision(status.get("geometry"), given=self._incidence is not None,
+                                                      incidence_measurement=status.get("incidence_measurement")))
         self._phases_given()
         if self.options.orientation_min_exit_deg is not None:
             self.catalog.results.status = self.catalog.workbench.set_orientation_min_exit(self.options.orientation_min_exit_deg)
@@ -479,10 +482,11 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         self._call("compare_sectors")
         reliable = [peak for peak in search.peaks if is_reliable(peak)]  # no caveat, not cut off at the end of the data
         chosen = sorted(reliable, key=lambda peak: -peak.area)[: max(0, int(self.options.rings))]
-        skipped = [f"{peak.q:.4g} ({(caveat(peak) or AT_EDGE).split(':')[0]})" for peak in search.peaks
-                   if not is_reliable(peak)]
+        skipped = [f"{format_number(p.q, p.q_err, value_only=True)} ({(caveat(p) or AT_EDGE).split(':')[0]})"
+                   for p in search.peaks if not is_reliable(p)]
+        centres_shown = [format_number(p.q, p.q_err, value_only=True) for p in sorted(chosen, key=lambda p: p.q)]
         self._decide(
-            "rings analysed", ", ".join(f"{peak.q:.4g}" for peak in sorted(chosen, key=lambda item: item.q)) or "none",
+            "rings analysed", ", ".join(centres_shown) or "none",
             "the strongest reliable peaks by area" + (f"; not analysed: {', '.join(skipped)}" if skipped else ""),
         )
         centres = [float(peak.q) for peak in chosen]

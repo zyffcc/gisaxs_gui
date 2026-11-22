@@ -149,6 +149,10 @@ def test_three_ring_uncertainty_tooltips_follow_the_display_language() -> None:
         candidate.rot1_sigma_deg, candidate.rot2_sigma_deg = 0.12, 0.08
         candidate.uncertainty_method = "ring jackknife and least squares"
         dialog._show_candidate(candidate)
+        assert dialog.result_center_x.text() == "124.000 px"
+        assert dialog.result_distance.text() == "1456.70 mm"
+        assert "0.030 px" in dialog.result_center_x.toolTip()
+        assert "0.20 mm" in dialog.result_distance.toolTip()
         for language, centre_method, tilt_method in (("zh", "环的刀切法与最小二乘法", "最小二乘"),
                                                      ("en", "ring jackknife and least squares", "least squares")):
             apply_language(language, [dialog])

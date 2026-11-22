@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import math
-from typing import Optional
-
 from src.gimap.app.presentation.i18n import tr, trf
-from src.gimap.shared.orientation_notes import coverage_warning, orientation_notes
+from src.gimap.shared.numbers import format_number
+from src.gimap.shared.orientation_notes import coverage_warning, measured_f_text, orientation_notes
 
 from .texts import message_text
 
@@ -14,12 +12,9 @@ MODEL_NAMES = {"gaussian": "Gaussian + isotropic", "gaussian_mosaic": "Gaussian 
                "maier_saupe": "Maier–Saupe + isotropic"}
 
 
-def _pm(value: Optional[float], error: Optional[float], digits: int) -> str:
-    if value is None or not math.isfinite(value):
-        return "—"
-    if error is None or not math.isfinite(error) or error <= 0:
-        return f"{value:.{digits}f}"
-    return f"{value:.{digits}f} ± {error:.{digits}f}"
+def percent_text(value, error):
+    return format_number(value * 100 if value is not None else None,
+                         error * 100 if error is not None else None)
 
 
 def orientation_text(spec) -> str:
@@ -83,16 +78,16 @@ def _fit_lines(result):
     return [
         trf("{model}: oriented fraction {fraction}, FWHM {fwhm}°, direction χ0 = {chi0}°",
             model=tr(MODEL_NAMES.get(fit.model, fit.model)),
-            fraction=_bounded(_pm(values.get("oriented_fraction"), errors.get("oriented_fraction"), 3), "fraction_iso",
-                              fit.at_bound),
-            fwhm=_bounded(_pm(values.get("fwhm_deg"), errors.get("fwhm_deg"), 2), "width", fit.at_bound),
-            chi0=_bounded(_pm(values.get("chi0_deg"), errors.get("chi0_deg"), 1), "chi0_deg", fit.at_bound)),
+            fraction=_bounded(format_number(values.get("oriented_fraction"), errors.get("oriented_fraction")),
+                              "fraction_iso", fit.at_bound),
+            fwhm=_bounded(format_number(values.get("fwhm_deg"), errors.get("fwhm_deg")), "width", fit.at_bound),
+            chi0=_bounded(format_number(values.get("chi0_deg"), errors.get("chi0_deg")), "chi0_deg", fit.at_bound)),
         trf("Fitted Hermans f = {f} (missing wedge filled, oriented part {f_oriented})",
-            f=_pm(values.get("herman"), errors.get("herman"), 3),
-            f_oriented=_pm(values.get("herman_oriented"), errors.get("herman_oriented"), 3)),
+            f=format_number(values.get("herman"), errors.get("herman")),
+            f_oriented=format_number(values.get("herman_oriented"), errors.get("herman_oriented"))),
         trf("2D order 2<cos²χ> − 1 = {order}; χ²_red = {chi2} over {points} bins up to χ = {chi_max}°; "
             "weighted coverage {coverage}",
-            order=_pm(values.get("order_2d"), errors.get("order_2d"), 3), chi2=f"{fit.chi2_red:.3g}",
+            order=format_number(values.get("order_2d"), errors.get("order_2d")), chi2=format_number(fit.chi2_red),
             points=fit.points, chi_max=f"{result.chi_max:g}",
             coverage=f"{fit.weighted_coverage:.3f}" if fit.weighted_coverage is not None else "—"),
     ]
@@ -112,9 +107,7 @@ def pole_result_text(result) -> str:
                                 reasons=", ".join(tr(reason) for reason in fit.quality_reasons)))
     measured, error, _ = fit.measured_moment
     if measured is not None:
-        text = trf("Measured f = {value}", value=f"{measured:#.3g}")
-        if error is not None:
-            text += " ± " + f"{error:#.3g} (" + tr("stat") + ")"
+        text = trf("Measured f = {value}", value=measured_f_text(measured, error, stat_label=tr("stat")))
         limits = result.systematics.get("range")
         if limits:
             text += trf(" [{low}, {high}] (systematic)", low=f"{limits[0]:#.3g}", high=f"{limits[1]:#.3g}")
@@ -123,7 +116,7 @@ def pole_result_text(result) -> str:
     if fit.ok:
         lines.extend(_fit_lines(result))
     lines.append(trf("Background {value} counts/pixel ({source}). 1 − φ is conditional on the background b.",
-                     value=f"{result.background:.4g}", source=tr(result.background_source)))
+                     value=format_number(result.background, result.background_sigma), source=tr(result.background_source)))
     if result.min_exit_deg is not None:
         lines.append(trf("Excluded αf < {angle}°. Polarisation {factor}.",
                          angle=f"{result.min_exit_deg:g}", factor=tr("off") if result.polarization is None
@@ -134,5 +127,5 @@ def pole_result_text(result) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["MODEL_NAMES", "orientation_text", "phase_cell_text", "phase_notes", "pole_result_text",
+__all__ = ["MODEL_NAMES", "orientation_text", "percent_text", "phase_cell_text", "phase_notes", "pole_result_text",
            "ring_text", "symmetry_text"]

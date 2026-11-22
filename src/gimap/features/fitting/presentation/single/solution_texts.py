@@ -3,7 +3,7 @@
 * a solution's name, numbered where two have the same composition (``Vertical cylinder + Vertical cylinder #2``);
 * its flags in short (``model error; at bound: σ_q``), for the solution selector;
 * where the values of a fit came from after Refine These Values (``refined_text``);
-* the ± of a value of a Predict solution: half the width of its 68 % interval (``predict_plus``);
+* the ± of a value of a Predict solution: half the width of its 68 % interval (``predict_uncertainty``);
 * the name of a step of Undo (``step_text``).
 """
 
@@ -14,8 +14,6 @@ from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.shared import fit_names
-
-from ...application.solution_export import half_width, intervals_by_path
 
 SHORT_FLAGS = {
     "unconstrained": "not determined: {name}", "at_bound": "at bound: {name}", "correlated": "correlated: {name}",
@@ -100,25 +98,22 @@ def refined_text(refined: Optional[dict], solutions) -> str:
                edited=tr(EDITED) if refined.get("edited") else "")
 
 
-def predict_plus(solution, path) -> tuple[str, str]:
-    """(“± half-width”, its tooltip) of a value of a Predict solution; ``("", "")`` when it is no such solution."""
-    if solution is None or not getattr(solution, "intervals", ()):
-        return "", ""
-    values = intervals_by_path(solution).get(path)
+def predict_uncertainty(solution, values, sampled) -> tuple[Optional[float], str]:
+    """The reported half-width for a Predict parameter and its source for the tooltip."""
     if values is None:
-        if path[0] == "globals" and (sampled := solution.posterior_summary.get(path[1])):
-            low, high = sampled["low68"], sampled["high68"]
-            return f"± {0.5 * (high - low):.2g}", trf("Sampled central 68 % interval [{low}, {high}].",
-                                                    low=f"{low:.4g}", high=f"{high:.4g}")
-        return "–", tr(NO_INTERVAL)
-    half = half_width(values)
+        low, high = sampled.get("low68"), sampled.get("high68")
+        tip = "Sampled central 68 % interval [{low}, {high}]."
+    else:
+        low, high = values[2:4]
+        kind = fit_names.reported_interval_kind(solution.flags, values[6], solution.diagnostics.get("posterior_kind"))
+        tip = PLUS_TIP_BIC if kind == "bic" else PLUS_TIP
+        if kind == "network_proposal":
+            tip = "± half the width of the reported 68 % interval [{low}, {high}] from the network proposals."
+    half = fit_names.interval_half_width(low, high)
     if half is None:
-        return "–", tr(NO_INTERVAL)
-    kind = fit_names.reported_interval_kind(solution.flags, values[6], solution.diagnostics.get("posterior_kind"))
-    tip = PLUS_TIP_BIC if kind == "bic" else PLUS_TIP
-    if kind == "network_proposal":
-        tip = "± half the width of the reported 68 % interval [{low}, {high}] from the network proposals."
-    return f"± {half:.2g}", trf(tip, low=f"{values[2]:.4g}", high=f"{values[3]:.4g}")
+        return None, tr(NO_INTERVAL)
+    _, lo_text, hi_text = fit_names.interval_values(None, low, high)
+    return half, trf(tip, low=lo_text, high=hi_text)
 
 
 def step_text(label) -> str:
@@ -130,5 +125,5 @@ def step_text(label) -> str:
 
 
 __all__ = ["EDITED", "INCOMPLETE", "METHODS", "NO_INTERVAL", "PLUS_HEADER_TIP", "PLUS_TIP", "PLUS_TIP_BIC",
-           "REFINED_ENTRY", "REFINED_FROM", "SELECTOR", "SHORT_FLAGS", "numbered_labels", "predict_plus",
+           "REFINED_ENTRY", "REFINED_FROM", "SELECTOR", "SHORT_FLAGS", "numbered_labels", "predict_uncertainty",
            "refined_entry", "refined_text", "selector_text", "short_flags", "step_text"]

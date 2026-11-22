@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import QPushButton, QToolButton, QVBoxLayout, QWidget
 from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, FlowLayout
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.shared import fit_names
+from src.gimap.shared.numbers import format_number
 from src.gimap.shared.export_text import export_text
 
 from ..application import (
@@ -33,6 +34,7 @@ from ..application import (
     probability,
     rivals,
 )
+from ..application.gisaxs_choice import component_number, population_values
 from ..application.operations import halves_label
 from .guided_details import SolutionDetails
 from .guided_text import GOOD, NOTE, WARN, ask_save_path, badge, label, listed, save_failed_toast, saved_toast, table
@@ -80,21 +82,12 @@ def model_name(model: str) -> str:
     return str(model or "").replace("_", " ")
 
 
-def population_values(row: dict, key: str) -> str:
-    """``key`` (R, h, D) of every population of a solution, in the order of the radii: “3.06 / 6.02”, “49.4 / –”;
-    “—” when no population has it."""
-    components = sorted((c for c in row.get("components") or () if c.get("R") is not None), key=lambda c: float(c["R"]))
-    if not any(component.get(key) is not None for component in components):
-        return "—"
-    return " / ".join("–" if component.get(key) is None else _number(component[key]) for component in components)
-
-
 def _details(row: dict) -> str:
     """Every parameter and warning of a solution (the row's tooltip), its words in the interface language."""
     components = row.get("components") or [{}]
     values = "; ".join(
         (f"{number}: " if len(components) > 1 else "")
-        + ", ".join(f"{tr(name)} {_number(component[key])}{unit}" for key, name, unit in DETAILS if component.get(key) is not None)
+        + ", ".join(f"{tr(name)} {component_number(row, key, number - 1)}{unit}" for key, name, unit in DETAILS if component.get(key) is not None)
         for number, component in enumerate(components, start=1))
     notes = list(row.get("warnings") or ()) + ([] if row.get("converged", True) else ["not converged"])
     label = tr(fit_names.BIC_WEIGHT) if fit_names.weight_key(row) == "bic_weight" else "p"
@@ -127,7 +120,7 @@ def _joined(items) -> str:
 
 
 def _number(value, digits: int = 3) -> str:
-    return "—" if value is None else f"{float(value):.{digits}g}"
+    return format_number(value, digits=digits)
 
 
 def cut_rows(report: dict) -> str:

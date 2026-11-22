@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- Reports and result labels round estimates to the decimal place of their two-significant-digit uncertainty. Unit-cell and population tables use compact notation such as `8.9335(22) Å`.
+
 - **GIWAXS unit cells.** Analyze refines lattice parameters and strain from indexed peaks on one frame or across a series, with uncertainties, peak residuals and exports. A resolved fibre axis also permits a directional strain fit. The crystal-orientation report pools unresolved near-random populations with the isotropic fraction.
 
 - **GIWAXS film absorption and crystal orientation** use refracted incident and exit waves near the sample horizon, including evanescent attenuation below the critical angle. For a frame correction, enter the optical constants at the measurement wavelength or select a film CIF. The attenuation-length option retains the large-angle geometrical correction.

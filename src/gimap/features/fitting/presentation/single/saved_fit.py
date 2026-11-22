@@ -121,9 +121,9 @@ def compare_saved_fit(page):
         previous = _selection(saved.count, saved.side, saved.q_range)
         if saved.quality is not None:
             metric = "χ²ᵣ" if saved.weighting == "sigma" else "var ln I"
-            previous += f" · {metric} {saved.quality:.4g}"
+            previous += f" · {metric} {saved.quality:.3g}"
         if result is not None:
-            current += f" · {page._chi_name(result)} {result.chi2_reduced:.4g}"
+            current += f" · {page._chi_name(result)} {result.chi2_reduced:.3g}"
         label.setText("\n".join((trf("Saved in {name} · {selection}", name=saved.path.name, selection=previous),
                                  trf("Current selection · {selection}", selection=current),
                                  tr("± gives the least-squares error where available."))))

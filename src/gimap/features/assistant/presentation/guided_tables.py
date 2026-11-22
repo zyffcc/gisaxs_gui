@@ -18,10 +18,12 @@ from PyQt5.QtWidgets import QHeaderView, QSizePolicy, QTableWidget, QTableWidget
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.app.presentation.theme import theme_manager
+from src.gimap.shared.numbers import format_number
 from src.gimap.shared.orientation_notes import coverage_warning, orientation_notes
 
 from ..application import herman_texts
 from ..application.pipeline_phases import pole_estimate
+from ..application.report_numbers import peak_value
 from .guided_words import words
 
 PEAK_COLUMNS = (
@@ -129,10 +131,11 @@ def peak_rows(peaks: list[dict]) -> list[list]:
         size = peak.get("size_nm")
         orientation = str(peak.get("orientation") or "")
         caveat = str(peak.get("caveat") or "")
-        size_text = "—" if size is None else ("≥ " if peak.get("size_is_lower_bound") else "") + f"{size:.3g}"
+        size_text = "—" if size is None else ("≥ " if peak.get("size_is_lower_bound") else "") + format_number(
+            size, peak.get("size_err_nm"), compact=True)
         at_edge = not caveat and "at_edge" in (peak.get("flags") or ())
         rows.append([
-            f"{peak.get('q'):.4g}", f"{peak.get('d_A'):.4g}", f"{peak.get('fwhm'):.3g}",
+            *(peak_value(peak, key, compact=True) for key in ("q", "d_A", "fwhm")),
             (tr(EDGE_VERDICT), tr(EDGE_NOTE)) if at_edge else (trust(caveat), tr(caveat) if caveat else ""),
             (size_text, tr(str(peak.get("size_note") or ""))),
             (short_orientation(orientation), tr(orientation)),

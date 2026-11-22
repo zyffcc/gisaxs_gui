@@ -2,7 +2,10 @@
 
 from math import isclose
 
+from src.gimap.shared.numbers import applied_angle, format_number
 from src.gimap.shared.orientation_notes import coverage_warning
+
+from .report_numbers import peak_value
 
 
 WARNING_TOPICS = {
@@ -21,9 +24,9 @@ def result_lines(report, word=str):
     nominal = incidence.get("override_deg", incidence.get("reference_deg"))
     measured, error = incidence.get("deg"), incidence.get("error_deg")
     if nominal is not None and nominal > 0 and measured is not None and error and abs(nominal - measured) > 3 * error:
-        lines.append(word("Nominal αi {nominal}° and measured αi {value} ± {error}° differ by more than 3σ. Used {used}°.").format(
-            nominal=f"{nominal:g}", value=f"{measured:.4f}", error=f"{error:.4f}",
-            used=f"{report['geometry']['incidence_deg']:.5g}"))
+        lines.append(word("Nominal αi {nominal}° and measured αi {measurement}° differ by more than 3σ. Used {used}°.").format(
+            nominal=format_number(nominal), measurement=format_number(measured, error),
+            used=applied_angle(report["geometry"]["incidence_deg"], incidence)))
     if not matched:
         lines.append(word("No phase matched the measured peaks.") if report.get("phase_assignment") else
                      word("No phase assignments recorded."))
@@ -42,8 +45,8 @@ def result_lines(report, word=str):
             elif ring.get("herman") is None or pole.get("quality_reasons") or coverage_warning(pole.get("systematics") or {}):
                 orientation = word("orientation undetermined")
             else:
-                orientation = word(ring.get("texture") or "measured ring") + f" (f = {ring['herman']:.3g})"
-            results.append(f"{peak.get('hkl') or ''} · {ring['q']:.4g} Å⁻¹ · {orientation}")
+                orientation = word(ring.get("texture") or "measured ring") + f" (f = {format_number(ring['herman'], ring.get('herman_err'))})"
+            results.append(f"{peak.get('hkl') or ''} · {peak_value(peak, 'q', value_only=True)} Å⁻¹ · {orientation}")
         if not results:
             results.append(word("no ring orientation measured"))
             for peak in phase_peaks:

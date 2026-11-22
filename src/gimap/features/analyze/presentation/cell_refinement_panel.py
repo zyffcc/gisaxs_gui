@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 from threading import Event
 
@@ -13,19 +12,12 @@ from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 
 from src.gimap.app.presentation.components.toast import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import format_number
 
 from ..application.cell_refinement import frame_cell_refinement
 from ..application.export_record import analysis_metadata, export_stem
 from .indexing_export import _finite
-
-
-def _estimate(value, error=None, scale=1):
-    if value is None or not math.isfinite(value):
-        return "—"
-    if error is None or not math.isfinite(error) or error <= 0:
-        return f"{value * scale:.6g}"
-    places = max(0, 1 - math.floor(math.log10(error * scale)))
-    return f"{value * scale:.{places}f} ± {error * scale:.2g}"
+from .indexing_texts import percent_text
 
 
 def _table(table, rows):
@@ -48,8 +40,8 @@ def _fibre_text(fit):
         return trf("Directional strain unavailable. {reason}", reason=tr(fit["reason"]))
     return trf("Fibre ({axis}) · in-plane strain {ip}% · out-of-plane strain {op}%",
                axis=" ".join(map(str, fit["axis_hkl"])),
-               ip=_estimate(fit["values"]["in_plane"], fit["errors"]["in_plane"], 100),
-               op=_estimate(fit["values"]["out_of_plane"], fit["errors"]["out_of_plane"], 100))
+               ip=percent_text(fit["values"]["in_plane"], fit["errors"]["in_plane"]),
+               op=percent_text(fit["values"]["out_of_plane"], fit["errors"]["out_of_plane"]))
 
 
 class CellRefinementMixin:
@@ -148,27 +140,28 @@ class CellRefinementMixin:
         if fit:
             self.cell_summary.setText(tr(fit["reason"]))
             if fit["ok"]:
-                shift = (_estimate(fit["zero_shift"], fit["zero_shift_error"])
+                shift = (format_number(fit["zero_shift"], fit["zero_shift_error"])
                          if fit["zero_shift_error"] is not None else tr("0 (fixed)"))
                 self.cell_summary.setText(trf("{system} · {n} peaks · χ²red {chi} · q shift {shift} Å⁻¹",
                                               system=tr(fit["system"]), n=len(fit["residuals"]),
-                                              chi=_estimate(fit["chi2_red"]), shift=shift))
+                                              chi=format_number(fit["chi2_red"]), shift=shift))
                 for key, value in fit["values"].items():
-                    parameters.append((_units(key), _estimate(value, fit["errors"][key]),
-                                       _estimate(fit["reference"][key]),
-                                       _estimate(fit["strain"].get(key), fit["strain_errors"].get(key), 100)))
+                    parameters.append((_units(key), format_number(value, fit["errors"][key]),
+                                       format_number(fit["reference"][key], digits=5),
+                                       percent_text(fit["strain"].get(key), fit["strain_errors"].get(key))))
                 for row in fit["residuals"]:
-                    peaks.append((" ".join(map(str, row["hkl"])), _estimate(row["q"], row["sigma"]),
-                                  f"{row['residual']:+.5g}", tr("Yes")))
+                    residual = format_number(row["residual"], row["sigma"], value_only=True)
+                    peaks.append((" ".join(map(str, row["hkl"])), format_number(row["q"], row["sigma"]),
+                                  residual, tr("Yes")))
             else:
                 for row in fit["seeds"]:
-                    peaks.append((" ".join(map(str, row["hkl"])), _estimate(row["q"], row["sigma"]),
+                    peaks.append((" ".join(map(str, row["hkl"])), format_number(row["q"], row["sigma"]),
                                   "—", tr("Available")))
             critical = fit["q_axis"].get("critical_angle_deg")
             basis = trf("Transmitted q (αc = {angle}°)", angle=f"{critical:g}") if critical else tr("Kinematic q")
             self.cell_summary.setText(self.cell_summary.text() + " · " + basis)
             for row in fit.get("excluded", ()):
-                peaks.append((str(row.get("candidate_hkl") or "—"), _estimate(row["q"], row.get("sigma")),
+                peaks.append((str(row.get("candidate_hkl") or "—"), format_number(row["q"], row.get("sigma")),
                               "—", tr(row["reason"])))
             self.cell_fibre_label.setText(_fibre_text(fit.get("fibre_strain")))
         _table(self.cell_values, parameters)

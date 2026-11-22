@@ -21,6 +21,7 @@ import math
 from typing import Optional
 
 from src.gimap.shared import fit_names
+from src.gimap.shared.numbers import format_number
 
 ASK_PROBABILITY = 0.2
 """A solution after the first with at least this posterior probability makes the run ask the person to choose the
@@ -112,10 +113,57 @@ def bounds_text(solution: dict) -> str:
     return ", ".join(bound_phrases(solution))
 
 
-def sizes(solution: Optional[dict], equals: str = " = ", decimals: Optional[dict] = None) -> str:
-    """R of every population and D of those with a paracrystal, in the order of the radii (``R = 3.06 / 6.02 nm,
-    D = 49.4 / – nm``; one population: ``R = 3.06 nm, D = 49.4 nm``)."""
-    return fit_names.sizes_text((solution or {}).get("components") or (), equals, decimals)
+def component_estimate(solution, key, index):
+    precise = solution.get("least_squares_values") or {}
+    name = f"{key}_{index + 1}"
+    value = precise.get(name)
+    return solution["components"][index].get(key) if value is None else value
+
+
+def displayed_estimate(solution, key, index=None):
+    """The value and reported 68 % interval in the units of a solution's display field."""
+    intervals = solution.get("intervals") or {}
+    precise = solution.get("least_squares_values") or {}
+    if index is None:
+        name = {"sigma_Res": "tail_width", "nu_Res": "tail_exponent",
+                "resolution_amplitude": "res_amplitude"}.get(key, key)
+        value = (solution.get("globals") or {}).get(key)
+        if precise.get(name) is not None:
+            value = precise[name]
+        return value, _bounds(intervals.get(name) or intervals.get(key), 68)
+
+    value = component_estimate(solution, key, index)
+    bounds = interval(solution, key, index)
+    if key == "sigma_D" and bounds is None:
+        # Predict fits σnn/D. This display field is σD/D = (σnn/D) / √(2π).
+        source = f"sigma_nn_{index + 1}"
+        scale = math.sqrt(2 * math.pi)
+        if precise.get(source) is not None:
+            value = precise[source] / scale
+        original = _bounds(intervals.get(source), 68)
+        if original is not None:
+            bounds = tuple(endpoint / scale for endpoint in original)
+    return value, bounds
+
+
+def component_number(solution, key, index):
+    value, bounds = displayed_estimate(solution, key, index)
+    return format_number(value) if bounds is None else fit_names.interval_values(value, *bounds)[0]
+
+
+def population_values(solution, key):
+    """Parameter values in radius order, using each population's original interval."""
+    components = (solution or {}).get("components") or []
+    ordered = sorted((i for i, c in enumerate(components) if c.get("R") is not None), key=lambda i: components[i]["R"])
+    if not any(components[i].get(key) is not None for i in ordered):
+        return "—"
+    return " / ".join(component_number(solution, key, i) if components[i].get(key) is not None else "–" for i in ordered)
+
+
+def sizes(solution: Optional[dict], equals: str = " = ") -> str:
+    radii = population_values(solution, "R")
+    spacing = population_values(solution, "D")
+    return f"R{equals}{radii} nm" + ("" if spacing == "—" else f", D{equals}{spacing} nm")
 
 
 def chance(solution: Optional[dict], name: str = "probability ") -> str:
@@ -132,7 +180,12 @@ def chance(solution: Optional[dict], name: str = "probability ") -> str:
 def interval(solution: Optional[dict], key: str, component: int = 0, level: int = 68) -> Optional[tuple[float, float]]:
     """``(low, high)`` of the ``level`` % posterior interval of a component's value (``key``: R, h, D; ``component``
     from 0), or ``None`` when the fit gave none."""
-    found = ((solution or {}).get("intervals") or {}).get(f"{key}_{component + 1}") or {}
+    return _bounds(((solution or {}).get("intervals") or {}).get(f"{key}_{component + 1}"), level)
+
+
+def _bounds(found, level):
+    if not found:
+        return None
     try:
         low, high = float(found[f"low{level}"]), float(found[f"high{level}"])
     except (KeyError, TypeError, ValueError):

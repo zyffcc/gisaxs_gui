@@ -292,12 +292,12 @@ def test_the_window_shows_one_rms_residual_and_says_which_it_is() -> None:
 
     tilted = CalibrationCandidate("agbh", 179.3, 263.5, 1634.0, rms_residual_px=1.056, tilt_refined=True,
                                   point_rms_px=0.45, untilted_point_rms_px=0.46, initial_point_rms_px=1.80)
-    assert (rms_title(tilted), rms_text(tilted), rms_text(tilted, 2)) == ("Ring-point RMS:", "0.450 px", "0.45 px")
-    assert "Before refinement" in rms_tip(tilted) and "1.800 px" in rms_tip(tilted)
-    assert "same points with zero tilt gives 0.460 px" in rms_tip(tilted)
+    assert (rms_title(tilted), rms_text(tilted)) == ("Ring-point RMS:", "0.45 px")
+    assert "Before refinement" in rms_tip(tilted) and "1.8 px" in rms_tip(tilted)
+    assert "same points with zero tilt gives 0.46 px" in rms_tip(tilted)
     current = CalibrationCandidate("agbh", 179.4, 263.6, 1634.5, point_rms_px=0.47, initial_point_rms_px=1.84)
-    assert (rms_title(current), rms_text(current)) == ("Ring-point RMS:", "0.470 px")
-    assert "1.840 px" in rms_tip(current) and "zero tilt" not in rms_tip(current)
+    assert (rms_title(current), rms_text(current)) == ("Ring-point RMS:", "0.47 px")
+    assert "1.84 px" in rms_tip(current) and "zero tilt" not in rms_tip(current)
     flat = CalibrationCandidate("agbh", 179.3, 263.5, 1634.0, rms_residual_px=1.056)
-    assert (rms_title(flat), rms_text(flat)) == ("Ring-radius RMS:", "1.056 px")
+    assert (rms_title(flat), rms_text(flat)) == ("Ring-radius RMS:", "1.06 px")
     assert "azimuthal average" in rms_tip(flat)

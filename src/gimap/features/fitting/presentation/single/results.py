@@ -3,7 +3,7 @@ methods, and saving (the points with the model and its terms plus a JSON record,
 the solutions: ``solutions_export.py``; the figure: ``figure_export.py``).
 
 ± of a value is its least-squares error after a fit; with a solution of Predict parameters in Model (no fit since),
-half the width of the solution's 68 % posterior interval (``solution_texts.predict_plus``, said in its tooltip).
+half the width of the solution's 68 % posterior interval (``solution_texts.predict_uncertainty``, said in its tooltip).
 """
 
 from __future__ import annotations
@@ -22,7 +22,8 @@ from PyQt5.QtWidgets import QFileDialog, QHeaderView, QTableWidgetItem
 from src.gimap.app.presentation.i18n import tr, trf
 
 from src.gimap.shared import fit_names
-from ...application.solution_export import posterior_by_path
+from src.gimap.shared.numbers import format_number
+from ...application.solution_export import intervals_by_path, posterior_by_path
 from ...application.single_fit import (
     GRAZING,
     INFO,
@@ -33,14 +34,13 @@ from ...application.single_fit import (
     fit_record,
     model_to_dict,
     parameter_info,
-    parameter_text,
 )
 from ...application.fit_nxcansas import fit_curves, write_curves
 from ..views.step_widgets import fit_to_rows, show_line
 from .method_hint import note_text
 from . import predict_texts
 from .session import path_name
-from .solution_texts import PLUS_HEADER_TIP, numbered_labels, predict_plus, refined_text
+from .solution_texts import PLUS_HEADER_TIP, numbered_labels, predict_uncertainty, refined_text
 from ...application.models import InSituSourceFrame
 from ...application.curve_sources import source_stem
 
@@ -165,11 +165,10 @@ def write_pair(path, write_table, record: dict) -> Path:
 def value_cells(key: str, value: float, error, free: bool) -> tuple[str, str]:
     """The value with its unit, and “± error” (no unit) or “fixed”: the unit stays in the value column."""
     unit = INFO[key].unit
-    text = parameter_text(key, value, error)
-    if unit and text.endswith(unit):
-        text = text[: -len(unit)].strip()
-    number, _sep, err = text.partition(" ± ")
-    return f"{number} {unit}".strip(), f"± {err}" if err else ("" if free else tr("fixed"))
+    number = format_number(value, error, value_only=True)
+    if error is None or not math.isfinite(error) or error < 0:
+        return f"{number} {unit}".strip(), "" if free else tr("fixed")
+    return f"{number} {unit}".strip(), "± " + format_number(error, error, value_only=True)
 
 
 CORRELATED_SHOWN = 2
@@ -273,7 +272,7 @@ class FitResultsMixin:
                 text = trf("Saved model from {name} · {count} points", name=saved.path.name, count=saved.count)
                 if saved.quality is not None:
                     metric = "χ²ᵣ" if saved.weighting == "sigma" else "var ln I"
-                    text += f" · {metric} {saved.quality:.4g}"
+                    text += f" · {metric} {saved.quality:.3g}"
                 self.quality_label.setText(text)
             self.warnings_label.setText("")
             self.warnings_label.setToolTip("")
@@ -369,6 +368,7 @@ class FitResultsMixin:
         predicted = None if result is not None else next(  # a solution of Predict in Model: ± from its interval
             (s for s in self.session.solutions if s.model == self.session.model and s.intervals), None)
         posterior = posterior_by_path(predicted) if predicted else {}
+        reported = intervals_by_path(predicted) if predicted else {}
         self.parameters_table.setColumnHidden(3, predicted is None)
         self.parameters_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.parameters_table.horizontalHeaderItem(1).setText(tr("least-squares\nvalue") if predicted else tr("value"))
@@ -380,10 +380,12 @@ class FitResultsMixin:
             full = path_name(self.session.model, path, full=True)
             component = None if path[0] == "globals" else self.session.model.components[path[0]]
             full += "\n" + tr(parameter_info(component, path[1]).tip)
-            value, plus = value_cells(path[1], parameter.value, error, parameter.free)
             why = ""
             if predicted is not None and parameter.free:
-                plus, why = predict_plus(predicted, path)
+                error, why = predict_uncertainty(predicted, reported.get(path), posterior.get(path, {}))
+            value, plus = value_cells(path[1], parameter.value, error, parameter.free)
+            if why and not plus:
+                plus = "–"
             if result is not None and parameter.free and not plus:  # a free value the fit gives no error for
                 plus, why = "–", predict_texts.no_error_reason(path, parameter, result, self.session.model)
             plus, why = self.flag_cell(path, result, plus, why)
@@ -395,7 +397,8 @@ class FitResultsMixin:
             self.parameters_table.setItem(line, 0, _item(name, full))
             self.parameters_table.setItem(line, 1, _item(value))
             self.parameters_table.setItem(line, 2, _item(plus, why))
-            median = f"{sampled['median']:.5g}" if sampled else "—"
+            median = (fit_names.interval_values(sampled["median"], sampled.get("low68"), sampled.get("high68"))[0]
+                      if sampled else "—")
             interval = (fit_names.interval_text(sampled["median"], sampled["low68"], sampled["high68"])
                         if sampled and "low68" in sampled else "")
             self.parameters_table.setItem(line, 3, _item(median, interval))
@@ -423,7 +426,7 @@ class FitResultsMixin:
         self.solutions_table.setRowCount(len(solutions))
         labels = numbered_labels(solutions)
         for line, solution in enumerate(solutions):
-            radii, distances = predict_texts.sizes_cells(solution.model)  # every population, by radius
+            radii, distances = predict_texts.sizes_cells(solution.model, solution)  # every population, by radius
             tip = tr("From {source}.").format(source=tr(solution.source))
             for extra in (predict_texts.points_text(solution.points), predict_texts.differing_tip(solution, solutions)):
                 if extra:

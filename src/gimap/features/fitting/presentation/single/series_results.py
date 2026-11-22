@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import QFileDialog, QMessageBox, QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.app.presentation.theme import theme_manager
+from src.gimap.shared.numbers import format_number
 
 from ...application.single_fit import FAMILIES
 from ...application.series_fit import (
@@ -183,8 +184,7 @@ class FitSeriesResultsMixin:
                      *choices]
             for path, _name in columns:
                 value, error = result.model.get(path).value, result.errors.get(path, np.nan)
-                cells.append("—" if not np.isfinite(value) else
-                             f"{value:.4g}" + ("" if not np.isfinite(error) else f" ± {error:.2g}"))
+                cells.append(format_number(value, error))
             cells += [start_text(frame), self.flags_cell(frame), str(frame.points),
                       tr(HALF_TEXT.get(frame.halves_used, frame.halves_used))]
         token = STATE_COLOR.get(self._frame_state(frame.index)[0])

@@ -21,6 +21,7 @@ from typing import Callable, Optional, Sequence
 
 import numpy as np
 
+from ....shared.numbers import format_number
 from ....shared.ring_profile import SHADOW_FRACTION, fold_ring, measured_hermans
 from .profiles import Profile, estimate_background
 
@@ -304,10 +305,9 @@ def ring_orientation(
             tuple(notes), weighted, herman_isotropic, shadowed,
         )
     if herman_isotropic is not None and weighted < 0.999:
-        notes.append(  # with the decimals of f (those of σ_f), so that a small f_iso does not read as 0.00
-            f"A random (isotropic) ring measured over the same |χ| would give f = "
-            f"{signed(herman_isotropic, herman_decimals(herman_err))}: compare f with that, not with 0."
-        )
+        reference = format_number(herman_isotropic).replace("-", "−")
+        notes.append(f"A random (isotropic) ring measured over the same |χ| would give f = "
+                     f"{reference}: compare f with that, not with 0.")
     excess = None if herman is None else float(herman - (herman_isotropic or 0.0))
     margin = _texture_margin(herman_err)
     filled = np.interp(chi, angles, values)

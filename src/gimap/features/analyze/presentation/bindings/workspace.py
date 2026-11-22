@@ -20,6 +20,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import GISAXS, FrameAnalysis, export_stem, source_labels
 from ...application.frame_preprocessing import floating
+from ..geometry_summary import incidence_angle_text
 from ..texts import flat_detector_summary, message_text, tilt_summary
 from .display import PLOT_SIDES, VIEW_DETECTOR, cut_lines
 
@@ -276,7 +277,7 @@ class WorkspaceMixin:
         if geometry is None:
             self.set_step_state("geometry", "warn", tr("No geometry yet"))
             return
-        detail = f"{geometry.distance_m * 1e3:.1f} mm · λ {geometry.wavelength_angstrom:.4g} Å · αi {geometry.incidence_deg:g}°"
+        detail = f"{geometry.distance_m * 1e3:.1f} mm · λ {geometry.wavelength_angstrom:.4g} Å · αi {incidence_angle_text(analysis)}°"
         flat = getattr(analysis, "flat_detector", None)  # a .poni tilt the flat geometry leaves out, when it matters
         detail = " · ".join((detail, *tilt_summary(geometry, tr), *flat_detector_summary(flat, tr)))
         self.set_step_state("geometry", "warn" if flat is not None and flat.needs_attention else "ok", detail)

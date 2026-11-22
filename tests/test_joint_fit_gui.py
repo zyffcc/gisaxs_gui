@@ -19,9 +19,10 @@ from dataclasses import replace
 import numpy as np
 from PyQt5.QtWidgets import QApplication, QComboBox, QLabel
 
-from src.gimap.features.fitting.application.joint_fit import CurveSpec, hints
+from src.gimap.features.fitting.application.joint_fit import CurveSpec, curve_errors, hints
 from src.gimap.features.fitting.application.single_fit import Curve, FitModel, evaluate, new_component
 from src.gimap.features.fitting.application.single_predict import predict_request
+from src.gimap.shared.numbers import format_number
 from tests.test_fit_page import _page, _wait
 
 LAMBDA, ALPHA_I = 0.1045, 0.4
@@ -126,7 +127,8 @@ def test_joint_window_fits_a_horizontal_and_a_vertical_cut(tmp_path):
         assert dialog.result is not None, dialog.joint_status.text()
         assert abs(dialog.result.models[0].get((0, "h")).value - 6.0) < 0.5
         assert "χ²ᵣ" in dialog.joint_summary.text()
-        assert f"h = {dialog.result.models[0].get((0, 'h')).value:.5g}" in dialog.joint_dimensions.text()
+        height = dialog.result.models[0].get((0, "h")).value
+        assert f"h = {format_number(height, curve_errors(dialog.result, 0).get((0, 'h')))} nm" in dialog.joint_dimensions.text()
         dialog.joint_min_exit.setValue(0)  # the completed fit retains its own range
         assert "2 αc" in dialog.joint_summary.text()
         assert dialog.joint_shown.count() == 2
