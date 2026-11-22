@@ -392,7 +392,8 @@ class BatchExportMixin:
         if corrections.mirror_fill:
             parts.append(tr("mirror filling"))
         if state.mode != GISAXS and (corrections.solid_angle or corrections.polarization is not None
-                                     or corrections.film_thickness_nm is not None or corrections.lorentz):
+                                     or corrections.film_thickness_nm is not None or corrections.film_delta is not None
+                                     or corrections.film_cif_path or corrections.lorentz):
             parts.append(tr("intensity corrections"))
         if corrections.dark_path:
             parts.append(trf("dark {name}", name=Path(corrections.dark_path).name))
@@ -483,7 +484,6 @@ class BatchExportMixin:
             (self.bad_pixels_check, corrections.bad_pixels), (self.mirror_fill_check, corrections.mirror_fill),
             (self.minimum_check, corrections.minimum is not None), (self.maximum_check, corrections.maximum is not None),
             (self.solid_angle_check, corrections.solid_angle), (self.polarization_check, corrections.polarization is not None),
-            (self.film_check, corrections.film_thickness_nm is not None and corrections.attenuation_length_um is not None),
             (self.refraction_check, bool(corrections.critical_angle_deg)),
             (self.sector_check, giwaxs.sector is not None), (self.box_check, giwaxs.box is not None),
         ]
@@ -492,8 +492,6 @@ class BatchExportMixin:
                 check.setChecked(bool(value))
         for spin, value in ((self.minimum_spin, corrections.minimum), (self.maximum_spin, corrections.maximum),
                             (self.polarization_spin, corrections.polarization),
-                            (self.film_thickness_spin, corrections.film_thickness_nm),
-                            (self.attenuation_spin, corrections.attenuation_length_um),
                             (self.critical_angle_spin, corrections.critical_angle_deg)):
             if value is not None:
                 with QSignalBlocker(spin):
@@ -510,9 +508,7 @@ class BatchExportMixin:
                 with QSignalBlocker(spin):
                     spin.setValue(value)
         self.polarization_spin.setEnabled(corrections.polarization is not None)
-        film = corrections.film_thickness_nm is not None and corrections.attenuation_length_um is not None
-        self.film_thickness_spin.setEnabled(film)
-        self.attenuation_spin.setEnabled(film)
+        self.film_controls.restore(corrections)
         self.critical_angle_spin.setEnabled(bool(corrections.critical_angle_deg))
         self.sector_grid.setEnabled(giwaxs.sector is not None)
         self.box_grid.setEnabled(giwaxs.box is not None)

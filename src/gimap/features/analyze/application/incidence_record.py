@@ -56,11 +56,13 @@ def _nominal(request, profile, header):
 
 
 def frame_incidence_record(analysis, result_dict, *, origin, reference_deg, reference_source, applied_deg, decision):
+    angle_references = {key: ref for key, ref in analysis.correction_files.items()
+                        if key != analysis.corrections.film_cif_path}
     return plain(dict(result_dict, origin=origin, path=str(analysis.path), frame_index=analysis.frame_index,
                       summed_frames=analysis.summed_frames, calibration=_calibration(analysis.geometry),
                       technique=analysis.kind, nominal_at_measurement_deg=nominal_incidence(analysis)[0],
                       frame_files=analysis.frame_files, calibration_files=analysis.geometry_files,
-                      correction_files=analysis.correction_files, corrections=analysis.corrections,
+                      correction_files=angle_references, corrections=analysis.corrections,
                       mask=bitmap_record(analysis.drawn_mask, analysis.shape) if analysis.drawn_mask is not None else None,
                       reference_deg=reference_deg,
                       reference_source=reference_source, applied_deg=applied_deg, decision=decision))

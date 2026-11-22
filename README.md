@@ -25,6 +25,8 @@ right.*
   curves in q (Å⁻¹, kinematic; a flat detector, tilted when the `.poni` gives rotations): GISAXS cuts, I(q), sectors, q boxes and I(χ). Geometry from a calibrant or a
   `.poni` file, kept as the instrument profile of the detector; masks, hot and dead pixels left out per
   frame, background subtraction and optional GIWAXS intensity corrections with propagated errors.
+  Near the sample horizon, film absorption and crystal orientation can use the incident and exit waves
+  refracted in the film. [Measured P08 ring profiles and fit residuals](tools/benchmarks/README.md#p08-crystal-orientation-at-the-measured-incidence-and-roll)
 - **Run Automatic Analysis** (no AI): for GIWAXS a peak table with fitted positions, widths and
   uncertainties, ring orientation (Hermans f) and Scherrer sizes (lower bounds); for GISAXS the Yoneda cut,
   the length scale 2π/q\* (not necessarily the particle spacing) and screening fits of sphere and cylinder models. A value it cannot know, such as the

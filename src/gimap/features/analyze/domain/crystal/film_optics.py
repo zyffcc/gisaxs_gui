@@ -15,6 +15,7 @@ from src.gimap.shared.xray_scattering import (
 )
 
 from ..intensity import film_absorption_factor
+from ..refracted_film import REFRACTED_FILM_FORMULA, RefractedFilm, exit_transmission
 from .scattering import ATOMIC_NUMBER
 from .symmetry import expand_sites
 
@@ -74,73 +75,102 @@ def film_optics(phase, wavelength_angstrom):
     return record
 
 
-def exit_transmission(sin_exit, delta, beta):
-    """Reciprocal exit-wave field |2s / (s + √(s² − 2δ + 2iβ))|², s = sin αf in vacuum."""
-    sine = np.asarray(sin_exit, dtype=float)
-    transmitting = np.isfinite(sine) & (sine > 0.) & (sine <= 1.)
-    sine = np.where(transmitting, sine, 0.)
-    field = np.sqrt(sine**2 - 2*delta + 2j*beta)
-    amplitude = np.divide(2*sine, sine + field, where=transmitting, out=np.zeros_like(field))
-    return np.abs(amplitude)**2
+class _RingRays:
+    """Per-pixel and central model rays, folded with the measured profile's uncertainty weights."""
+
+    def __init__(self, geometry, q, chi_pixels, qz_pixels, signed_profile, sin_exit):
+        self.sine = exit_sine_of_qz(geometry, qz_pixels) if sin_exit is None else sin_exit
+        centres = np.arange(90) + .5
+        self.central_sine = exit_sine_of_qz(geometry, q * np.cos(np.radians(centres)))
+        self.index = np.clip(np.floor(chi_pixels.astype(float) + 90).astype(int), 0, 179)
+        self.counts = np.bincount(self.index, minlength=180)
+        self.profile = signed_profile
+        self.signed_bins = np.floor(signed_profile.x + 90).astype(int)
+
+    def fold(self, values, central):
+        totals = np.bincount(self.index, weights=np.nan_to_num(values), minlength=180)
+        bins = self.signed_bins
+        signed = np.divide(totals[bins], self.counts[bins], where=self.counts[bins] > 0,
+                           out=np.full(len(bins), np.nan))
+        _, values, _, measured, _, _ = fold_ring(self.profile.x, signed, self.profile.sigma, 0.)
+        return np.where(measured, values, np.nan_to_num(central))
 
 
-def ring_optical_factors(optics, geometry, q, chi_pixels, qz_pixels, signed_profile, *, fit_absorption=False):
-    """Fold pixel averages of T_f (and, optionally, T_f F_A) with the intensity weights.
+def ring_transmission(optics, geometry, q, chi_pixels, qz_pixels, signed_profile, *, sin_exit=None):
+    """The exit surface field alone, for the exported angular diagnostics."""
+    rays = _RingRays(geometry, q, chi_pixels, qz_pixels, signed_profile, sin_exit)
+    return rays.fold(*(exit_transmission(s, optics["delta"], optics["beta"])
+                       for s in (rays.sine, rays.central_sine)))
 
-    Model-only bins use the ray at the ring centre. The fitted attenuation curve
-    divides the folded product by the folded field already present in the texture library.
+
+def _thickness(u, incident_rate, depth_rate):
+    if u >= 1.:
+        return np.inf
+    # When the incident field has no decay, the evanescent/specular depth ratio
+    # falls as 1/d. The rational coordinate keeps this limit smooth at u = 1.
+    return (-np.log1p(-u) if incident_rate else u / (1.-u)) / depth_rate
+
+
+def ring_optical_factors(optics, geometry, q, chi_pixels, qz_pixels, signed_profile, *,
+                         fit_absorption=False, thickness_nm=np.inf, geometric_depth=None, sin_exit=None):
+    """Fold the full depth-integrated wave intensity on the same rays as the observed data.
+
+    A geometrically corrected frame retains the ratio of wave to geometrical factors at its
+    known thickness. Unmeasured bins are evaluated at the ring centre for plotting.
     """
-    sine = exit_sine_of_qz(geometry, qz_pixels)
-    centres = np.arange(90) + 0.5
-    central_sine = exit_sine_of_qz(geometry, q * np.cos(np.radians(centres)))
-    field = exit_transmission(sine, optics["delta"], optics["beta"])
-    central_field = exit_transmission(central_sine, optics["delta"], optics["beta"])
-    index = np.clip(np.floor(chi_pixels.astype(float) + 90).astype(int), 0, 179)
-    counts = np.bincount(index, minlength=180)
-    signed_bins = np.floor(signed_profile.x + 90).astype(int)
-
-    def fold(pixel_factor, central_factor):
-        totals = np.bincount(index, weights=pixel_factor, minlength=180)
-        signed = totals[signed_bins] / counts[signed_bins]
-        _, values, _, measured, _, _ = fold_ring(signed_profile.x, signed, signed_profile.sigma, 0.)
-        return np.where(measured, values, central_factor)
-
-    transmission = fold(field, central_field)
-    if not fit_absorption:
-        return transmission, None
+    rays = _RingRays(geometry, q, chi_pixels, qz_pixels, signed_profile, sin_exit)
     sin_in = math.sin(geometry.incidence_rad)
-    if sin_in <= 0.:
-        raise ValueError("Film absorption requires a positive incidence angle.")
-    # u = 1 − exp(−μd / sin αi) maps both the thin and semi-infinite limits to finite endpoints.
-    # Extra knots near zero resolve the short absorption scale of the lowest exit rays.
-    knots = np.r_[0., np.geomspace(1e-6, .01, 20, endpoint=False), np.linspace(.01, 1., 100)]
+    waves = [RefractedFilm(s, sin_in, optics["delta"], optics["beta"], geometry.wavelength_angstrom)
+             for s in (rays.sine, rays.central_sine)]
+    if geometric_depth is not None:
+        denominator = [film_absorption_factor(s, sin_in, geometric_depth) for s in (rays.sine, rays.central_sine)]
+        return rays.fold(*(w.factor(thickness_nm) / g for w, g in zip(waves, denominator))), None
+    if not fit_absorption:
+        return rays.fold(*(w.factor(thickness_nm) for w in waves)), None
+
+    # Usually u is the fraction of the incident intensity lost over the film thickness.
+    # In a lossless film with a propagating incident field, the exit field can still be
+    # evanescent. Parameterise d using its maximum exit decay rate in that case.
+    incident_rate = waves[0].incident_decay_nm
+    depth_rate = incident_rate or (40 * np.pi / geometry.wavelength_angstrom
+                                  * math.sqrt(max(2 * optics["delta"], 0.)))
+    thin = rays.fold(*(w.factor(0.) for w in waves))
+    if depth_rate == 0.:
+        return thin, None
+    # Evanescent rays can decay on a much shorter scale than the incident field.
+    # Space knots smoothly through the thin end where that loss changes most rapidly.
+    grid = np.linspace(0., 1., 181)[1:]**2
+    knots = np.r_[0., np.geomspace(1e-8, grid[0], 16, endpoint=False), grid]
     relative = []
     for u in knots:
-        tau = -sin_in * np.log1p(-u) if u < 1. else np.inf
-        product = fold(field * np.nan_to_num(film_absorption_factor(sine, sin_in, tau)),
-                       central_field * np.nan_to_num(film_absorption_factor(central_sine, sin_in, tau)))
-        relative.append(np.divide(product, transmission, out=np.ones_like(product), where=transmission > 0.))
-    return transmission, FilmAbsorption(sin_in, PchipInterpolator(knots, relative, axis=0))
+        d = _thickness(u, incident_rate, depth_rate)
+        factor = rays.fold(*(w.factor(d) for w in waves))
+        relative.append(np.divide(factor, thin, out=np.ones_like(factor), where=thin > 0.))
+    return thin, FilmAbsorption(sin_in, PchipInterpolator(knots, relative, axis=0),
+                                waves[0].mu_nm, incident_rate, depth_rate)
 
 
 @dataclass(frozen=True)
 class FilmAbsorption:
-    """Relative angular attenuation multiplying the T_f-weighted polar-bin intensities."""
+    """A fitted depth-integrated intensity, relative to the folded thin-film surface fields."""
 
     sin_incidence: float
     curve: PchipInterpolator
+    mu_nm: float
+    incident_decay_nm: float
+    depth_rate_nm: float
 
     def record(self, u, error_u):
         thin = u < 1e-6
         thick = u > 1. - 1e-6
-        return {"parameter": "optical depth d / attenuation length, shared across rings of the phase",
-                "formula": "T_f times F_A, with F_A = A(af)/A(ai), A = (1-exp(-mu*d*s))/s, s = csc(ai)+csc(af)",
-                "optical_depth": None if thick else float(-self.sin_incidence * np.log1p(-u)),
-                "optical_depth_error": (None if error_u is None or thin or thick else
-                                        float(error_u * self.sin_incidence / (1.-u))),
+        d = None if thick else float(_thickness(u, self.incident_decay_nm, self.depth_rate_nm))
+        slope = (1.-u) if self.incident_decay_nm else (1.-u)**2
+        d_error = (None if error_u is None or thin or thick else
+                   float(error_u / (slope*self.depth_rate_nm)))
+        return {"parameter": "film thickness, shared across rings of the phase",
+                "formula": REFRACTED_FILM_FORMULA,
+                "thickness_nm": d, "thickness_error_nm": d_error,
+                "optical_depth": None if d is None else d * self.mu_nm,
+                "optical_depth_error": None if d_error is None else d_error * self.mu_nm,
                 "thin_limit": bool(thin), "thick_limit": bool(thick),
-                "incident_path_absorbed_fraction": float(u)}
-
-
-def ring_transmission(optics, geometry, q, chi_pixels, qz_pixels, signed_profile):
-    return ring_optical_factors(optics, geometry, q, chi_pixels, qz_pixels, signed_profile)[0]
+                "incident_intensity_decay_fraction": float(u) if self.incident_decay_nm else 0.}

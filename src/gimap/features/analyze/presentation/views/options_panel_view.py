@@ -20,6 +20,7 @@ from src.gimap.app.presentation.components import AdvancedSection, SegmentedCont
 
 from ..frames_model import MAX_SUM
 from .command_bar import ElidedLabel
+from .film_controls import FilmControls
 from .normalisation_view import NormalisationView
 from .reduction_errors_view import ReductionErrorsView
 
@@ -235,28 +236,9 @@ class OptionsPanelView(NormalisationView, ReductionErrorsView):
         polarization.addWidget(self.polarization_spin)
         polarization.addStretch(1)
         section.add_layout(polarization)
-        self.film_check = QCheckBox("Absorption in the film", section)
-        self.film_check.setObjectName("analyzeFilmCheck")
-        self.film_check.setToolTip(
-            "The path of the beam in the film changes with the exit angle αf; relative to αf = αi. "
-            "Refraction is not included: valid well above the critical angle."
-        )
-        section.add_widget(self.film_check)
-        film = QFormLayout()
-        film.setHorizontalSpacing(8)
-        self.film_thickness_spin = _spin(section, 0.1, 1e6, 100.0, decimals=1, step=10.0, suffix=" nm")
-        self.film_thickness_spin.setObjectName("analyzeFilmThickness")
-        self.attenuation_spin = _spin(section, 0.001, 1e6, 100.0, decimals=3, step=1.0, suffix=" µm")
-        self.attenuation_spin.setObjectName("analyzeAttenuationLength")
-        self.attenuation_spin.setToolTip(
-            "Attenuation length 1/µ of the film at this energy (tables such as CXRO or NIST)"
-        )
-        film.setRowWrapPolicy(QFormLayout.WrapLongRows)  # the panel is narrow: never wider than it
-        for spin in (self.polarization_spin, self.film_thickness_spin, self.attenuation_spin):
-            spin.setMaximumWidth(130)
-        film.addRow("Thickness", self.film_thickness_spin)
-        film.addRow("Attenuation length", self.attenuation_spin)
-        section.add_layout(film)
+        self.polarization_spin.setMaximumWidth(130)
+        self.film_controls = FilmControls(section)
+        section.add_widget(self.film_controls)
         self._lorentz_row(section)
         return section
 

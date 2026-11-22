@@ -32,6 +32,18 @@ def _number(value, error=None, *, decimals=2, scale=1):
     return result
 
 
+def _film_summary(optics):
+    if not optics.get("available"):
+        return tr("Film optical constants unavailable")
+    constants = dict(delta=f"{optics['delta']:.3g}", beta=f"{optics['beta']:.3g}")
+    if optics.get("model") == "frame corrected with refracted waves":
+        return trf("Frame corrected for refracted film waves · δ {delta} · β {beta}", **constants)
+    if optics.get("model") == "refracted waves":
+        return trf("Refracted film waves · δ {delta} · β {beta}", **constants)
+    # Older fit records contain only the reciprocal exit transmission.
+    return trf("Film exit transmission |T|² from CIF composition · δ {delta} · β {beta}", **constants)
+
+
 def _summary(phase, ring):
     status = tr("Orientation determined") if phase["determined"] else tr("Orientation not determined")
     reasons = [tr(reason) for reason in phase.get("reasons", [])]
@@ -42,12 +54,6 @@ def _summary(phase, ring):
         for p in phase["populations"]
     ]
     weights = tr("Free reflection weights") if phase.get("family_weights") == "free" else tr("Kinematic reflection weights")
-    optics = phase.get("film_optics", {})
-    transmission = (
-        trf("Film exit transmission |T|² from CIF composition · δ {delta} · β {beta}",
-            delta=f"{optics['delta']:.3g}", beta=f"{optics['beta']:.3g}")
-        if optics.get("available") else tr("Film exit transmission unavailable")
-    )
     lines = [
         " · ".join((f"{phase['phase']} · {status}", *reasons)),
         *populations,
@@ -60,7 +66,7 @@ def _summary(phase, ring):
         trf("Crystal Hermans f {crystal} · measured ring f {ring}",
             crystal=_number(phase["herman_crystal"], decimals=3), ring=_number(ring["herman_measured"], decimals=3))
         + f" · {weights}",
-        transmission,
+        _film_summary(phase.get("film_optics", {})),
     ]
     if phase.get("search_settings", {}).get("noncollinear_poles_available") is False:
         lines.append(tr("Only one pole direction constrains this phase. Two distinct fibre axes cannot be established."))

@@ -151,3 +151,122 @@ def test_settings_files_keep_the_intensity_corrections() -> None:
     for key in ("solid_angle", "polarization", "film_thickness_nm", "attenuation_length_um"):
         old["corrections"].pop(key)
     assert settings_from_record(old).corrections == Corrections()  # files written before: nothing corrected
+
+
+@pytest.mark.parametrize("thickness", [140., None])
+def test_reduction_recovers_a_ring_at_subcritical_exit_angles(tmp_path, thickness):
+    from src.gimap.shared.geometry.q_mapping import exit_directions, geometry_rays
+
+    geometry = replace(GEOMETRY, incidence_deg=.52, sample_roll_deg=-1.3)
+    delta, beta = 2.6e-6, 1.6e-7
+    along, x, y = geometry_rays(geometry, (0, SHAPE[0]), (0, SHAPE[1]))
+    _, _, sin_f = exit_directions(x, y, along, geometry.incidence_rad, sample_roll_rad=geometry.sample_roll_rad)
+    sin_i = np.sin(geometry.incidence_rad)
+    k = 20 * np.pi / geometry.wavelength_angstrom  # nm^-1
+    kz_i = k * np.sqrt(sin_i**2 - 2*delta + 2j*beta)
+
+    def depth_weight(sine):
+        kz = k * np.sqrt(sine**2 - 2*delta + 2j*beta)
+        decay = 2 * (kz_i.imag + kz.imag)
+        field = (2*k*sin_i / (k*sin_i + kz_i)) * (2*k*sine / (k*sine + kz))
+        return abs(field)**2 * (1. if thickness is None else -np.expm1(-decay*thickness)) / decay
+
+    maps = giwaxs_maps(SHAPE, geometry)
+    signal = 50. + 500.*np.exp(-.5*((maps.q - 1.1)/.025)**2)
+    above = sin_f > 0.
+    raw = np.zeros(SHAPE, np.float32)
+    raw[above] = signal[above] * depth_weight(sin_f[above]) / depth_weight(sin_i)
+    path = tmp_path / "ring.tif"
+    Image.fromarray(raw).save(path)
+    profile = InstrumentProfile("film test", geometry, None, SHAPE)
+    reduce = AnalyzeFrame(DetectorIoFrameSource(), InMemoryInstrumentProfileRepository([profile]))
+    corrections = Corrections(film_delta=delta, film_beta=beta, film_thickness_nm=thickness, bad_pixels=False)
+    analysis = reduce(AnalysisRequest(path=path, mode="giwaxs", profile_name=profile.name, corrections=corrections))
+    subcritical = above & (sin_f < np.sqrt(2*delta)) & (np.abs(maps.q - 1.1) < .025)
+    assert subcritical.any() and not np.any(analysis.valid[~above]) and np.all(analysis.valid[above])
+    np.testing.assert_allclose(analysis.data[above], signal[above], rtol=2e-5)
+    meta = analysis_metadata(analysis)["intensity_corrections"]["film_absorption"]
+    assert meta["model"] == "refracted waves" and meta["delta"] == delta and meta["beta"] == beta
+    assert meta["thickness_nm"] == thickness and meta["thick_limit"] == (thickness is None)
+    assert settings_from_record(settings_record(AnalyzeSettings(corrections=corrections))).corrections == corrections
+
+
+def test_film_cif_is_resolved_at_the_frame_wavelength_and_recorded(tmp_path):
+    from src.gimap.features.analyze.application.indexing import phase_from_cif
+    from src.gimap.features.analyze.domain.crystal.film_optics import film_optics
+
+    cif = tmp_path / "film.cif"
+    cif.write_text("""data_film
+_chemical_formula_sum 'Si O2'
+_cell_formula_units_Z 2
+_cell_length_a 4.5
+_cell_length_b 4.5
+_cell_length_c 4.5
+_cell_angle_alpha 90
+_cell_angle_beta 90
+_cell_angle_gamma 90
+""")
+    path = tmp_path / "film.tif"
+    Image.fromarray(np.full(SHAPE, 100, dtype=np.uint16)).save(path)
+    corrections = Corrections(film_cif_path=str(cif), bad_pixels=False, lorentz=True)
+    phase = phase_from_cif(cif)
+    assert phase.positions_only and not phase.phase().atoms
+    for wavelength in (.70, 1.0):
+        profile = InstrumentProfile("film test", replace(GEOMETRY, wavelength_angstrom=wavelength), None, SHAPE)
+        reducer = AnalyzeFrame(DetectorIoFrameSource(), InMemoryInstrumentProfileRepository([profile]))
+        analysis = reducer(AnalysisRequest(path=path, mode="giwaxs", profile_name=profile.name, corrections=corrections))
+        record = analysis_metadata(analysis)
+        optic = record["intensity_corrections"]["film_absorption"]
+        expected = film_optics(phase.phase(), wavelength)
+        assert optic["delta"] == expected["delta"] and optic["beta"] == expected["beta"]
+        assert optic["source"] == str(cif)
+        assert {"file": cif.name, "sha256": phase.source_sha256} in record["input_sha256"]
+    # Restore the measured rays using the constants at reduction time, even if the CIF moved.
+    cif.rename(tmp_path / "moved.cif")
+    snapshot = (vars(analysis), analysis.corrections, analysis.geometry, analysis.raw_data, analysis.raw_valid, path.name)
+    data, valid, _ = reducer.measured_orientation_pixels(*snapshot)
+    assert valid.any() and np.isfinite(data[valid]).all()
+
+
+@pytest.mark.parametrize("mode,key", [("transmission", "radial"), ("gisaxs", "horizontal")])
+def test_inactive_film_cif_is_not_required_to_reproduce_other_modes(tmp_path, mode, key):
+    from src.gimap.features.analyze.infrastructure.reproduce import replay_reduction
+
+    path = tmp_path / "sample.tif"
+    Image.fromarray(np.full(SHAPE, 20, dtype=np.uint16)).save(path)
+    profile = InstrumentProfile("film test", GEOMETRY, None, SHAPE)
+    reducer = AnalyzeFrame(DetectorIoFrameSource(), InMemoryInstrumentProfileRepository([profile]))
+    absent = tmp_path / "unused.cif"
+    analysis = reducer(AnalysisRequest(path=path, mode=mode, profile_name=profile.name,
+                                       corrections=Corrections(film_cif_path=str(absent))))
+    record = analysis_metadata(analysis, curve_keys=[key])
+    assert record["intensity_corrections"] is None and str(absent) not in record["reproduction"]["inputs"]
+    replayed = replay_reduction(record, tmp_path)
+    np.testing.assert_array_equal(replayed[key]["intensity"], analysis.reduction.curve(key).intensity)
+
+
+def test_film_controls_apply_only_complete_inputs_and_restore_them(qt_application, monkeypatch, tmp_path):
+    from src.gimap.features.analyze.presentation.views.film_controls import FilmControls
+    from PyQt5.QtWidgets import QFileDialog
+
+    widget = FilmControls()
+    widget.check.setChecked(True)
+    assert widget.values()["attenuation_length_um"] == 100.
+    widget.model.setCurrentIndex(widget.model.findData("typed"))
+    widget.delta.setText("2.25")
+    assert not any(widget.values().values())
+    widget.beta.setText("0.13")
+    assert widget.values()["film_beta"] == pytest.approx(1.3e-7) and widget.values()["film_thickness_nm"] is None
+    widget.thick.setChecked(False)
+    widget.thickness.setValue(125.)
+    saved = Corrections(**widget.values())
+    widget.restore(Corrections())
+    assert not widget.check.isChecked()
+    widget.restore(saved)
+    assert Corrections(**widget.values()) == saved and widget.model.currentData() == "typed"
+    path = str(tmp_path / "test.cif")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_: (path, ""))
+    widget.model.setCurrentIndex(widget.model.findData("cif"))
+    widget._choose()
+    assert widget.values()["film_cif_path"] == path and widget.values()["film_delta"] is None
+    widget.close()

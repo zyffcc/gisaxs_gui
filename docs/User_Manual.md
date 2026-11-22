@@ -1420,14 +1420,18 @@ at fixed q. Ring orientation has its own polarisation and exit-angle settings.
 |---|---|
 | **Solid angle of each pixel (cos³2θ)** | — |
 | **Polarisation, factor** | f (default 0.99): 0.95–0.99 at a synchrotron (horizontal), 0 for an unpolarised laboratory source, −1 vertical |
-| **Absorption in the film** | **Thickness** (nm), **Attenuation length** 1/µ (µm, from tables such as CXRO or NIST) |
+| **Absorption in the film** | Select a **Film model**. For refracted waves use **Enter δ and β** or **Film CIF**. Clear **Thick film limit** to enter a measured **Thickness** in nm. |
 | **Lorentz factor for peak areas** | **Incidence-plane half-width** in horizontal detector pixels (default 2) |
 
-Peak positions do not change; intensities compared across χ or q do — orientation, pole figures,
-crystallinity ratios. The film absorption leaves out refraction, so it holds well above the critical
-angle; with it on, pixels at or below the sample horizon are left out. The factors, and how the error
-bars follow them, are in [Physics and Methods, chapter 5](Physics_Manual.md#5-intensity-corrections-for-giwaxs);
-the JSON record (`intensity_corrections`) gives the formulas and parameters.
+Near the horizon, use **Choose CIF…** to supply the film composition, or enter δ and β at the frame wavelength in units of 10⁻⁶. Both choices account for the shallow
+penetration of an evanescent wave below the critical angle. If only an attenuation length is known, use
+**Attenuation length** with the film thickness and the tabulated length 1/µ in µm. This geometrical
+approximation applies when both incident and exit angles are well above the critical angle.
+All three choices exclude pixels at or below the horizon. The correction changes intensities at fixed q
+and propagates to their errors. The frame JSON records the formula and parameters in `intensity_corrections`.
+[Physics and Methods, chapter 5](Physics_Manual.md#5-intensity-corrections-for-giwaxs)
+
+![Film intensity correction with a measured thickness and optical constants](manual_images/en/film_absorption.png)
 
 Select **Lorentz factor for peak areas** to compare integrated crystalline intensities of a fibre texture. The map
 uses the GIXSGUI weight cos αi |q_y|/k. The radial curve sums these weighted pixels in each q bin, and the peak
@@ -2175,7 +2179,9 @@ direction, the fit can test a single fibre axis at one or two widths.
 To set the window for one ring, move the purple band over its peak before fitting. If the band spans several
 detected peaks, each keeps its own window. Automatic analysis calculates its ring windows from the radial peaks.
 When the CIF composition and scattering factors give the film's optical constants at the measurement wavelength,
-the model includes exit transmission |T|² and uses measured bins down to the horizon. A minimum exit angle set by
+the model averages transmission and attenuation of the refracted waves over the measured pixels in each bin.
+Unknown thickness uses the thick-film limit. The fit accounts for any film correction applied to the frame
+and admits measured bins down to the horizon. A minimum exit angle set by
 the user and **Fit up to χ** still apply. When the optical constants are unavailable, the usual exit-angle limit
 applies. A window containing reflections from different phases is excluded. Reflections of the same phase in one
 window contribute to the same curve.
@@ -2189,7 +2195,7 @@ that phase. The ± values are statistical standard errors. The component percent
 Check the runner-up axes, ΔBIC, and reduced χ² for the joint fit and the displayed ring.
 When the orientation is undetermined, the listed planes, widths and fractions describe the trial fit.
 The crystal Hermans factor describes the fitted distribution of fibre axes. The measured ring f describes that
-ring over its measured angles. With exit transmission enabled, the panel also gives the film's δ and β.
+ring over its measured angles. The panel gives δ and β when film optics are available.
 **Export…** writes the selected ring and its component curves to `<frame>_crystal_orientation.csv`
 and the phase results, settings and sources to `<frame>_crystal_orientation.json`. Automatic analysis with phases also
 includes a **Crystal orientation** section and a `crystal_orientation` record in the report JSON.

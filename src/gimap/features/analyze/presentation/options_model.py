@@ -188,7 +188,7 @@ class OptionsModelMixin:
 
     def set_intensity_corrections(
         self, *, solid_angle: bool, polarization: Optional[float], film_thickness_nm: Optional[float],
-        attenuation_length_um: Optional[float],
+        attenuation_length_um: Optional[float], film_delta=None, film_beta=None, film_cif_path=None,
     ) -> None:
         """GIWAXS intensity corrections (``None``: that one off)."""
         self.state.corrections = replace(
@@ -196,6 +196,7 @@ class OptionsModelMixin:
             polarization=None if polarization is None else float(polarization),
             film_thickness_nm=None if film_thickness_nm is None else float(film_thickness_nm),
             attenuation_length_um=None if attenuation_length_um is None else float(attenuation_length_um),
+            film_delta=film_delta, film_beta=film_beta, film_cif_path=film_cif_path,
         )
 
     def set_bad_pixels(self, enabled: bool) -> None:

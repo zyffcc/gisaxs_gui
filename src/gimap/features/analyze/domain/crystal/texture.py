@@ -22,6 +22,8 @@ MIN_DELTA_BIC = 6.
 
 @dataclass(frozen=True)
 class TextureRing:
+    """A folded profile, its fixed optical factor and an optional thickness-dependent multiplier."""
+
     ring_id: int
     q: float
     q_min: float
@@ -90,11 +92,11 @@ def _ring_record(data, trial, coeff, red, dof):
         shape = (1. - trial.x[1])*oriented + trial.x[1]*library.isotropic
     else:
         shape = library.isotropic[None, :]
-    optical_record = {}
+    optical_factor = ring.transmission
     if ring.absorption is not None:
         attenuation = ring.absorption.curve(trial.x[-1])
         shape = shape * attenuation
-        optical_record["exit_transmission_times_absorption"] = (ring.transmission * attenuation).tolist()
+        optical_factor = optical_factor * attenuation
     contributions = scale * relative[:, None] * shape
     components = [{"hkl": f.label, "multiplicity": f.multiplicity, "q_hkl": f.q, "sum_f2": f.strength,
                    "kinematic_weight": float(kinematic), "weight": float(weight), "values": curve.tolist()}
@@ -105,7 +107,7 @@ def _ring_record(data, trial, coeff, red, dof):
     worst = int(np.argmax(np.abs(residual)))
     f_ring, f_error, _ = measured_hermans(profile.chi[use], profile.value[use], profile.sigma[use])
     return {
-        **optical_record,
+        "film_intensity_factor": None if optical_factor is None else optical_factor.tolist(),
         "ring_id": int(ring.ring_id), "q": float(ring.q), "q_window": [float(ring.q_min), float(ring.q_max)],
         "points": int(use.sum()), "effective_dof": dof, "reduced_chi2": _finite(red), "scale": scale,
         "herman_measured": _finite(f_ring), "herman_measured_err": _finite(f_error),
@@ -160,9 +162,10 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
     if not rings:
         result["reasons"].append("no assigned rings")
         return result
-    incidence_sines = {None if ring.absorption is None else ring.absorption.sin_incidence for ring in rings}
-    if len(incidence_sines) != 1 or any(r.absorption is not None and r.transmission is None for r in rings):
-        raise ValueError("Fitting film absorption needs exit transmission and one incidence angle for all rings.")
+    optical_settings = {None if r.absorption is None else
+                        (r.absorption.sin_incidence, r.absorption.mu_nm, r.absorption.depth_rate_nm) for r in rings}
+    if len(optical_settings) != 1 or any(r.absorption is not None and r.transmission is None for r in rings):
+        raise ValueError("Fitting film thickness requires one film and incidence angle across all rings.")
     axes = candidate_axes(phase)
     found = reflections(phase, max(r.q_max for r in rings))
     result.update(

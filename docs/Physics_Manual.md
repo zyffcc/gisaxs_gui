@@ -1151,21 +1151,29 @@ Implementation: `src/gimap/features/analyze/domain/intensity.py`
 
 ### 5.4 Absorption in the film
 
-A uniform film of thickness d and attenuation length Λ_att = 1/µ is entered with d in nm and Λ_att in µm (from tables such as CXRO or NIST at the beam energy). Scattering from depth z travels `z/sin α_i` in and `z/sin α_f` out:
+For a homogeneous film with optical constants δ and β at wavelength λ, let s = sin α in vacuum and k = 2π/λ. At the vacuum–film interface the transmitted wave has
 
 ```text
-s(α_f) = 1 / sin α_i + 1 / sin α_f                                               (5.6)
-A(α_f) = ∫ from 0 to d of exp(−z s / Λ_att) dz = (Λ_att / s) (1 − exp(−d s / Λ_att))     (5.7)
-F_A = A(α_f) / A(α_i)                                                            (5.8)
+v(α) = √(s² − 2δ + 2iβ),      Im v ≥ 0
+k_z(α) = k v(α),              t(α) = 2s / (s + v)
+g = 2 Im[k_z(α_i) + k_z(α_f)]
+A(α_f,d) = |t_i|² |t_f|² ∫₀ᵈ exp(−gz) dz = |t_i|² |t_f|² [1 − exp(−gd)] / g
+F_film = A(α_f,d) / A(α_i,d)
 ```
 
-- The code evaluates `(1 − exp(−d s/Λ_att))/s`; the constant Λ_att cancels in the ratio.
-- `sin α_f` is the exact value (2.8) for each pixel.
-- Pixels with `sin α_f ≤ 0` (at or below the horizon) have no factor and are left out. The correction needs `α_i > 0`.
-- Limits: for `d ≪ Λ_att`, `F_A → 1`; for `d ≫ Λ_att`, `F_A → s(α_i)/s(α_f)`.
-- Not included: refraction (so the correction is valid only well above the critical angle), the reflected-wave paths of the DWBA, the substrate, and a varying composition with depth.
+The reciprocal exit wave enters with the same decaying root as the incident wave. Below α_c ≈ √(2δ), its imaginary normal wavevector limits the depth contributing to diffraction even for very weak absorption. The model includes transmission at the top surface and omits reflection at the substrate. The depth integral tends to d for gd ≪ 1 and to 1/g for gd ≫ 1. Normalisation to specular exit cancels the incident transmission. The correction divides each pixel by F_film before binning, using its external exit angle (2.8). It requires α_i > 0 and excludes pixels at or below the horizon. Wavelength, depth and wavevectors in these formulas must use consistent length units.
 
-Implementation: `src/gimap/features/analyze/domain/intensity.py`
+**Large-angle limit (Table 2).** When both sin²α ≫ 2δ, 2β, the fields approach unit amplitude and Im k_z ≈ kβ/sin α. With μ = 4πβ/λ and attenuation length Λ_att = 1/μ this gives
+
+```text
+S(α_f) = 1 / sin α_i + 1 / sin α_f                                               (5.6)
+A(α_f,d) ≈ (1 − exp(−μ d S)) / (μ S)                                             (5.7)
+F_A = A(α_f,d) / A(α_i,d)                                                        (5.8)
+```
+
+When only Λ_att is supplied, GIMaP uses (5.6–5.8) directly. F_A tends to 1 in the thin limit and to S(α_i)/S(α_f) in the thick limit. Film thickness is entered in nm and the tabulated attenuation length in µm. [Gasser et al., §§2.5–2.6 and Table 2](https://journals.iucr.org/j/issues/2025/01/00/xx5064/)
+
+Implementation: `src/gimap/features/analyze/domain/refracted_film.py`, `src/gimap/features/analyze/domain/intensity.py`
 
 ### 5.5 Uncertainty of corrected photon counts
 
@@ -1704,7 +1712,7 @@ Implementation: `src/gimap/features/assistant/domain/orientation.py`
 
 ### 7.7 Ring orientation and the Hermans orientation factor
 
-With a phase assignment, §7.11 uses the same radial windows, detector errors and folding for the joint crystal orientation fit. When the CIF supplies film optical constants, that fit models the exit transmission and admits measured pixels down to the horizon of the active q map. An explicit exit-angle or polar-angle limit still applies. The single-ring Hermans and pole-figure procedures below use their original cuts.
+With a phase assignment, §7.11 uses the same radial windows, detector errors and folding for the joint crystal orientation fit. When the CIF supplies film optical constants, that fit models refraction and attenuation of both film waves and admits measured pixels down to the horizon of the active q map. An explicit exit-angle or polar-angle limit still applies. The single-ring Hermans and pole-figure procedures below use their original cuts.
 
 **Ring window.** The ring is centred on the fitted q_0 of the nearest radial peak (when one lies within
 `max(2 FWHM, 3 Δq)` of the requested q), with the half width
@@ -2082,7 +2090,7 @@ An oriented population a has a reciprocal-lattice plane normal **n**ₐ preferen
 ```text
 Kₐ(γ) = Cₐ {exp[−γ²/(2sₐ²)] + exp[−(π−γ)²/(2sₐ²)]},   ∫₀^{π/2} Kₐ(γ) sin γ dγ = 1
 Gₐ(χ,ψ) = (1/2π) ∫₀^{2π} Kₐ(arccos[cos χ cos ψ + sin χ sin ψ cos α]) dα
-Nᵣₖ = Aᵣ ⟨|T_f|²⟩ᵣₖ ∫bin k sin χ [φ + Σₐ pₐ Σg Wᵣg Gₐ(χ,ψ₍g,a₎)] dχ
+Nᵣₖ = Aᵣ ⟨F_film⟩ᵣₖ ∫bin k sin χ [φ + Σₐ pₐ Σg Wᵣg Gₐ(χ,ψ₍g,a₎)] dχ
 φ + Σₐ pₐ = 1,    Σg Wᵣg = 1
 ```
 
@@ -2098,9 +2106,9 @@ u = sin αf = q cos χ / (2π/λ) − sin αi                    (external q)
 |T_f|² = |2u / [u + √(u² − 2δ + 2iβ)]|²,    u > 0
 ```
 
-Zⱼ is the atomic number. The forward factors for H, C, N, O, Na, Si, Ca, I, Au and Pb are interpolated over 4.895–30 keV. When factors are unavailable, δ is estimated from rₑλ²ρₑ/(2π), β is unknown and the fit retains the §7.7 exit cut. With film optics, each signed bin averages the Fresnel field intensity over its measured pixels at their external exit angles, then combines ±χ with the intensity profile's weights. If the q map already includes refraction, the fit inverts that mapping to obtain the external exit angle. The fixed q window follows the active geometry. The incident field is constant for a frame and enters Aᵣ. A single interface can enhance scattering near the critical angle. It cannot account for a beamstop, an asymmetric sample shadow, diffuse background varying with χ, or a peak leaving the extraction window. [Henke scattering factors](https://henke.lbl.gov/optical_constants/asf.html) · [Gasser et al., 2025, §2.6](https://doi.org/10.1107/S1600576724010628)
+Zⱼ is the atomic number. The forward factors for H, C, N, O, Na, Si, Ca, I, Au and Pb are interpolated over 4.895–30 keV. When factors are unavailable, δ is estimated from rₑλ²ρₑ/(2π), β is unknown and the fit retains the §7.7 exit cut. With film optics, each signed bin averages the full depth-integrated factor F_film (§5.4) over its measured pixels at their external exit angles, then combines ±χ with the intensity profile's weights. The fit takes the external exit angle from each measured detector ray, including when the q map uses refraction. For display bins without pixels it uses the ray at the centre of the ring window when that ray exists. The fixed q window follows the active geometry. A single interface can enhance scattering near the critical angle. It cannot account for a beamstop, an asymmetric sample shadow, diffuse background varying with χ, or a peak leaving the extraction window. [Henke scattering factors](https://henke.lbl.gov/optical_constants/asf.html) · [Gasser et al., 2025, §2.6](https://doi.org/10.1107/S1600576724010628)
 
-The P08 benchmark also fits the product of the exit field and the film absorption factor F_A of §5.4. At depth z, the incident and exit paths total zS, with S = csc αᵢ + csc α_f. Integrating exp(−μzS) from 0 to d gives (1 − exp(−μdS))/(μS). The benchmark normalises this factor at α_f = αᵢ and averages T_f F_A over the same measured pixels as the data. The public metadata give no measured thickness. Each phase therefore has one nuisance parameter τ = μd shared by its rings. This parameter counts in the fit statistics. Both phases reach the optically thick limit, where only the angular dependence is determined. These paths use geometric angles and approximate attenuation near the critical angle. [Gasser et al., §2.5, eq. 10](https://journals.iucr.org/j/issues/2025/01/00/xx5064/)
+The default orientation model uses the thick-film limit when the thickness is unknown. For a frame corrected with the geometrical absorption factor, the model uses the supplied thickness and divides F_film by the factor already applied to each pixel. A frame corrected with the refracted-wave model needs no further film multiplier. The P08 benchmark also fits one thickness shared by all rings of each phase, including that parameter in BIC and the degrees of freedom. It reports the optical depth τ = μd for a finite thickness. At the thick limit only the angular dependence can be inferred.
 
 The search compares isotropic material with one or two oriented populations. Each has its own width (2°–120°) and axis, including two widths about the same axis. Primitive (hkl) with |h|, |k|, |l| ≤ 2 are grouped by symmetry and inversion. For N measured bins, BIC = χ² + k ln N. With m oriented populations, k includes 2m shared continuous parameters and one scale per ring, or one amplitude per family per ring when its weights are free. A pair must improve on each constituent's single-component BIC. Two distinct axes require noncollinear reflection poles. Against each constituent alone and its supported two-width fit, the two-axis prediction must change at least one measured ring by √(Σₖ(ΔNₖ/σₖ)²) > 1 after refitting scales and weights.
 
@@ -2108,7 +2116,7 @@ An orientation is **determined** when the joint and every ring’s reduced χ² 
 
 The fitted crystal Hermans factor is Σₐ pₐ ∫ Kₐ(γ) P₂(cos γ) sin γ dγ over the hemisphere, with P₂(x) = (3x²−1)/2. Each population’s own axis defines γ. Each ring also reports its model-free f over the measured bins (§7.7). When the fit fails the quality criteria, its axes, widths and fractions are diagnostic estimates.
 
-For the public P08 frame (λ = 0.688801 Å), the MAPbI₃ formula with four units per cell gives ρₑ = 1.0423 e Å⁻³, δ = 2.183 × 10⁻⁶, β = 1.269 × 10⁻⁷ and αc = 0.1197°. Only Pb and I have refined positions in the benchmark CIF. At q ≈ 1 Å⁻¹ the two measured sides of the ring fade at different angles well above αc. The joint fit fails the residual check. [Public-frame benchmark](../tools/benchmarks/README.md#crystal-orientation)
+For the public P08 frame (λ = 0.688801 Å), the MAPbI₃ formula with four units per cell gives ρₑ = 1.0423 e Å⁻³, δ = 2.183 × 10⁻⁶, β = 1.269 × 10⁻⁷ and αc = 0.1197°. Only Pb and I have refined positions in the benchmark CIF. The measured geometry places the sharp attenuation of the 0.9973 Å⁻¹ ring near the film critical angle. At |χ| = 84.5° the prediction changes from 84.4 with geometrical absorption to 24.1 with refracted waves, against 28.2 ± 3.3 measured. The 1.7248 Å⁻¹ ring still exceeds the reduced χ² limit of 5, so this exposure leaves the MAPbI₃ orientation undetermined. [Public-frame benchmark](../tools/benchmarks/README.md#p08-crystal-orientation-at-the-measured-incidence-and-roll)
 
 ## 8. GISAXS automatic analysis
 
@@ -5121,7 +5129,7 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 ### 15.1 Scattering physics
 
 - **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value unless Analyze is given the film's critical angle (q_z of one film, section 2.6), and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
-Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10), the four-term DWBA on a known bare substrate (section 9.17) and the vertical cut of a fit of several curves (section 9.18); a layered substrate, an oxide or a film on the wafer and roughness are not modelled. The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). The film absorption correction and the q_z of the XRR extractor also ignore refraction (sections 5.4, 13.1). The only refraction-corrected quantity is the Sputter island height H(t), which uses the refracted wavevector transfer for the positions of fringe minima, not a DWBA intensity (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
+Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10), the four-term DWBA on a known bare substrate (section 9.17) and the vertical cut of a fit of several curves (section 9.18); a layered substrate, an oxide or a film on the wafer and roughness are not modelled. The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). GIWAXS intensity corrections and orientation fits can use refracted waves in a uniform film (sections 5.4, 7.11). The XRR extractor uses vacuum q_z (section 13.1). The Sputter island height H(t) uses the refracted wavevector transfer for fringe minima (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
 - **Absolute intensity.** A secondary standard sets the absolute scale for its measurement conditions (section 4.12). In grazing incidence, footprint, illuminated volume and interface effects require a sample-specific treatment. The scale parameter Int in Fitting is an empirical amplitude because the form factors use P(0) = 1 (section 9.4).
 - **Lorentz weighting.** The optional detector Jacobian applies to integrated crystalline intensities (§5.6).
 - **Texture.** The analysis assumes fibre symmetry. The systematic range tests the angular cuts, background, attenuation and edge fills (§§7.7, 7.11). A population concentrated beyond the measured angles can give f outside these scenarios.

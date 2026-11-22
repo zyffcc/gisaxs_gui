@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- **GIWAXS film absorption and crystal orientation** use refracted incident and exit waves near the sample horizon, including evanescent attenuation below the critical angle. For a frame correction, enter the optical constants at the measurement wavelength or select a film CIF. The attenuation-length option retains the large-angle geometrical correction.
+
 - **Measure from frame** now measures incidence αi alongside roll ψ. Analyze records the shadow, specular and available GISAXS Yoneda estimates with their uncertainties. Automatic analysis uses a resolved measurement when the nominal angle is missing or differs by more than 3σ. **Keep entered αi** retains the nominal value.
 
 - Analyze can measure sample roll ψ from the shadow or Yoneda band and the two sides of a GIWAXS ring or a GISAXS specular rod. The applied angle sets the sample axes for cuts, pole figures and reflection overlays. Automatic analysis reports the estimates and applies a resolved roll at three standard errors.

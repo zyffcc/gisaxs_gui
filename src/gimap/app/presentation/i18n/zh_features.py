@@ -10,6 +10,8 @@ from .zh_calibration_rings import CALIBRATION_RINGS_ZH
 from .zh_calibration_uncertainty import CALIBRATION_UNCERTAINTY_ZH
 from .zh_coverage_report import COVERAGE_REPORT_ZH
 from .zh_crystal_orientation import CRYSTAL_ORIENTATION_ZH
+from .zh_crystal_film import STRINGS as CRYSTAL_FILM_ZH
+from .zh_refracted_film import REFRACTED_FILM_ZH
 from .zh_fit_data import FIT_DATA_ZH
 from .zh_flat_field import FLAT_FIELD_ZH
 from .zh_geometry import GEOMETRY_ZH
@@ -79,6 +81,7 @@ FEATURES_ZH = {
     **RING_ASSIGNMENT_ZH, **ORIENTATION_REDUCTION_ZH, **ORIENTATION_REPORT_ZH, **SERIES_SELECTION_ZH,
     **REDUCTION_ERRORS_ZH, **HORIZON_SELECTION_ZH, **REPRODUCTION_ZH, **JOINT_HEIGHT_ZH,
     **COVERAGE_REPORT_ZH, **POLE_REFERENCE_ZH, **CRYSTAL_ORIENTATION_ZH, **TEXTURE_POPULATIONS_ZH,
+    **CRYSTAL_FILM_ZH, **REFRACTED_FILM_ZH,
 }
 
 __all__ = ["FEATURES_ZH"]

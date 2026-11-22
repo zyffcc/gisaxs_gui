@@ -19,7 +19,8 @@ def _observed_pixels(analysis, frame_source):
         # pixels hidden or altered by them, retaining the user's flat, dark and mask.
         reducer = AnalyzeFrame(frame_source, None)
         data, valid, _ = reducer.measured_orientation_pixels(
-            vars(analysis), replace(settings, film_thickness_nm=None, attenuation_length_um=None),
+            vars(analysis), replace(settings, film_thickness_nm=None, attenuation_length_um=None,
+                                    film_delta=None, film_beta=None, film_cif_path=None),
             analysis.geometry, analysis.raw_data, analysis.raw_valid, analysis.path.name,
             bitmap_record(analysis.drawn_mask, analysis.shape),
         )

@@ -278,6 +278,39 @@ def public_frame(*, with_phases=True, diagnostics=False, incidence_deg=None, sam
     return report
 
 
+def film_comparison(reference, current):
+    """Compare two optical-depth refits only when their profiles and geometry match."""
+    for key in ("incidence_deg", "sample_roll_deg", "wavelength_A"):
+        if not np.isclose(reference["geometry"][key], current["geometry"][key], rtol=1e-9, atol=1e-9):
+            raise ValueError(f"Cannot compare frames with different {key}.")
+    comparison = []
+    for old, new in zip(reference["benchmark_film_absorption"], current["benchmark_film_absorption"], strict=True):
+        if old["phase"] != new["phase"] or old["phase_spec"]["source_sha256"] != new["phase_spec"]["source_sha256"]:
+            raise ValueError("The phase or CIF differs between runs.")
+        rings = []
+        for before, after in zip(old["rings"], new["rings"], strict=True):
+            for key in ("q", "q_window", "chi_deg", "fit_mask", "observed", "sigma"):
+                if not np.allclose(np.asarray(before[key], float), np.asarray(after[key], float),
+                                   equal_nan=True, rtol=1e-8, atol=1e-8):
+                    raise ValueError(f"The {new['phase']} profiles differ in {key}.")
+            bins = []
+            for i, chi in enumerate(after["chi_deg"]):
+                if chi < 80. or not after["fit_mask"][i]:
+                    continue
+                observed, sigma = after["observed"][i], after["sigma"][i]
+                old_fit, new_fit = before["fitted"][i], after["fitted"][i]
+                bins.append({"chi_deg": chi, "observed": observed, "sigma": sigma,
+                             "reference_fitted": old_fit, "current_fitted": new_fit,
+                             "reference_residual_sigma": (observed-old_fit)/sigma,
+                             "current_residual_sigma": (observed-new_fit)/sigma})
+            rings.append({"q": after["q"], "points": after["points"], "reference_chi2red": before["reduced_chi2"],
+                          "current_chi2red": after["reduced_chi2"], "bins_above_80_deg": bins})
+        comparison.append({"phase": new["phase"], "reference_model": old["film_absorption"],
+                           "current_model": new["film_absorption"], "reference_chi2red": old["reduced_chi2"],
+                           "current_chi2red": new["reduced_chi2"], "rings": rings})
+    return comparison
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--part", choices=("synthetic", "public", "all"), default="all")
@@ -285,9 +318,12 @@ def main():
     parser.add_argument("--json", type=Path)
     parser.add_argument("--public-incidence-deg", type=float, help="test a specified incidence angle on the public frame")
     parser.add_argument("--public-roll-deg", type=float, help="fix sample roll ψ (default: measure on the frame)")
+    parser.add_argument("--reference-json", type=Path, help="compare the public film-depth refit with a prior run")
     arguments = parser.parse_args()
     if arguments.trials < 1:
         parser.error("--trials must be positive")
+    if arguments.reference_json and arguments.part == "synthetic":
+        parser.error("--reference-json requires a public-frame run")
     results = {}
     if arguments.part in ("public", "all"):
         with tempfile.TemporaryDirectory() as home:
@@ -297,6 +333,9 @@ def main():
                 os.environ.setdefault("QT_QPA_FONTDIR", "C:/Windows/Fonts")
             results["public"] = public_frame(diagnostics=True, incidence_deg=arguments.public_incidence_deg,
                                             sample_roll_deg=arguments.public_roll_deg)
+        if arguments.reference_json:
+            reference = json.loads(arguments.reference_json.read_text(encoding="utf-8"))
+            results["film_comparison"] = film_comparison(reference["public"], results["public"])
     if arguments.part in ("synthetic", "all"):
         results["synthetic"] = [coverage(name, arguments.trials) for name in (*TEXTURES, MIXTURE)]
         for item in results["synthetic"]:
@@ -311,6 +350,11 @@ def main():
                   "delta BIC", fit.get("delta_bic"), "Hermans", fit.get("herman_crystal"))
             for ring in fit.get("rings", []):
                 print(ring["q"], ring["reduced_chi2"], ring["herman_measured"])
+        for phase in results.get("film_comparison", []):
+            print(phase["phase"], "reference and current joint reduced chi2",
+                  phase["reference_chi2red"], phase["current_chi2red"])
+            for ring in phase["rings"]:
+                print(ring["q"], ring["reference_chi2red"], ring["current_chi2red"])
     if arguments.json:
         arguments.json.write_text(json.dumps(results, indent=2, allow_nan=False), encoding="utf-8")
 
