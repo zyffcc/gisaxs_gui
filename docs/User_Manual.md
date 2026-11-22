@@ -1293,7 +1293,7 @@ range, the background, and how many pixels were filled from the mirror side.
 
 ![The Mask & corrections step](manual_images/en/05_mask_step.png)
 
-*The summary at the top counts each kind of pixel left out; on the image, amber circles mark the hot pixels found in this frame and the red rectangle is a drawn mask.*
+*At the top the three closed sections that scale the intensities; the summary under them counts each kind of pixel left out; on the image, amber circles mark the hot pixels found in this frame and the red rectangle is a drawn mask.*
 
 **Show Masked Pixels on the Image** marks them on the detector image: red = left out, amber
 circles = hot or dead pixels, cyan = filled from the mirror side (used in the curves).
