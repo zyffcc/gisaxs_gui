@@ -96,7 +96,8 @@ class PhaseSpec:
 
     def phase(self) -> Phase:
         if self.positions_only:  # no symmetry known: every hkl, no intensities from the atoms as listed
-            return Phase(self.name, UnitCell(*self.cell), (parse_operation("x,y,z"),), ())
+            return Phase(self.name, UnitCell(*self.cell), (parse_operation("x,y,z"),), (),
+                         self.formula_sum, self.formula_units_z)
         operations = parse_operations(self.operations) if self.operations else centring_operations(self.centring)
         return Phase(self.name, UnitCell(*self.cell), operations, tuple(self.atoms), self.formula_sum, self.formula_units_z)
 

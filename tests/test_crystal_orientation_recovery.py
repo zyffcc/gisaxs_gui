@@ -147,9 +147,9 @@ def test_public_p08_automatic_crystal_orientation_zero_roll():
     assert len(mapi["populations"]) == 2 and mapi["fwhm_deg"] is None
     assert mapi["film_optics"]["electron_density_e_per_a3"] == pytest.approx(1.04228, abs=1e-5)
     assert mapi["film_optics"]["beta"] == pytest.approx(1.26942e-7, rel=1e-4)
-    assert mapi["reduced_chi2"] == pytest.approx(33.07, abs=.15)
+    assert mapi["reduced_chi2"] == pytest.approx(31.75, abs=.15)
     assert [r["reduced_chi2"] for r in mapi["rings"]] == pytest.approx(
-        [40.15, 13.26, 14.53, 59.36, 123.25, 8.94, 20.88, 8.44, 5.69, 2.95], abs=.25)
+        [38.74, 12.89, 14.28, 58.29, 115.00, 8.94, 20.55, 8.59, 5.65, 2.97], abs=.25)
     strong = mapi["rings"][0]
     assert {r["hkl"] for r in strong["components"]} == {"110", "002"}
     assert strong["profile_settings"]["min_exit_deg"] == 0.
@@ -166,7 +166,7 @@ def test_public_p08_automatic_crystal_orientation_zero_roll():
     assert len(lead["rings"]) == 1
     assert lead["rings"][0]["reduced_chi2"] == pytest.approx(2.76, abs=.08)
     widths = sorted(p["fwhm_deg"] for p in lead["populations"])
-    assert widths == pytest.approx([16.64, 65.37], abs=.3)
+    assert widths == pytest.approx([16.69, 65.58], abs=.3)
 
 
 def test_transmitted_sharp_and_broad_populations_recover_their_own_widths_and_fractions():
@@ -212,20 +212,26 @@ def test_measured_angles_and_absorption_reach_public_crystal_orientation():
     assert report["geometry"]["incidence_deg"] == pytest.approx(incidence["deg"])
     assert incidence["deg"] == pytest.approx(.5012, abs=.003)
     mapi, lead = report["crystal_orientation"]
-    assert mapi["reduced_chi2"] == pytest.approx(18.32, abs=.25)
+    assert mapi["film_optics"]["depth_source"] == "thick limit"
+    assert mapi["reduced_chi2"] == pytest.approx(3.366, abs=.08)
     assert not mapi["determined"] and lead["axes"] == [[0, 0, 1], [0, 0, 1]]
-    assert lead["reduced_chi2"] == pytest.approx(1.90, abs=.12)
+    assert lead["reduced_chi2"] == pytest.approx(1.786, abs=.08)
     attenuated, basal = report["benchmark_film_absorption"]
     assert attenuated["film_absorption"]["thick_limit"]
     assert not attenuated["determined"] and basal["axes"] == [[0, 0, 1], [0, 0, 1]]
     assert attenuated["points"] == mapi["points"]
-    assert attenuated["reduced_chi2"] == pytest.approx(4.24, abs=.10)
+    assert attenuated["axes"] == [[2, 2, 1], [1, 1, 0]]
+    assert attenuated["reduced_chi2"] == pytest.approx(3.371, abs=.08)
     assert [r["reduced_chi2"] for r in attenuated["rings"]] == pytest.approx(
-        [5.96, 2.71, 5.92, 3.97, 2.94, 3.88, 5.25, 3.78, 3.76, 3.66], abs=.15)
-    assert basal["reduced_chi2"] == pytest.approx(1.86, abs=.12)
+        [1.64, 2.46, 6.04, 2.89, 2.10, 3.72, 4.62, 3.13, 3.79, 3.64], abs=.12)
+    horizon = attenuated["rings"][0]
+    for i in (84, 85):
+        assert horizon["fit_mask"][i]
+        assert abs(horizon["observed"][i] - horizon["fitted"][i]) < 1.5 * horizon["sigma"][i]
+    assert basal["reduced_chi2"] == pytest.approx(1.809, abs=.08)
 
 
-def test_texture_recovers_one_optical_depth_across_three_rings():
+def test_texture_recovers_one_refracted_wave_optical_depth_across_three_rings():
     from types import SimpleNamespace
 
     from src.gimap.features.analyze.domain.crystal import fold_profile
@@ -249,15 +255,24 @@ def test_texture_recovers_one_optical_depth_across_three_rings():
         curve = SimpleNamespace(x=signed, sigma=np.ones_like(signed))
         field, absorption = ring_optical_factors(
             optics, geometry, q, signed, np.tile(qz[use], 2), curve, fit_absorption=True)
-        # Generate exact bin-centre signals without evaluating the fit's interpolator.
-        s = 1/sin_i + 1/sine[use]
-        attenuation = (2/sin_i) * np.expm1(-tau*s) / (s * np.expm1(-2*tau/sin_i))
-        signal = background + (mean[use] - background) * field[use] * attenuation
+        # Construct independent amplitudes and a depth integral on each ray, including evanescent exits.
+        k = geometry.wavevector_inv_angstrom
+        medium = -2*optics["delta"] + 2j*optics["beta"]
+        ki, kf = k*np.sqrt(sin_i**2 + medium), k*np.sqrt(sine[use]**2 + medium)
+        ti = 2*k*sin_i / (k*sin_i + ki)
+        tf = 2*k*sine[use] / (k*sine[use] + kf)
+        d_angstrom = tau / (2*k*optics["beta"])
+        rate = 2*(ki+kf).imag
+        depth = -np.expm1(-rate*d_angstrom) / rate
+        specular = abs(ti)**4 * -np.expm1(-4*ki.imag*d_angstrom) / (4*ki.imag)
+        signal = background + (mean[use] - background) * abs(ti * tf)**2 * depth / specular
         profile = fold_profile(signed, np.tile(signal, 2), curve.sigma, background)
         rings.append(TextureRing(i, q, low, high, profile, field, absorption))
     fitted = fit_crystal_orientation(phase, rings)
     assert fitted["axes"] == [[0, 0, 1]]
+    assert fitted["determined"]
     assert fitted["film_absorption"]["optical_depth"] == pytest.approx(tau, rel=.01)
     assert fitted["fwhm_deg"] == pytest.approx(22., abs=.1)
+    assert fitted["fraction_iso"] == pytest.approx(.29, abs=.001)
     assert fitted["parameters"] == 2 + 3 + 1
     assert sum(r["effective_dof"] for r in fitted["rings"]) == pytest.approx(fitted["points"] - 6)

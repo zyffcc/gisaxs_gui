@@ -424,32 +424,42 @@ On Xeuss the beam position prevents an independent bilateral spot measurement, a
 
 On the 0.9973 Å⁻¹ ring, the vacuum horizon obeys `cos χ = (2π/λ) sin αi / q`. With λ = 0.688801 Å, its predicted |χ| is 85.41° at the measured incidence and 89.31° at the notebook angle. The observed loss around 84–86° agrees with the former. This check does not enter the incidence estimate.
 
-`python tools/benchmarks/crystal_orientation.py --part public --json measured.json` runs the automatic analysis with the published αi as its reference. For this exposure the reduction uses αi = 0.50124° and ψ = −1.30459°. The JSON keys `crystal_orientation` and `benchmark_film_absorption` contain the exit-transmission fit and the refit including film absorption, respectively. Both use the same CIFs, measured pixels, uncertainties, integration windows and per-ring intensity scales.
+`python tools/benchmarks/crystal_orientation.py --part public --json measured.json` runs the automatic analysis with the published αi as its reference. It measures αi = 0.50124° and ψ = −1.30459°. In the JSON, `crystal_orientation` uses the thick-film limit and `benchmark_film_absorption` fits one optical depth μd per phase. The public sample record gives the coating and annealing conditions but no measured thickness. [P08 sample and notebook](https://zenodo.org/records/17466183)
 
-The sample YAML gives the coating and annealing conditions but no measured film thickness. The refit allows one effective optical depth τ = μd per phase, common to its rings. With s = csc αi + csc αf and s₀ = 2 csc αi, the normalized F_A = [(1 − exp(−τs))/s] / [(1 − exp(−τs₀))/s₀] follows §5.4 of the Physics Manual. The model multiplies T_f by F_A on each measured ray before binning and folding. It uses geometrical path lengths, an approximation near the critical angle. The extra parameter enters BIC, the covariance and effective degrees of freedom. Both phases reach the thick limit F_A = s₀/s, which supplies no finite estimate of d. [P08 sample and notebook](https://zenodo.org/records/17466183)
+For the reference columns, run the same command at commit `27f8b22d` with `--json reference.json`. The refit there used the exit-field intensity T_f = |t_f|² multiplied by the geometrical film absorption F_A of Physics Manual §5.4. At the present revision add `--reference-json reference.json` to compare both refits. The benchmark compares the CIF hashes, geometry, q windows, χ bins, fit masks, signals and errors. Its `film_comparison` block records the per-ring χ²red and the measured and predicted intensities for fitted bins above 80°. Each model retains the per-ring intensity scales and evaluates its optical factor on each measured ray before folding. The fitted optical depth counts toward BIC and the effective degrees of freedom.
 
-| Phase and q (Å⁻¹) | χ²red, T_f | χ²red, T_f × F_A |
-|---|---:|---:|
-| **MAPbI₃ joint (746 bins)** | **18.32** | **4.24** |
-| 0.9973 | 34.94 | 5.96 |
-| 1.4091 | 7.75 | 2.71 |
-| 1.7248 | 12.14 | 5.92 |
-| 1.9903 | 26.37 | 3.97 |
-| 2.2256 | 30.19 | 2.94 |
-| 2.4382 | 6.61 | 3.88 |
-| 2.8148 | 22.03 | 5.25 |
-| 2.9854 | 21.47 | 3.78 |
-| 3.4480 | 4.39 | 3.76 |
-| 4.1040 | 3.71 | 3.66 |
-| **PbI₂ 0.8989 (83 bins)** | **1.90** | **1.86** |
+| Phase and q (Å⁻¹) | χ²red, T_f only | χ²red, T_f × geometrical F_A | χ²red, refracted waves |
+|---|---:|---:|---:|
+| **MAPbI₃ joint (746 bins)** | **18.32** | **4.24** | **3.37** |
+| 0.9973 | 34.94 | 5.96 | 1.64 |
+| 1.4091 | 7.75 | 2.71 | 2.46 |
+| 1.7248 | 12.14 | 5.92 | 6.04 |
+| 1.9903 | 26.37 | 3.97 | 2.89 |
+| 2.2256 | 30.19 | 2.94 | 2.10 |
+| 2.4382 | 6.61 | 3.88 | 3.72 |
+| 2.8148 | 22.03 | 5.25 | 4.62 |
+| 2.9854 | 21.47 | 3.78 | 3.13 |
+| 3.4480 | 4.39 | 3.76 | 3.79 |
+| 4.1040 | 3.71 | 3.66 | 3.64 |
+| **PbI₂ 0.8989 (83 bins)** | **1.90** | **1.86** | **1.81** |
 
-For MAPbI₃ the best pair changes from (102) + (001) with T_f to (221) + (110) with absorption. The latter gives conditional widths of 78.6 ± 6.1° and 11.25 ± 0.39° and fractions of 0.74 ± 0.39 and 0.046 ± 0.003. Three rings still exceed the unchanged χ²red limit of 5. The data do not establish the fibre planes or their populations. The largest residuals on the eight innermost rings are negative at |χ| = 84.5–88.5°. At 84.5° on the 0.9973 Å⁻¹ ring, the measured folded signal is 28.2 ± 3.3 and the model gives 84.4, an excess of 17.2σ. At 85.5° the signal is −0.4 ± 3.6 and the model gives 3.6. The film model describes much of the overall angular attenuation but misses the sharp loss just above the horizon. The outer two rings have their largest residuals at 69.5° and 26.5°.
+Both depth fits reach the thick limit for both phases. Fixing that limit in the wave model gives joint χ²red = 3.366 for MAPbI₃ and 1.786 for PbI₂. Fitting the depth adds one parameter per phase and gives 3.371 and 1.809. The frame provides no finite thickness estimate.
 
-PbI₂ retains two basal (001) components under both models. With absorption, the widths are 13.9 ± 1.7° and 53.4 ± 5.1° and their fractions are 0.055 ± 0.041 and 0.62 ± 0.47. The BIC difference between the two absorption treatments is only 0.78 on this single reflection. Its broad fraction and the optical depth are poorly constrained.
+On the 0.9973 Å⁻¹ ring, the central ray at |χ| = 84.5° has αf ≈ 0.10° from sin αf = q cos χ / k − sin αi. Below the MAPbI₃ critical angle of 0.120° the exit wave samples less film. The 85.5° bin straddles the vacuum horizon and its measured rays lie above it. Residuals in the last two columns are (observed − fitted) / σ.
+
+| Ring q (Å⁻¹) | &#124;χ&#124; (°) | Observed ± σ | Geometrical fit | Refracted fit | Geometrical residual | Refracted residual |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0.9973 | 83.5 | 85.36 ± 5.96 | 89.70 | 85.18 | −0.73 | +0.03 |
+| 0.9973 | 84.5 | 28.17 ± 3.27 | 84.37 | 24.13 | −17.19 | +1.24 |
+| 0.9973 | 85.5 | −0.36 ± 3.56 | 3.56 | 0.45 | −1.10 | −0.23 |
+
+Only the 1.7248 Å⁻¹ ring now exceeds the determination limit of χ²red = 5. Its largest residual is at 85.5°, where the folded background-subtracted signal is −10.05 ± 2.05 and the wave model gives 8.70 (−9.16σ). The best pair for MAPbI₃ remains (221) + (110), with ΔBIC = 9.61 over (211) + (110). Their conditional FWHM values are 78.68 ± 5.75° and 11.08 ± 0.33°, with fractions of the phase of 0.952 ± 0.465 and 0.0483 ± 0.0024. The isotropic fraction is at zero to the quoted precision, with a local error of 0.466. The failed ring prevents a quantitative determination of the crystal distribution.
+
+The single PbI₂ ring passes the determination checks for two (001) populations, with FWHM values of 51.24 ± 5.27° and 13.47 ± 1.75° and phase fractions of 0.570 ± 0.336 and 0.049 ± 0.029. The isotropic fraction is 0.381 ± 0.362. This basal reflection supplies no independent check on the broad fraction.
 
 ### P08 crystal orientation before and after roll
 
-To reproduce the comparison at the published angle, run `python tools/benchmarks/crystal_orientation.py --part public --public-incidence-deg 0.075 --public-roll-deg 0 --json zero.json`, then omit `--public-roll-deg 0` to measure the roll. Both runs use the same two CIFs. Each ring has its own intensity scale. The central columns give χ²red for the original exit-angle cut and the CIF-based exit-transmission fit. The last column compares the two raw arms, using RMS of the difference between mean pixel intensities in matching 2° |χ| bins. Each bin must have at least 12 pixels on each arm in both runs.
+To reproduce the historical exit-transmission comparison at the published angle, use commit `27f8b22d`. Run `python tools/benchmarks/crystal_orientation.py --part public --public-incidence-deg 0.075 --public-roll-deg 0 --json zero.json`, then omit `--public-roll-deg 0` to measure the roll. Both runs use the same two CIFs. Each ring has its own intensity scale. The central columns give χ²red for the original exit-angle cut and the CIF-based exit-transmission fit. The last column compares the two raw arms, using RMS of the difference between mean pixel intensities in matching 2° |χ| bins. Each bin must have at least 12 pixels on each arm in both runs.
 
 | Phase and q (Å⁻¹) | Original cut, ψ = 0 → measured | Exit transmission, ψ = 0 → measured | Paired bins | ±χ RMS, ψ = 0 → measured |
 |---|---:|---:|---:|---:|
@@ -472,7 +482,7 @@ With exit transmission the best MAPbI₃ candidate remains (212) + (001). Their 
 
 ### P08 film at fixed ψ = 0 (reference)
 
-The benchmark uses the dark-subtracted frame, its PONI (λ = 0.688801 Å) and αi = 0.075° from the public example. The peak search assigns ten rings to tetragonal MAPbI₃ and one to PbI₂. The profiles use pixel-scatter errors, a locally fitted radial background constant in χ, polarization 0.99 and the original q windows. The MAPbI₃ CIF supplies four CH₆NPbI₃ units per cell for the index, and refined Pb and I sites for diffraction. These give ρₑ = 1.0423 e Å⁻³, δ = 2.18265 × 10⁻⁶, β = 1.26942 × 10⁻⁷ and αc = 0.1197°. The PbI₂ fixture now uses the symmetry of its declared space group P −3 m 1, which gives one Pb and two I atoms per cell. [Public dataset and notebook](https://zenodo.org/records/17466183)
+The historical fits below use the dark-subtracted frame, its PONI (λ = 0.688801 Å) and αi = 0.075° from the public example. At these fixed angles the current default thick-film wave model gives joint χ²red = 31.75 for MAPbI₃ and 2.76 for PbI₂. The peak search assigns ten rings to tetragonal MAPbI₃ and one to PbI₂. The profiles use pixel-scatter errors, a locally fitted radial background constant in χ, polarization 0.99 and the original q windows. The MAPbI₃ CIF supplies four CH₆NPbI₃ units per cell for the index, and refined Pb and I sites for diffraction. These give ρₑ = 1.0423 e Å⁻³, δ = 2.18265 × 10⁻⁶, β = 1.26942 × 10⁻⁷ and αc = 0.1197°. The PbI₂ fixture uses the symmetry of its declared space group P −3 m 1, which gives one Pb and two I atoms per cell. [Public dataset and notebook](https://zenodo.org/records/17466183)
 
 | Phase and q (Å⁻¹) | Families | Shared width, original cut | Independent widths, original cut | Independent widths, exit transmission |
 |---|---|---:|---:|---:|

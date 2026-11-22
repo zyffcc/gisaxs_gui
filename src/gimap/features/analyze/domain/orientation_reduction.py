@@ -48,6 +48,11 @@ def _background(q, intensity, errors, low, high, step):
 
 
 def ring_profiles(maps, image, valid, counts, geometry, window, step, corrections):
+    profiles, indices, _ = measured_ring_profiles(maps, image, valid, counts, geometry, window, step, corrections)
+    return profiles, indices
+
+
+def measured_ring_profiles(maps, image, valid, counts, geometry, window, step, corrections):
     """Reduce actual pixels inside the ring at each exit-angle threshold. Image excludes L and mirror fill."""
     low, high = sorted(window)
     width = high - low
@@ -98,4 +103,6 @@ def ring_profiles(maps, image, valid, counts, geometry, window, step, correction
                   "background_source": method, "background_sigma": error, "error_model": error_model}
         profiles[multiplier] = Curve("azimuthal", f"I(χ), q = {low:.3f}–{high:.3f} Å⁻¹",
                                      azimuth, means, sigma, pixels, "χ (°)", region=region)
-    return profiles, np.ravel_multi_index((row[ring & nominal], column[ring & nominal]), image.shape)
+    selected = ring & nominal
+    indices = np.ravel_multi_index((row[selected], column[selected]), image.shape)
+    return profiles, indices, sin_exit[selected]

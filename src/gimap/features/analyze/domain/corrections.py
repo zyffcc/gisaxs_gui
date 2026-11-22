@@ -60,7 +60,8 @@ class Corrections:
     """GIWAXS: divide by the polarisation factor with this ``f`` (0.95–0.99 synchrotron, 0 laboratory)."""
     film_thickness_nm: Optional[float] = None
     attenuation_length_um: Optional[float] = None
-    """GIWAXS: divide by the absorption in a film of this thickness and attenuation length (both needed).
+    """GIWAXS geometrical-path correction when thickness and attenuation length are supplied.
+    Film optical constants select the refracted-wave correction instead.
 
     The intensity corrections need the geometry; they are applied after the others, in the analysis,
     and are not part of ``is_identity``."""
@@ -92,8 +93,23 @@ class Corrections:
     sigma_path: Optional[str] = None
     pooled_scatter: bool = True
     poisson_variance: str = "observed"
+    film_delta: Optional[float] = None
+    film_beta: Optional[float] = None
+    film_cif_path: Optional[str] = None
+    """GIWAXS film intensity correction. Supply δ and β or a CIF resolved at the frame wavelength.
+    With optical constants, a missing thickness selects the semi-infinite film."""
 
     def __post_init__(self) -> None:
+        if (self.film_delta is None) != (self.film_beta is None):
+            raise ValueError("Enter both film optical constants, δ and β.")
+        if self.film_delta is not None and not (
+            math.isfinite(self.film_delta) and math.isfinite(self.film_beta) and self.film_beta >= 0
+        ):
+            raise ValueError("Film δ must be finite and film β must be finite and nonnegative.")
+        if (self.film_delta is not None or self.film_cif_path) and self.film_thickness_nm is not None and not (
+            math.isfinite(self.film_thickness_nm) and self.film_thickness_nm > 0
+        ):
+            raise ValueError("Enter a positive film thickness or select the thick film limit.")
         DetectorResponse(self.counts_per_adu, self.offset_adu, self.error_model, self.sigma_path)
         if not (math.isfinite(self.lorentz_band_px) and self.lorentz_band_px >= 0):
             raise ValueError("The Lorentz exclusion half-width must be finite and nonnegative.")

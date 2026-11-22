@@ -224,6 +224,8 @@ def analysis_metadata(analysis: FrameAnalysis, *, curve_keys=None, with_reproduc
         record["input_sha256"] = [{"file": Path(ref["path"]).name, "sha256": ref["sha256"]} for ref in inputs.values()]
     else:
         references = [corrections.dark_path, corrections.background_path, corrections.flat_field_path]
+        if analysis.kind == GIWAXS and corrections.film_cif_path:
+            references.append(corrections.film_cif_path)
         if getattr(analysis, "error_model_used", None) == "sigma" or any(
             curve["region"].get("error_model") == "sigma_frame" for curve in record["curves"]
         ):

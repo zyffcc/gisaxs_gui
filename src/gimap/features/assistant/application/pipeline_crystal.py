@@ -7,7 +7,8 @@ def compact_crystal(phase):
     """Keep the numerical results and family weights in the summary; profiles are in report.json."""
     rings = []
     for ring in phase.get("rings", []):
-        curves = {"chi_deg", "observed", "sigma", "measured", "fit_mask", "fitted", "components", "exit_transmission"}
+        curves = {"chi_deg", "observed", "sigma", "measured", "fit_mask", "fitted", "components",
+                  "exit_transmission", "film_intensity_factor", "exit_transmission_times_absorption"}
         row = {key: value for key, value in ring.items() if key not in curves}
         row["components"] = [{k: v for k, v in c.items() if k != "values"} for c in ring["components"]]
         rings.append(row)
@@ -55,11 +56,17 @@ def crystal_lines(phases: list[dict]) -> list[str]:
                       f"joint χ²_red = {_number(phase.get('reduced_chi2'))}.", ""]
             optics = phase.get("film_optics")
             if optics:
-                if optics["available"]:
+                if optics.get("model") in ("refracted waves", "frame corrected with refracted waves"):
+                    context = ("The frame was corrected for" if optics["model"].startswith("frame corrected")
+                               else "The orientation model includes")
+                    lines += [f"{context} refraction and attenuation of the incident and exit waves in the film "
+                              f"(δ = {_number(optics['delta'])}, β = {_number(optics['beta'])}, "
+                              f"{optics['depth_source']}).", ""]
+                elif optics["available"]:
                     lines += [f"The fit includes the film's exit transmission |T|² "
                               f"(δ = {_number(optics['delta'])}, β = {_number(optics['beta'])}).", ""]
                 else:
-                    lines += [f"Film exit transmission unavailable. {optics.get('reason', '')}".rstrip(), ""]
+                    lines += [f"Film optics unavailable. {optics.get('reason', '')}".rstrip(), ""]
             if phase.get("search_settings", {}).get("noncollinear_poles_available") is False:
                 lines += ["Only one pole direction constrains this phase. Two distinct fibre axes cannot be established.", ""]
             elif len(phase["rings"]) == 1:

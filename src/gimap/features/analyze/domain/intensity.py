@@ -18,8 +18,9 @@ They change only intensities, never q:
 * **Absorption in the film** — a film of thickness ``d`` and attenuation length ``L`` (1/µ), beam in
   at ``αi``, out at ``αf``: the scattering from depth ``z`` is attenuated by ``exp(−z·s/L)`` with
   ``s = 1/sin αi + 1/sin αf``, so the film scatters ``∝ (1 − exp(−d·s/L)) / s``; factor relative to
-  ``αf = αi``. Refraction is not included (valid well above the critical angle); pixels at or below
-  the sample horizon have no factor (they are left out).
+  ``αf = αi``. This is the large-angle limit. With film δ and β, the normalised depth integral of
+  the transmitted incident and exit waves includes evanescent attenuation (see ``refracted_film``).
+  Pixels at or below the sample horizon have no factor.
 * **Lorentz factor of a fibre texture** (GIXSGUI, Jiang 2015, Eq. 5 with S = cos αi cos αf) — crystallites
   oriented at random about the surface normal: a reciprocal-lattice point at the polar angle χ from the normal
   lies on a circle about q_z, and the Ewald sphere cuts that circle at a rate set by the component of its motion
@@ -40,6 +41,8 @@ import numpy as np
 from src.gimap.shared.geometry import DetectorGeometry
 from src.gimap.shared.geometry.q_mapping import exit_directions, geometry_rays
 
+from .refracted_film import REFRACTED_FILM_FORMULA, RefractedFilm
+
 BLOCK_ROWS = 512
 LORENTZ_FORMULA = ("L = 1/(cos ai * cos af * |sin 2theta_f|), fibre texture about the surface normal (GIXSGUI, "
                    "Jiang 2015, Eq. 5, S = cos ai cos af); 1/L = cos(ai) |qy| / k")
@@ -55,6 +58,8 @@ def has_intensity_corrections(corrections) -> bool:
 
 
 def film_absorption_on(corrections) -> bool:
+    if getattr(corrections, "film_delta", None) is not None or getattr(corrections, "film_cif_path", None):
+        return True
     thickness = getattr(corrections, "film_thickness_nm", None)
     length = getattr(corrections, "attenuation_length_um", None)
     return bool(thickness and length and thickness > 0 and length > 0)
@@ -89,6 +94,8 @@ def intensity_factor(
     polarization: Optional[float] = None,
     film_thickness_nm: Optional[float] = None,
     attenuation_length_um: Optional[float] = None,
+    film_delta: Optional[float] = None,
+    film_beta: Optional[float] = None,
     lorentz: bool = False,
     lorentz_band_px: float = 2.0,
 ) -> np.ndarray:
@@ -96,7 +103,10 @@ def intensity_factor(
     rows, columns = int(shape[0]), int(shape[1])
     factor = np.ones((rows, columns), dtype=np.float32)
     beam = float(geometry.distance_m)
-    film = bool(film_thickness_nm and attenuation_length_um and film_thickness_nm > 0 and attenuation_length_um > 0)
+    if (film_delta is None) != (film_beta is None):
+        raise ValueError("Enter both film optical constants, δ and β.")
+    refracted = film_delta is not None
+    film = refracted or bool(film_thickness_nm and attenuation_length_um and film_thickness_nm > 0 and attenuation_length_um > 0)
     sin_in, cos_in = math.sin(geometry.incidence_rad), math.cos(geometry.incidence_rad)
     if film and sin_in <= 0:
         raise ValueError("The film absorption needs a grazing angle αi above 0.")
@@ -114,7 +124,10 @@ def intensity_factor(
             block *= polarization_factor(along, x, y, float(polarization))
         if film or lorentz:
             _along, across, sin_exit = exit_directions(x, y, along, geometry.incidence_rad, sample_roll_rad=geometry.sample_roll_rad)
-        if film:
+        if refracted:
+            waves = RefractedFilm(sin_exit, sin_in, film_delta, film_beta, geometry.wavelength_angstrom)
+            block *= waves.factor(np.inf if film_thickness_nm is None else film_thickness_nm)
+        elif film:
             block *= film_absorption_factor(sin_exit, sin_in, ratio)
         if lorentz:
             # across = q_y/k. One horizontal pixel at the direct beam subtends p_x/D radians.
@@ -138,7 +151,14 @@ def describe_intensity_corrections(corrections) -> Optional[dict]:
             "factor": float(corrections.polarization),
             "formula": "0.5*(1 + cos^2(2theta) - f*cos(2phi)*sin^2(2theta)), phi from the horizontal (pyFAI)",
         }
-    if film_absorption_on(corrections):
+    if getattr(corrections, "film_delta", None) is not None or getattr(corrections, "film_cif_path", None):
+        record["film_absorption"] = {
+            "model": "refracted waves", "delta": corrections.film_delta, "beta": corrections.film_beta,
+            "source": corrections.film_cif_path or "entered optical constants",
+            "thickness_nm": corrections.film_thickness_nm, "thick_limit": corrections.film_thickness_nm is None,
+            "formula": REFRACTED_FILM_FORMULA,
+        }
+    elif film_absorption_on(corrections):
         record["film_absorption"] = {
             "thickness_nm": float(corrections.film_thickness_nm),
             "attenuation_length_um": float(corrections.attenuation_length_um),

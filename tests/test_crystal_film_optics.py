@@ -91,10 +91,66 @@ def test_absorption_and_exit_field_are_multiplied_on_each_measured_ray():
     chi = np.array([-84.8, -84.1, 84.1, 84.8])
     profile = SimpleNamespace(x=np.array([-84.5, 84.5]), sigma=np.array([4., 2.]))
     field, absorption = ring_optical_factors(optics, geometry, 1., chi, qz, profile, fit_absorption=True)
-    for tau in (0., .00007, .0013, .0082, .02):
-        u = -np.expm1(-tau / sin_i)
-        reference = quad(lambda z: np.exp(-tau * z * 2 / sin_i), 0, 1)[0]
-        exact = [quad(lambda z: np.exp(-tau * z * (1/sin_i + 1/v)), 0, 1)[0] / reference for v in s]
-        product = exit_transmission(s, **optics) * exact
+    k = 20 * np.pi / geometry.wavelength_angstrom
+    index_term = -2 * optics["delta"] + 2j * optics["beta"]
+    ki = k * np.sqrt(sin_i**2 + index_term)
+    kf = k * np.sqrt(s**2 + index_term)
+    field_ratio = abs((s / (s + kf/k)) / (sin_i / (sin_i + ki/k)))**2
+    for d in (0., 1., 12., 100., 500.):
+        u = -np.expm1(-2 * ki.imag * d)
+        reference = quad(lambda z: np.exp(-4*ki.imag*d*z), 0, 1)[0]
+        exact = [quad(lambda z: np.exp(-2*(ki+v).imag*d*z), 0, 1)[0] / reference for v in kf]
+        product = field_ratio * exact
         assert field[84] * absorption.curve(u)[84] == pytest.approx(
             (product[:2].mean() + 4 * product[2:].mean()) / 5, rel=2e-5)
+    # A previously applied geometrical correction divides each ray before averaging.
+    d, tau = 100., .002
+    geometric = ((2/sin_i) / (1/sin_i + 1/s)
+                 * np.expm1(-tau*(1/sin_i+1/s)) / np.expm1(-2*tau/sin_i))
+    rate = 2 * (ki + kf).imag
+    remaining = field_ratio * (4*ki.imag/rate) * np.expm1(-rate*d) / np.expm1(-4*ki.imag*d) / geometric
+    factor, fitted = ring_optical_factors(optics, geometry, 1., chi, qz, profile,
+                                          thickness_nm=d, geometric_depth=tau)
+    assert fitted is None
+    assert factor[84] == pytest.approx((remaining[:2].mean() + 4*remaining[2:].mean()) / 5)
+
+
+def test_frame_corrected_with_refracted_waves_has_no_second_optical_factor():
+    from src.gimap.features.analyze.application.crystal_orientation import _frame_optics, _profile
+    from src.gimap.features.analyze.domain.corrections import Corrections
+    from src.gimap.features.analyze.domain.giwaxs import giwaxs_maps
+
+    geometry = DetectorGeometry(1e-4, 1e-4, .03, 40., 62., 1., .5)
+    corrections = Corrections(film_delta=2e-6, film_beta=1e-7)
+    optics = _frame_optics(None, geometry, corrections, False)
+    assert optics["source"] == "typed frame optical constants"
+    assert optics["model"] == "frame corrected with refracted waves"
+    assert optics["depth_source"] == "thick limit"
+    maps = giwaxs_maps((64, 80), geometry)
+    image = 10 + 60 * np.exp(-((maps.q - .5) / .01)**2)
+    profile, region, factor, absorption = _profile(
+        maps, (image, np.ones(image.shape, bool), True),
+        SimpleNamespace(corrections=corrections, geometry=geometry), (.48, .52), .5, optics)
+    assert np.count_nonzero(profile.measured) > 8
+    assert region["min_exit_deg"] == 0.
+    assert factor is None and absorption is None
+
+
+def test_transparent_film_retains_finite_evanescent_exit_depth():
+    from src.gimap.features.analyze.domain.crystal.film_optics import ring_optical_factors
+
+    geometry = DetectorGeometry(1e-4, 1e-4, .5, 100., 200., 1., .5)
+    s = .001
+    chi = np.array([84.5])
+    qz = (s + np.sin(geometry.incidence_rad)) * geometry.wavevector_inv_angstrom * np.ones(1)
+    profile = SimpleNamespace(x=chi, sigma=np.ones(1))
+    optics = {"delta": 2e-6, "beta": 0.}
+    thin, absorption = ring_optical_factors(optics, geometry, 1., chi, qz, profile, fit_absorption=True)
+    d = 2.
+    rate = 20 * geometry.wavevector_inv_angstrom * np.sqrt(2 * optics["delta"] - s**2)
+    u = absorption.depth_rate_nm * d / (1 + absorption.depth_rate_nm*d)
+    assert absorption.curve(u)[84] == pytest.approx(-np.expm1(-rate*d) / (rate*d), rel=1e-5)
+    assert thin[84] > 0 and absorption.curve(1.)[84] == pytest.approx(0., abs=1e-14)
+    assert absorption.record(u, None)["thickness_nm"] == pytest.approx(d)
+    assert absorption.record(u, None)["optical_depth"] == 0.
+    assert absorption.record(u, None)["incident_intensity_decay_fraction"] == 0.
