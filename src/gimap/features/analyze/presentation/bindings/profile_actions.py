@@ -37,6 +37,7 @@ class ProfileActionsMixin(GeometryEditorMixin, GeometryFilesMixin, FitHandoverMi
 
     def _profile_chosen(self, _index: int) -> None:
         self.view_model.set_profile(self.profile_combo.currentData())
+        self._sync_normalisation_widgets()
         self._remember()
         self.run_analysis()
 

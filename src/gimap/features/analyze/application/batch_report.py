@@ -53,6 +53,7 @@ class BatchRun:
     failures: list = field(default_factory=list)
     """``name (reason)`` of every frame that failed (``failed``: the two apart)."""
     first_metadata: Optional[dict] = None
+    frame_normalisations: list[dict] = field(default_factory=list)
     first_frame: str = ""
     curve_titles: dict = field(default_factory=dict)
     started: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M"))
@@ -108,6 +109,20 @@ class BatchRun:
         """A frame that gave nothing: its name, the reason in English, and the file it was to be read from."""
         self.failed.append({"frame": str(frame), "why": str(why), **({"file": str(file)} if file else {})})
         self.failures.append(f"{frame} ({why})")
+
+    def record_frame_normalisation(self, frame: str, metadata: dict) -> None:
+        norm = metadata.get("normalisation") or {}
+        if not norm.get("standard_calibration"):
+            return
+        # One complete standard record for this set-up; t and M can differ even in a batch with fixed settings.
+        first = (self.first_metadata or {}).get("normalisation") or {}
+        if first.get("standard_calibration") == norm["standard_calibration"]:
+            norm = {**norm, "standard_calibration": {"$ref": "#/settings_of_first_frame/normalisation/standard_calibration"}}
+        entry = {"frame": frame, "source_file": metadata["source_file"], "frame_index": metadata["frame_index"],
+                 "normalisation": norm, "output_intensity_unit": metadata["output_intensity_unit"]}
+        if "reference_peak_scale" in metadata:
+            entry["reference_peak_scale"] = metadata["reference_peak_scale"]
+        self.frame_normalisations.append(entry)
 
 
 _KINDS = ("tables", "per_frame", "nxcansas", "fit_input", "q_map", "cake", "detector_image", "q_map_image", "frames")
@@ -281,7 +296,13 @@ def readme_text(choices: BatchChoices, *, batch: str, frame: str, frames: int, c
     if curves and (choices.tables or choices.per_frame or choices.nxcansas):
         # Compare reads these named curves back; keep their titles exactly.
         lines += ["", "Curves:"] + [f"  {key}: {title}" for key, title in curves]
-    lines += ["", "Units: q in 1/A (Angstrom^-1), angles in degrees, intensity = mean counts per pixel.", NAMES]
+    unit = (run.first_metadata or {}).get("output_intensity_unit") if run is not None else None
+    quantity = "intensity = mean counts per pixel"
+    if unit == "relative":
+        quantity = "curve and q-map intensities are relative after reference-peak scaling; cake intensity is in cm^-1"
+    elif unit:
+        quantity = f"absolute intensity in {export_text(unit)}"
+    lines += ["", f"Units: q in 1/A (Angstrom^-1), angles in degrees, {quantity}.", NAMES]
     if run is not None:
         lines += cut_lines(run, names["record"]) + sum_lines(run)
         for source in run.sources:
@@ -335,6 +356,8 @@ def batch_record(run: BatchRun, files: Sequence[Path]) -> dict[str, Any]:
     }
     if run.write_error:
         record["write_error"] = run.write_error
+    if run.frame_normalisations:
+        record["frame_normalisations"] = run.frame_normalisations
     if run.sums and max(run.sums) > 1:
         record["sums"] = [{"frame": frame, "frames_summed": int(size)} for frame, size in zip(run.frames, run.sums)]
     if run.sources:

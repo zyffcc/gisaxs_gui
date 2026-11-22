@@ -276,6 +276,15 @@ def series_header(series: SeriesMap) -> list[str]:
     built = series.built_with
     lines = [f"software: {SOFTWARE}", f"software_version: {RELEASE}",
              f"curve: {series.curve}" + (f" - {series.title}" if series.title else "")]
+    first_frame = built.get("first_frame") or {}
+    unit = first_frame.get("output_intensity_unit")
+    if not unit:  # a map built from live rows may have only the set-up captured at its start
+        corrections = (built.get("settings") or {}).get("corrections") or {}
+        standard = (corrections.get("normalisation") or {}).get("standard_calibration")
+        if standard:
+            unit = standard["intensity_unit"]
+    if unit:
+        lines.append(f"curve intensity: {unit}")
     halves = view_words(series)
     if halves:
         lines.append(f"halves: {halves}")

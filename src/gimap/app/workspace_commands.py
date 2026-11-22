@@ -90,6 +90,13 @@ class WorkspaceCommands:
     def _shown(self) -> str:
         return self._held()
 
+    def _standard_profile(self) -> str:
+        try:
+            self._analyze.view_model.absolute_scale_profile()
+        except ValueError as exc:
+            return str(exc)
+        return ""
+
     def _batch_free(self) -> str:
         return BATCH_RUNNING if self._analyze.batch_running() else ""
 
@@ -228,6 +235,7 @@ class WorkspaceCommands:
             "analyze_run_automatic": MenuEntry(analyze(lambda: page().run_automatic()), self._run_automatic),
             "analyze_stop_automatic": MenuEntry(analyze(lambda: page().stop_automatic()), self._stop_automatic),
             "analyze_repeat": MenuEntry(analyze(lambda: page().run_analysis()), self._frame),
+            "analyze_absolute_scale": MenuEntry(analyze(lambda: page().absolute_scale_dialog()), self._standard_profile),
             "analyze_export": MenuEntry(analyze(lambda: page().export_current()), self._analysis),
             "analyze_batch": MenuEntry(analyze(lambda: page().batch_export_dialog()), self._batch),
             "analyze_batch_folder": MenuEntry(analyze(lambda: page().batch_from_folder()), self._batch_free),

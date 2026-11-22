@@ -139,6 +139,14 @@ class FrameAnalysis:
     """What the header offers for the normalisation (``normalisation.header_values``; of a sum: the sums)."""
     normalisation: Optional[NormalisationUse] = None
     """The constant the frame was multiplied by and its terms (``Corrections.normalisation``); ``None``: none."""
+    reference_peak_scale: Optional[float] = None
+    """Factor subsequently applied to the reduced curves and q map of a series, after frame normalisation."""
+
+    @property
+    def calibrated_curve_unit(self) -> Optional[str]:
+        if self.normalisation is None or self.normalisation.standard_calibration is None:
+            return None
+        return self.normalisation.unit if self.reference_peak_scale is None else "relative"
 
     @property
     def shape(self) -> tuple[int, int]:

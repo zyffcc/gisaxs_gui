@@ -539,7 +539,7 @@ spreadsheet.
 | File | Open Data… (`Ctrl+O`), Open Folder… (`Ctrl+Shift+O`), Open Recent, Open Project… (`Ctrl+Shift+P`), Save Project (`Ctrl+S`), Save Project As… (`Ctrl+Shift+S`), Labs Parameters ▸ Load… / Save As…, Exit |
 | Edit | Undo (`Ctrl+Z`), Redo (`Ctrl+Y`; `Ctrl+Shift+Z` also works): the set-up in Analyze, the model in Fitting's Single analysis |
 | View | *Workspaces* and *Labs*: the pages (`Ctrl+1`…`Ctrl+6`), Collapse Sidebar (`Ctrl+B`), Full Screen (`F11`), Theme ▸ Light / Dark, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`), Language ▸ English / 中文 |
-| Analyze | Run Automatic Analysis, Stop Automatic Analysis, Repeat Analysis (`F5`), Export Curves… (`Ctrl+E`), Batch Export… (`Ctrl+Shift+E`), Batch Export a Folder…, Send to Fitting, Send Both Cuts to Fitting, Send Series to Fitting…, Send Series to Compare, Set-up Files ▸ Save Settings… / Load Settings… / Save Cuts… / Load Cuts… / Save Masks… / Load Masks…, Figures ▸ Save Image… / Save q-Map Data… / Save View Data…, Clear Frame List |
+| Analyze | Run Automatic Analysis, Stop Automatic Analysis, Repeat Analysis (`F5`), Absolute Scale from a Standard…, Export Curves… (`Ctrl+E`), Batch Export… (`Ctrl+Shift+E`), Batch Export a Folder…, Send to Fitting, Send Both Cuts to Fitting, Send Series to Fitting…, Send Series to Compare, Set-up Files ▸ Save Settings… / Load Settings… / Save Cuts… / Load Cuts… / Save Masks… / Load Masks…, Figures ▸ Save Image… / Save q-Map Data… / Save View Data…, Clear Frame List |
 | Fitting | Open Curve…, Import Curves…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Fit Several Curves Together…, Load Model…, Save Model…, Save Data and Fit…, Save Plot…, Batch / In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
 | Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), SEM Particle Analysis…, 1D Predict — Fit Many Curves…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
 | Help | User Manual (`F1`), Physics and Methods, Keyboard Shortcuts…, Example Data ▸ GISAXS — Ag Nanoparticles (GALAXI)… / SAXS — AgBh Calibrant (pyFAI)… / GIWAXS — MAPbI₃ Film (DESY P08)… / GIWAXS — PbTe, Tilted Detector (Xeuss)…, Report a Problem…, Open Log Folder, Open User Data Folder, GitHub Repository, Check for Updates…, How to Cite GIMaP…, Third-party Notices, About GIMaP |
@@ -1366,6 +1366,35 @@ value chosen is not analysed, and the status line says why. The JSON record (`no
 (`# intensity: …` line) state the factor and each term with its source; the settings file keeps the choice
 ([Physics and Methods 4.12](Physics_Manual.md#412-normalisation-exposure-monitor-transmission-thickness-absolute-scale)).
 
+**Calibrating with a secondary standard**
+
+1. Measure the standard in transmission with the same instrument set-up as the sample. Choose the instrument profile
+   in Analyze or open a frame with geometry. Open **Analyze ▸ Absolute Scale from a Standard…**.
+2. Choose the standard's detector file and frame number, or a reduced radial curve containing q, I and optionally σ.
+   For a frame, check the current mask, dark, flat field and background first. Use the appropriate empty-cell or
+   empty-beam subtraction. For a curve, supply corrected intensity before frame normalisation. Enter the standard's
+   exposure, monitor, transmission and thickness in mm. Use 1 for an unused exposure, monitor or transmission term.
+3. Choose **Water** and its measured temperature, or **Reference curve file** and your reference table (for example,
+   your SRM 3600 certificate). Supply q, differential scattering cross section in cm⁻¹ and pointwise standard
+   uncertainty in cm⁻¹. Select the q unit for each file independently. Enter any shared **one-standard-deviation**
+   scale uncertainty once as a percentage. Use zero for a component with no supplied uncertainty.
+4. Leave both q limits blank for the overlap, or enter a range in Å⁻¹. For water, select its flat SAXS plateau.
+   Click **Fit Scale**. Inspect the overlay and the residual (scaled measurement minus reference). A trend in the
+   residual can indicate a background mismatch or an unsuitable q range.
+5. Enter the **sample** thickness in mm and click **Apply Scale**. GIMaP converts both thicknesses to cm and saves
+   A, its standard uncertainty, source and UTC date in the instrument profile. Set the sample's own exposure,
+   monitor and transmission under **Mask & Corrections ▸ Normalisation**, using the same monitor convention as for
+   the standard. For a later sample, **Use Saved Scale** reuses the profile calibration with its new thickness.
+   A change in detector distance, pixel size, tilt or wavelength requires a calibration for the new set-up.
+
+The curve CSV labels intensity in `cm^-1`. In the frame JSON, `normalisation.standard_calibration` identifies the
+standard measurement, the reference, the fitted q range and A ± σ_A. σ_A is common to the whole curve. The
+pointwise σ column gives the statistical uncertainty of each reduced point. For a combined batch table,
+each entry in `frame_normalisations` links its sample terms to the standard in the batch JSON.
+A subsequent series normalisation to a target peak height gives relative intensities.
+
+![Fit and residuals for a synthetic standard](manual_images/en/absolute_scale.png)
+
 **Intensity corrections (GIWAXS)** (folded, off by default). They divide each pixel by a geometric
 factor; q does not change:
 
@@ -1975,7 +2004,7 @@ between sessions), else next to the data — and writes the same files there:
   SasView, SASfit and other NeXus programs open, and Fitting too (section 6.1). Each curve is a SASentry of its own,
   titled with the frame, the curve and which q its Q is: a horizontal cut keeps its signed qy (both halves; a
   program that fits |Q| sees each |q| twice, so fit one half there), a vertical cut has qz. Each holds Q in
-  1/angstrom as Analyze computed it, I (arbitrary units: mean counts per pixel), Idev = σ, a mask of the points
+  1/angstrom as Analyze computed it, I (1/cm after standard calibration, arbitrary units otherwise), Idev = σ, a mask of the points
   without a finite value, the wavelength, the distance, the pixel size and αi (as the sample's pitch), and the same
   record as `_analysis.json` (as JSON in a note of SASprocess). I(χ) and curves shown against 2θ are not in it —
   NXcanSAS has no angle axis — but in their CSVs. The box applies to **Save the Curves of the Plot** and **Export
@@ -4056,7 +4085,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The GIWAXS and GISAXS q are kinematic: no refraction correction.** Near or below the film's critical angle, the q_z of a peak can be off by up to about k·sin αi, and in GISAXS that of the Yoneda band most, by an amount of that order (the report's *Decisions* give the number for your frame); the ± and σ of the report contain neither that nor the geometry's uncertainty ([Physics and Methods, sections 7.9 and 8.6](Physics_Manual.md#79-what-the-report-states)). | Measure above the critical angle for positions, or correct q_z yourself for the material; quote the systematic error separately from the statistical ±. |
 | **Hermans f and the texture sentence are not corrected for the exit angle.** f weighs the bins next to the sample horizon most, where absorption in the film or a shadow can lower the intensity; on the public P08 frame leaving out the bins within 5° of the sample plane moves f − f_iso by 17–27 σ_f ([Physics and Methods, section 7.7](Physics_Manual.md#77-ring-orientation-and-the-hermans-orientation-factor)). | Read the ring's notes and the *ring orientation* line of *Decisions*; when they name the ring, check I(χ) near χ = ±90° before reading f as texture. |
 | **NeXus/HDF5 files not written by the Lambda server are now read as stored** (earlier versions transposed and flipped them). A geometry or mask made on such a file with an earlier version no longer fits it (section 5.1). | Check the beam centre and masks of such data; calibrate again if needed. |
-| **The normalisation divides the frame after the background and dark frame are subtracted** in the frame's own units, with the scales you type: the header exposure or monitor of the background is not used. Transmission and thickness are typed, not measured; the absolute factor is yours (section 5.2). | Set the background's **Scale** (and the **Dark scale**) to the ratio of exposure times or monitors of the frame and the background. |
+| **The normalisation divides the frame after the background and dark frame are subtracted** in the frame's own units. Transmission and thickness are entered by the user (section 5.2). | Set the background's **Scale** (and the **Dark scale**) to the ratio of exposure times or monitors of the frame and the background. |
 | **XRR intensities are raw**: no monitor normalisation, footprint, background, resolution correction or θ offset. Analyze masks and bad-pixel search are not applied (section 9.2). | Apply the required corrections to the exported curve and check the ROI and valid-pixel counts. |
 | **Format Converter does not read EDF.** | Use **Analyze ▸ Batch Export ▸ Converted detector frames**. |
 | **The uint16 modes of the Format Converter mark pixels without data only in HDF5**: in a TIFF or CBF such a pixel holds 65535 and reads back as a valid value (section 9.1). | Keep the stored data type (the default), or write HDF5, when the gaps and bad pixels matter. |

@@ -192,6 +192,10 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
         "binning": binning(analysis),
         "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),  # UTC, when the record was written
     }
+    if getattr(analysis, "calibrated_curve_unit", None) is not None:
+        record["output_intensity_unit"] = analysis.calibrated_curve_unit
+        if analysis.reference_peak_scale is not None:
+            record["reference_peak_scale"] = analysis.reference_peak_scale
     files = source_files(analysis.path, loaded)
     if files:  # a set of module files, a master with its data files: every file the frame was read from
         record["source_files"] = files
@@ -247,8 +251,12 @@ def intensity_lines(record: Mapping[str, Any]) -> list[str]:
     norm = record.get("normalisation")
     if norm:
         terms = ", ".join(f"{key} {item['value']:.6g} ({item['source']})" for key, item in norm.items()
-                          if isinstance(item, Mapping))
-        lines.append(f"intensity: {norm['intensity_unit']}; normalised I = A*I/(t*M*T*d), factor {norm['factor']:.6g}"
+                          if isinstance(item, Mapping) and "value" in item and "source" in item)
+        unit = norm["intensity_unit"]
+        if record.get("reference_peak_scale") is not None:
+            unit = (f"relative after reference-peak scaling by {record['reference_peak_scale']:.8g}; "
+                    f"before reference-peak scaling: {unit}")
+        lines.append(f"intensity: {unit}; normalised I = A*I/(t*M*T*d), factor {norm['factor']:.6g}"
                      f" ({terms}); sigma scaled by the same factor")
     return lines
 
@@ -351,7 +359,7 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
         "source": "native_detector_columns" if analysis.kind == GISAXS else "radial_bins",
         "file_format": analysis.path.suffix.lower().lstrip("."),
         "intensity_unit": ("counts_per_pixel" if getattr(analysis, "normalisation", None) is None
-                           else analysis.normalisation.unit),
+                           else getattr(analysis, "calibrated_curve_unit", None) or analysis.normalisation.unit),
         "counting_model_valid": (
             photon_counts(analysis.metadata, corrections, mirror_filled=getattr(analysis, "filled_pixels", None) is not None)
             and analysis.intensity_scale is None
