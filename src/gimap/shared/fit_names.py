@@ -56,9 +56,14 @@ SENTENCES = {
     "absent": "population {name} has Scale 0: this solution does not use it",
 }
 """Flag kind → the sentence a person reads (``{name}``: the display names; templates, translated by the interface)."""
-DENSITY_NOTICE = ("The 5 % model-error floor was calibrated at 198.5 points per decade of q. This cut has "
-                  "{density} points per decade. For independent points, interval widths scale approximately as "
-                  "√(198.5 / density).")
+MIN_SAMPLING_POINTS, MAX_SAMPLING_POINTS = 80, 400
+DENSITY_NOTICE = ("This cut has {count} fitted points. The validation grid has 397 equally spaced points "
+                  "from 0.02 to 2 nm⁻¹ (Δq = 0.005 nm⁻¹).")
+PEAK_SPACING = ("At the intensity maximum (|q| = {peak} nm⁻¹), Δq is {spacing} nm⁻¹ "
+                "({ratio} times the validation spacing).")
+SPARSE_SAMPLING = "Fewer than 80 fitted points. Check whether the measured features are resolved."
+DENSE_SAMPLING = ("With more than 400 fitted points, sampling may fail and the fits may be compared by BIC. "
+                  "Try rebinning to 150–250 log-spaced points.")
 BIC_WEIGHT = "BIC weight"
 MC_ERROR = "Mode log evidence {z} ± {error} (bootstrap Monte Carlo error)."
 COMPOSITION_RANGE = "Composition probability {p} (68 % Monte Carlo range {low}–{high})."
@@ -88,8 +93,17 @@ def diagnostic_lines(diagnostics, ess=None):
         low, high = d["composition_probability_mc68"]
         lines.append((COMPOSITION_RANGE, {"p": f"{d['composition_probability']:.4g}",
                                           "low": f"{low:.4g}", "high": f"{high:.4g}"}))
-    if d.get("density_notice"):
-        lines.append((DENSITY_NOTICE, {"density": f"{d['points_per_decade']:.4g}"}))
+    count = d.get("point_count")
+    if count is not None:
+        lines.append((DENSITY_NOTICE, {"count": count}))
+        if d.get("peak_spacing_nm_inv") is not None:
+            spacing = d["peak_spacing_nm_inv"]
+            lines.append((PEAK_SPACING, {"peak": f"{d['peak_q_nm_inv']:.4g}", "spacing": f"{spacing:.4g}",
+                                         "ratio": f"{spacing / d['validation_spacing_nm_inv']:.3g}"}))
+        if count < MIN_SAMPLING_POINTS:
+            lines.append((SPARSE_SAMPLING, {}))
+        if count > MAX_SAMPLING_POINTS:
+            lines.append((DENSE_SAMPLING, {}))
     return lines
 
 

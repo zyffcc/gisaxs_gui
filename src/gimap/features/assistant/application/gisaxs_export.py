@@ -66,7 +66,8 @@ def fit_solutions_csv(fit: dict, provenance: str = "") -> str:
     sampled_columns = [f"{key}_posterior_{stat}" for key in keys for stat in ("median", "low68", "high68")] if posterior else []
     diagnostics = any(row.get("diagnostics") for row in rows)
     diag_keys = (["ess", "compared_by", "posterior_kind", "interval_kind", "log_evidence", "log_evidence_mc_error",
-                  "point_count", "points_per_decade"] if diagnostics else [])
+                  "point_count", "points_per_decade", "peak_q_nm_inv", "peak_spacing_nm_inv",
+                  "validation_spacing_nm_inv"] if diagnostics else [])
     if diagnostics and not by_bic:
         diag_keys += ["composition_probability", "composition_probability_mc_low68", "composition_probability_mc_high68"]
     lines = [f"# {line}" for line in provenance.splitlines()] + [

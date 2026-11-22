@@ -3063,11 +3063,15 @@ Carlo error conditional on the sampled proposals. For each replicate, sum Z* ove
 divide by the sum over all compared modes. The 16th and 84th percentiles give the composition probability's
 Monte Carlo range. If a mode has no local sampler, the record identifies the network-proposal evidence (using the counting uncertainty before the 5 % floor), its effective sample size and bootstrap error. BIC weights have no evidence-based probability range.
 
-The validation grid in `tools/benchmarks/recovery_cases.py` has 397 points from 0.02 to 2.0 nm⁻¹.
-Its density ρ₀ = 397/log₁₀(2/0.02) = 198.5 points per decade was used to calibrate the 5 % model-error floor.
-The record gives N and ρ = N/log₁₀(q_max/q_min) on the fitted window. When ρ/ρ₀ exceeds 1.5 or falls below 1/1.5,
-a notice explains that, for independent points of comparable precision and the same q range, interval widths
-scale approximately as √(ρ₀/ρ). Rebinning correlated points need not follow this scaling.
+The 5 % model-error floor was calibrated on a **linear grid** of 397 points from 0.02 to 2 nm⁻¹,
+with Δq = 0.005 nm⁻¹. The average over those two decades is 198.5 points per decade. To compare sampling at
+a feature, the report gives the point count in the fitted window and Δq at its measured intensity maximum,
+in nm⁻¹ and as a multiple of 0.005 nm⁻¹. This Δq is the mean of the gaps to the nearest distinct |q| on
+each side, or the one available gap at an endpoint. A log-binned cut can have several times the validation
+spacing near its maximum. Below 80 fitted points, check that the features are resolved. Above 400,
+importance sampling may fall back to a BIC comparison. Try rebinning to 150–250 log-spaced points.
+In the paper's Table S6, 68 % interval widths changed by about 20–30 % from 79 to 160 points and little
+from 160 to 240. With 582 native points the sampler had five effective samples and the comparison used BIC.
 
 Every solution with normalized weight at least 1 % is returned in descending order. Each carries the refined
 values with their least-squares errors (9.8), the posterior median and intervals, χ²ᵣ, its probability and flags. An
@@ -3125,10 +3129,12 @@ no such approximation, so GIMaP says when it matters:
   q₊R = 1.2. In the sphere coverage table below (`posterior_dwba_pairs.json`), nominal 68 % intervals cover the
   true radius on only 33 % (level 1) and 18 % (level 2) of DWBA cuts in the 1.2–1.7 bin. Level 2 adds
   `qzR_fail:R_n` above 2, the approximate onset of strong model error in that comparison. Use level 3 or a
-  four-term DWBA fit. These are sphere validation results, applied conservatively to random cylinders.
-- `cyl_sphere:R_n` marks a random or upright cylinder with known height, 0.8 ≤ h/(2R) ≤ 1.25 and q₊R > 1.2.
-  This aspect-ratio check flags a possible alternative interpretation of the DWBA recovery results. A horizontal
-  upright-cylinder cut alone does not determine h. It can use a height supplied with the selected population in Model.
+  four-term DWBA fit. Level 3 also raises `qzR_cov:R_n` above q₊R = 1.7. These sphere coverage thresholds
+  also apply to random cylinders as a precaution.
+- At levels 2 and 3, an upright cylinder with q₊R > 2 receives `cyl_sphere:R_n`. Its radial profile can fit
+  scattering from spheres of a similar radius. The horizontal cut alone leaves its height undetermined.
+  At any level, a random or upright cylinder with a known height also receives this flag when
+  q₊R > 1.2 and 0.8 ≤ h/(2R) ≤ 1.25.
 - For random cylinders the limit is the spheres', applied to the radius, which is a lower bound of their size; no
   level evaluates them at the cut's q_z in Fitting's model, so the flag only warns.
 - Predict assigns the flags after fitting. The fitted values, intervals and probabilities depend on the substrate level used.
@@ -3283,6 +3289,11 @@ share whose 68 % interval holds the truth:
 | 1.7–2.3 | 42 | 0.5 % (0 %) · 12 % · 67 % | 4.0 % (-2 %) · 2 % · 14 % | 4.0 % (-3 %) · 10 % · 36 % | 15 % (-15 %) · 43 % · 7 % |
 | 2.3–3.5 | 58 | 0.7 % (0 %) · 5 % · 71 % | 11 % (-11 %) · 19 % · 7 % | 6.7 % (0 %) · 14 % · 48 % | 20 % (-13 %) · 50 % · 22 % |
 | above 3.5 | 45 | 5.5 % (0 %) · 36 % · 49 % | 40 % (-30 %) · 87 % · 0 % | 7.0 % (+2 %) · 16 % · 53 % | 29 % (-29 %) · 67 % · 40 % |
+
+In the two-path run (`si_tp_new`), coverage falls from 60 % to 36 % across q₊R = 1.7 and reaches 48 % in
+the next bin. This motivates the level-3 coverage warning. The upright-cylinder shape warning uses q₊R > 2
+as a practical threshold near the onset of strong shape confusion. The public GALAXI cut illustrates this
+ambiguity at q₊R ≈ 3.1. The table measures radius coverage for a given composition.
 
 The curves by their largest sphere's q₊R: true composition most probable · truth's mode listed · median χ²/N:
 
@@ -3676,10 +3687,15 @@ noise): the joint fit finds h within its error, which the horizontal cut alone d
 With BornAgain's average layer off, the noise-free baseline recovered σ_R/R = 0.150005 and h = 5.9997 nm
 for inputs 0.15 and 6 nm at the default cutoff. The original sweep with BornAgain's average layer on gave heights
 about 3% low for 10% Si-like coverage and 13–60% low for Au-like coverages of 10–40% over the full cut.
-At α_f ≥ 2α_c the Au-like biases were 6–20% low. When the vertical reduced χ² exceeds 3, **Needs attention** in
-the joint report explains that the model omits the effective refractive index of the particle layer and height is
-likely underestimated for dense or high-Z layers. The report always states the assumption of independent radii and
-heights. For H = 1.5R the benchmark overestimated h by 14% with joint reduced χ² near 1.2.
+At α_f ≥ 2α_c the Au-like biases were 6–20% low. The joint report states that h assumes a dilute layer and
+independent heights and radii. It warns at vertical reduced χ² > 3 for supplied or Poisson uncertainties.
+For a fitted upright-cylinder height, a second joint fit uses the full valid vertical range and keeps the
+horizontal data and parameter links. If the selected range is already the full cut, the check uses 2α_c.
+With heights h and h′ on the selected and comparison ranges, respectively, **Needs attention** flags
+|h − h′| > 2√(σ_h² + σ_h′²) or |h − h′| > 0.02|h|. The quadrature sum is a diagnostic scale for
+overlapping fits. The relative threshold also works when a fit has no finite standard error.
+In the stored noise-free fits, changing the range shifted h by 7.6 % for 10 % Au and 12.0 % for 40 % Si.
+For H = 1.5R, both ranges overestimated h by about 14 % at joint reduced χ² near 1.2 and the range check was silent.
 The simulations and per-fit results are in `tools/benchmarks/vertical_height_bias.py` and its JSON record.
 
 Implementation: `src/gimap/features/fitting/domain/joint_fit.py`, `domain/vertical_cut.py`,

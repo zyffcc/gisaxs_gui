@@ -18,9 +18,10 @@ The held-out curves themselves (`recovery_cases.py`, `heldout_cases.py`) need ne
 On the Windows release-check machine, `python -m pytest --collect-only -q` collected **4322 tests**.
 Five tests skipped for missing optional Python packages. One reads an NXcanSAS export with SasView
 (`sasdata`), and four compare detector orientations with `pyFAI`. A separate test skipped because
-the `h5clear` executable was missing. The default suite includes the exact Predict regression for known-composition
-cuts 184 and 167 of the first benchmark. Run `python -m pytest -q tests/test_predict_regression.py`
-to repeat both fits (24 s here).
+the `h5clear` executable was missing. Run `python -m pytest -q tests/test_predict_regression.py` for the
+five-cut exact Predict regression (72 s on the Windows test machine). In `per_cut/posterior_recovery.json.gz`
+it checks known-composition fits 184 and 167 and composition choice 176. It also checks automatic level-2
+fit 89 in `per_cut/posterior_newseed_auto2.json.gz` and known-composition fit 208 in `per_cut/posterior_newseed.json.gz`.
 
 ## The runs the paper quotes
 
@@ -72,6 +73,12 @@ In `posterior_dwba_pairs.json` the runs keep the labels they were paired under: 
 `si_eia_new`. In the summaries, *true composition most probable* (`composition.exact`) is judged on the most probable
 solution: the first solution Predict lists has the true families; `true_in_equivalent_set` says that a listed
 solution (probability at least 0.05) has them.
+
+For spheres in the two-path DWBA comparison (`si_tp_new`), 68 % interval coverage was 60 %, 36 % and
+48 % in the q₊R bins 1.2–1.7, 1.7–2.3 and 2.3–3.5. Predict therefore raises `qzR_cov` above 1.7 at
+level 3 (`reporting.QZR_TWO_PATH_COVERAGE`). The frequent sphere/cylinder confusion in the DWBA comparison motivates a separate shape warning:
+at levels 2 and 3 an upright cylinder above q₊R = 2 (`reporting.QZR_UPRIGHT_SPHERE`) gets `cyl_sphere`, including fits without a height.
+The public GALAXI worked example gives q₊R = 3.13 for the 5.99 nm upright cylinder.
 
 `history/` holds the summaries of earlier code and of removed methods; they are not the paper's numbers
 (`history/README.md`). A new run writes `NAME_summary.json` here and `results/NAME.json` (not committed); files named
@@ -157,6 +164,22 @@ where the model holds. The table records the original sweep, before the horizont
 | resolution σ 0.02°, divergence σ 0.01° | 30 % | -2.5 % | +0.0 % | -0.2 % | 9.7 | -0.2 % | 1.2 |
 | H = 1.5 R (correlated) | 30 % | +14.4 % | +0.6 % | -0.2 % | 1.2 | +14.2 % | 1.2 |
 | 40 % Au, average layer, roughness 1.0 nm, resolution 0.02° + divergence 0.01° | 40 % | -59.6 % | +1.0 % | -0.6 % | 242.4 | -19.5 % | 10.3 |
+
+**Height consistency between fit ranges.** We paired the stored full-range and 2α_c fits in
+`vertical_height_bias.json` by case and Poisson seed. With h from the selected 2α_c range and h′ from the
+full cut, the warning fires if |h − h′| exceeds either 2√(σ_h² + σ_h′²) or 0.02|h|. The two fits
+share data, so the quadrature sum serves as a diagnostic scale. The counts below refer to this range check
+alone. The table above gives joint reduced χ². The separate χ² warning in the program uses the vertical cut.
+
+| Cases in the original sweep | Noise-free range warning | Poisson draws flagged per case |
+|---|---|---|
+| All five Si/Au average-layer cases, 0.02° resolution with divergence, combined 40 % Au case | Yes | 10/10 |
+| 0.01° resolution alone | Yes | 5/10 |
+| Three smooth controls, four roughness-only cases, H = 1.5R | No | 0/10 |
+
+For 10 % Au and 40 % Si, the noise-free heights changed by 7.6 % and 12.0 % of the selected height.
+With H = 1.5R they changed by only 0.18 % despite a +14 % bias. Agreement between the two ranges
+can therefore coexist with a bias from correlated heights and radii.
 
 The roughness is BornAgain's (K-correlation, Hurst 0.7, lateral correlation 25 nm): *r only* subtracts the bare rough
 substrate's cut, which leaves the reduced reflection coefficients; *r and diffuse* keeps the substrate's own diffuse
@@ -258,7 +281,7 @@ points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife
 
 ## The third set
 
-`posterior_newseed` was run at commit 6bb1a18 (fitting tree d139e6f5). The fitting code differs from the tree of the other runs (7e68831a) by reporting only: Predict's numbers are the same, which `tests/test_predict_regression.py` checks against `per_cut/posterior_recovery.json.gz`. Its seed (20261122) was chosen after the last change of the procedure, so no change was judged on it. The stage `auto` is the automatic analysis's call as it was then: the first level (q_z = 0), spheres and upright cylinders, one or two populations.
+`posterior_newseed` was run at commit 6bb1a18 (fitting tree d139e6f5). The fitting code differs from the tree of the other runs (7e68831a) in its reporting. The five-cut regression above checks the archived numerical results from three runs. The seed (20261122) was chosen after the last change of the procedure, so no change was judged on it. The stage `auto` in this archive is the automatic analysis's call as it was then: the first level (q_z = 0), spheres and upright cylinders, one or two populations.
 Among recovered frames, each cell gives the fraction within 1σ, fraction within 2σ and median |error|/σ.
 The three-ring row uses the separate set. The other rows use the 300-frame set.
 

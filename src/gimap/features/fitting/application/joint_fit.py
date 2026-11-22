@@ -28,7 +28,7 @@ from ..domain import fit_links
 from ..domain.fit_engine import FitData, fit_scales, residuals
 from ..domain.fit_resolution import MISSING_DQ
 from ..domain.fit_model import FitModel, evaluate, model_to_dict
-from ..domain.joint_fit import SHARED, JointCurve, JointResult, curve_errors, default_shared, fit_curves
+from ..domain.joint_fit import SHARED, HeightRangeCheck, JointCurve, JointResult, curve_errors, default_shared, fit_curves
 from ..domain.substrates import CUSTOM, MATERIALS, Substrate
 from ..domain.vertical_cut import VerticalCut
 
@@ -39,7 +39,15 @@ NO_EXIT_ANGLE = "{name}: no point of the vertical cut lies above the sample hori
 FEW_POINTS = "{name}: fewer than 3 points to fit"
 FEW_ABOVE_CUTOFF = "{name} has fewer than 3 usable points above the exit-angle limit. Lower the limit or widen the cut."
 DEFAULT_MIN_EXIT_ANGLE_AC = 2.0
-HEIGHT_ASSUMPTION = "The model omits correlations between height and radius."
+HEIGHT_ASSUMPTION = "The fitted height assumes a dilute particle layer and no correlations between height and radius."
+CHECKING_HEIGHT = "Checking the height on a second vertical range …"
+SAME_POINTS = "Both vertical ranges contain the same usable points. The height comparison is unavailable."
+CHECK_FAILED = "The second vertical range could not be fitted. The height comparison is unavailable."
+CHECK_STOPPED = "The height comparison was stopped."
+HEIGHT_RANGE_LINE = ("{height} is {selected} nm at the selected cutoff and {alternate} nm "
+                     "at a cutoff of {multiple} αc.")
+HEIGHT_RANGE_WARNING = ("{height} depends on the vertical fit range. The change exceeds twice the combined "
+                        "height uncertainty or 2% of the selected height.")
 LAYER_WARNING = ("{name} has a vertical reduced χ² of {chi2} (> 3). The model omits the effective refractive index "
                  "of the particle layer. For dense or high-Z layers the fitted height is likely underestimated. "
                  "In the BornAgain benchmark, heights for Au-like layers at 10–40% coverage were 13–60% low on "
@@ -226,7 +234,38 @@ def run_joint_fit(specs: Sequence[CurveSpec], model: FitModel, substrate: Option
         for owner, component in enumerate(model.components):
             if (owner, "h") in heights and "h" not in component.params:
                 curves = _start_height(curves, (owner, "h"), stop)
-    return fit_curves(curves, frozenset(shared) | heights, method=method, progress=progress, stop=stop)
+    result = fit_curves(curves, frozenset(shared) | heights, method=method, progress=progress, stop=stop)
+    fitted_heights = [path for path in sorted(heights) if path[1] == "h"
+                      and (result.models[0].get(path).free or result.models[0].get(path).tie)]
+    if not fitted_heights or not any(c.model.cut for c in curves) or not result.converged:
+        return result
+    alternate = 0.0 if min_exit_angle_ac else DEFAULT_MIN_EXIT_ANGLE_AC
+    if progress is not None:
+        progress(0.99, CHECKING_HEIGHT)
+    check = _compare_height_range(result, specs, alternate, fitted_heights, stop)
+    return replace(result, height_range_check=check)
+
+
+def _compare_height_range(result, specs, alternate, fitted_heights, stop) -> HeightRangeCheck:
+    """Only the vertical cutoff changes. Retain the horizontal data, links, starts and fitting method."""
+    check = HeightRangeCheck(alternate)
+    try:
+        comparison = []
+        for spec, curve in zip(specs, result.start_curves):
+            if curve.model.cut is not None:
+                cut_model = replace(curve.model, cut=replace(curve.model.cut, min_exit_angle_ac=alternate))
+                curve = JointCurve(curve.name, curve_data(spec, cut_model), cut_model)
+            comparison.append(curve)
+        check = replace(check, points=tuple(c.data.q.size for c in comparison))
+        if check.points == result.points:
+            return replace(check, unavailable=SAME_POINTS)
+        second = fit_curves(comparison, result.shared, method=result.method, stop=stop)
+    except (ValueError, FloatingPointError, np.linalg.LinAlgError):
+        # An unusable second range (e.g. too few points above 2αc) leaves the requested fit available.
+        return replace(check, unavailable=CHECK_FAILED)
+    if not second.converged:
+        return replace(check, unavailable=CHECK_STOPPED if second.stopped else CHECK_FAILED)
+    return replace(check, estimates={p: values_of(second, p)[0] for p in fitted_heights})
 
 
 def _start_height(curves, path, stop) -> list[JointCurve]:
@@ -270,6 +309,24 @@ def key_name(key) -> str:
     return name if owner == SHARED else f"{name} [{owner + 1}]"
 
 
+def height_range_rows(result: JointResult) -> list[dict]:
+    """Compare shared heights. Quadrature is a diagnostic scale for these overlapping ranges."""
+    check = result.height_range_check
+    rows = []
+    if check is None:
+        return rows
+    for path, (alternate, alt_error) in check.estimates.items():
+        selected, error = values_of(result, path)[0]
+        delta = abs(selected - alternate)
+        sigma = math.hypot(error, alt_error)
+        rows.append({"height": fit_links.parameter_name(path), "selected_nm": selected, "alternate_nm": alternate,
+                     "selected_sigma_nm": error if math.isfinite(error) else None,
+                     "alternate_sigma_nm": alt_error if math.isfinite(alt_error) else None,
+                     "combined_sigma_nm": sigma if math.isfinite(sigma) else None, "difference_nm": delta,
+                     "warn": delta > 0.02 * abs(selected) or (math.isfinite(sigma) and delta > 2 * sigma)})
+    return rows
+
+
 def needs_attention(result: JointResult, specs: Sequence[CurveSpec]) -> list[tuple[str, dict]]:
     messages = warnings(specs)
     for index, spec in enumerate(specs):
@@ -277,6 +334,10 @@ def needs_attention(result: JointResult, specs: Sequence[CurveSpec]) -> list[tup
             chi2 = result.reduced_chi2_for(index)
             if chi2 > 3.0:
                 messages.append((LAYER_WARNING, {"name": spec.name, "chi2": f"{chi2:.4g}"}))
+    if result.height_range_check is not None and result.height_range_check.unavailable:
+        messages.append((result.height_range_check.unavailable, {}))
+    messages.extend((HEIGHT_RANGE_WARNING, {"height": row["height"]}) for row in height_range_rows(result)
+                    if row["warn"])
     return messages
 
 
@@ -304,6 +365,7 @@ def joint_record(result: JointResult, specs: Sequence[CurveSpec], substrate: Opt
                                             "min_exit_angle_deg": model.cut.min_exit_angle_deg}
     from .fit_reproduction import joint_recipe
 
+    check = result.height_range_check
     return {
         "software": SOFTWARE, "kind": "gimap_joint_fit_v1", "q_unit": "nm^-1",
         **({"reproduction": joint_recipe(result, specs)} if result.start_curves else {}),
@@ -314,6 +376,9 @@ def joint_record(result: JointResult, specs: Sequence[CurveSpec], substrate: Opt
         "shared": sorted(fit_links.parameter_name(path) for path in result.shared),
         "at_bounds": [key_name(key) for key in result.at_bounds],
         "model_assumptions": [HEIGHT_ASSUMPTION],
+        **({"height_range_check": {"alternate_min_exit_angle_ac": check.min_exit_angle_ac,
+                                   "alternate_points_per_curve": list(check.points), "unavailable": check.unavailable,
+                                   "heights": height_range_rows(result)}} if check is not None else {}),
         "needs_attention": [template.format(**values) for template, values in needs_attention(result, specs)],
         "covariance_keys": [key_name(key) for key in result.covariance_keys],
         "covariance": [[number(v) for v in row] for row in result.covariance],
@@ -342,7 +407,8 @@ def model_for_page(page_model: FitModel, result: JointResult, number: int = 0) -
     return model
 
 
-__all__ = ["DEFAULT_MIN_EXIT_ANGLE_AC", "FEW_ABOVE_CUTOFF", "HEIGHT_ASSUMPTION", "KINDS", "CurveSpec", "SHARED",
-           "curve_data", "curve_errors", "curve_model", "default_shared", "hints", "joint_curves", "joint_record",
+__all__ = ["DEFAULT_MIN_EXIT_ANGLE_AC", "FEW_ABOVE_CUTOFF", "HEIGHT_ASSUMPTION", "HEIGHT_RANGE_LINE", "KINDS",
+           "CurveSpec", "SHARED", "curve_data", "curve_errors", "curve_model", "default_shared",
+           "height_range_rows", "hints", "joint_curves", "joint_record",
            "key_name", "model_for_page", "needs_attention", "plot_points", "run_joint_fit", "shareable", "substrate_of",
            "values_of", "warnings", "with_heights"]

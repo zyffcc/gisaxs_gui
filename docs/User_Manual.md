@@ -1723,7 +1723,8 @@ at 0, the non-negativity limit*). A reported solution with χ²ᵣ above 10 — 
 compositions tried describes the cut and that its R and D are not measurements (the Bragg rings of a powder or a
 calibrant give such a misfit). At the second level, Predict parameters flags a sphere or random cylinder when
 q_z·R > 1.2 because its reported interval can underestimate the uncertainty (`qzR_cov`). Above 2 it also flags
-strong model error (`qzR_fail`). To include the exit-reflected path for spheres, use **Send to Fitting**, enter
+strong model error (`qzR_fail`). An upright cylinder above 2 is flagged as a possible sphere of similar radius
+(`cyl_sphere`), even when its height is unknown. To include the exit-reflected path for spheres, use **Send to Fitting**, enter
 αi, αf and λ under Model ▸ **Spheres in grazing incidence** and run Predict parameters again. When another solution has a probability of 0.2 or more, the curve alone does not
 decide the model: a line under the table says so, and the Results tab asks which one you expect and names the
 solutions whose D is within 15 % of 2π/q\*. The report gives the refined R, h and D of the reported
@@ -2641,15 +2642,19 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
   comparison that fell back to BIC. For evidence comparisons, Fit details gives the effective sample size, bootstrap
   error of the log evidence (200 resamples) and the resulting 68 % Monte Carlo range of the composition probability.
   Below 50 effective samples the sampled quantiles use tempered weights. A dash means no sampled estimate is available.
-- The 5 % model-error floor was calibrated using 397 points over 0.02–2.0 nm⁻¹ (198.5 points per decade).
-  A density difference greater than a factor of 1.5 triggers a notice. At the same q range, independent points of
-  comparable precision give widths proportional to the inverse square root of their density.
+- **Fit details…** gives the fitted point count and the spacing near the measured intensity maximum.
+  The validation cuts had 397 linearly spaced points over 0.02–2 nm⁻¹ (Δq = 0.005 nm⁻¹).
+  A spacing ratio of 3 means the points near the maximum are three times as far apart as on the validation grid.
+  Below 80 points, check whether the cut resolves its features. Above 400, sampling may fall back to BIC.
+  Try rebinning to 150–250 log-spaced points and repeat Predict parameters.
 - Select **Reflected beam present in the data** for a measured cut with a reflected beam. For a level-1 fit, enter the measured q₊ under **Measured q_z for level-1 flags (nm⁻¹)** if known. This value affects warnings only. On such cuts, level 1
   (effective interface) and level 2 (Born at q_z) flag sphere and random-cylinder radii above q_z·R = 1.2
   (`qzR_cov`). In the simulated DWBA sphere benchmark, nominal 68 % coverage was only 18–33 % at 1.2–1.7.
   Level 2 adds `qzR_fail` above 2. Use both angles for level 3 or fit the four-term DWBA with a known substrate.
-  The original level-1 `qzR` flag starts above 1.7. A cylinder with known height, 0.8 ≤ h/(2R) ≤ 1.25 and
-  q_z·R > 1.2 may stand for a sphere (`cyl_sphere`). See Physics and Methods §9.13 for the coverage table.
+  Level 3 flags interval coverage above 1.7. The level-1 `qzR` radius-bias flag also starts above 1.7.
+  At levels 2 and 3 an upright cylinder with q_z·R > 2 may stand for a sphere of similar radius (`cyl_sphere`).
+  At any level, a cylinder with a known height also receives this flag if 0.8 ≤ h/(2R) ≤ 1.25 and q_z·R > 1.2.
+  See Physics and Methods §9.13 for the coverage table.
 - **Fit details…** also shows the reported 68 % intervals, extended to include the least-squares value. It gives the refined value first, then its
   interval, e.g. `R 4.12 [4.08, 4.16] nm`, and the probability. When a refined value lies at an end of its interval,
   a line says so (*the refined value lies at the edge of the posterior: the model describes this curve only within
@@ -2913,8 +2918,12 @@ particles. The fit starts from the model in Single analysis.
   exit-angle limit in substrate critical angles and degrees. With supplied or Poisson uncertainties, **Needs attention**
   flags a vertical reduced χ² above 3. The model omits the particle layer’s effective refractive index, so the
   fitted height is likely too low for a dense or high-Z layer. In the BornAgain benchmark, heights for Au-like
-  layers at 10–40% coverage were 13–60% low on the full cut and 6–20% low from 2 αc. Heights and radii are
-  assumed independent. Simulated cylinders with H = 1.5 R gave a height about 14% too high even with a good fit.
+  layers at 10–40% coverage were 13–60% low on the full cut and 6–20% low from 2 αc.
+  For a fitted cylinder height, the report also gives the height from a second fit using the full vertical range
+  (from 2 αc if you selected the full range). A warning appears if the heights differ by over twice their
+  combined standard error or by over 2% of the selected height. The report indicates when the two ranges
+  contain the same usable points or the comparison fit fails. Both heights assume a dilute layer and
+  uncorrelated heights and radii. For simulated cylinders with H = 1.5 R, both fits gave a height about 14% too high.
 
 **Fit Several Curves Together** warns when the exported vertical band crosses qy = 0 or its centre has |qy| below 0.02 nm⁻¹. The particle model excludes the specular reflection. If the band includes it, move the cut beside the ridge and send both curves again. The vertical-cut model and its check against BornAgain are described in
 [Physics and Methods, section 9.18](Physics_Manual.md#918-several-curves-fitted-together-the-vertical-cut).
@@ -3914,8 +3923,7 @@ experiment (chapter 13).
 ### 10.7 Without the window
 
 **Worked example (GALAXI GISAXS).**
-Run this command from the source folder to reproduce the Yoneda cut in Fig. 4 and fit it at the second level.
-The figure shows the earlier fit at the first level.
+Run this command from the source folder to reproduce the Yoneda cut and level-2 fit in Fig. 4.
 It uses the public GALAXI frame, its calibration and the reported incidence angle of 0.463°.
 
 ```sh
@@ -3923,6 +3931,8 @@ python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.t
 ```
 
 Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
+At q_z = 0.5226 nm⁻¹ the 5.99 nm upright cylinder has q_z·R = 3.13. *Needs attention* identifies it as
+a possible sphere (`cyl_sphere:R_2`). The BornAgain reference uses spheres of radius 5.75 nm.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
 gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
 the candidate solutions and their probabilities. Exit code 2 means that an item needs attention in the report.
@@ -4248,7 +4258,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The models for manual fitting are not proposed by Predict parameters.** Core–shell spheres, the 2D hexagonal paracrystal (infinite domains) and Percus–Yevick hard spheres (a 3D liquid) are fitted by Refine and Search only; core–shell spheres at q_z = 0. | Start them from values you know, or from a Predict solution with spheres, then change the family or the interference in Model and Refine ([Physics and Methods, section 9.14](Physics_Manual.md#914-models-for-manual-fitting)). |
 | **Fitting is slower with sizes by intensity and with random cylinders.** With a sphere or vertical cylinder and sizes by number or log-normal, **Search the ranges** takes a few seconds as before; with *Gaussian, by intensity* (models of earlier versions) tens of seconds, and with a random cylinder (15–800 ms per evaluation) up to minutes. | Set **Sizes** to *Gaussian, by number*, narrow the ranges of R, h and σR/R before a search, or start **Refine** from values close to the curve. |
 | **A vertical cut is modelled for spheres and upright cylinders only**, at one in-plane q (q∥ of its columns), without a q resolution or the specular rod, and only in Fitting ▸ Fit Several Curves Together. Its scales are its own: with several populations their ratio is not tied to the horizontal cut's (section 6.6). | Take the vertical cut beside the specular rod; fit random cylinders and core–shell spheres on horizontal cuts. |
-| **Cylinder height in a joint fit.** The model omits the particle layer’s effective index and assumes independent heights and radii. | Check the vertical reduced χ² and the fitted range. Height can be too low in dense or high-Z layers, or too high when height increases with radius (section 6.6). |
+| **Cylinder height in a joint fit.** The model assumes a dilute particle layer and independent heights and radii. | Check the vertical reduced χ² and the height difference between ranges. Both ranges can give a biased height when height and radius are correlated (section 6.6). |
 | **The substrate table holds bare Si, SiO₂, plate glass and Au from 4.9 to 30 keV.** An oxide, a polymer film, roughness and the particle layer's own index are not part of it (section 6.2). | Type δ and β of an effective substrate, or use the two paths with a free r. |
 | **The posterior check (MCMC) is slow for random cylinders.** A random cylinder takes 15–200 ms per evaluation. A check takes hours. Independent ensembles can both miss a distant mode (section 6.2). | Compare other modes through Predict's other solutions. |
 | **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; spheres with two paths and a free reflection coefficient r when Model has both angles, else at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, other shapes) can give a composition a high probability that it does not deserve. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with both angles R is off by about 6 % (median; P90 19–40 %) and the composition right in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
