@@ -119,6 +119,7 @@ class Curve:
     columns: Optional[dict] = None
     """The columns of a table read as q, I and σ (``ColumnMapping.to_dict``; a CSV: chosen by its header's names, or
     by the person); ``None``: a file read by place or an NXcanSAS curve."""
+    source: Optional[dict] = None
 
     @property
     def signed(self) -> bool:
@@ -134,8 +135,11 @@ class Curve:
         if sigma is not None and (sigma.shape != q.shape or not np.any(np.isfinite(sigma) & (sigma > 0))):
             sigma = None
         keep = np.isfinite(q) & np.isfinite(intensity)
+        from .curve_sources import source_record
+
         return cls(q[keep], intensity[keep], None if sigma is None else sigma[keep], name, path, unit, unit_from,
-                   int(rows_left_out) + int(q.size - np.count_nonzero(keep)), columns)
+                   int(rows_left_out) + int(q.size - np.count_nonzero(keep)), columns,
+                   source_record(path) if path else None)
 
 
 def _half(curve: Curve, positive: bool):
@@ -373,9 +377,11 @@ def derived_values(component: Component) -> dict:
 
 
 def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: str, q_range, result: Optional[FitResult],
-               excluded=()) -> dict:
+               excluded=(), curve_table=None, include_recipe=True) -> dict:
     """What the export writes next to the table: the model, the fit and how it was made."""
     from .curve_sources import source_record
+    from .fit_reproduction import fit_recipe
+    from .fit_state import number
     from .fit_uncertainty import describe_links, uncertainty_record
 
     made_of = None if curve is None else prepare_points(curve, side, q_range, excluded)
@@ -393,7 +399,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
                    "halves_used": None if made_of is None else made_of.halves_used,
                    "averaged": None if made_of is None else made_of.averaged,
                    "left_out_q_nm^-1": sorted(float(value) for value in excluded)},
-        "log_rmse": log_rmse(model, data),
+        "log_rmse": number(log_rmse(model, data)),
         # spheres of a horizontal cut: q_z = 0 (effective interface) or the two-path model with the cut's angles
         "sphere_model": "effective interface (q_z = 0)" if grazing(model) is None else "two paths (direct + exit-reflected)",
         "qz_plus_R": {f"{index}": round(value, 4) for index, value in qz_plus_r(model)},
@@ -401,13 +407,17 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
         "derived": [derived_values(component) for component in model.components],
         "links": describe_links(model),
     }
+    source = None
     if curve is not None and curve.path:
-        record["curve"]["source"] = source_record(curve.path)
+        record["curve"]["source"] = source = curve.source or source_record(curve.path)
+    recipe = fit_recipe(model, data, result, source, curve_table) if include_recipe else None
+    if recipe is not None:
+        record["reproduction"] = recipe
     if result is not None:
         record["fit"] = {
-            "method": result.method, "chi2_reduced": result.chi2_reduced, "converged": result.converged,
+            "method": result.method, "chi2_reduced": number(result.chi2_reduced), "converged": result.converged,
             "evaluations": result.evaluations, "seconds": round(result.seconds, 3), "message": result.message,
-            "errors": {f"{owner}:{key}": value for (owner, key), value in result.errors.items()},
+            "errors": {f"{owner}:{key}": number(value) for (owner, key), value in result.errors.items()},
             "at_bounds": [f"{owner}:{key}" for owner, key in result.at_bounds],
             "correlated": [[f"{a[0]}:{a[1]}", f"{b[0]}:{b[1]}", rho] for a, b, rho in result.correlated],
             **uncertainty_record(result),  # correlation matrix and covariance (names as in links), flags

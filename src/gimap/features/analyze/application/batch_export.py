@@ -51,7 +51,7 @@ from src.gimap.shared.signed_cut import FIT_HALVES, fit_halves
 from ..domain import GISAXS, PROFILES, Curve
 from ..domain.normalisation import ABSOLUTE_UNIT
 from .batch_fit import FIT_MODEL, FIT_NONE, FIT_PEAKS, MODEL_COMPONENTS, STARTS
-from .batch_tables import common_x
+from .batch_tables import batch_table_columns, common_x
 from .export_record import source_files
 from .nxcansas_export import nxcansas_name
 from .models import FrameAnalysis
@@ -228,7 +228,8 @@ def export_frame(
             ))
     if choices.fit_input:
         try:
-            written.append(export.fit_input(analysis, destination / FOLDERS["fit_input"], halves=choices.fit_halves))
+            path = export.fit_input(analysis, destination / FOLDERS["fit_input"], halves=choices.fit_halves)
+            written.extend((path, path.with_suffix(".json")))
         except ValueError:
             pass  # a frame without a usable curve: nothing to fit
     if choices.nxcansas:
@@ -301,6 +302,9 @@ class CurveTables:
 
     def frames(self, key: str) -> int:
         return len(self._columns.get(key, ()))
+
+    def reference_columns(self, key):
+        return batch_table_columns([(x, y) for _, x, y in self._columns[key]])
 
     def write(self, writer: CurveWriter, destination: Path, stem: str, text_format: str = "csv",
               notes: Sequence[str] = ()) -> list[Path]:

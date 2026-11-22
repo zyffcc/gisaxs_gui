@@ -18,6 +18,7 @@ from src.gimap.shared.file_digest import sha256_of
 
 from ..domain import FlatField, check_flat_shape, normalise_flat_field
 from ..domain.flat_field import FLAT_SHAPE, FLOOR, NO_RESPONSE, NOT_2D
+from .reduction_inputs import image_stamp
 
 APPLIED_AS = (
     "I / F_ff, right after the background: F_ff is the flat field divided by its mean over the pixels it keeps "
@@ -80,8 +81,7 @@ class FlatFieldMixin:
     def _flat_field(self, path: str, frame_shape: Optional[tuple[int, int]] = None) -> tuple[FlatField, FlatFieldUse]:
         """The flat field of ``path`` and what is recorded of it, read once per file version; ``ValueError``
         (``FLAT_SHAPE``) when it is not of ``frame_shape``."""
-        stat = Path(path).stat()
-        key = (str(path), stat.st_mtime_ns, stat.st_size)
+        key = image_stamp(path, self.frames)
         cache = self._flat_cache  # one tuple: analyses run on several threads
         if cache is None or cache[0] != key:
             flat = read_flat_field(self.frames, path)

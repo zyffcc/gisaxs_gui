@@ -21,6 +21,7 @@ import numpy as np
 from src.gimap.app.presentation.i18n import tr
 
 from ...application.single_fit import fit_record
+from ...application.fit_reproduction import with_prediction
 from ...application.solution_export import solutions_block, solutions_curves, solutions_table, table_text
 
 SAVE_SOLUTIONS = "Save Solutions"
@@ -37,13 +38,24 @@ class SolutionsExportMixin:
             (widget.triggered if hasattr(widget, "triggered") else widget.clicked).connect(
                 lambda *_args: self.export_solutions_dialog())
 
-    def solutions_record(self) -> dict:
+    def solutions_record(self, record=None, *, exporting_solutions=False) -> dict:
         """``{"predict": …}``: every solution with its intervals and flags; ``{}`` without solutions."""
         session = self.session
         if not session.solutions:
             return {}
         refined = session.refined_from if session.result is not None and session.result_is_current() else None
-        block = solutions_block(session.solutions, session.model, refined_from=refined, run=session.predict_run)
+        run = session.predict_run
+        block = solutions_block(session.solutions, session.model, refined_from=refined,
+                                run=None if run is None else {k: v for k, v in run.items() if k != "reproduction"})
+        if record is not None:
+            selected = block["in_model"] if session.solutions_searched() else None
+            if session.solutions_searched() and not (run or {}).get("reproduction"):
+                # Old projects have the posterior values but lack the inputs to its sampler.
+                block["reproduction_status"] = "The original Predict inputs were not recorded."
+                if exporting_solutions or record.get("reproduction", {}).get("operation") != "manual":
+                    record.pop("reproduction", None)
+            else:
+                with_prediction(record, run, None if selected is None else selected - 1)
         block["points_changed_since"] = session.solutions_searched() and not session.solutions_are_current()
         return {"predict": block}
 
@@ -68,7 +80,7 @@ class SolutionsExportMixin:
         curve_names, columns = solutions_curves(session.solutions, data)
         record = fit_record(session.model, data, session.curve, side=session.side, q_range=session.q_range,
                             result=session.result if session.result_is_current() else None, excluded=session.excluded)
-        record.update(self.solutions_record())
+        record.update(self.solutions_record(record, exporting_solutions=True))
         record["files"] = {"table": path.name, "curves": curves_path.name}
         try:
             write_text_whole(curves_path, table_text(curve_names, np.where(np.isfinite(columns), columns, np.nan).tolist()))

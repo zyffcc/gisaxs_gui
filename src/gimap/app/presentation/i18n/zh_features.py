@@ -14,10 +14,12 @@ from .zh_joint_fit import JOINT_FIT_ZH
 from .zh_mask_tools import MASK_TOOLS_ZH
 from .zh_normalisation import NORMALISATION_ZH
 from .zh_nxcansas import NXCANSAS_ZH
+from .zh_reproduction import REPRODUCTION_ZH
 
 FEATURES_ZH = {
     **FLAT_FIELD_ZH, **NXCANSAS_ZH, **GISAXS_CUTS_ZH, **FIT_DATA_ZH, **NORMALISATION_ZH, **GEOMETRY_ZH,
     **APP_SESSION_ZH, **INDEXING_ZH, **INSITU_ZH, **JOINT_FIT_ZH, **ABSOLUTE_SCALE_ZH, **MASK_TOOLS_ZH,
+    **REPRODUCTION_ZH,
 }
 
 __all__ = ["FEATURES_ZH"]

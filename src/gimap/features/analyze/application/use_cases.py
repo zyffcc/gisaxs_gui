@@ -53,11 +53,12 @@ from .export_record import (  # noqa: F401 - the record of an export; these name
 )
 from .flat_detector import detector_rotation_message, flat_detector_error, flat_detector_message
 from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating
-from .geometry_files import SiblingPoni
+from .geometry_files import SiblingPoni, geometry_references
 from .geometry_resolution import ResolveGeometry, center_not_used_message, refused_profile_message
 from .nxcansas_export import nxcansas_name, sas_curves
 from .technique import TechniqueGuess
 from .ports import CurveWriter, FrameSource, InstrumentProfileStore
+from .reduction_inputs import correction_references, frame_references
 
 
 class AnalyzeFrame(FramePreprocessingMixin):
@@ -92,6 +93,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             detector_name=image.detector_name,
             metadata=dict(image.metadata or {}),
             summed_frames=request.summed_frames,
+            frame_files=frame_references(Path(request.path), image.metadata) if request.with_record else {},
         )
         headers = [header_values(image.metadata)]  # exposure and monitors: a sum is divided by their sums
         if request.summed_frames:
@@ -102,6 +104,8 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 extra_data = np.asarray(extra.data, dtype=np.float32)
                 total.add(extra_data, valid_pixels(extra_data, extra.mask, negatives_valid=floating(extra.metadata)))
                 headers.append(header_values(extra.metadata))
+                if request.with_record:
+                    common["frame_files"].update(frame_references(path, extra.metadata, common["frame_files"]))
                 del extra, extra_data
             data, valid = total.result()
         common["header_values"] = headers[0] if len(headers) == 1 else summed_header_values(headers)
@@ -169,7 +173,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
         return masks
 
     def __call__(
-        self, request: AnalysisRequest, *, loaded: Optional[FrameAnalysis] = None
+        self, request: AnalysisRequest, *, loaded: Optional[FrameAnalysis] = None, resolution=None, mask_bitmap=None,
     ) -> FrameAnalysis:
         """Reduce the requested frame(s); ``loaded`` is reused when it holds the same frames."""
         if (
@@ -177,6 +181,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             and Path(loaded.path) == Path(request.path)
             and loaded.frame_index == int(request.frame_index)
             and tuple(loaded.summed_frames) == request.summed_frames
+            and (not request.with_record or loaded.frame_files)
         ):
             raw_data = loaded.raw_data if loaded.raw_data is not None else loaded.data
             raw_valid = loaded.raw_valid if loaded.raw_valid is not None else loaded.valid
@@ -188,11 +193,12 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 metadata=loaded.metadata,
                 summed_frames=loaded.summed_frames,
                 header_values=loaded.header_values,
+                frame_files=loaded.frame_files,
             )
         else:
             raw_data, raw_valid, common = self._load_frames(request)
         shape = (int(raw_data.shape[0]), int(raw_data.shape[1]))
-        resolution = self.resolve(
+        resolution = resolution or self.resolve(
             detector_name=common["detector_name"],
             shape=shape,
             profile_name=request.profile_name,
@@ -223,7 +229,12 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 common["path"], (int(common["frame_index"]), tuple(common["summed_frames"])), raw_data, raw_valid,
                 geometry, request.incidence_deg)
         kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)
-        counting = self.correct_pixels(common, raw_data, raw_valid, request.corrections, geometry, kind)
+        counting = self.correct_pixels(common, raw_data, raw_valid, request.corrections, geometry, kind,
+                                       mask_bitmap=mask_bitmap)
+        if request.with_record:
+            common["request"] = request
+            common["correction_files"] = correction_references(request.corrections, self.frames)
+            common["geometry_files"] = geometry_references(resolution)
         if not request.corrections.normalisation.is_identity:  # one constant of the frame, last
             self._normalise(common, raw_data, raw_valid, request.corrections, counting, Path(request.path).name)
         data, valid = common["data"], common["valid"]
@@ -373,7 +384,8 @@ class ExportAnalysis:
             raise ValueError("This frame has no q map yet (it needs a geometry).")
         x_axis, z_axis = rsm.axes()
         return self.writer.write_map(
-            rsm.image, x_axis, z_axis, Path(path), (rsm.x_label, "qz (Å⁻¹)"), analysis_metadata(analysis)
+            rsm.image, x_axis, z_axis, Path(path), (rsm.x_label, "qz (Å⁻¹)"),
+            analysis_metadata(analysis, with_reproduction=False)
         )
 
     def curves(
@@ -385,7 +397,7 @@ class ExportAnalysis:
         chosen = [curve for key in keys if (curve := analysis.reduction.curve(key)) is not None and not curve.is_empty]
         if not chosen:
             raise ValueError("None of these curves has data.")
-        metadata = analysis_metadata(analysis)
+        metadata = analysis_metadata(analysis, curve_keys=[curve.key for curve in chosen])
         if extra_metadata:
             metadata.update(_plain(dict(extra_metadata)))
         stem = export_stem(analysis)
@@ -406,7 +418,7 @@ class ExportAnalysis:
         if reduction is None:
             return None
         chosen = [curve for curve in reduction.curves if not keys or curve.key in keys]
-        metadata = analysis_metadata(analysis)
+        metadata = analysis_metadata(analysis, curve_keys=[curve.key for curve in chosen if not curve.is_empty])
         if extra_metadata:
             metadata.update(_plain(dict(extra_metadata)))
         sas = sas_curves(chosen, metadata, run=export_stem(analysis))
@@ -418,7 +430,7 @@ class ExportAnalysis:
         """The unwrapped view as a CSV table: q in the first row, χ in the first column."""
         q_axis, chi_axis = cake.axes()
         # The cake is calculated from detector pixels, before a series scales its curves and q map to a peak.
-        metadata = {**analysis_metadata(replace(analysis, reference_peak_scale=None)),
+        metadata = {**analysis_metadata(replace(analysis, reference_peak_scale=None), with_reproduction=False),
                     "title": "GIMaP Analyze cake: mean intensity on a chi-q grid, blank = no pixel"}
         return self.writer.write_map(cake.image, q_axis, chi_axis, Path(path), ("q (Å⁻¹)", "χ (°)"), metadata)
 
@@ -428,9 +440,9 @@ class ExportAnalysis:
         if curve is None:
             raise ValueError("Nothing to fit: this frame has no usable curve.")
         path = Path(destination) / f"{export_stem(analysis)}_fit_input.dat"
-        return self.writer.write_xy(
-            curve, path, _fit_input_metadata(analysis, analysis_metadata(analysis), halves)
-        )
+        metadata = _fit_input_metadata(analysis, analysis_metadata(analysis, curve_keys=["fit_input"]), halves)
+        self.writer.write_record(path.with_suffix(".json"), {**metadata, "files": [path.name]})
+        return self.writer.write_xy(curve, path, metadata)
 
     def __call__(
         self,
@@ -449,10 +461,11 @@ class ExportAnalysis:
         curves = [curve for curve in analysis.reduction.curves if not curve.is_empty]
         if not curves:
             raise ValueError("Nothing to export: every curve of this frame is empty.")
-        metadata = analysis_metadata(analysis)
+        fit_curve = fit_input_curve(analysis)
+        keys = [curve.key for curve in curves] + ([] if fit_curve is None else ["fit_input"])
+        metadata = analysis_metadata(analysis, curve_keys=keys)
         if extra_metadata:
             metadata.update(_plain(dict(extra_metadata)))
-        fit_curve = fit_input_curve(analysis)
         stem = export_stem(analysis)
         path = Path(destination) / f"{stem}_fit_input.dat"
         sas = sas_curves(curves, metadata, run=stem) if nxcansas else []

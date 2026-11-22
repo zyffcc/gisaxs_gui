@@ -13,6 +13,7 @@ import math
 from src.gimap.app.presentation.i18n import tr
 
 from ...application.single_predict import MAX_PARTICLES, predict_request, predicted
+from ...application.series_fit import PredictedStart
 
 METHODS = ("local", "global", "predict")
 NOT_PREDICT = "Predict each frame needs 1–3 particles in Single analysis' model."
@@ -90,7 +91,9 @@ class FitSeriesPredictMixin:
                 self._series_job = None
             if not result.succeeded:
                 raise RuntimeError(result.error.message if result.error else "Predict parameters failed")
-            return closest(predicted(result.value), previous_model).model
+            solutions = predicted(result.value)
+            selected = closest(solutions, previous_model)
+            return PredictedStart(selected.model, solutions.index(selected), result.value.get("reproduction"))
 
         return predict
 

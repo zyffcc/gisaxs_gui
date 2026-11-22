@@ -85,7 +85,7 @@ class PredictPageMixin(PredictProgressMixin):
         solutions = as_solutions(predicted(value))
         if curve is None or curve is self.session.curve:
             self.session.predict_run = {"stopped": False, "network": value.get("network"),
-                                        "seconds": value.get("seconds")}
+                                        "seconds": value.get("seconds"), "reproduction": value.get("reproduction")}
         self._solutions_found(solutions, curve, selection)
 
     def posterior_lines(self) -> list[str]:

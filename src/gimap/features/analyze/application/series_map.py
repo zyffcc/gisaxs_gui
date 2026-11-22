@@ -21,6 +21,7 @@ from ..domain import SeriesMap, q_from_two_theta, series_map
 from ..domain.series_map import VIEW_BOTH, VIEW_FOLDED, VIEW_MEAN, VIEW_NEGATIVE, VIEW_POSITIVE, RowFacts
 from .models import FrameAnalysis
 from .ports import FRAME_OF, CurveWriter, source_name
+from .series_reproduction import series_recipe
 from .use_cases import SOFTWARE
 
 SERIES_TITLE = "GIMaP Analyze series map: rows = frames in list order, columns = x; mean intensity per bin, blank = no data"
@@ -368,7 +369,9 @@ def export_series_map(writer: CurveWriter, series: SeriesMap, path: Path) -> Pat
                 f"rows: frame (first column); columns: {series.x_label} (first row)"]
     header = [f"frame \\ {series.x_label}", *(f"{value:.8g}" for value in series.x)]
     rows = [[series.number(row), *(float(value) for value in series.image[row])] for row in range(series.rows)]
-    return _with_record(writer, series, Path(path), comments, header, rows, table="map")
+    recipe = series_recipe(series)
+    return _with_record(writer, series, Path(path), comments, header, rows, table="map",
+                        **({"reproduction": recipe} if recipe else {}))
 
 
 def export_series_curve(writer: CurveWriter, series: SeriesMap, row: int, path: Path) -> Path:
@@ -378,8 +381,9 @@ def export_series_curve(writer: CurveWriter, series: SeriesMap, row: int, path: 
                 *series_header(series), row_words(series, row)]
     values = series.profile(row)
     rows = [[float(x), float(value)] for x, value in zip(series.x, values)]
+    recipe = series_recipe(series, row)
     return _with_record(writer, series, Path(path), comments, [series.x_label, "intensity"], rows,
-                        table="curve of one frame", frame=series.number(row))
+                        table="curve of one frame", frame=series.number(row), **({"reproduction": recipe} if recipe else {}))
 
 
 def export_series_trace(writer: CurveWriter, series: SeriesMap, name: str, values, path: Path, *, what: str) -> Path:

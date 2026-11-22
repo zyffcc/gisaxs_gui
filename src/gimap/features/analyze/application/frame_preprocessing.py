@@ -38,8 +38,10 @@ from ..domain import (
 )
 from ..domain.normalisation import BAD_VALUE, NORMALISATION_TEMPLATES  # noqa: F401 - the page translates them
 from ..domain.mask_edits import MaskShape
+from ..domain.mask_bitmap import read_bitmap
 from ..domain.mask_raster import evaluate_mask
 from .flat_field import FlatFieldMixin
+from .reduction_inputs import image_stamp
 
 
 def floating(metadata: Optional[Mapping[str, Any]]) -> bool:
@@ -108,8 +110,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
     def _reference_frame(self, kind: str, path: str, frame: int) -> tuple[np.ndarray, np.ndarray]:
         """The background or dark frame (``kind``) and its valid pixels, loaded once per file version."""
         path = Path(str(path))
-        stat = path.stat()
-        key = (str(path), int(frame), stat.st_mtime_ns, stat.st_size)
+        key = (image_stamp(path, self.frames), int(frame))
         cached = self._references.get(kind)  # one tuple per kind: analyses run on several threads
         if cached is None or cached[0] != key:
             image = self.frames.load(path, int(frame))
@@ -160,8 +161,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
 
     def _file_mask(self, path: str, frame_shape: tuple[int, int]) -> np.ndarray:
         """Non-zero pixels of a mask image, read once per file version."""
-        stat = Path(path).stat()
-        key = (str(path), stat.st_mtime_ns, stat.st_size)
+        key = image_stamp(path, self.frames)
         cache = self._file_mask_cache
         if cache is None or cache[0] != key:
             cache = (key, read_mask_image(Path(path), self.frames))
@@ -204,7 +204,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
 
     def _preprocess(
         self, raw_data: np.ndarray, raw_valid: np.ndarray, corrections: Corrections,
-        metadata: Mapping[str, Any], mirror_center_x: Optional[float], geometry=None,
+        metadata: Mapping[str, Any], mirror_center_x: Optional[float], geometry=None, mask_bitmap=None,
     ) -> dict:
         """The frame to reduce and what was done to it (fields of ``FrameAnalysis``).
 
@@ -215,7 +215,8 @@ class FramePreprocessingMixin(FlatFieldMixin):
         usable = raw_valid
         if bad is not None and bad.mask.any():
             usable = usable & ~bad.mask
-        drawn = self._user_mask(raw_data, usable, corrections, geometry)
+        drawn = (self._user_mask(raw_data, usable, corrections, geometry) if mask_bitmap is None
+                 else read_bitmap(mask_bitmap, raw_data.shape))
         if drawn is not None and drawn.any():
             usable = usable & ~drawn
         record: dict = {"corrections": corrections, "bad_pixels": bad, "drawn_mask": drawn}
@@ -247,10 +248,10 @@ class FramePreprocessingMixin(FlatFieldMixin):
             self._intensity, self._intensity_key = cached, key
         return cached
 
-    def correct_pixels(self, common: dict, raw_data, raw_valid, corrections, geometry, kind) -> bool:
+    def correct_pixels(self, common: dict, raw_data, raw_valid, corrections, geometry, kind, *, mask_bitmap=None) -> bool:
         """Apply the pixel-dependent corrections shared by sample and standard. Return the counting model."""
         mirror_x = geometry.beam_center_x_px if geometry is not None and kind == GIWAXS else None
-        common.update(self._preprocess(raw_data, raw_valid, corrections, common["metadata"], mirror_x, geometry))
+        common.update(self._preprocess(raw_data, raw_valid, corrections, common["metadata"], mirror_x, geometry, mask_bitmap))
         counting = photon_counts(common["metadata"], corrections, mirror_filled=common.get("filled_pixels") is not None)
         self._flat_scale(common, corrections, counting)
         if kind == GIWAXS and geometry is not None and has_intensity_corrections(corrections):

@@ -55,6 +55,12 @@ def result_to_dict(result: Optional[FitResult]) -> Optional[dict]:
         "errors": {path_key(path): number(value) for path, value in result.errors.items()},
         "correlated": [[path_key(a), path_key(b), number(rho)] for a, b, rho in result.correlated],
         "at_bounds": [path_key(path) for path in result.at_bounds], "start_kept": bool(result.start_kept),
+        "covariance": [[number(v) for v in row] for row in result.covariance],
+        "covariance_paths": [path_key(path) for path in result.covariance_paths],
+        "start_model": model_to_dict(result.start_model) if result.start_model is not None else None,
+        "evaluation_budget": result.evaluation_budget, "seed": result.seed,
+        "population_seeds": [model_to_dict(m) for m in result.population_seeds],
+        "stopped_after": result.stopped_after,
     }
 
 
@@ -69,7 +75,13 @@ def result_from_dict(data: Optional[dict]) -> Optional[FitResult]:
         errors={path_of(key): read_number(value) for key, value in (data.get("errors") or {}).items()},
         correlated=tuple((path_of(a), path_of(b), read_number(rho)) for a, b, rho in data.get("correlated") or ()),
         at_bounds=tuple(path_of(key) for key in data.get("at_bounds") or ()),
-        start_kept=bool(data.get("start_kept")))
+        start_kept=bool(data.get("start_kept")),
+        covariance=tuple(tuple(read_number(v) for v in row) for row in data.get("covariance", ())),
+        covariance_paths=tuple(path_of(name) for name in data.get("covariance_paths", ())),
+        start_model=model_from_dict(data["start_model"]) if data.get("start_model") else None,
+        evaluation_budget=data.get("evaluation_budget"), seed=data.get("seed", 1729),
+        population_seeds=tuple(model_from_dict(m) for m in data.get("population_seeds", ())),
+        stopped_after=data.get("stopped_after"))
 
 
 def selection_to_dict(selection) -> Optional[dict]:

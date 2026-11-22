@@ -238,6 +238,7 @@ class WorkspaceCommands:
             "analyze_repeat": MenuEntry(analyze(lambda: page().run_analysis()), self._frame),
             "analyze_absolute_scale": MenuEntry(analyze(lambda: page().absolute_scale_dialog()), self._standard_profile),
             "analyze_export": MenuEntry(analyze(lambda: page().export_current()), self._analysis),
+            "analyze_reproduce": MenuEntry(analyze(lambda: self.menus.reproduce_from_record())),
             "analyze_batch": MenuEntry(analyze(lambda: page().batch_export_dialog()), self._batch),
             "analyze_batch_folder": MenuEntry(analyze(lambda: page().batch_from_folder()), self._batch_free),
             "analyze_send_fitting": MenuEntry(analyze(lambda: page().fit_current()), self._send_fitting),

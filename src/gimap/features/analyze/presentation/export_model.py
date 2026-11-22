@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Optional
 
 from ..application import (
@@ -18,6 +19,7 @@ from ..application import (
     row_label,
     series_row,
 )
+from ..application.series_reproduction import spool_row
 
 EXPORT_FOLDER = "gimap_analysis"
 EXPORT_FOLDER_KEY = "export_folder"
@@ -39,6 +41,24 @@ class ExportModelMixin:
     export_nxcansas = False
     """Export, the curves of a plot and the export while watching also write the curves against q as NXcanSAS
     (the Export step's “Also as NXcanSAS (.h5)”)."""
+
+    _series_recipe_dir = None
+
+    @property
+    def series_spool(self):
+        directory = self._series_recipe_dir
+        return None if directory is None else directory.name
+
+    def begin_series_spool(self, *, replace_existing):
+        if replace_existing:
+            self.release_series_spool()
+        if self._series_recipe_dir is None:
+            self._series_recipe_dir = TemporaryDirectory(prefix="gimap-series-records-")
+
+    def release_series_spool(self):
+        if self._series_recipe_dir is not None:
+            self._series_recipe_dir.cleanup()
+            self._series_recipe_dir = None
 
     # -- export ------------------------------------------------------------------------
 
@@ -73,7 +93,8 @@ class ExportModelMixin:
         """Thread-safe: ``(x, intensity, x_label, row label, (path, frame_index))`` of one frame's curve."""
         analysis = self.analyze(replace(request, with_map=False))  # one curve per frame: no q map
         x, intensity, x_label = series_row(analysis, key)
-        return x, intensity, x_label, row_label(analysis), (Path(analysis.path), int(analysis.frame_index))
+        label = spool_row(self.series_spool, analysis, key, row_label(analysis))
+        return x, intensity, x_label, label, (Path(analysis.path), int(analysis.frame_index))
 
     def cake(self, analysis: FrameAnalysis):
         """Thread-safe: the frame unwrapped onto χ–q."""
@@ -145,8 +166,9 @@ class ExportModelMixin:
                 x, intensity, label = series_row(analysis, live_key)
             except ValueError as exc:
                 return ExportedFiles(written, live_key=live_key, live_row=None, live_error=str(exc))
+            name = spool_row(self.series_spool, analysis, live_key, row_label(analysis))
             return ExportedFiles(written, live_key=live_key, live_row=(
-                x, intensity, label, row_label(analysis), (Path(analysis.path), int(analysis.frame_index))))
+                x, intensity, label, name, (Path(analysis.path), int(analysis.frame_index))))
         return written
 
     def _save_frame_images(

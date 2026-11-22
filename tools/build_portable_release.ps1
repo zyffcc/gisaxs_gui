@@ -375,6 +375,8 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Copying $($ApplicationFiles.Count) application files..."
 $SelectionPath = Join-Path $LicenseStaging 'application-selection.json'
 $Generated = @{}
+$BuildCommit = & git -C $ProjectRoot rev-parse --verify --quiet HEAD
+$Generated['src/gimap/shared/revision.json'] = @{commit = $BuildCommit} | ConvertTo-Json -Compress
 @{ files = @($ApplicationFiles); licences = @($LicenseFiles); generated = $Generated } |
     ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $SelectionPath -Encoding UTF8
 try {

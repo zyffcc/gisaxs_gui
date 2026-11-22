@@ -441,6 +441,12 @@ class ApplicationMenus:
 
     # -- tools --------------------------------------------------------------
 
+    def reproduce_from_record(self):
+        from .presentation.reproduction import choose_record
+        from .reproduce import reproduce_record
+
+        return choose_record(self.window, reproduce_record)
+
     def open_geometry_calibration(self):
         return self.tools.show("calibration", _geometry_calibration_dialog)
 

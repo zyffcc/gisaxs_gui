@@ -126,9 +126,11 @@ def create_curve_fit():
     from src.gimap.shared.signed_cut import PreparedCut, fit_halves, merge_points, prepare_cut
 
     from .application.single_fit import CURVE_FIT_MIN_POINTS, TOO_FEW_FOR_CURVE_FIT
+    from .application.fit_reproduction import prediction_record
     from .application.workflow_v5 import default_options
     from .domain.posterior import encoding, network, refine
-    from .infrastructure.adapters.posterior_job import batch_compositions, curve_rows
+    from .infrastructure.adapters.posterior_job import batch_compositions, curve_rows, encode
+    from .infrastructure.reproduce_fit import predict_options, prediction_plan
     from .infrastructure.adapters.workflow_v5 import prepare_sides, side_notes
 
     def prepared(q, intensity, sigma, halves) -> PreparedCut:
@@ -173,6 +175,11 @@ def create_curve_fit():
                    "one_half": cut.single, "merged": cut.merged}
         # As the 1D Predict record names it: the network and the SHA-256 of its weights (checked when it is loaded).
         used = {"name": network.path().stem, "sha256": (getattr(proposals, "meta", None) or {}).get("sha256")}
+        if used["sha256"]:
+            plan = prediction_plan(dict(q=q.tolist(), intensity=item["observed"].tolist(), sigma=item["sigma"].tolist()),
+                                   predict_options(dict(seed=CURVE_FIT_SEED, **chosen)), network.path(), proposals.meta,
+                                   display_q=np.linspace(q.min(), q.max(), options["render_points"]), limit=5)
+            rows[0]["reproduction"] = prediction_record(plan, [encode(s) for s in solutions[:5]])
         for row in rows:
             row.update(prepared=cut.note, preparation=dict(made_of), network=dict(used), seed=CURVE_FIT_SEED,
                        curve_notes=side_notes(item, {}))  # an estimated σ, negative and zero intensities

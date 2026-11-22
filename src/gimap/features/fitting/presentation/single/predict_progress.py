@@ -76,6 +76,7 @@ class PredictProgressMixin:
 
     def _predict_started(self, tried) -> None:
         self._predict_partial, self._predict_tried = None, tried
+        self._partial_plan = None
         self._predict_clock.start()
 
     def _tick_predict(self) -> None:
@@ -89,6 +90,7 @@ class PredictProgressMixin:
         """A report of the job (its thread): the stage line, and the solutions finished so far."""
         details = dict(progress.details or {})
         if details.get("partial"):
+            self._partial_plan = details.pop("prediction_plan", None)
             self._predict_partial = (details.pop("partial"), int(details.get("done") or 0), int(details.get("total") or 0))
         if details.get("stage"):
             details["received"] = time.monotonic()
@@ -111,6 +113,10 @@ class PredictProgressMixin:
             return
         finished, total = kept[1], kept[2]
         self.session.predict_run = {"stopped": True, "finished": finished, "total": total}
+        if self._partial_plan:
+            from ...application.fit_reproduction import prediction_record
+            self.session.predict_run["reproduction"] = prediction_record(
+                {**self._partial_plan, "partial_after": finished}, kept[0])
         self._solutions_found(solutions, curve, selection, message=lambda: trf(
             KEPT, solutions=count_solutions(len(solutions)), finished=finished, total=total))
 

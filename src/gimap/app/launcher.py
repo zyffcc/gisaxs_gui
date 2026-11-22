@@ -26,7 +26,8 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     """``gimap [FILE_OR_FOLDER ...] [--version]``; options Qt knows (``-style …``) are left to Qt."""
     parser = argparse.ArgumentParser(
         prog="gimap", description=f"{APP_NAME}: GISAXS and GIWAXS analysis. Opens the files and folders given "
-                                  "(detector frames, a folder of them, a .gimap project).")
+                                  "(detector frames, a folder of them, a .gimap project). "
+                                  "Use 'gimap reproduce RECORD.json [--out FOLDER]' to repeat a reduction or fit.")
     parser.add_argument("paths", nargs="*", metavar="FILE_OR_FOLDER",
                         help="detector frames, a folder of frames or a project (.gimap) to open")
     parser.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
@@ -49,7 +50,11 @@ def saved_appearance(data_dir: Path) -> tuple[str, str]:
 
 def launch(argv: Optional[Sequence[str]] = None) -> int:
     """Run GIMaP; returns the exit code."""
-    options = parse_arguments(argv)  # --version and --help end here, before Qt starts
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] == ["reproduce"]:
+        from src.gimap.app.reproduce import reproduce_cli
+        return reproduce_cli(arguments[1:])
+    options = parse_arguments(arguments)  # --version and --help end here, before Qt starts
     # Matplotlib must use the Qt backend of PyQt5; Qt must find its platform plugin.
     os.environ.setdefault("MPLBACKEND", "Qt5Agg")
     from src.gimap.app.qt_plugins import ensure_qt_platform_plugin_path

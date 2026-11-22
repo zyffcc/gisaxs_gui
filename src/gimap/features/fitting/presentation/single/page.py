@@ -360,6 +360,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self._status(lambda reason=str(exc): tr("Could not use this solution: {reason}").format(reason=reason), "error")
             return False
         self.session.solutions = [Solution(model, float(row.get("best_chi2_weighted") or np.nan), "Analyze", deviation)]
+        self.session.predict_run = {"reproduction": row["reproduction"]} if row.get("reproduction") else None
         self.session.solutions_selection = None  # not searched here: its χ² is Analyze's, of Analyze's points
         self.session.result = None  # as when a solution is chosen in Results: a new start
         self.session.refined_from, self.session.model_from = None, 0

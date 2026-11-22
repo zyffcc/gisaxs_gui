@@ -569,6 +569,8 @@ class AnalyzePage(
         for task in ("analyze", "batch", "series", "cake", "mask_preview"):
             self.tasks.cancel(task)
         self.shape_layer.cancel_drawing()
+        if not self._batch_inflight and not self.tasks.is_busy():
+            self.view_model.release_series_spool()
         self.shutdown_batch()
         self._reset_series_fit()
         self._dispose_undo()

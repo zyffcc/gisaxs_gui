@@ -53,7 +53,8 @@ def _status(model, result, path, parameter) -> str:
 
 def blocks(model, data, curve, *, side: str, q_range, result, excluded=()) -> list:
     """The report as blocks: ``("h1"|"h2"|"p", text)``, ``("ul", [items])``, ``("table", header, rows)``."""
-    record = fit_record(model, data, curve, side=side, q_range=q_range, result=result, excluded=excluded)
+    record = fit_record(model, data, curve, side=side, q_range=q_range, result=result, excluded=excluded,
+                        include_recipe=False)
     out: list = [("h1", "GIMaP fit report"),
                  ("p", f"{record['software_version']} · written {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC")]
     source = (record.get("curve") or {}).get("source") or {}

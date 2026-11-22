@@ -174,7 +174,7 @@ class CsvCurveWriter:
                     stream.write(f"# observation: {json.dumps(_jsonable(observation), sort_keys=True)}\n")
                 stream.write(f"# columns: {export_text(curve.x_label)}  I  sigma  pixels\n")
                 for x, intensity, sigma, pixels in zip(curve.x, curve.intensity, curve.sigma, curve.pixels):
-                    stream.write(f"{x:.8g} {intensity:.8g} {sigma:.8g} {int(pixels)}\n")
+                    stream.write(f"{x:.17g} {intensity:.17g} {sigma:.17g} {int(pixels)}\n")
             os.replace(unfinished, path)  # complete, or not there at all
         finally:
             if unfinished.exists():
@@ -197,7 +197,7 @@ class CsvCurveWriter:
                     if isinstance(value, float) and value != value:
                         cells.append(blank)
                     elif isinstance(value, float):
-                        cells.append(f"{value:.8g}")  # as the files of one frame: a table loses no digit of them
+                        cells.append(f"{value:.8g}")  # the precision of combined batch tables
                     else:
                         cells.append(_cell(export_text(str(value)), separator) or blank)
                 writer.writerow(cells)
@@ -266,7 +266,7 @@ class CsvCurveWriter:
                     [_cell(export_text(curve.x_label), separator), _cell(export_text(curve.y_label), separator), "sigma", "pixels"]
                 )
                 for row in zip(curve.x, curve.intensity, curve.sigma, curve.pixels):
-                    writer.writerow([f"{row[0]:.8g}", f"{row[1]:.8g}", f"{row[2]:.8g}", int(row[3])])
+                    writer.writerow([f"{row[0]:.17g}", f"{row[1]:.17g}", f"{row[2]:.17g}", int(row[3])])
             written.append(path)
         sidecar = destination / f"{stem}_analysis.json"
         payload = dict(metadata)

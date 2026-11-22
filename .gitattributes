@@ -11,3 +11,4 @@ src/gimap/features/fitting/domain/posterior/data/*.npz binary
 utils/sputter_client/** -text
 # The Slurm scripts of the 1D proposal network run on Linux: LF in every checkout.
 tools/ml1d/maxwell/** text eol=lf
+src/gimap/shared/revision.json export-subst

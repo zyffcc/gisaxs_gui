@@ -4657,6 +4657,10 @@ Every curve export of Analyze writes `<stem>_analysis.json` beside the curve fil
 
 The numbers are those of the reduction; `geometry` is the geometry that was applied.
 
+`reproduction` identifies the source revision, input files and numerical settings for replay. Its reference columns preserve the original array type and bytes in little-endian order (zlib, then Base64). Replay reads the detector files, checks their SHA-256 digests, and runs the reduction with the recorded geometry. A fit replay uses the points that entered the fit, with their units, order and uncertainties. Predict parameters uses the recorded seed, options and network weights.
+
+For a reference column `r` and a reproduced column `a`, the maximum relative difference is `max_i (|a_i − r_i| / |r_i|)`. Equal entries contribute zero, including matching infinities and paired NaNs. A nonzero value against a zero reference, or unmatched nonfinite values, give `"infinity"`. A missing column or unequal row count gives `null`. The separate `identical` test compares array types and bytes, so it distinguishes positive and negative zero. The record gives the Python, NumPy and SciPy versions used for the calculation.
+
 An NXcanSAS export (`<stem>_nxcansas.h5`, NeXus definition NXcanSAS 1.1; Batch Export `nxcansas/`, the command
 line `curves_nxcansas.h5`) carries the same record, with the key `curve` (key, title, x label and region of that
 curve) added, as the JSON `data` of an NXnote `gimap_record` in each entry's SASprocess. Each SASentry holds one
@@ -4711,9 +4715,11 @@ Implementation: `src/gimap/features/analyze/infrastructure/adapters/csv_export.p
 
 `bad_pixels_left_out` gives, per frame, the numbers of hot pixels, dead pixels (counting detectors only) and pixels
 on defective detector lines that were excluded automatically (the rules are in section 4.4). `drawn_mask_pixels` is the number of pixels of the user's mask, and `pixels_filled_from_mirror` the
-number of pixels filled from the mirror image. A value `null` means that the step was off. The mask recipe and its
-source files reproduce the user mask on that frame. A mask image export preserves its pixel positions directly
-(section 4.5).
+number of pixels filled from the mirror image. A value `null` means that the step was off. The reproduction
+recipe stores both the user mask (`mask`) and the final excluded pixels (`excluded_pixels`). Each bitmap gives its
+shape and alternating run lengths in row-major order, starting with zeros. Lengths are unsigned 64-bit
+little-endian integers, compressed with zlib and encoded in Base64. SHA-256 covers one byte per pixel, 0 or 1,
+before compression. Replay restores the user mask and checks the final excluded pixels after preprocessing.
 
 ### 14.5 Version of the software
 
@@ -4798,10 +4804,7 @@ These gaps are known at the time of writing. A reader who needs the information 
 - The SEM record holds no summary statistics, because none are computed (section 13.2).
 - The uint16 modes of the Format Converter write pixels without data as 65535; outside HDF5, which marks them in
   its `pixel_mask`, they read back as valid values (section 13.3).
-- Seeds are not written into the records (section 14.8), except the seed of Predict parameters in the command
-  line's `report.json` (section 14.10).
-- The per-frame analysis JSON records counts of automatic bad pixels and mirror-filled pixels. Their positions
-  can be recovered from the frame and settings. For the user mask it records the recipe and the count (section 14.4).
+- Older Analyze and Fitting records may lack the inputs and settings for replay. See User Manual §12.
 - `<stem>_analysis.json` gives its time of creation in UTC (`created`), as the XRR and SEM records do; the 2D
   Prediction record gives local time without a time zone.
 
@@ -4915,7 +4918,7 @@ The calibration record carries the standard-derived scale uncertainty. Curve fil
 
 ### 15.7 Records
 
-The records give counts, not positions, of excluded and filled pixels, do not all name the release version, do not hold the seeds, and the 2D Prediction record holds neither the step parameters nor checksums of the model files. Section 14.9 lists these gaps.
+Analyze reduction records preserve the masks described in section 14.4. Fit records preserve the solver settings, including the seed for Predict parameters. Other tools and older exports have the limitations listed in section 14.9.
 
 ## References
 

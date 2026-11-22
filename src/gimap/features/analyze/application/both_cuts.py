@@ -62,13 +62,15 @@ def write_both_cuts(export, analysis, destination, halves: Optional[str] = None)
     geometry = cut_geometry(analysis)
     horizontal = export.fit_input(analysis, destination, halves=halves)
     curve = analysis.reduction.curve("vertical")
-    metadata = analysis_metadata(analysis)
+    metadata = analysis_metadata(analysis, curve_keys=["fit_input_qz"])
     observation = {**fit_input_observation(analysis), "source": "native_detector_rows", **geometry}
     observation = {key: value for key, value in observation.items() if key != "halves"}
     path = Path(destination) / f"{export_stem(analysis)}{VERTICAL_SUFFIX}"
     from .export_record import _for_fitting  # the curve as Fitting takes it (q in Å⁻¹)
 
-    vertical = export.writer.write_xy(_for_fitting(curve), path, {**metadata, "observation": observation})
+    metadata.update(observation=observation, files=[path.name])
+    export.writer.write_record(path.with_suffix(".json"), metadata)
+    vertical = export.writer.write_xy(_for_fitting(curve), path, metadata)
     if not all(math.isfinite(value) for value in geometry.values() if isinstance(value, float)):
         raise ValueError(NOT_GISAXS)
     return Path(horizontal), Path(vertical), geometry

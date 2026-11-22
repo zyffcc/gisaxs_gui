@@ -22,6 +22,7 @@ from typing import Optional
 
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
 from src.gimap.shared.geometry.poni import PoniFile, format_poni, read_poni
+from src.gimap.shared.reproduction import file_reference
 
 PIXEL_TOLERANCE = 0.01
 """A ``.poni`` whose pixel size differs from the frame header's by more than this share is for another detector."""
@@ -31,6 +32,18 @@ NO_WAVELENGTH = "The .poni file states no wavelength: enter the wavelength or th
 SIBLING_SOURCE = ".poni beside the frame: {path}"
 LOADED_SOURCE = ".poni loaded: {path}"
 POSSIBLE_ENCODINGS = ("utf-8", "latin-1")
+
+
+def geometry_references(resolution):
+    """Source calibration when it is available. The profile's complete values survive removal of that file."""
+    source = resolution.profile.source if resolution.profile else ""
+    for template in (SIBLING_SOURCE, LOADED_SOURCE):
+        prefix = template.partition("{path}")[0]
+        if source.startswith(prefix):
+            path = source[len(prefix):]
+            if resolution.how == "file" or Path(path).is_file():
+                return {path: file_reference(path)}
+    return {}
 
 
 def _shape_text(shape) -> str:

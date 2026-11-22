@@ -112,6 +112,11 @@ class FitResult:
     """The covariance matrix of the free parameters (rows of ``covariance_paths``; NaN in the rows of a direction
     the curve does not see); empty when it could not be computed."""
     covariance_paths: tuple = ()
+    start_model: Optional[FitModel] = field(default=None, compare=False, repr=False)
+    evaluation_budget: Optional[int] = None
+    seed: int = 1729
+    population_seeds: tuple = field(default=(), compare=False, repr=False)
+    stopped_after: Optional[int] = None
 
 
 def stopped_result(result: FitResult) -> FitResult:
@@ -326,6 +331,7 @@ def fit(model: FitModel, data: FitData, *, method: str = "local", max_evaluation
     if data.q.size < 3:
         raise ValueError("Too few points to fit (at least 3 in the fitting range)")
     tick = time.perf_counter()
+    start_model = model
     model = fit_links.apply_links(model)  # the model itself when it has no link
     count = sum(1 for _path, p in model.parameters() if p.free and not p.tie)
     budget = int(max_evaluations or (4000 if method == "global" else 150 * (count + 1)))
@@ -379,6 +385,8 @@ def fit(model: FitModel, data: FitData, *, method: str = "local", max_evaluation
         errors=errors, correlated=correlated, at_bounds=_at_bounds(fitted, problem), start_kept=kept,
         covariance=() if covariance is None else tuple(tuple(float(v) for v in row) for row in covariance),
         covariance_paths=tuple(paths),
+        start_model=start_model, evaluation_budget=budget, seed=seed, population_seeds=tuple(seeds),
+        stopped_after=problem.evaluations if stopped else None,
     )
 
 

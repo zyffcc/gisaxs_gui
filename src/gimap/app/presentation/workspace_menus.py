@@ -110,6 +110,10 @@ ANALYZE_MENU = (
         Entry("analyze_save_map", "Save &q-Map Data…", "The intensity on a regular q grid, as a CSV table with its axes"),
         Entry("analyze_save_view", "Save &View Data…", "The q map (q∥–qz) or the cake (χ–q) as a table with its axes"),
     )),
+    Submenu("analyze_tools", "Tools", "Tools for working with analysis records", (
+        Entry("analyze_reproduce", "&Reproduce from Record…",
+              "Repeat a recorded reduction or fit and compare the numerical results"),
+    )),
     SEPARATOR,
     Entry("analyze_clear", "C&lear Frame List",
           "Remove every file from the list. One file: select it and press Delete, or right-click it"),

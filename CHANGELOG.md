@@ -12,6 +12,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Reproduce from Record…** in Analyze ▸ Tools and `gimap reproduce RECORD.json` rerun recorded reductions and fits. Records preserve mask bitmaps, input digests, geometry, fit settings and full-precision comparison values. The comparison reports bitwise agreement and the maximum relative difference per column (User Manual §12).
+
 - **Analyze ▸ Absolute Scale from a Standard…** fits a detector frame or reduced radial curve against water at the
   measured temperature or a user-supplied reference such as glassy carbon. Calibrated exports carry intensity in
   cm⁻¹ and record the standard, fitted range, scale and uncertainty. The instrument profile keeps the calibration.
@@ -1202,7 +1204,6 @@ hold.
   it in Fitting.
 - Cancel/Stop records a request immediately but cannot forcibly interrupt a directory scan or single-file read.
   Unfinished Compare imports are discarded, or a Fitting frame is not fitted, when the active read returns.
-- Run records do not hold everything needed to repeat a run (masks are counted, not stored as pixel lists).
   Sputter, 1D Predict, AI and CLI records now identify the software version; Predict parameters uses a fixed seed.
 
 - **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`,
