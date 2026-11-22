@@ -18,9 +18,9 @@ from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .giwaxs_summary import result_lines
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
 from .pipeline_roll import incidence_lines
-from .pipeline_crystal import crystal_lines, compact_crystal
+from .pipeline_crystal import compact_crystal
 from .report_numbers import _number, _fixed, _pm
-from .pipeline_phases import assignment_lines, orientation_checks_only, pole_line
+from .pipeline_phases import orientation_checks_only, phase_sections, pole_line
 from .report_language import ENGLISH, heading as section
 from .run_record import mask_lines, record_lines
 
@@ -282,10 +282,7 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: st
         hints = report.get("series_hints") or []
         if hints:
             lines += [_hints_title(report) + ": " + "; ".join(hints), ""]
-        if assignment_lines(report):
-            lines += [section("Phase assignment", language), "", *assignment_lines(report), ""]
-        if report.get("crystal_orientation"):
-            lines += [section("Crystal orientation", language), "", *crystal_lines(report["crystal_orientation"])]
+        lines += phase_sections(report, language)
         lines += [section("Ring orientation", language), "", *_ring_lines(report.get("rings") or []), ""]
     lines += [section("Decisions", language), ""]
     lines += [f"- **{item['what']}**: {item['decision']} — {item['why']}" for item in report.get("decisions") or []]

@@ -27,8 +27,12 @@ def crystal_lines(phases: list[dict]) -> list[str]:
         reasons = ", ".join(phase["reasons"])
         lines += [f"**{phase['phase']}** — {status}" + (f" ({reasons})." if reasons else "."), ""]
         if phase["ok"]:
-            lines.append(f"Best model {axes_text(phase['axes'])}, runner-up {axes_text(phase['runner_up_axes'])}, "
-                         f"ΔBIC = {_number(phase.get('delta_bic'))}.")
+            near_random = phase.get("near_random", [])
+            if near_random:
+                lines.append(f"The two best profile models differ by ΔBIC = {_number(phase.get('delta_bic'))}.")
+            else:
+                lines.append(f"Best model {axes_text(phase['axes'])}, runner-up {axes_text(phase['runner_up_axes'])}, "
+                             f"ΔBIC = {_number(phase.get('delta_bic'))}.")
             if phase.get("runner_up_tied_axes"):
                 tied = ", ".join(axes_text(axes) for axes in phase["runner_up_tied_axes"])
                 lines.append(f"The model {tied} ties with the runner-up.")
@@ -49,8 +53,14 @@ def crystal_lines(phases: list[dict]) -> list[str]:
                         ratios = [_pm(s, e, 3) for s, e in zip(shares, errors)]
                         lines.append(f"The fitted axes account for fractions {' and '.join(ratios)} "
                                      "of the oriented population.")
+            if phase["axes"] or near_random:
+                for p in near_random:
+                    lines.append(f"A near-random component is grouped with the isotropic fraction "
+                                 f"({p['reason']}, ΔBIC for replacing it with isotropic material "
+                                 f"{_number(p['delta_bic_vs_isotropic_replacement'])}).")
+                category = "isotropic including near-random" if near_random else "isotropic fraction"
                 lines.append(f"Total oriented fraction {_pm(phase['oriented_fraction'], phase['oriented_fraction_err'], 3)}, "
-                             f"isotropic fraction {_pm(phase['fraction_iso'], phase['fraction_iso_err'], 3)}. "
+                             f"{category} {_pm(phase['fraction_iso'], phase['fraction_iso_err'], 3)}. "
                              f"The fit uses {phase['family_weights']} reflection-family weights.")
             lines += [f"Crystal f = {_number(phase.get('herman_crystal'))}, "
                       f"joint χ²_red = {_number(phase.get('reduced_chi2'))}.", ""]

@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- **GIWAXS unit cells.** Analyze refines lattice parameters and strain from indexed peaks on one frame or across a series, with uncertainties, peak residuals and exports. A resolved fibre axis also permits a directional strain fit. The crystal-orientation report pools unresolved near-random populations with the isotropic fraction.
+
 - **GIWAXS film absorption and crystal orientation** use refracted incident and exit waves near the sample horizon, including evanescent attenuation below the critical angle. For a frame correction, enter the optical constants at the measurement wavelength or select a film CIF. The attenuation-length option retains the large-angle geometrical correction.
 
 - **Measure from frame** now measures incidence αi alongside roll ψ. Analyze records the shadow, specular and available GISAXS Yoneda estimates with their uncertainties. Automatic analysis uses a resolved measurement when the nominal angle is missing or differs by more than 3σ. **Keep entered αi** retains the nominal value.

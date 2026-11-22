@@ -1,10 +1,10 @@
-# GIMaP example: ideal bulk rock-salt comparison with a = 6.46 Angstrom.
+# GIMaP example: ideal bulk rock-salt comparison with a = 6.462 Angstrom.
 # The public Xeuss peaks differ from this cell; see the example README.
 data_PbTe_bulk
 _chemical_name_common 'PbTe (bulk rock salt)'
-_cell_length_a 6.46
-_cell_length_b 6.46
-_cell_length_c 6.46
+_cell_length_a 6.462
+_cell_length_b 6.462
+_cell_length_c 6.462
 _cell_angle_alpha 90
 _cell_angle_beta 90
 _cell_angle_gamma 90

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from typing import Optional, Sequence
+from weakref import ref
 
 from ..application.indexing import (
     IndexingSettings,
@@ -25,6 +26,7 @@ class IndexingModel:
         self.phases: list[PhaseSpec] = []
         self.settings = IndexingSettings()
         self._cache: Optional[tuple] = None
+        self._assigned = None
         self.last_pole = None
         """The last pole figure fitted (``application.pole_figure.PoleFigure``)."""
 
@@ -74,6 +76,15 @@ class IndexingModel:
 
     def assign(self, peaks: Sequence[dict], geometry=None, *, transmission=False) -> dict:
         return assign_peaks(peaks, self.phases, self.settings.q_max, geometry=geometry, transmission=transmission)
+
+    def remember_assignment(self, analysis, assignment, orientations=()):
+        if analysis is not None:
+            self._assigned = (ref(analysis), tuple(self.phases), assignment, orientations)
+
+    def cell_inputs(self, analysis):
+        if self._assigned and self._assigned[0]() is analysis and self._assigned[1] == tuple(self.phases):
+            return self._assigned[2:]
+        return None, ()
 
     def record(self, geometry) -> dict:
         return indexing_record(self.phases, self.settings, self.overlays(geometry))

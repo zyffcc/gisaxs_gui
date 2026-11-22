@@ -93,6 +93,22 @@ def test_110_and_002_have_perpendicular_poles_in_one_mapbi3_texture():
     assert abs(record["herman_measured"] - fit["herman_crystal"]) > 0.15
 
 
+def test_measured_evidence_decides_whether_a_broad_distribution_has_an_axis():
+    from src.gimap.features.analyze.domain.crystal.texture import _populations
+    from src.gimap.features.analyze.domain.crystal.texture_search import Trial
+
+    axis = [(0, 0, 1)]
+    best = Trial((0,), False, np.array([np.log(85.), .1]), 50., 60.)
+    covariance = np.diag([.05**2, .02**2, 1.])
+    null = Trial((), False, np.array([]), 65., 68.)
+    populations, near_random, _ = _populations(best, axis, covariance, [best, null], points=50)
+    assert not near_random and populations[0]["axis"] == [0, 0, 1]
+    close_null = Trial((), False, np.array([]), 61., 64.)
+    populations, near_random, _ = _populations(best, axis, covariance, [best, close_null], points=50)
+    assert not populations and near_random[0]["delta_bic_vs_isotropic_replacement"] == 4.
+    assert "axis" not in near_random[0]
+
+
 def test_reweighted_doublet_and_two_real_fibre_populations_are_selected_by_bic():
     phase, rings = synthetic("MAPbI3_tetragonal", SEED, second_axis=(0, 0, 1), share=0.42,
                              family_reweight=(((0, 0, 2), 0.15),))
@@ -220,7 +236,21 @@ def test_measured_angles_and_absorption_reach_public_crystal_orientation():
     assert attenuated["film_absorption"]["thick_limit"]
     assert not attenuated["determined"] and basal["axes"] == [[0, 0, 1], [0, 0, 1]]
     assert attenuated["points"] == mapi["points"]
-    assert attenuated["axes"] == [[2, 2, 1], [1, 1, 0]]
+    for fit in (mapi, attenuated):
+        assert fit["axes"] == [[1, 1, 0]]
+        assert fit["populations"][0]["fwhm_deg"] == pytest.approx(11.08, abs=.2)
+        broad, = fit["near_random"]
+        assert "axis" not in broad and broad["fwhm_deg"] == pytest.approx(78.68, abs=.3)
+        # The small modulation is detected, but its fitted fraction trades with random.
+        assert broad["delta_bic_vs_isotropic_replacement"] > 100.
+        assert 0. < broad["replacement_delta_chi2_per_bin"] < 1.
+        assert broad["fraction_isotropic_correlation"] < -.95
+        assert broad["fraction"] < 3. * broad["fraction_err"]
+        assert fit["fraction_iso"] == pytest.approx(.952, abs=.003)
+        assert fit["fraction_iso_err"] == pytest.approx(fit["populations"][0]["fraction_err"])
+        from src.gimap.features.assistant.application.pipeline_crystal import crystal_lines
+        report_text = "\n".join(crystal_lines([fit]))
+        assert "near-random" in report_text and "(2 2 1)" not in report_text
     assert attenuated["reduced_chi2"] == pytest.approx(3.371, abs=.08)
     assert [r["reduced_chi2"] for r in attenuated["rings"]] == pytest.approx(
         [1.64, 2.46, 6.04, 2.89, 2.10, 3.72, 4.62, 3.13, 3.79, 3.64], abs=.12)

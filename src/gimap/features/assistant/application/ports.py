@@ -118,6 +118,10 @@ class AnalysisWorkbench(Protocol):
         """Joint fit to the phase-resolved rings of the displayed frame."""
         ...
 
+    def refine_cells(self, assignment: dict, orientations: list, max_peaks: int, check_cancel) -> list[dict]:
+        """Fit the indexed cell of each phase and the strain along a resolved fibre axis."""
+        ...
+
     def set_halves(self, side: str) -> dict: ...
 
     def set_gisaxs_cuts(

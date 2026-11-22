@@ -89,6 +89,13 @@ class PhaseSpec:
     formula_sum: str = ""
     """Only _chemical_formula_sum, for deriving bulk composition independently of the atom sites."""
     formula_units_z: Optional[float] = None
+    space_group_number: int = 0
+    cif_cell: Optional[tuple[float, ...]] = None
+
+    @property
+    def reference_cell(self) -> UnitCell:
+        """Preserve the original strain reference when a trial cell is edited to index displaced rings."""
+        return UnitCell(*(self.cif_cell or self.cell))
 
     @property
     def positions_only(self) -> bool:
@@ -127,6 +134,8 @@ class PhaseSpec:
             "|F|² from the atom sites" if self.atoms else "1 for every allowed reflection",
             "orientation": self.orientation, "indices": list(self.indices), "orientation_text": self.orientation_text(),
             "source": self.source, "source_sha256": self.source_sha256, "warnings": list(self.warnings),
+            "space_group_number": self.space_group_number,
+            "reference_cell": list(self.reference_cell.as_tuple()),
         }
 
 
@@ -202,6 +211,7 @@ def phase_from_cif(path, *, color: str = PHASE_COLORS[0], orientation: str = POW
         structure.name or path.stem, structure.cell.as_tuple(), "P", structure.operations, structure.atoms,
         structure.space_group, orientation, tuple(indices), color, True, str(path), _sha256(path), structure.warnings,
         structure.symmetry, structure.notes, structure.formula, structure.formula_sum, structure.formula_units_z,
+        structure.space_group_number, structure.cell.as_tuple(),
     )
 
 
@@ -332,7 +342,8 @@ def candidates(overlays_: Sequence[PhaseOverlay]) -> list[Candidate]:
         if not overlay.spec.visible:
             continue
         for ring in overlay.rings:
-            found.append(Candidate(overlay.spec.name, ring.label, ring.q, ring.intensity, ring.multiplicity, ring.labels))
+            found.append(Candidate(overlay.spec.name, ring.label, ring.q, ring.intensity, ring.multiplicity,
+                                   ring.labels, ring.families))
     return found
 
 
@@ -368,6 +379,9 @@ def assign_peaks(peaks: Sequence[dict], specs: Sequence[PhaseSpec], q_max: Optio
     assignments = []
     for item, peak in zip(assign_all(triples, found), observed):
         record = item.record()
+        for coordinate in ("q_parallel", "qz"):
+            if coordinate in peak:
+                record[coordinate] = peak[coordinate]
         record["tentative"] = bool(record["phase"] in loose)  # positions only: no extinctions, no intensities
         if "q_window" in peak:
             low, high = peak["q_window"]

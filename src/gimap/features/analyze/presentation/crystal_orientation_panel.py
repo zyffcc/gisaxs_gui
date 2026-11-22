@@ -54,15 +54,24 @@ def _summary(phase, ring):
         for p in phase["populations"]
     ]
     weights = tr("Free reflection weights") if phase.get("family_weights") == "free" else tr("Kinematic reflection weights")
+    near_random = phase.get("near_random", [])
+    fraction_label = ("Resolved oriented {oriented}% · isotropic including near-random {isotropic}%"
+                      if near_random else "Total oriented {oriented}% · isotropic {isotropic}%")
+    stats = dict(delta=_number(phase.get("delta_bic"), decimals=1), joint=_number(phase["reduced_chi2"]),
+                 ring=_number(ring["reduced_chi2"]))
+    if near_random:
+        comparison = trf("Profile-model ΔBIC {delta} · joint χ²red {joint} · ring χ²red {ring}", **stats)
+    else:
+        comparison = trf("Runner-up {axes} · ΔBIC {delta} · joint χ²red {joint} · ring χ²red {ring}",
+                         axes=_axes(phase.get("runner_up_axes")), **stats)
     lines = [
         " · ".join((f"{phase['phase']} · {status}", *reasons)),
         *populations,
-        trf("Total oriented {oriented}% · isotropic {isotropic}%",
+        *[trf("Near-random · {reason}", reason=tr(p["reason"])) for p in near_random],
+        trf(fraction_label,
             oriented=_number(phase["oriented_fraction"], phase["oriented_fraction_err"], decimals=1, scale=100),
             isotropic=_number(phase["fraction_iso"], phase["fraction_iso_err"], decimals=1, scale=100)),
-        trf("Runner-up {axes} · ΔBIC {delta} · joint χ²red {joint} · ring χ²red {ring}",
-            axes=_axes(phase.get("runner_up_axes")), delta=_number(phase.get("delta_bic"), decimals=1),
-            joint=_number(phase["reduced_chi2"]), ring=_number(ring["reduced_chi2"])),
+        comparison,
         trf("Crystal Hermans f {crystal} · measured ring f {ring}",
             crystal=_number(phase["herman_crystal"], decimals=3), ring=_number(ring["herman_measured"], decimals=3))
         + f" · {weights}",
@@ -223,6 +232,7 @@ class CrystalOrientationMixin:
             self._refresh_crystal_options()
             return
         self._crystal_result = records
+        self._refresh_cell()
         analysis = self._page.view_model.state.analysis
         window = analysis.reduction.markers.get("chi_q_window")
         center = np.mean(window) if window is not None else None

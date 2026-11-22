@@ -56,7 +56,7 @@ sources in the table. A candidate CIF supplies expected reflections for comparis
   purpose as a tilt case; Analyze applies pyFAI's rot1 and rot2, and its q equals pyFAI's at the reference pixels).
   The EDF header says `Center_1/2` = (8.3, 590.39), `SampleDistance` = 0.37 m, `Dummy` = −1.5 ± 0.6.
   With this `.poni` the strongest peaks of radial I(q) lie at q ≈ 1.57, 1.82 and 2.58 Å⁻¹, in the ratios of rock-salt
-  111, 200 and 220 but 6–7 % below bulk PbTe (a = 6.46 Å, rings at 1.68, 1.95 and 2.75 Å⁻¹): an assignment against
+  111, 200 and 220 but 6–7 % below bulk PbTe (a = 6.462 Å, rings at 1.68, 1.95 and 2.75 Å⁻¹): an assignment against
   bulk PbTe finds none of them. pyFAI gives the same q, so the geometry and the sample, not the reduction, set this.
 
 `manifest.json` holds the same values for the tests.

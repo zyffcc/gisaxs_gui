@@ -18,6 +18,7 @@ from .texture_search import BIC_TIE, Hypothesis, RingData, _coefficients, multip
 
 MAX_REDUCED_CHI2 = 5.
 MIN_DELTA_BIC = 6.
+MIN_FRACTION_SIGMA = 3.
 
 
 @dataclass(frozen=True)
@@ -128,8 +129,12 @@ def _directions(trial, axes):
     return [list(axes[trial.indices[i]]) for i, _ in _order(trial)]
 
 
-def _populations(trial, axes, covariance):
-    records = []
+def _populations(trial, axes, covariance, trials, points):
+    """Identify material that can be separated from random on the measured bins."""
+    records, near_random = [], []
+    gradient_resolved = np.zeros(len(trial.x))
+    nonlinear = covariance[:len(trial.x), :len(trial.x)]
+    by_axes = {t.indices: t for t in trials}
     for i, share in _order(trial):
         width = math.exp(trial.x[2*i])
         width_err = _error(covariance, 2*i)
@@ -139,12 +144,42 @@ def _populations(trial, axes, covariance):
         gradient[1] = -share
         if len(trial.indices) == 2:
             gradient[3] = oriented if i == 0 else -oriented
-        variance = gradient @ covariance[:len(gradient), :len(gradient)] @ gradient
-        records.append({"axis": list(axes[trial.indices[i]]), "fwhm_deg": width,
-                        "fwhm_err_deg": None if width_err is None else width*width_err,
-                        "fraction": float(oriented * share),
-                        "fraction_err": _finite(np.sqrt(max(variance, 0.)))})
-    return records
+        variance = gradient @ nonlinear @ gradient
+        fraction = float(oriented * share)
+        error = _finite(np.sqrt(max(variance, 0.)))
+        product = variance * covariance[1, 1]
+        correlation = _finite((gradient @ nonlinear[:, 1]) / np.sqrt(product)) if product > 0. else None
+        # Every simpler hypothesis was independently optimised in the same measured bins.
+        reduced = by_axes.get(trial.indices[:i] + trial.indices[i+1:])
+        delta = None if reduced is None else float(reduced.bic - trial.bic)
+        per_bin = None if reduced is None else float((reduced.chi2 - trial.chi2) / points)
+        record = {"fwhm_deg": width, "fwhm_err_deg": None if width_err is None else width*width_err,
+                  "fraction": fraction, "fraction_err": error, "delta_bic_vs_isotropic_replacement": delta,
+                  "replacement_delta_chi2_per_bin": per_bin,
+                  "fraction_isotropic_correlation": correlation}
+        split_unresolved = (per_bin is not None and per_bin <= 1.
+                            and error is not None and fraction < MIN_FRACTION_SIGMA * error
+                            and correlation is not None and correlation < -np.sqrt(.5))
+        weak_evidence = delta is not None and delta < MIN_DELTA_BIC
+        if weak_evidence and len(trial.indices) == 2:
+            # A one-width fit to a two-width mixture keeps the more similar width.
+            # Different single axes can also explain a mixture equally well. Drop
+            # only the component least supported by the two nested comparisons.
+            other = by_axes.get((trial.indices[i],))
+            if other is not None and other.bic < reduced.bic - BIC_TIE:
+                weak_evidence = False
+            elif other is not None and abs(other.bic - reduced.bic) <= BIC_TIE:
+                distances = [abs(trial.x[2*j] - reduced.x[0]) for j in range(2)]
+                weak_evidence = i == int(np.argmax(distances))
+        if weak_evidence or split_unresolved:
+            record["reason"] = ("isotropic replacement within 6 BIC units" if weak_evidence
+                                else "fraction trades with the isotropic fraction within 3σ")
+            near_random.append(record)
+        else:
+            records.append({**record, "axis": list(axes[trial.indices[i]])})
+            gradient_resolved += gradient
+    error = _finite(np.sqrt(np.maximum(0., gradient_resolved @ nonlinear @ gradient_resolved))) if records else None
+    return records, near_random, error
 
 
 def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check_cancel=None) -> dict:
@@ -176,7 +211,11 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
                          "max_legendre_degree": MAX_DEGREE, "bin_width_deg": 1., "bin_samples": BIN_SAMPLES,
                          "selection": "BIC = chi2 + k ln(N)", "bic_tie_tolerance": BIC_TIE,
                          "mosaic_widths": "one per population; repeated axis allowed",
-                         "min_distinct_axis_ring_separation_sigma": 1.},
+                         "min_distinct_axis_ring_separation_sigma": 1.,
+                         "min_population_delta_bic": MIN_DELTA_BIC,
+                         "max_near_random_replacement_delta_chi2_per_bin": 1.,
+                         "min_separable_fraction_sigma": MIN_FRACTION_SIGMA,
+                         "min_isotropic_explained_variance_fraction": .5},
     )
     data = []
     for ring in rings:
@@ -204,7 +243,7 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
     if problem.absorption:
         index = len(best.x) - 1
         result["film_absorption"] = data[0].ring.absorption.record(best.x[index], _error(covariance, index))
-    populations = _populations(best, axes, covariance)
+    populations, near_random, resolved_err = _populations(best, axes, covariance, trials, problem.points)
     phi = float(best.x[1]) if best.indices else 1.
     phi_err = _error(covariance, 1) if best.indices else None
     delta = float(runner.bic - best.bic) if runner is not None else None
@@ -213,6 +252,8 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
     reasons = result["reasons"]
     if not best.indices:
         reasons.append("the isotropic model has the lowest BIC")
+    elif not populations:
+        reasons.append("no population can be separated from the isotropic fraction")
     if red > MAX_REDUCED_CHI2 or any(r is None or r > MAX_REDUCED_CHI2 for r in local_red):
         reasons.append("joint or ring reduced χ² exceeds 5")
     if delta is None or delta < MIN_DELTA_BIC:
@@ -223,19 +264,26 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
     width_at_bound = any(abs(p["fwhm_deg"] - b) < 1e-3 for p in populations for b in WIDTH_BOUNDS)
     if best.indices and (abs(phi-1.) < 1e-5 or width_at_bound):
         reasons.append("the width or isotropic limit is at a bound")
-    directions = _directions(best, axes)
+    directions = [p["axis"] for p in populations]
     fractions = [share for _, share in _order(best)]
     share_errors = ([_error(covariance, 3)]*2 if len(fractions) == 2
                     else [0.] if len(fractions) == 1 else [])
+    if near_random:
+        result.update(fitted_isotropic_fraction=phi, fitted_isotropic_fraction_err=phi_err)
+        phi = 1. - sum(p["fraction"] for p in populations)
+        phi_err = resolved_err
+        fractions = [1.] if populations else []
+        share_errors = [0.] if populations else []
     # In a mixed texture, f is the alignment of each population's own fibre
     # director with the surface normal, averaged over populations and isotropic material.
     result.update({
-        "ok": True, "determined": bool(best.indices and not reasons), "axes": directions,
-        "populations": populations, "axis_fractions": fractions, "axis_fractions_err": share_errors,
+        "ok": True, "determined": bool(populations and not reasons), "axes": directions,
+        "populations": populations, "near_random": near_random,
+        "axis_fractions": fractions, "axis_fractions_err": share_errors,
         "family_weights": "free" if best.free else "kinematic",
-        "runner_up_axes": _directions(runner, axes) if runner is not None else None,
+        "runner_up_axes": _directions(runner, axes) if runner is not None and not near_random else None,
         "runner_up_tied_axes": [_directions(t, axes) for t in trials[2:]
-                                if runner is not None and abs(t.bic-runner.bic) <= BIC_TIE],
+                                if not near_random and runner is not None and abs(t.bic-runner.bic) <= BIC_TIE],
         "runner_up_bic": float(runner.bic) if runner is not None else None, "delta_bic": delta,
         "bic": float(best.bic), "points": problem.points, "parameters": problem.parameters,
         "reduced_chi2": float(red),

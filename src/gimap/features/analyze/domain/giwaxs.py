@@ -207,6 +207,36 @@ def strongest_ring(curve: Curve, *, skip_fraction: float = 0.05) -> tuple[float,
     return float(x[best] - half), float(x[best] + half)
 
 
+def radial_sector_curves(image, usable, maps, settings, counts, corrections):
+    """Integrate radial, in-plane and out-of-plane I(q) on the supplied map, in Å⁻¹."""
+    values = image
+    q_low = float(maps.q[usable].min())
+    q_high = float(maps.q[usable].max())
+    bins = int(settings.bins) if settings.bins else _radial_bins(maps, usable, q_low, q_high)
+    radial = _profile(
+        "radial", "I(q)", "q (Å⁻¹)", maps.q, values, usable,
+        low=q_low, high=q_high, bins=bins, region={"sector": "full"}, counts=counts, merge=not corrections.lorentz,
+    )
+    if corrections.lorentz:
+        radial = replace(radial, intensity=radial.intensity * radial.pixels, sigma=radial.sigma * radial.pixels,
+                         y_label="I (summed counts)",
+                         region={**radial.region, "aggregation": "sum of Lorentz-weighted pixels"})
+    absolute_chi = np.abs(maps.chi_deg)
+    in_plane_limit = 90.0 - float(settings.in_plane_half_width_deg)
+    out_limit = float(settings.out_of_plane_half_width_deg)
+    in_plane = _profile(
+        "in_plane", "In-plane sector I(q)", "q (Å⁻¹)", maps.q, values,
+        usable & (absolute_chi >= in_plane_limit),
+        low=q_low, high=q_high, bins=bins, region={"chi_deg": (in_plane_limit, 90.0)}, counts=counts,
+    )
+    out_of_plane = _profile(
+        "out_of_plane", "Out-of-plane sector I(q)", "q (Å⁻¹)", maps.q, values,
+        usable & (absolute_chi <= out_limit),
+        low=q_low, high=q_high, bins=bins, region={"chi_deg": (0.0, out_limit)}, counts=counts,
+    )
+    return radial, in_plane, out_of_plane, q_low, q_high, bins
+
+
 def reduce_giwaxs(
     image: np.ndarray,
     valid: np.ndarray,
@@ -240,30 +270,8 @@ def reduce_giwaxs(
                              orientation_profiles=profiles, orientation_indices=indices)
         return Reduction(GIWAXS, (), {}, ("No valid pixels above the sample horizon.",))
     values = image
-    q_low = float(maps.q[usable].min())
-    q_high = float(maps.q[usable].max())
-    bins = int(settings.bins) if settings.bins else _radial_bins(maps, usable, q_low, q_high)
-    radial = _profile(
-        "radial", "I(q)", "q (Å⁻¹)", maps.q, values, usable,
-        low=q_low, high=q_high, bins=bins, region={"sector": "full"}, counts=counts, merge=not corrections.lorentz,
-    )
-    if corrections.lorentz:
-        radial = replace(radial, intensity=radial.intensity * radial.pixels, sigma=radial.sigma * radial.pixels,
-                         y_label="I (summed counts)",
-                         region={**radial.region, "aggregation": "sum of Lorentz-weighted pixels"})
-    absolute_chi = np.abs(maps.chi_deg)
-    in_plane_limit = 90.0 - float(settings.in_plane_half_width_deg)
-    out_limit = float(settings.out_of_plane_half_width_deg)
-    in_plane = _profile(
-        "in_plane", "In-plane sector I(q)", "q (Å⁻¹)", maps.q, values,
-        usable & (absolute_chi >= in_plane_limit),
-        low=q_low, high=q_high, bins=bins, region={"chi_deg": (in_plane_limit, 90.0)}, counts=counts,
-    )
-    out_of_plane = _profile(
-        "out_of_plane", "Out-of-plane sector I(q)", "q (Å⁻¹)", maps.q, values,
-        usable & (absolute_chi <= out_limit),
-        low=q_low, high=q_high, bins=bins, region={"chi_deg": (0.0, out_limit)}, counts=counts,
-    )
+    radial, in_plane, out_of_plane, q_low, q_high, bins = radial_sector_curves(
+        image, usable, maps, settings, counts, corrections)
     window = settings.chi_q_window or strongest_ring(radial)
     curves = [radial, in_plane, out_of_plane]
     profiles, indices = {}, None

@@ -472,6 +472,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             if search is not None:
                 self._assign(search)
                 self._fit_crystal_orientation()
+                self._refine_cells()
             return
         self._run.decisions.append(uncertainty_decision(status.get("error_model"), corrections=status.get("corrections")))
         self._assign(search)
@@ -501,6 +502,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             if decision is not None:
                 self._run.decisions.append(decision)
         self._fit_crystal_orientation()
+        self._refine_cells()
 
     # -- report ----------------------------------------------------------------------
 

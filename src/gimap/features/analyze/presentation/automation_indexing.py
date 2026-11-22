@@ -58,8 +58,11 @@ class IndexingAutomationMixin:
     def assign_peaks(self, peaks: Sequence[dict]) -> dict:
         """``{"phases", "rule", "assignments"}`` for peaks ``{"q", "q_err", "fwhm"}`` (no phases: empty lists)."""
         analysis = self._page.view_model.state.analysis
-        return self._page.indexing.assign(list(peaks), geometry=getattr(analysis, "geometry", None),
-                                          transmission=getattr(analysis, "kind", None) == TRANSMISSION)
+        model = self._page.indexing
+        assignment = model.assign(list(peaks), geometry=getattr(analysis, "geometry", None),
+                                  transmission=getattr(analysis, "kind", None) == TRANSMISSION)
+        model.remember_assignment(analysis, assignment)
+        return assignment
 
     def pole_figure(self, background: Optional[float] = None, model: str = GAUSSIAN,
                     chi0_deg: Optional[float] = None, chi_max: float = CHI_MAX) -> dict:
@@ -81,6 +84,15 @@ class IndexingAutomationMixin:
             raise ValueError("The visible phases changed after peak assignment.")
         return partial(frame_crystal_orientation, model.state.analysis, specs,
                        frame_source=model.frames, assignment=assignment, check_cancel=check_cancel)
+
+    def prepare_cell_refinement(self, assignment, orientations, max_peaks, check_cancel):
+        from ..application.cell_refinement import frame_cell_refinement
+
+        page = self._page
+        page.indexing.remember_assignment(page.view_model.state.analysis, assignment, orientations)
+        return partial(frame_cell_refinement, page.view_model.state.analysis, tuple(page.indexing.phases),
+                       page.indexing.settings, assignment=assignment, orientations=orientations,
+                       max_peaks=max_peaks, check_cancel=check_cancel)
 
     def store_pole(self, result) -> dict:
         self._page.indexing.last_pole = result

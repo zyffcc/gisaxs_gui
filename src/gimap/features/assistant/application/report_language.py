@@ -22,6 +22,7 @@ HEADINGS_ZH = {
     "Ring orientation": "取向",
     "Orientation checks": "取向核查",
     "Phase assignment": "物相指认",
+    "Refined unit cells": "精修晶胞",
     "Crystal orientation": "晶体取向",
     "Decisions": "决策",
     "Steps": "步骤",
