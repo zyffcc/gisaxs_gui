@@ -37,8 +37,9 @@ from ...application.series_fit import (
     series_table,
 )
 from ..views.fit_series_view import RESULTS_WIDTH
-from .results import folder_action, start_folder, write_pair, write_plot
+from .results import folder_action, start_folder, write_pair, write_plot, write_text_whole
 from .series_stages import CHI2
+from .series_selection import CHOICE_TIPS, INTERVAL_NOTE, choice_cells, choice_headers, selection_summary
 from .series_text import HALF_TEXT, STATE_COLOR, STATE_MARK
 from .session import path_name
 from .start_texts import START, START_TIP, start_text, start_tip
@@ -90,6 +91,7 @@ class FitSeriesResultsMixin:
         self.trend_combo.currentIndexChanged.connect(lambda _index: self._show_trend_column())
         self.to_single_button.clicked.connect(self._open_in_single)
         self.save_table_action.triggered.connect(lambda: self.save_table())
+        self.save_report_action.triggered.connect(lambda: self.save_report())
         self.save_trend_action.triggered.connect(lambda: self._save_plot(self.trend_plot, "trend"))
         self.save_frame_action.triggered.connect(lambda: self._save_plot(self.frame_plot, "frame"))
         self.splitter.splitterMoved.connect(self._splitter_moved)
@@ -113,15 +115,20 @@ class FitSeriesResultsMixin:
             self._table_frames = []
             if model is not None:
                 columns = parameter_columns(model)
-                table.setColumnCount(len(columns) + 6)
-                table.setHorizontalHeaderLabels(["#", "χ²ᵣ"] + [path_name(model, path, unit=True) for path, _name in columns]
+                choices = choice_headers(self._settings)
+                first_parameter = 2 + len(choices)
+                table.setColumnCount(len(columns) + len(choices) + 6)
+                table.setHorizontalHeaderLabels(["#", "χ²ᵣ"] + [tr(key) for key in choices]
+                                                + [path_name(model, path, unit=True) for path, _name in columns]
                                                 + [tr(START), tr("Flags"), tr("Points"), tr("Halves")])
-                for column, (path, _name) in enumerate(columns, start=2):  # the whole name (“1·Sphere R (nm)”) on hover
+                for column, key in enumerate(choices, start=2):
+                    table.horizontalHeaderItem(column).setToolTip(tr(CHOICE_TIPS[key]))
+                for column, (path, _name) in enumerate(columns, start=first_parameter):
                     table.horizontalHeaderItem(column).setToolTip(path_name(model, path, unit=True, full=True))
-                table.horizontalHeaderItem(len(columns) + 2).setToolTip(tr(START_TIP))
-                table.horizontalHeaderItem(len(columns) + 3).setToolTip(tr(FLAGS_TIP))
-                table.horizontalHeaderItem(len(columns) + 4).setToolTip(tr("The points the frame was fitted on"))
-                table.horizontalHeaderItem(len(columns) + 5).setToolTip(
+                table.horizontalHeaderItem(table.columnCount() - 4).setToolTip(tr(START_TIP))
+                table.horizontalHeaderItem(table.columnCount() - 3).setToolTip(tr(FLAGS_TIP))
+                table.horizontalHeaderItem(table.columnCount() - 2).setToolTip(tr("The points the frame was fitted on"))
+                table.horizontalHeaderItem(table.columnCount() - 1).setToolTip(
                     tr("What those points are: the mean of both halves of the cut, or one half"))
                 header = table.horizontalHeader()
                 for column in range(table.columnCount()):
@@ -155,13 +162,21 @@ class FitSeriesResultsMixin:
     def _fill_row(self, row: int, frame, columns) -> None:
         table = self.results_table
         last = table.columnCount() - 1
-        if table.columnSpan(row, 1) > 1:
-            table.setSpan(row, 1, 1, 1)
+        choices = choice_cells(frame, choice_headers(self._settings))
+        has_attempt = bool(frame.predict_attempts or frame.selection)
+        first_parameter = 2 + len(choices)
+        for col in (1, first_parameter):
+            if table.columnSpan(row, col) > 1:
+                table.setSpan(row, col, 1, 1)
+        span = None
         if not frame.ok:  # no values: why, across the row
-            cells = [str(frame.index + 1), f"{STATE_MARK['failed']} {self._reason_text(frame.error)}"]
+            reason = f"{STATE_MARK['failed']} {self._reason_text(frame.error)}"
+            cells = [str(frame.index + 1), "", *choices, reason] if has_attempt else [str(frame.index + 1), reason]
+            span = first_parameter if has_attempt else 1
         else:
             result = frame.result
-            cells = [str(frame.index + 1), f"{result.chi2_reduced:.3g}" if np.isfinite(result.chi2_reduced) else "—"]
+            cells = [str(frame.index + 1), f"{result.chi2_reduced:.3g}" if np.isfinite(result.chi2_reduced) else "—",
+                     *choices]
             for path, _name in columns:
                 value, error = result.model.get(path).value, result.errors.get(path, np.nan)
                 cells.append("—" if not np.isfinite(value) else
@@ -171,17 +186,19 @@ class FitSeriesResultsMixin:
         token = STATE_COLOR.get(self._frame_state(frame.index)[0])
         brush = None if token is None else QBrush(theme_manager().color(token))
         tip = self._frame_tip(frame)
-        started = len(columns) + 2  # the Start cell: the rule that chose Predict's solution, on hover
+        started = first_parameter + len(columns)
         for column in range(last + 1):
             item = QTableWidgetItem(cells[column] if column < len(cells) else "")
             item.setToolTip(tip + "\n" + start_tip(frame) if column == started and frame.ok else tip)
             if brush is not None:
                 item.setForeground(brush)
             table.setItem(row, column, item)
-        if not frame.ok:
-            table.setSpan(row, 1, 1, last)
+        if span is not None:
+            table.setSpan(row, span, 1, last - span + 1)
+        if len(frame.predict_attempts) > 1:
+            table.resizeRowToContents(row)
         model = table.model()
-        for column in range(last + 1) if frame.ok else (0,):  # a reason spans the row: it widens no column
+        for column in range(last + 1) if span is None else range(span):
             width = table.sizeHintForIndex(model.index(row, column)).width() + 2
             if width > table.columnWidth(column):
                 table.setColumnWidth(column, width)
@@ -225,8 +242,9 @@ class FitSeriesResultsMixin:
         key, model, table = self.trend_combo.currentData(), self._start_model, self.results_table
         if model is None or not table.rowCount():
             return
+        start = 2 + len(choice_headers(self._settings))
         column = 1 if key == CHI2 else next(
-            (position for position, (path, _name) in enumerate(parameter_columns(model), start=2) if path == key), None)
+            (position for position, (path, _name) in enumerate(parameter_columns(model), start=start) if path == key), None)
         if column is None:
             return
         # By the column's place, not by a cell: the cell of a row without a fit spans the table.
@@ -320,6 +338,10 @@ class FitSeriesResultsMixin:
             self._rebuild_results()
         frames = list(self.fits.values())
         started = self._start_model is not None
+        summary = selection_summary(self._settings) if started else ""
+        self.selection_summary.setVisible(bool(summary))
+        has_intervals = summary and any(f.selection and f.selection.intervals for f in frames)
+        self.selection_summary.setText(summary + ("\n" + tr(INTERVAL_NOTE) if has_intervals else ""))
         self.save_button.setVisible(bool(self.fits))
         self._refresh_open_frame()
         self.save_button.setEnabled(not self._listing_busy)
@@ -405,7 +427,8 @@ class FitSeriesResultsMixin:
         if not path:
             return None
         frames = list(self.fits.values())
-        header, rows = series_table(frames, self._start_model, details=True, folder=self.folder, flags=True)
+        header, rows = series_table(frames, self._start_model, details=True, folder=self.folder, flags=True,
+                                    predict_columns=self._settings.method == "predict" or self._settings.start == "chain")
 
         def write(target) -> None:
             with open(target, "w", newline="", encoding="utf-8") as stream:
@@ -413,19 +436,39 @@ class FitSeriesResultsMixin:
                 writer.writerow(header)
                 writer.writerows(rows)
 
-        listing = dict(self._run_listing or {})
-        if self._untouched_start:
-            listing["model"] = UNTOUCHED
-        record = series_record(self._start_model, self._settings, self.folder, self.pattern_edit.text(), frames,
-                               q_unit=self._unit, side_from=self._side_from, listing=listing)
         try:
-            write_pair(path, write, record)  # both, or neither
+            write_pair(path, write, self._series_record())  # both, or neither
         except OSError as exc:
             self._status(lambda error=str(exc): tr("Could not save: {error}").format(error=error), "error")
             return None
         self._unsaved = False
         self._status(lambda name=Path(path).name: tr("Saved {name} and its record.").format(name=name), "ok",
                      action=folder_action(path))
+        return path
+
+    def _series_record(self):
+        listing = dict(self._run_listing or {})
+        if self._untouched_start:
+            listing["model"] = UNTOUCHED
+        return series_record(self._start_model, self._settings, self.folder, self.pattern_edit.text(),
+                             list(self.fits.values()), q_unit=self._unit, side_from=self._side_from, listing=listing)
+
+    def save_report(self, path=None):
+        from ...application.series_report import series_report
+
+        if self._listing_busy or not self.fits or self._start_model is None:
+            return None
+        path = path or QFileDialog.getSaveFileName(self, tr("Save Series Report"),
+                                                   str(start_folder(self.folder) / "series_fit.md"),
+                                                   tr("Markdown (*.md)"))[0]
+        if not path:
+            return None
+        try:
+            write_text_whole(path, series_report(self._series_record()))
+        except OSError as exc:
+            self._status(lambda error=str(exc): tr("Could not save: {error}").format(error=error), "error")
+            return None
+        self._status(lambda: tr("Saved {name}.").format(name=Path(path).name), "ok", action=folder_action(path))
         return path
 
     def _plot_words(self, name: str) -> tuple[str, str]:

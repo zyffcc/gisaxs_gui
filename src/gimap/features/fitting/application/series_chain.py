@@ -10,9 +10,8 @@ starts every frame from the result of the frame after it and keeps whichever of 
   Predict parameters (its method unchanged: the page's network, with the particles of the start model), and the better
   of the two fits is kept (``better``).
 * **Which solution of Predict** (``restart_solution``): of the solutions at least 1/``PREDICT_FACTOR`` as probable as
-  the most probable one, the one closest to the previous frame's result (``solution_distance``: the RMS of the shared
-  free values' differences, each as a share of its range, of the log of its range when it spans 10× or more, as Search
-  scales it); without a previous result, the most probable one. The rule that chose it is kept
+  the most probable one, the one closest to the previous frame's result in log R, D and relative radius spread,
+  pairing like populations in radius order. Without a previous result, the most probable one. The rule that chose it is kept
   (``FrameFit.predict_choice``).
 * **Better** of two fits of one frame: one fitted to the end and converged before one that is not, then the lower
   χ²ᵣ; on equal terms the first.
@@ -32,13 +31,13 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Callable, Optional, Sequence
 
-import numpy as np
-
 from ..domain import beam_tail
 from ..domain.fit_links import parameter_name
 from ..domain.fit_limits import manual_chain_start
 from ..domain.fit_model import FitModel
+from ..domain.series_continuity import solution_distance
 from .series_fit import FrameFit, SeriesSettings, fit_frame, poor_fit, prepare_frame
+from .series_selection import PredictAttempt, closest_index, mode_choice, ranked
 
 CHAIN = "chain"
 """The start choice of a chained fit (``SeriesSettings.start``)."""
@@ -88,61 +87,22 @@ def chain_break(frame: FrameFit, previous: Optional[FrameFit], *, new_stage: boo
     return ""
 
 
-def _range_position(value: float, lower: float, upper: float) -> Optional[float]:
-    """Where ``value`` lies in ``[lower, upper]`` as a share of the range (of its log when it spans 10× or more, as
-    Search scales it); ``None`` for a range that is not finite."""
-    if not (math.isfinite(lower) and math.isfinite(upper)) or upper <= lower:
-        return None
-    if lower > 0 and upper >= 10.0 * lower:
-        return (math.log(max(value, lower)) - math.log(lower)) / (math.log(upper) - math.log(lower))
-    return (value - lower) / (upper - lower)
-
-
-def _by_radius(model: FitModel) -> list:
-    return sorted(range(len(model.components)), key=lambda owner: model.components[owner].value("R"))
-
-
-def solution_distance(model: FitModel, previous: FitModel) -> float:
-    """How far a solution's values lie from the previous frame's result: the RMS, over the values both share (free and
-    not linked in ``previous``, with a finite range there; the particles paired in order of their radius, of the same
-    family), of the difference of their places in ``previous``'s ranges (``_range_position``). ``inf`` when they
-    share none."""
-    pairs = [("globals", "globals")]
-    if len(model.components) == len(previous.components):
-        pairs += list(zip(_by_radius(model), _by_radius(previous)))
-    differences = []
-    for owner, other in pairs:
-        if owner != "globals" and model.components[owner].family != previous.components[other].family:
-            continue
-        mine = model.globals if owner == "globals" else model.components[owner].params
-        theirs = previous.globals if other == "globals" else previous.components[other].params
-        for key in sorted(set(mine) & set(theirs)):
-            parameter = theirs[key]
-            if not parameter.free or parameter.tie:
-                continue
-            here = _range_position(float(mine[key].value), parameter.lower, parameter.upper)
-            there = _range_position(float(parameter.value), parameter.lower, parameter.upper)
-            if here is not None and there is not None:
-                differences.append(here - there)
-    return float(np.sqrt(np.mean(np.square(differences)))) if differences else math.inf
+def _restart(solutions, previous):
+    ordered = ranked(solutions)
+    if previous is None or not previous.ok:
+        return ordered[0], CHOSEN_TOP, mode_choice(ordered, 0, "most probable")
+    model = previous.result.model
+    chosen = closest_index(ordered, model, 1 / PREDICT_FACTOR)
+    frame = previous.index + 1
+    distance = solution_distance(ordered[chosen].model, model)
+    rule = CHOSEN_CLOSEST.format(frame=frame, factor=f"{PREDICT_FACTOR:g}", distance=f"{distance:.3g}")
+    return ordered[chosen], rule, mode_choice(ordered, chosen, "closest", reference_frame=frame)
 
 
 def restart_solution(solutions: Sequence, previous: Optional[FrameFit]) -> tuple:
-    """``(solution, rule)``: of Predict's ``solutions`` (each with ``model`` and ``probability``), the one to restart a
-    broken chain from (the closest to ``previous``'s result among those at least 1/``PREDICT_FACTOR`` as probable as
-    the most probable one; without a previous result, the most probable) and the rule that chose it (English,
-    ``CHOICES``)."""
-    if not solutions:
-        raise RuntimeError("Predict parameters found no solution for this frame")
-    top = max(solutions, key=lambda solution: float(solution.probability))
-    if previous is None or not previous.ok:
-        return top, CHOSEN_TOP
-    best = float(top.probability)
-    near = [solution for solution in solutions if float(solution.probability) * PREDICT_FACTOR >= best] or [top]
-    distances = [solution_distance(solution.model, previous.result.model) for solution in near]
-    chosen = int(np.argmin(distances))
-    return near[chosen], CHOSEN_CLOSEST.format(frame=previous.index + 1, factor=f"{PREDICT_FACTOR:g}",
-                                               distance=f"{distances[chosen]:.3g}")
+    """The solution and its rule for a chained Predict restart."""
+    solution, rule, _choice = _restart(solutions, previous)
+    return solution, rule
 
 
 def better(first: FrameFit, second: Optional[FrameFit]) -> FrameFit:
@@ -174,14 +134,20 @@ def chained_fit(index: int, path: str, curve, start: FitModel, single: FitModel,
     why = chain_break(frame, previous, new_stage=new_stage)
     if not why or (predict is None and solutions is None) or (stop is not None and stop()) or not frame.points:
         return replace(frame, chain=why)
-    chosen = {}
-    if solutions is not None:
-        def predict(data, start_model):  # noqa: F811 - Predict's solutions, one chosen by its rule
-            solution, chosen["rule"] = restart_solution(solutions(data, start_model), previous)
-            return solution.model
-    again = fit_frame(index, path, curve, single, replace(settings, method="predict"), stop, predict)
+    called, choice, rule = False, None, ""
+
+    def try_predict(data, start_model):
+        nonlocal called, choice, rule
+        called = True
+        if solutions is None:
+            return predict(data, start_model)
+        solution, rule, choice = _restart(solutions(data, start_model), previous)
+        return solution.model
+
+    again = fit_frame(index, path, curve, single, replace(settings, method="predict"), stop, try_predict)
     if stop and stop():
-        return replace(frame, chain=why)
+        attempts = (PredictAttempt(fit_pass, why, choice, False, again.error or "stopped"),) if called else ()
+        return replace(frame, chain=why, predict_attempts=attempts)
     if again.fitted:
         proposal = again.result.model
         if (proposal.weighting != single.weighting or proposal.resolution_mode != single.resolution_mode
@@ -189,8 +155,17 @@ def chained_fit(index: int, path: str, curve, start: FitModel, single: FitModel,
             # Compare χ² on the same points, with the chosen weights and smearing. Predict remains a separate fit.
             again = fit_frame(index, path, curve, manual_chain_start(proposal, single),
                               replace(settings, method="local"), stop)
-    again = replace(again, start_from="predict", fit_pass=fit_pass, start_frame=0, predict_choice=chosen.get("rule", ""))
-    return replace(better(frame, again), chain=why)
+    again = replace(again, start_from="predict", fit_pass=fit_pass, start_frame=0, predict_choice=rule, selection=choice)
+    kept = better(frame, again)
+    attempts = (PredictAttempt(fit_pass, why, choice, kept is again, again.error),) if called else ()
+    return replace(kept, chain=why, predict_attempts=attempts)
+
+
+def keep_pass_attempts(kept, first, second):
+    """Preserve Predict provenance across the choice between the forward and backward fits."""
+    attempts = tuple(replace(attempt, kept=attempt.kept and frame is kept)
+                     for frame in (first, second) for attempt in frame.predict_attempts)
+    return replace(kept, predict_attempts=attempts) if attempts else kept
 
 
 def frame_flags(frame: FrameFit) -> list[tuple[str, str]]:

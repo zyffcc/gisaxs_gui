@@ -360,7 +360,7 @@ class FitSeriesStagesMixin:
     # -- the trend ------------------------------------------------------------------------------
 
     def _draw_trend(self) -> None:
-        """A value (± 1σ) or χ²ᵣ against frame (or time: ``trend_x``), one colour per stage."""
+        """A parameter or χ²ᵣ over time. Predict's quantiles belong to the selected mode."""
         import pyqtgraph as pg
 
         key = self.trend_combo.currentData()
@@ -369,32 +369,58 @@ class FitSeriesStagesMixin:
         self.trend_plot.set_title("")  # while it is empty, the plot says when it fills (``TREND_EMPTY``)
         if key is None or not frames or self._start_model is None:
             self.trend_plot.set_curves([])
+            self.least_squares_check.hide()
             return
         groups: dict[Optional[int], list] = {}
         for frame in frames:
             groups.setdefault(self.stage_of_frame(frame.index), []).append(frame)
         name = tr("χ²ᵣ") if key == CHI2 else self.trend_combo.currentText()
-        curves, colors, bars = [], [], []
+        coordinates, axis = self.trend_x([frame.index for frame in frames])
+        positions = {frame.index: x for frame, x in zip(frames, coordinates)}
+        intervals = {frame.index: frame.selection.interval(key) for frame in frames
+                     if key != CHI2 and frame.selection is not None}
+        posterior = {index: values for index, values in intervals.items()
+                     if len(values) >= 4 and all(v is not None and np.isfinite(v) for v in values[:4])}
+        self.least_squares_check.setVisible(bool(posterior))
+        curves, colors, markers, bars = [], [], [], []
         for stage, members in groups.items():
-            x = np.array(self.trend_x([frame.index for frame in members])[0], float)
-            if key == CHI2:
-                y, error = np.array([frame.result.chi2_reduced for frame in members]), np.full(len(members), math.nan)
-            else:
-                y = np.array([frame.result.model.get(key).value for frame in members])
-                error = np.array([frame.result.errors.get(key, math.nan) for frame in members])
             staged = stage is not None and len(groups) > 1
             color = stage_color(stage) if staged else "#2563eb"
             label = tr("stage {n}").format(n=stage) if staged else name  # the value: in the list and on the axis
-            curves.append((label, x, y))
-            colors.append(color)
-            bars.append((x, y, error, color))
+            prefix = label + " · " if staged else ""
+            predicted = [frame for frame in members if frame.index in posterior]
+            if predicted:
+                x = np.array([positions[frame.index] for frame in predicted])
+                median, low, high = np.array([posterior[frame.index][1:4] for frame in predicted]).T
+                curves.append((prefix + tr("Posterior median (68%)"), x, median))
+                colors.append(color)
+                markers.append(TREND_MARKER)
+                bars.append((x, median, low, high, color))
+            other = [frame for frame in members if frame.index not in posterior]
+            if other:
+                x = np.array([positions[frame.index] for frame in other])
+                if key == CHI2:
+                    y = np.array([frame.result.chi2_reduced for frame in other])
+                else:
+                    y = np.array([frame.result.model.get(key).value for frame in other])
+                    error = np.array([frame.result.errors.get(key, math.nan) for frame in other])
+                    bars.append((x, y, y - error, y + error, color))
+                curves.append((prefix + tr("Refined fit (±1σ)") if posterior else label, x, y))
+                colors.append(color)
+                markers.append(Marker("d", 6.0) if posterior else TREND_MARKER)
+        if posterior and self.least_squares_check.isChecked():
+            indices = sorted(posterior)
+            curves.append((tr("Predict least squares"), np.array([positions[i] for i in indices]),
+                           np.array([posterior[i][0] for i in indices])))
+            colors.append("#777777")
+            markers.append(Marker("s", 4.0, hollow=True))
         # The stages' legend in the corner with the fewest points — the bottom right for a value that grows,
         # off the late frames; one value needs no legend (the list above the plot and the axis name it).
-        self.trend_plot.legend.setOffset(self._legend_corner(curves) if len(groups) > 1 else (-10, 10))
-        self.trend_plot.legend.setVisible(len(groups) > 1)
-        _every, axis = self.trend_x([frame.index for frame in frames])
+        legend = len(groups) > 1 or bool(posterior)
+        self.trend_plot.legend.setOffset(self._legend_corner(curves) if legend else (-10, 10))
+        self.trend_plot.legend.setVisible(legend)
         self.trend_plot.set_labels(axis, "χ²ᵣ" if key == CHI2 else path_name(self._start_model, key, unit=True, translate=False))
-        self.trend_plot.set_curves(curves, colors, markers=[TREND_MARKER] * len(curves))
+        self.trend_plot.set_curves(curves, colors, markers=markers)
         if axis == "frame":
             first, last = frames[0].index + 1, frames[-1].index + 1
             self.trend_plot.plot.setXRange(first - 0.5, last + 0.5, padding=0)  # no point on the edge of the plot
@@ -404,11 +430,11 @@ class FitSeriesStagesMixin:
         else:  # seconds: as they fall
             self.trend_plot.plot.getAxis("bottom").setTickSpacing()
             self.trend_plot.plot.enableAutoRange(axis="x")
-        for x, y, error, color in bars:  # ±1σ as vertical bars, in the plot's coordinates
-            keep = np.isfinite(error)
+        for x, y, low, high, color in bars:
+            keep = np.isfinite(low) & np.isfinite(high)
             if not keep.any():
                 continue
-            low, high = y[keep] - error[keep], y[keep] + error[keep]
+            low, high = low[keep], high[keep]
             if self.trend_plot.log_check.isChecked():
                 low = np.where(low > 0, low, y[keep] / 10.0)
             item = self.trend_plot.plot.plot(np.repeat(x[keep], 2), np.column_stack([low, high]).ravel(),

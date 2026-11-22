@@ -89,7 +89,12 @@ def start_tip(frame) -> str:
     """The Start cell's tooltip: the rule that chose Predict's solution when the fit started from one, else what the
     column says."""
     if frame.ok and frame.start_from == "predict" and frame.predict_choice:
-        return trf(CHOSEN, rule=chain_text(frame.predict_choice, CHOICES))
+        if frame.selection and not frame.chain:
+            choice = frame.selection
+            rule = trf("closest to frame {n}", n=choice.reference_frame) if choice.rule == "closest" else tr(choice.rule)
+        else:
+            rule = chain_text(frame.predict_choice, CHOICES)
+        return trf(CHOSEN, rule=rule)
     return tr(START_TIP)
 
 
