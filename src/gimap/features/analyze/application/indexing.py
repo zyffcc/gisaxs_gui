@@ -1,13 +1,17 @@
 """Use case: the reflections of the phases a person gives, where they fall on the q map and the detector, and which
 reflection each ring of I(q) is.
 
-A phase is a unit cell with its symmetry (the operations of a CIF, or a lattice centring) and optionally atom
-sites, plus how the crystallites lie: at random (``powder``), with the plane (hkl) parallel to the substrate
+A phase is a unit cell with its symmetry (the operations of a CIF or of its space group, or a lattice centring) and
+optionally atom sites, plus how the crystallites lie: at random (``powder``), with the plane (hkl) parallel to the substrate
 (``plane``) or with the crystal axis [uvw] along the surface normal (``axis``). Fibre spots are placed at
 (±q_∥, q_z) on the q map, in the transmitted channel and, with the refraction shift, also in the reflected one
 (``domain/crystal/fibre.py``); powder rings at |q| on I(q) and as arcs on the q map. The detector positions come
 from the inverse of the q map (``shared/geometry/q_inverse.positions_of_q``), tilt and refraction of the map
 included. Everything is in Å⁻¹.
+
+A CIF phase whose operations could not be found (``domain/crystal/cif.py``: ``symmetry`` ``none``) gives positions
+only: every hkl of the cell, intensity 1, no extinctions; its warnings stay with the phase, and rings assigned to it
+are ``tentative`` in the assignment.
 """
 
 from __future__ import annotations
@@ -35,13 +39,20 @@ from ..domain.crystal import (
     centring_operations,
     fibre_spots,
     observed_qz,
+    parse_operation,
     parse_operations,
     powder_rings,
     reachable,
     read_cif,
     reflections,
 )
+from ..domain.crystal.cif import FROM_SYMBOL, NO_SPACE_GROUP, POSITIONS_ONLY
+from ..domain.crystal.space_groups import CELL_MISFIT, DISAGREE, NO_NUMBER, ORIGIN_TAKEN, UNKNOWN, UNREADABLE
 
+SYMMETRY_TEMPLATES = (FROM_SYMBOL, ORIGIN_TAKEN, UNREADABLE, UNKNOWN, CELL_MISFIT, DISAGREE, NO_NUMBER)
+"""The notes and warnings of a CIF phase about its symmetry, with values (shown translated by presentation)."""
+SYMMETRY_TEXTS = (NO_SPACE_GROUP, POSITIONS_ONLY)
+"""The same, without values."""
 POWDER, PLANE, AXIS = "powder", "plane", "axis"
 ORIENTATIONS = (POWDER, PLANE, AXIS)
 PHASE_COLORS = ("#f97316", "#22d3ee", "#a3e635", "#f472b6", "#facc15", "#c084fc", "#38bdf8", "#fb7185")
@@ -68,10 +79,32 @@ class PhaseSpec:
     """The CIF the phase was read from ("" when typed in)."""
     source_sha256: str = ""
     warnings: tuple[str, ...] = ()
+    symmetry: str = ""
+    """Where the operations of a CIF phase come from: ``file``, ``symbol`` (its space group) or ``none`` (positions
+    only); ``""`` for a cell typed in (its ``centring``)."""
+    notes: tuple[str, ...] = ()
+    """How the operations were derived (``symbol``)."""
+    formula: str = ""
+    """The sum formula of the CIF (the name is its common or mineral name or its data block)."""
+
+    @property
+    def positions_only(self) -> bool:
+        return self.symmetry == "none"
 
     def phase(self) -> Phase:
+        if self.positions_only:  # no symmetry known: every hkl, no intensities from the atoms as listed
+            return Phase(self.name, UnitCell(*self.cell), (parse_operation("x,y,z"),), ())
         operations = parse_operations(self.operations) if self.operations else centring_operations(self.centring)
         return Phase(self.name, UnitCell(*self.cell), operations, tuple(self.atoms))
+
+    def symmetry_record(self) -> str:
+        if self.positions_only:
+            return "none: positions only (every hkl, no intensities, no extinctions)"
+        if self.symmetry == "symbol":
+            return f"{len(self.operations)} operations generated from the space group {self.space_group}"
+        if self.operations:
+            return f"{len(self.operations)} operations from the CIF"
+        return f"lattice centring {self.centring}"
 
     def orientation_text(self) -> str:
         h, k, l = self.indices
@@ -83,10 +116,11 @@ class PhaseSpec:
 
     def record(self) -> dict:
         return {
-            "name": self.name, "cell": list(self.cell), "space_group": self.space_group,
-            "symmetry": f"{len(self.operations)} operations from the CIF" if self.operations else
-            f"lattice centring {self.centring}", "atoms": len(self.atoms),
-            "intensities": "|F|² from the atom sites" if self.atoms else "1 for every allowed reflection",
+            "name": self.name, "formula": self.formula, "cell": list(self.cell), "space_group": self.space_group,
+            "symmetry": self.symmetry_record(), "symmetry_notes": list(self.notes),
+            "positions_only": self.positions_only, "atoms": len(self.atoms),
+            "intensities": "none (positions only)" if self.positions_only else
+            "|F|² from the atom sites" if self.atoms else "1 for every allowed reflection",
             "orientation": self.orientation, "indices": list(self.indices), "orientation_text": self.orientation_text(),
             "source": self.source, "source_sha256": self.source_sha256, "warnings": list(self.warnings),
         }
@@ -160,12 +194,10 @@ def phase_from_cif(path, *, color: str = PHASE_COLORS[0], orientation: str = POW
     """A phase read from a CIF (cell, symmetry operations, atom sites)."""
     path = Path(path)
     structure = read_cif(path)
-    centring = (structure.space_group.strip()[:1] or "P").upper() if not structure.operations else "P"
-    if centring not in "PABCIFR":
-        centring = "P"
     return PhaseSpec(
-        structure.name or path.stem, structure.cell.as_tuple(), centring, structure.operations, structure.atoms,
+        structure.name or path.stem, structure.cell.as_tuple(), "P", structure.operations, structure.atoms,
         structure.space_group, orientation, tuple(indices), color, True, str(path), _sha256(path), structure.warnings,
+        structure.symmetry, structure.notes, structure.formula,
     )
 
 
@@ -310,10 +342,16 @@ def assign_peaks(peaks: Sequence[dict], specs: Sequence[PhaseSpec], q_max: Optio
     found = candidates(overlays(visible, settings, None))
     triples = [(float(peak["q"]), float(peak.get("q_err") or math.nan), float(peak.get("fwhm") or math.nan))
                for peak in peaks if peak.get("q")]
+    loose = {spec.name for spec in visible if spec.positions_only}
+    assignments = []
+    for item in assign_all(triples, found):
+        record = item.record()
+        record["tentative"] = bool(record["phase"] in loose)  # positions only: no extinctions, no intensities
+        assignments.append(record)
     return {
         "phases": [spec.record() for spec in visible],
         "rule": "nearest reflection within max(3 σ(q0), FWHM/2)",
-        "assignments": [item.record() for item in assign_all(triples, found)],
+        "assignments": assignments,
     }
 
 
@@ -341,6 +379,7 @@ def with_color(spec: PhaseSpec, index: int) -> PhaseSpec:
 
 __all__ = [
     "AXIS", "DEFAULT_Q_MAX", "IndexingSettings", "Marker", "ORIENTATIONS", "PHASE_COLORS", "PLANE", "POWDER",
+    "SYMMETRY_TEMPLATES", "SYMMETRY_TEXTS",
     "PhaseOverlay", "PhaseSpec", "assign_peaks", "candidates", "detector_positions", "film_critical_angle",
     "indexing_record", "overlays", "phase_from_cif", "phase_overlay", "q_y_of", "table_rows", "with_color",
 ]

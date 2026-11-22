@@ -7,9 +7,10 @@ from threading import Event
 from typing import Optional
 from PyQt5.QtCore import QObject, QSignalBlocker, Qt, pyqtSignal
 from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import QDialog, QMessageBox, QShortcut
+from PyQt5.QtWidgets import QDialog, QShortcut
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.question_box import ACCEPT, ACTION, REJECT, ask_choice
 from ...application.frame_import import ImportSource, other_detector, prepare_frame_import
 from ...application.ports import source_name
 from ..frame_import_dialog import FrameImportDialog
@@ -40,7 +41,7 @@ class _ImportSignals(QObject):
 
 
 class FrameImportMixin:
-    _import_applying = _importing = False
+    _import_applying = _importing = _asking_import = False
     def _connect_frame_import(self):
         self._frame_import_disposed = False
         self._importing = self._import_applying = False
@@ -169,16 +170,15 @@ class FrameImportMixin:
         return any(str(Path(path)) not in listed for path in paths)
 
     def ask_replace_or_add(self, paths) -> Optional[str]:
-        """Frames are listed and others are opened: ``replace`` them, ``add`` to them, or ``None`` (cancelled)."""
-        box = QMessageBox(QMessageBox.Question, tr("Open Frames"),
-                          trf("{count} frames are listed. Replace them with the frames opened now, or add these to "
-                              "the list?", count=len(self.view_model.state.files)), QMessageBox.Cancel, self)
-        replace = box.addButton(tr("Replace"), QMessageBox.AcceptRole)
-        add = box.addButton(tr("Add to List"), QMessageBox.ActionRole)
-        box.setDefaultButton(replace)
-        box.exec_()
-        clicked = box.clickedButton()
-        return "replace" if clicked is replace else "add" if clicked is add else None
+        """Frames are listed and others are opened: ``replace`` them, ``add`` to them, or ``None`` (cancelled).
+        A ``QuestionBox`` (``app/presentation/question_box.py``): a ``QMessageBox`` killed the process here on the
+        offscreen platform."""
+        answer = ask_choice(self, tr("Open Frames"),
+                            trf("{count} frames are listed. Replace them with the frames opened now, or add these to "
+                                "the list?", count=len(self.view_model.state.files)),
+                            ((tr("Replace"), ACCEPT), (tr("Add to List"), ACTION), (tr("Cancel"), REJECT)),
+                            default=0, escape=2)
+        return ("replace", "add", None)[answer]
 
     def import_paths(self, paths, *, interactive=True, selections=None, on_imported=None):
         """Inspect headers in the background, then import references; no stack is decoded here. Opened by the
@@ -192,9 +192,21 @@ class FrameImportMixin:
             return False
         appending = False
         if interactive and self.view_model.state.files and self._new_paths(paths):
-            answer = self.ask_replace_or_add(paths)
+            if self._asking_import:  # a second drop while the question is open
+                self._status(tr("Answer the open question about the frames listed first."), "warning")
+                return False
+            self._asking_import = True
+            try:
+                answer = self.ask_replace_or_add(paths)
+            finally:
+                self._asking_import = False
+            if self._frame_import_disposed:
+                return False
             if answer is None:
                 self._status(tr("Frame import cancelled."), "info")
+                return False
+            if self._list_kept():  # a batch or the automatic analysis started while the question was open
+                self._status(tr("Wait for the current task before changing imported frames."), "warning")
                 return False
             if answer == "replace":
                 self.clear_files()

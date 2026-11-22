@@ -557,7 +557,7 @@ Implementation: `src/gimap/features/calibration/domain/engine.py`, `src/gimap/fe
 
 GIMaP uses two measures of a calibration.
 
-**Ring residual (the Geometry Calibration window).** `rms_residual_px` is the RMS of observed minus predicted ring radius, in pixels, at the reported centre and distance (step 7). `distance_consistency` is the standard deviation divided by the mean of the per-ring distances. `azimuthal_coverage` is the mean coverage of the matched rings. The window shows a confidence:
+**Ring residual (the Geometry Calibration window).** `rms_residual_px` is the RMS of observed minus predicted ring radius, in pixels, at the reported centre and distance (step 7). The window shows one residual, of the geometry it displays: this one as *Ring-radius RMS* when the tilt was not refined, else the ring-point RMS of (3.17) with the tilt (`point_rms_px`, section 3.8) as *Ring-point RMS*; the tooltip says which, and gives the same points without the tilt. `distance_consistency` is the standard deviation divided by the mean of the per-ring distances. `azimuthal_coverage` is the mean coverage of the matched rings. The window shows a confidence:
 
 | Confidence | Condition |
 |---|---|
@@ -1803,8 +1803,30 @@ analysis assigns its rings to them. A phase is a unit cell `(a, b, c, α, β, γ
 its atom sites. It is read from a CIF (`_cell_length_*`, `_cell_angle_*`, the operations of
 `_space_group_symop_operation_xyz` or `_symmetry_equiv_pos_as_xyz`, `_atom_site_label`, `_type_symbol`,
 `_fract_x/y/z`, `_occupancy`, `_U_iso_or_equiv` or `_B_iso_or_equiv`; standard uncertainties in brackets are dropped)
-or typed in with a lattice centring (P, A, B, C, I, F, R in the hexagonal setting). A CIF without operations is used
-with the centring letter of its Hermann–Mauguin symbol only, and the window says so.
+or typed in with a lattice centring (P, A, B, C, I, F, R in the hexagonal setting).
+
+**A CIF without operations.** The operations are then generated from the space group the file names: its Hall
+symbol (`_space_group_name_Hall`), else its Hermann–Mauguin symbol (`_space_group_name_H-M_alt`,
+`_symmetry_space_group_name_H-M`), else its number (`_space_group_IT_number`, `_symmetry_Int_Tables_number`). A table
+gives the Hall symbol of each of the 230 types in the settings of *International Tables* A (both origin choices where
+there are two; hexagonal and rhombohedral axes of the R groups; the monoclinic groups with unique axis b, also as
+`P 21/n`, `P 21/a`, `I 2/a`) and the other five axis settings of every orthorhombic P group (`P b n m` for P n m a);
+the group is the closure of the Hall generators with the lattice translations (Hall, 1981). The symbol is read with
+or without spaces, with `2_1` or `2(1)` for 2₁, the old cubic `Fm3m` and `Cmca` for Fm3̄m and Cmce. Where the symbol
+leaves a choice open it is made and said: the origin choice that puts the atoms on fewer sites (atoms sit on special
+positions at the right origin and spread over general ones at the wrong one; choice 2 when that is a tie), and the
+hexagonal or rhombohedral axes from the cell. The cell must have the shape of the system and setting (a = b and 90°
+for a tetragonal group, γ = 120° on hexagonal axes, α = γ = 90° for unique axis b; lengths within 0.2 %, angles
+within 0.2°). Tested: every entry has the number of general positions of its point group and lattice and every
+glide plane and screw axis its symbol names; I4/mcm, Pnma, Pbnm, P2₁/c, C2/c, P1̄, Pm3̄m, Fm3̄m, Fd3̄m, Ia3̄d,
+P6₃mc, P3̄m1, R3̄m, P4₂/mnm, I4₁/amd and P4mm have their extinctions; a MAPbI₃ CIF that names only I 4/m c m gives
+the reflections and intensities of the CIF with all 32 operations (101 and 103 absent).
+
+When the operations cannot be found — a symbol that cannot be read or is not in the table, a cell of another shape,
+no space group named — the phase gives **positions only**: every (h, k, l) ≠ 0 of the cell, |F|² = 1, no
+extinctions. Its warnings stay with the phase (the Symmetry column, the record and the report), and a ring assigned
+to it is `tentative` (7.42). Earlier versions applied only the lattice centring of the symbol with the atoms as
+listed, which gave reflections the space group forbids and wrong intensities.
 
 **Reciprocal lattice.** With the columns of A the vectors **a**, **b**, **c** in the Cartesian frame of the cell
 (**a** along x, **b** in the x–y plane):
@@ -1904,8 +1926,11 @@ lists the other reflections within δ as alternatives. The orientation does not 
 orientation. q is kinematic unless α_c is given (2.6), so near the horizon a ring can be shifted by up to k sin α_i.
 Phases are assigned only when the person gives them (the window, or `--phase CIF` of `tools/gimap_agent.py auto`);
 the *Decisions* line *phase assignment* lists every peak and the rule, the section *Phase assignment* of
-`report.md` the alternatives too, and the peak rows of `report.json` have `phase`, `hkl`, `q_hkl`, `delta_q`,
-`delta_sigma` and `alternatives`.
+`report.md` the alternatives too (with each phase's warnings), and the peak rows of `report.json` have `phase`,
+`hkl`, `q_hkl`, `delta_q`, `delta_sigma`, `tolerance`, `tentative` and `alternatives`. The report states Δq against
+the window δ that accepted it; the peak table of Results has the phase, hkl and Δq of every peak. `tentative` is
+true for a ring assigned to a phase given as positions only: without its symmetry the nearest position is not
+evidence of the phase.
 
 Validation (tested). LaB₆ (Pm3̄m, a = 4.1569 Å): the first nine rings fall on d = 4.1569, 2.9394, 2.4000, 2.0785,
 1.8590, 1.6971, 1.4697, 1.3856 and 1.3145 Å to 10⁻⁴ Å, with multiplicities 6, 12, 8, 6, 24, 24, and on GIMaP's
@@ -1973,7 +1998,10 @@ window and the model are taken as exact.
 
 which includes the missing wedge as the model fills it, next to f from the measured bins alone (the sums of (7.25)
 on N_k) and the 2D order `2⟨cos²χ⟩ − 1` of ρ along the ring without the sin χ weight (the orientation parameter
-SciAnalysis reports). χ²_red, the bins fitted, the weighted coverage (7.24), b and its source are given too.
+SciAnalysis reports). χ²_red, the bins fitted, the weighted coverage (7.24), b and its source are given too. A free
+parameter at its bound (within 10⁻⁶ of it; `at_bound` of the record) is not determined by the data: the result then
+leads with a verdict, *not determined by this fit*, and with f of the measured bins, which needs no model, and marks
+the value at its bound; `report.md` does the same.
 
 Validation (tested): a synthetic I(χ) of a Gaussian about the normal with FWHM = 12° and φ = 0.35, Poisson noise,
 and |χ| < 4° missing, gives FWHM = 11.995 ± 0.015°, φ = 0.3500 ± 0.0014 and f = 0.6347 ± 0.0013 (true 0.6348;

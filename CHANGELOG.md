@@ -12,6 +12,17 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Third user test: Analyze and GIWAXS.** Opening frames while others are listed no longer ends the program on a
+  computer without a display (the Replace / Add to List question, and the other questions of Analyze, Batch
+  Export, Sputter, Format Converter and the session, are now GIMaP's own question window). A CIF that names its
+  space group without listing the operations gets them from the symbol (all 230 groups and the common settings);
+  without that the phase gives positions only, says so in the Symmetry column and the report, and its assignments
+  are tentative — it no longer lists forbidden reflections with wrong intensities. A phase is named after its common
+  or mineral name or its data block, not its sum formula. The Results peak table has the phase, hkl and Δq of each
+  peak. A pole figure whose fit ends at a bound leads with *not determined* and the Hermans f of the measured bins.
+  The Normalisation, Corrections and intensity-correction sections head the Mask & corrections step, and the step
+  says when the intensities are scaled. Geometry Calibration shows one RMS residual and names it (ring points with the
+  tilt, ring radii without). Manual 5.2, 5.9, 4.3; *Physics and Methods* 3.4, 7.10, 7.11.
 - **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
   sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture
   ((hkl) parallel to the substrate or [uvw] along the normal): their reflections are drawn with hkl labels on the

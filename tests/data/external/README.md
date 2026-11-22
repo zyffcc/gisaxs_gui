@@ -36,10 +36,13 @@ They are not GIMaP's data: keep the licences and the attribution below when you 
   `tools/gimap_agent.py auto … --technique gisaxs --calibration …`. BornAgain's sample model: Ag spheres
   (R 5.75 nm; a log-normal σ 0.4 is defined but commented out in r23) with a radial paracrystal of peak distance
   53.6 nm (Physics and Methods 9.10).
-- **AgBh** (pyFAI): the `.poni` states λ = 1.0 Å and L = 1583.2 mm with 0.57° tilt. Measured ring radii of
-  orders 1–5 around the `.poni` direct beam (180.0, 263.9) px give L = 1635 mm at 1.0 Å, so the stated
-  wavelength is not the one of the calibration (≈ 1.033 Å would give 1583 mm). Use the image for the beam
-  centre and for ring self-consistency, not for an absolute distance.
+- **AgBh** (pyFAI): the `.poni` states λ = 1.0 Å and L = 1583.2 mm with 0.57° tilt. The `.poni` is a
+  pixel-to-q test geometry, not a calibration of this image. The ring radii of orders 1–5, measured on the
+  azimuthal average about the direct beam (179.8, 264.0) px, are 162.6, 325.8, 489.0, 652.6 and 816.8 px; the
+  `.poni` puts them at 157.7, 315.5, 473.5, 631.8 and 790.5 px, 3.3 % closer. They give L = 1635 mm at 1.0 Å
+  (≈ 1.033 Å would give 1583 mm), which is what Geometry Calibration finds for this image at 12.398 keV
+  (`tests/test_public_data.py`). Use the image for the beam centre and for ring self-consistency, and the
+  `.poni` to compare pixel-to-q conversions with pyFAI, not as the distance of this image.
 - **P08 MAPbI₃**: `.poni` → direct beam (545.5, 1826.9) px, L = 811.8 mm, λ = 0.6888 Å, tilt 0.31°.
   Radial peaks at q ≈ 0.899 (PbI₂ 001), 0.999 (MAPbI₃ 110), 1.41, 1.99, 2.23 Å⁻¹. The raw frame is
   dark-subtracted floating-point data: negative values are real (noise), not detector gaps.

@@ -13,9 +13,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt5.QtWidgets import QMessageBox
-
 from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.question_box import ACCEPT, REJECT, ask_choice
 
 from ..application import QCM_FACTOR
 from .client_texts import ANALYZE_ANYWAY, NOMINAL_AT_END, RATE_UNITS, UNUSUAL_RATE, UNUSUAL_RATE_TITLE, shown_number
@@ -64,13 +63,10 @@ class RateMixin:
     def _confirm_rate(self, request) -> bool:
         """Ask whether the unit of an unusual rate is right: True to analyse anyway."""
         rate = request.rate_at_sample()
-        box = QMessageBox(QMessageBox.Question, tr(UNUSUAL_RATE_TITLE),
-                          text(UNUSUAL_RATE, nm=shown_number(rate), angstrom=shown_number(rate * 10.0)), parent=self)
-        anyway = box.addButton(tr(ANALYZE_ANYWAY), QMessageBox.AcceptRole)
-        box.addButton(QMessageBox.Cancel)
-        box.setDefaultButton(QMessageBox.Cancel)
-        box.exec_()
-        return box.clickedButton() is anyway
+        answer = ask_choice(self, tr(UNUSUAL_RATE_TITLE),
+                            text(UNUSUAL_RATE, nm=shown_number(rate), angstrom=shown_number(rate * 10.0)),
+                            ((tr(ANALYZE_ANYWAY), ACCEPT), (tr("Cancel"), REJECT)), default=1, escape=1)
+        return answer == 0
 
     # -- the nominal thickness at the last frame -----------------------------------------------------------------
     def _scan_seconds(self) -> Optional[float]:
