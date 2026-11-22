@@ -107,3 +107,23 @@ python tools/benchmarks/cut_model_bornagain.py   # in an environment with BornAg
 ```
 
 Times depend on the computer; `analyze_speed.json` names the one it was measured on.
+
+## Online GISAXS series
+
+`insitu_online.py --synthetic-mpx 1 4 --frames 8 --json tools/benchmarks/insitu_online.json` processes eight
+synthetic, locally written TIFFs of each detector size. The sphere radius steps from 5 to 7 nm at frame 5, which
+is supplied to the chain as a new stage. One forward pass fits the horizontal cut over 0.05–1.5 nm⁻¹,
+averaging both halves (369 points). Predict uses the model's one sphere and paracrystal at the break.
+
+| Detector | Reduction (s/frame) | Cuts (s/frame) | Chained fit (s/frame) | Predict (s/call) | Predict averaged over all frames (s/frame) |
+|---|---:|---:|---:|---:|---:|
+| 1000 × 1000 | 0.0718 | 0.00467 | 0.167 | 2.58 | 0.323 |
+| 2000 × 2000 | 0.265 | 0.00583 | 0.103 | 2.47 | 0.309 |
+
+Each number is an arithmetic mean on an Intel Core i9-13900HX with one worker and the OpenMP, MKL and OpenBLAS
+thread limits set to one. Reduction includes reading the TIFF and finding bad pixels. Cuts include the Yoneda
+search and the horizontal and vertical profiles. Chained fit includes refinement after a restart. Predict was
+timed separately in the same process and ran once per detector. The times cover processing only. Frame
+generation, watch polling, process startup, screen redraws and export are outside the stopwatch.
+The JSON gives each frame's timings, settings and the network checksum. Running the script without
+`--synthetic-mpx` times the watched folder on crops of the public GALAXI frame.

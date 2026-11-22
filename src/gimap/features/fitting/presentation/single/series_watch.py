@@ -93,7 +93,7 @@ class FitSeriesWatchMixin:
             self._next()  # with nothing left to fit: says what it waits for
         else:
             self._watch.stop()
-            if not self.queue and not self.tasks.is_busy():
+            if not self.queue and not self.tasks.is_busy() and not self.begin_smoothing():
                 self._finish()
         if self.running:
             self.refresh()
@@ -104,6 +104,9 @@ class FitSeriesWatchMixin:
                 and not self._stop.is_set())
 
     def _say_waiting(self) -> None:
+        if self._smoothing_error:
+            self._status(lambda: trf("Series smoothing failed: {error}", error=tr(self._smoothing_error)), "warning")
+            return
         self._status(lambda folder=self._folder_name(): trf(
             "Waiting for new curves in {folder} … (Stop to end)", folder=folder))
 

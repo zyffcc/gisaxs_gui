@@ -35,6 +35,7 @@ from ...application.series_chain import (
     better,
     chained_fit,
     frame_flags,
+    keep_pass_attempts,
     observation_time,
 )
 from ...application.series_fit import file_name, parameter_columns
@@ -128,7 +129,7 @@ class FitSeriesChainMixin:
         kept = better(before, frame)
         if kept is frame:
             self._backward_better += 1
-        return kept
+        return keep_pass_attempts(kept, before, frame)
 
     def _chain_finished(self) -> None:
         if self._fit_pass == BACKWARD:

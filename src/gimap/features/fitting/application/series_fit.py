@@ -28,6 +28,7 @@ from ..domain.fit_engine import FitResult
 from ..domain.fit_model import FAMILIES, INFO, FitModel, model_to_dict
 from .single_fit import Curve, PreparedCurve, fit_resolving, prepare_points, tail_for_curve
 from .models import InSituSourceFrame
+from .series_selection import DEFAULT_SCALE, PredictAttempt, SolutionChoice
 
 STARTS = (("previous", "Each frame starts from the previous frame's result"),
           ("same", "Every frame starts from the model in Single analysis"),
@@ -58,9 +59,16 @@ class SeriesSettings:
     backward: bool = False
     """After the frames in order, a backward pass: each frame from the result of the frame after it, the better fit
     kept (``series_chain.py``)."""
+    smooth: bool = False
+    """Select a joint HMM path through the Predict solutions of the series."""
+    smooth_scale: float = DEFAULT_SCALE
+    selection_recorded: bool = True
+    """False for saved fits from before series selection provenance was recorded."""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "side", fit_halves(self.side))
+        if not self.smooth_scale > 0:
+            raise ValueError("The continuity scale must be positive")
 
 
 def series_side(chosen=None, observed=None, single=None, *, signed: bool = True) -> str:
@@ -110,6 +118,10 @@ class FrameFit:
     predict_choice: str = ""
     """How Predict's solution was chosen where the chain broke (``series_chain.restart_solution``, English); empty:
     the kept fit did not start from Predict, or the rule is not known."""
+    selection: Optional[SolutionChoice] = None
+    """Mode selected by Predict, with its probabilities and conditional intervals."""
+    predict_attempts: tuple[PredictAttempt, ...] = ()
+    """Every Predict restart of this frame, including the ones superseded by another fit."""
 
     @property
     def ok(self) -> bool:
@@ -193,7 +205,12 @@ def _fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: S
         return FrameFit(index, path, error=TOO_FEW_POINTS, **made_of)
     try:
         if settings.method == "predict":  # the network's solution, then least squares for its errors and χ²
-            result, actions, _remaining = fit_resolving(predict(prepared.data, start), prepared.data, method="local",
+            predicted_model = predict(prepared.data, start)
+            choice = getattr(predict, "choice", None)
+            if choice is not None:
+                rule = f"closest to frame {choice.reference_frame}" if choice.reference_frame else choice.rule
+                made_of.update(selection=choice, predict_choice=rule)
+            result, actions, _remaining = fit_resolving(predicted_model, prepared.data, method="local",
                                                         stop=stop, resolve=False, restarts=0)
             return FrameFit(index, path, result, **made_of)
         # a start whose beam tail still has the generic ranges gets this frame's (``single_fit.tail_for_curve``)
@@ -345,7 +362,7 @@ def _resolved(folder: str) -> Path:
 
 
 def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = False,
-                 folder=None, flags: bool = False) -> tuple[list[str], list[list]]:
+                 folder=None, flags: bool = False, predict_columns: bool = False) -> tuple[list[str], list[list]]:
     """Header and rows: frame, file, χ²ᵣ, log RMSE, converged, then value and error of every free parameter.
 
     ``details``: with what each frame was fitted on after ``converged`` — ``points`` and ``halves_used``
@@ -363,10 +380,17 @@ def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = Fal
         header += [name, f"{name}_error"]
     if flags:
         from .series_chain import flags_text
+    from .series_policy import PREDICT_COLUMNS, decision_cells
+
+    with_choices = details and (predict_columns or any(frame.selection or frame.predict_attempts for frame in frames))
+    if with_choices:
+        header.extend(PREDICT_COLUMNS)
     rows = []
     for frame in sorted(frames, key=lambda item: item.index):
         tail = [flags_text(frame), frame.start_from, frame.start_frame or "", frame.chain, frame.predict_choice,
                 frame.fit_pass] if flags else []
+        if with_choices:
+            tail = decision_cells(frame) + tail
         row = [frame.index + 1, file_name(frame.path, folder)]
         made_of = [frame.points, frame.halves_used] if details else []
         if with_sources:
@@ -399,6 +423,8 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
     the halves of the series came from (the person's own choice, the fit inputs, Single analysis …);
     ``listing``: which curves of the folder were fitted (first, last, every n-th, the frames left out …),
     written as it is given. Files are named as in the table (``file_name``)."""
+    from .series_policy import frame_decisions, series_policy
+
     ordered = sorted(frames, key=lambda item: item.index)
     failed = [{"frame": frame.index + 1, "file": file_name(frame.path, folder), "why": frame.error}
               for frame in ordered if not frame.ok]
@@ -407,6 +433,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
         "saved": saved or datetime.now().astimezone().isoformat(timespec="seconds"),
         "folder": folder, "pattern": pattern, "q_unit_of_files": q_unit,
         "start_model": model_to_dict(model),
+        "series_policy": series_policy(settings),
         "settings": {"side": settings.side, "q_range_nm^-1": None if settings.q_range is None else list(settings.q_range),
                      "left_out_q_nm^-1": sorted(settings.excluded), "method": settings.method, "start": settings.start,
                      "resolve_edges": settings.resolve_edges, "backward_pass": settings.backward,
@@ -420,6 +447,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
                        "reason": frame.reason, "points": frame.points, "halves_used": frame.halves_used,
                        "averaged": frame.averaged, "left_out": frame.left_out,
                        "q_unit": frame.q_unit, "q_unit_from": frame.q_unit_from,
+                       **frame_decisions(frame),
                        **{key: value for key, value in (("start_from", frame.start_from),
                                                         ("start_frame", frame.start_frame), ("chain_break", frame.chain),
                                                         ("predict_choice", frame.predict_choice),

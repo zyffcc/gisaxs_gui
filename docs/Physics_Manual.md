@@ -128,6 +128,9 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [11.9 Where the stages are used](#119-where-the-stages-are-used)
   - [11.10 Compare](#1110-compare)
   - [11.11 Limits of the series methods](#1111-limits-of-the-series-methods)
+  - [11.12 Neighbour-frame and reference comparisons](#1112-the-timeline-how-far-each-frame-is-from-its-neighbour-and-from-a-reference-frame)
+  - [11.13 Chained fits, Predict choices and the continuity prior](#1113-chained-fit-of-an-in-situ-series)
+  - [11.14 The results database](#1114-the-results-database)
 - [12. Sputter](#12-sputter)
   - [12.1 Analyze: what the main screen shows](#121-analyze-what-the-main-screen-shows)
   - [12.2 The deposition rate](#122-the-deposition-rate)
@@ -4111,6 +4114,8 @@ Implementation: `src/gimap/features/compare/domain/comparison.py`, `src/gimap/fe
 
 ### 11.12 The timeline: how far each frame is from its neighbour and from a reference frame
 
+The comparison of consecutive frames follows Xi-cam’s Timeline. GIMaP estimates the noise from the series as described below. [Xi-cam, section 3.4](https://journals.iucr.org/s/issues/2018/04/00/xe5032/)
+
 Under the map (Analyze ▸ Series, the plot under the map: *χ² to the frame before* or *χ² to the reference frame*), every row `r` of the map is compared with the row before it and with a reference row `r_ref` (Options ▸ Reference frame, the first by default). The rows are mean intensities without their σ, so the noise of every x column is taken from the series itself, as in Eq. (11.5) (Eq. (11.6) below 4 rows), and no column counts as quieter than the median column:
 
 ```text
@@ -4128,19 +4133,41 @@ The sum runs over the `n` columns where both rows have a value (the x range show
 When the network and the manual fit use different size laws, weights or resolution, the network supplies a
 starting point for a local fit under the manual settings. The two candidate fits are ranked on the same objective.
 
-Fitting ▸ In-situ series ▸ *The previous result; Predict parameters where the chain breaks* refines every frame from the converged result of the frame before (as *The previous frame's result*). The chain **breaks** at a frame whose fit failed or did not converge, at the first frame of a new stage, or where χ²ᵣ jumps:
+Fitting ▸ In-situ series ▸ *Previous result, Predict at chain breaks* refines every frame from the converged result of the frame before (as *The previous frame's result*). The chain **breaks** at a frame whose fit failed or did not converge, at the first frame of a new stage, or where χ²ᵣ jumps:
 
 ```text
 χ²ᵣ(i) > 3 · χ²ᵣ(i − 1)   and   χ²ᵣ(i) > 2                                                          (11.65)
 ```
 
-A value at a bound of its range — a nuisance term (beam tail, background, resolution) or any other —, a value without a finite error (section 9.16) and a poor fit (`χ²ᵣ > 10`) are flagged but do not break the chain: the next frame still starts from this one, since a restart there put steps into series whose data change smoothly (with two linked spheres, R₁ jumped by a factor 2 where only the beam tail's exponent had reached its bound). There the frame is fitted again by Predict parameters with the particles of the start model (section 9.13; its method is unchanged). Of Predict's solutions whose probability is at least 1/10 of the most probable one's (`PREDICT_FACTOR`), the one closest to the previous frame's result is refined:
+Bounds, undetermined values and poor fits (χ²ᵣ > 10) are flagged separately. At a break, Predict proposes a restart with the particles of the starting model. The chained fit and the restarted fit are compared on the same objective. A converged fit takes precedence, then a completed fit, then the lower χ²ᵣ. Ties retain the original fit. The optional backward pass repeats this comparison using the next frame as the starting point.
+
+**Choosing a Predict solution.** Let pₜ(j) be Predict's probability for solution j from frame t alone. Rank 1 has the largest pₜ. For two solutions, match populations of the same family and paracrystal status in ascending order of radius within each group. For each matched population use the shared positive coordinates x = (ln R, ln D, ln(σ_R/R)), omitting D for a population without a structure factor. The distance is
 
 ```text
-d = sqrt( mean_k ( t_k(solution) − t_k(previous) )² )                                              (11.66)
+d²(i,j) = Σ_matched populations Σ_shared coordinates (xₜ(j) − xₜ₋₁(i))².                     (11.66)
 ```
 
-over the values both share that are free and not linked in the previous result and have a finite range there (the particles paired in order of their radius, of the same family), with t_k the place of the value in the previous result's range by (9.18)–(9.19); without a previous result the most probable solution. The rule that chose it is recorded (`predict_choice`). Of the two fits the one that converged is kept, else the one with the lower χ²ᵣ (the refined one on equal terms). With *Then a backward pass*, after the frames in order every frame from the last but one to the first is refined from the kept result of the frame after it, and the better of its two fits is kept by the same rule. Every frame records where its kept fit started (`start_from`: previous, next, single, predict; `start_frame`: the frame whose result it continued), why the chain broke (`chain_break`), how Predict's solution was chosen (`predict_choice`), the pass (`fit_pass`) and its **flags**: failed, not converged, stopped, poor fit, values at a bound of their range, the beam tail at an edge, undetermined values, chain broke, backward. The thresholds 3, 2 and 10 are working choices, not derived from a noise model. Implementation: `src/gimap/features/fitting/application/series_chain.py`
+A chained restart admits solutions with pₜ ≥ 0.1 p_max. *Predict each frame* with *Prefer the solution that continues the previous frame* admits those with pₜ ≥ 0.2 p_max. The closest eligible solution with matching composition is kept. Ties go to the more probable solution, as does the choice when no composition matches. With no reference frame, Predict takes rank 1. The cutoff and the pass direction can move a step in the fitted series. The closest rule leaves the single-frame probabilities unchanged. The coordinates for each candidate come from its Predict fit. The greedy rule compares them with the reference frame’s retained least-squares fit, while the HMM compares the Predict candidates on adjacent frames.
+
+**Smooth across frames (hidden Markov model).** The states are all solutions returned by Predict for each frame. The probability of a path is proportional to the product of its single-frame evidences and its transition weights. For adjacent states,
+
+```text
+w(i,j) = exp[−d²(i,j)/(2s²)] × ε(s)^[composition changes]
+ε(s) = 0.01^[(0.1/s)²].                                                                    (11.67)
+```
+
+A composition change means a change in the number of populations of any family or paracrystal status. The penalty is 0.01 at the default log step s = 0.1 (about 10% per selected frame). Larger s permits larger simultaneous changes. At s → ∞ every transition has unit weight, so the path reduces to independent choices. The pair weights are symmetric. Forward–backward sums the globally normalized path probabilities to give the marginal probability of every state, and Viterbi chooses the single most probable path. A state on that path can differ from the largest marginal at its frame. A frame without a prediction separates segments. Choosing a fresh start at each stage also splits the path at the stage boundary.
+
+**Reading the results.** The table and exports distinguish the kept fit from each attempted Predict restart and give the selection rule, single-frame rank, chosen p, maximum p and, for the HMM, the chosen state's marginal. The record identifies the candidate populations and stores all the marginals in single-frame rank order. The trend shows the median and central 68% posterior interval of the selected mode. Its small open symbol, when enabled, marks the mode's least-squares value. These intervals describe uncertainty within that mode. They exclude uncertainty in choosing the mode.
+
+**Time per frame on synthetic detectors.** Eight local int32 TIFF frames per size were reduced on an Intel Core i9-13900HX with one worker and one numerical-library thread. Each cut supplied 369 fitted points. One sphere with a paracrystal changed radius from 5 to 7 nm at the prescribed stage boundary, frame 5. Predict ran once per series.
+
+| Detector | Reduction (s/frame) | Cuts (s/frame) | Chained fit (s/frame) | Predict (s/call) | Predict (s/frame, averaged over all 8) |
+|---|---:|---:|---:|---:|---:|
+| 1000 × 1000 | 0.0718 | 0.00467 | 0.167 | 2.58 | 0.323 |
+| 2000 × 2000 | 0.265 | 0.00583 | 0.103 | 2.47 | 0.309 |
+
+Reduction includes TIFF reading and bad-pixel detection. Cuts include the Yoneda search and horizontal and vertical extraction. Fit time includes refinement after a restart. Predict was timed separately in process. The timing excludes frame generation, polling, display, export and process startup. [Benchmark settings and per-frame times](../tools/benchmarks/insitu_online.json)
 
 ### 11.14 The results database
 

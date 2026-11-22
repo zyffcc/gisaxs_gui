@@ -12,6 +12,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fitting ▸ In-situ series.** Inspect each Predict choice, its rank and its probability in the results table,
+  CSV, JSON and series report. The closest-solution rule now includes the relative radius width σ_R/R.
+  An optional hidden Markov model selects a path through the series and gives each solution a smoothed probability.
+  The trend shows the chosen mode's posterior median and 68% interval, with an optional least-squares marker.
 - **Analyze ▸ Absolute Scale from a Standard…** fits a detector frame or reduced radial curve against water at the
   measured temperature or a user-supplied reference such as glassy carbon. Calibrated exports carry intensity in
   cm⁻¹ and record the standard, fitted range, scale and uncertainty. The instrument profile keeps the calibration.

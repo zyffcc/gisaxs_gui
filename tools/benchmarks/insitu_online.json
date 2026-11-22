@@ -1,0 +1,245 @@
+{
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900HX",
+  "system": "Windows-10-10.0.26300-SP0",
+  "python": "3.10.18",
+  "numpy": "1.26.4",
+  "settings": {
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "workers": 1,
+    "mode": "GISAXS curves only, bad-pixel detection enabled",
+    "input": "synthetic local int32 TIFF, Poisson seed = zero-based frame index",
+    "pixel_um": 100,
+    "distance_m": 1.6,
+    "wavelength_angstrom": 1.0,
+    "incidence_deg": 0.2,
+    "center_fraction_xy": [
+      0.5,
+      0.8
+    ],
+    "horizontal_half_height_px": 2.5,
+    "model": "one sphere and a paracrystal, effective interface",
+    "stage_radii_nm": [
+      5,
+      7
+    ],
+    "D_nm": 40,
+    "stage_start_frame": 5,
+    "fit": "forward chained refinement, mean of both halves, default edge handling",
+    "fit_q_range_nm^-1": [
+      0.05,
+      1.5
+    ],
+    "predict": "particles in model, seed 0, in-process job handler",
+    "timing": "Wall time, including the first frame. Reduction includes TIFF read and frame preparation. Cuts include the Yoneda search and both cuts. Chained fit excludes the timed Predict call and includes restart refinement. Frame synthesis, polling, GUI and export are excluded."
+  },
+  "detectors": [
+    {
+      "shape": [
+        1000,
+        1000
+      ],
+      "frames": 8,
+      "cut_row_px": 688.5,
+      "mean_seconds_per_frame": {
+        "reduction_s": 0.07176502499714843,
+        "cut_s": 0.004673787498177262,
+        "chained_fit_s": 0.16664502499406808,
+        "predict_s": 0.32304772499992396
+      },
+      "predict_calls": 1,
+      "mean_seconds_per_predict_call": 2.5843817999993917,
+      "network": {
+        "name": "flow_v1",
+        "sha256": "7514c66e8cf384d9d4bc6ed7bdad1fbbca3d7d8e0c1b83c7c1aa9ea05a36ec7e"
+      },
+      "per_frame": [
+        {
+          "frame": 1,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.06953360000625253,
+          "cut_s": 0.0044707999913953245,
+          "chained_fit_s": 0.08846490000723861,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 2,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.07200509996619076,
+          "cut_s": 0.0048995000252034515,
+          "chained_fit_s": 0.38576649999595247,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 3,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.06815180002013221,
+          "cut_s": 0.004443999991053715,
+          "chained_fit_s": 0.07059650000883266,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 4,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.07142819999717176,
+          "cut_s": 0.00435450000804849,
+          "chained_fit_s": 0.10831509999115951,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 5,
+          "fit_points": 369,
+          "stage_start": true,
+          "chain_break": "a new stage begins",
+          "reduction_s": 0.0694340999762062,
+          "cut_s": 0.0045479999971576035,
+          "chained_fit_s": 0.5046679999795742,
+          "predict_s": 2.5843817999993917
+        },
+        {
+          "frame": 6,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.08500399999320507,
+          "cut_s": 0.00502559999586083,
+          "chained_fit_s": 0.0593720999895595,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 7,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.06891580001683906,
+          "cut_s": 0.0047033999871928245,
+          "chained_fit_s": 0.06441029999405146,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 8,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.06964760000118986,
+          "cut_s": 0.004944499989505857,
+          "chained_fit_s": 0.05156679998617619,
+          "predict_s": 0.0
+        }
+      ]
+    },
+    {
+      "shape": [
+        2000,
+        2000
+      ],
+      "frames": 8,
+      "cut_row_px": 1488.5,
+      "mean_seconds_per_frame": {
+        "reduction_s": 0.2652106749956147,
+        "cut_s": 0.005826075001095887,
+        "chained_fit_s": 0.10260237500551739,
+        "predict_s": 0.3089234375001979
+      },
+      "predict_calls": 1,
+      "mean_seconds_per_predict_call": 2.4713875000015832,
+      "network": {
+        "name": "flow_v1",
+        "sha256": "7514c66e8cf384d9d4bc6ed7bdad1fbbca3d7d8e0c1b83c7c1aa9ea05a36ec7e"
+      },
+      "per_frame": [
+        {
+          "frame": 1,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.25349309999728575,
+          "cut_s": 0.005629599996609613,
+          "chained_fit_s": 0.05785790001391433,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 2,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.3202941999770701,
+          "cut_s": 0.006889100011903793,
+          "chained_fit_s": 0.07162280002376065,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 3,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.2683114999963436,
+          "cut_s": 0.007061000011162832,
+          "chained_fit_s": 0.05745019999449141,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 4,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.2689748000120744,
+          "cut_s": 0.005968899989966303,
+          "chained_fit_s": 0.038950399990426376,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 5,
+          "fit_points": 369,
+          "stage_start": true,
+          "chain_break": "a new stage begins",
+          "reduction_s": 0.2598162999784108,
+          "cut_s": 0.0055844000016804785,
+          "chained_fit_s": 0.20596580000710674,
+          "predict_s": 2.4713875000015832
+        },
+        {
+          "frame": 6,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.248750700004166,
+          "cut_s": 0.005194299999857321,
+          "chained_fit_s": 0.2755660000257194,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 7,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.24843190002138726,
+          "cut_s": 0.005027199978940189,
+          "chained_fit_s": 0.07121110000298359,
+          "predict_s": 0.0
+        },
+        {
+          "frame": 8,
+          "fit_points": 369,
+          "stage_start": false,
+          "chain_break": "",
+          "reduction_s": 0.2536128999781795,
+          "cut_s": 0.005254100018646568,
+          "chained_fit_s": 0.04219479998573661,
+          "predict_s": 0.0
+        }
+      ]
+    }
+  ]
+}

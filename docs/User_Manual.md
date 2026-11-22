@@ -1819,6 +1819,8 @@ qy 0.05 Å⁻¹); the red arrow beside the map marks it, and it does not make a 
 
 *The timeline of 40 frames made of the public GALAXI frame with a side peak that moves at once at frame 25: χ² ≈ 1 between frames that differ by noise alone, ▲ at the jump, dashed lines at the stage boundaries.*
 
+The neighbour-frame comparison follows the Timeline in Xi-cam. [Xi-cam, section 3.4](https://journals.iucr.org/s/issues/2018/04/00/xe5032/)
+
 **The timeline.** The drop-down of the plot under the map also has **χ² to the frame before (timeline)** and
 **χ² to the reference frame (timeline)**: for every frame, how far its curve is from the one before it, or from
 the reference frame (**Options ▸ Reference frame**, the first by default), in units of the noise of each x
@@ -2705,8 +2707,7 @@ the fit1d kit (*Predict parameters (fit1d)*) and the quick physical fit (*Find t
 
 ![Fitting, In-situ series](manual_images/en/12_fitting_insitu.png)
 
-*The Results step on the left (the halves and points per frame, then every frame's χ²ᵣ and values ± 1σ); on the
-right the selected frame's fit and, below it, the trend of R through the series, coloured by stage.*
+*Eight synthetic sphere curves fitted with the hidden Markov model. Predict returned one solution per frame, so each has raw and smoothed probability 1. Frame 5 is selected. The trend shows the posterior median and 68% interval for R, with each solution’s least-squares value overlaid.*
 
 The **Batch / In-situ series** tab fits curves with the model of Single analysis. The command bar has
 **Import Curves…**, **Choose Folder…** and **Start**; **Pause** and **Stop** appear while fitting runs,
@@ -2768,7 +2769,7 @@ current frame finish before pausing. Completed results stay available.
   - **The model in Single analysis** — every frame independent of the others.
   - **The previous result; the Single model at each new stage** — follows the sample within a stage and starts
     afresh where the curves change course.
-  - **The previous result; Predict parameters where the chain breaks** — each frame from the result of the frame
+  - **Previous result, Predict at chain breaks** — each frame from the result of the frame
     before; where that chain breaks (the fit failed or did not converge, a new stage begins, or χ²ᵣ is more than 3
     times the frame before's and above 2), Predict parameters (section 6.4, its method unchanged) fits the frame
     again with the particles of Single's model, from its solution closest to the frame before among those at least
@@ -2777,17 +2778,21 @@ current frame finish before pausing. Completed results stay available.
     background or any other), a value the curve does not determine and a poor fit are flagged but do not break the
     chain, so a series whose curves change smoothly stays smooth. A model with
     no particle or more than three is refined only (the Run Log says so).
-- **Then a backward pass**: once every frame is done, from the last but one to the first, each frame is refined from
+- **Refine again in a backward pass**: once every frame is done, from the last but one to the first, each frame is refined from
   the result of the frame after it, and the better of its two fits is kept — a sample whose first frames are hard to
   fit is then followed back from where the fit is sure. Not while **Watch for new curves** waits for curves.
 - **Method**: **Refine (fast)**, **Search the ranges, then refine (slow)** or **Predict each frame**.
-- **Predict each frame** runs Predict parameters (section 6.4) on every frame, with the particles of the frame's
-  start model (1–3 particles: their families and paracrystals), then refines the solution kept with least squares
-  under the start model's fixed values and ranges; the table holds those values and their errors. **Prefer the
-  solution that continues the previous frame** (on by default): of the solutions at least 0.2 times as probable as
-  the most probable one, the frame keeps the one closest to the previous frame's sizes and distances (the smoothest
-  series); a clearly more probable solution is still taken. It does not apply when every frame starts from Single's
-  model, nor at the first frame of a new stage.
+- **Predict each frame** obtains solutions for each curve with the particles in the starting model. Turn off both
+  continuity options to take the most probable solution in each frame. **Prefer the solution that continues the
+  previous frame** (on by default) takes the closest eligible solution in ln R, ln D and ln(σ_R/R). A solution is
+  eligible when its probability is at least 0.2 times the maximum for that frame. A chained restart uses 0.1.
+  With no previous fit, at a new stage, or with an independent start, *Predict each frame* takes the most probable
+  solution. A step can move when the cutoff or pass direction changes.
+- **Smooth across frames (hidden Markov model)** uses evidence from the series to select a path through the Predict
+  solutions. **Log step per frame (s)** sets the expected scale of change between selected frames. The default, 0.1,
+  corresponds to about 10%. A smaller value favours smoother paths and can suppress a short-lived change.
+  While frames are arriving, their initial choices use each frame alone. When the queue empties, GIMaP computes
+  the path. With **Watch for new curves**, later arrivals can revise earlier choices.
 - Then **Start** in the command bar. **Pause** and **Stop** act after the frame being fitted; Stop during
   reading skips that frame's fit as described above. The frames done are kept. A project cannot be opened while a series runs (Stop first). A run started before the stages were found
   uses none (it says so).
@@ -2804,7 +2809,14 @@ current frame finish before pausing. Completed results stay available.
   *… (the chain broke: why)* when the continued fit was still the better one, or *from the model in Single
   analysis*. **Flags** says what to know before trusting the row: failed, not converged, a poor fit, values at a
   bound of their range, the beam tail at an edge, a value the curve does not determine.
-- Below the frame plot: one value against the frame (or χ²ᵣ), with ±1σ error bars, in the colours of the stages.
+- For a Predict run or restart, **Chosen by** identifies the rule and reference frame. **Rank**, **p chosen** and
+  **p max** refer to the single-frame evidence (rank 1 is most probable). **p smoothed** gives the probability of the
+  path's state given the series. Discarded restarts are labelled. The line below the table gives the run's rules.
+  Projects saved before these probabilities were recorded leave the corresponding cells empty.
+- The trend shows posterior medians and central 68% intervals for parameters with a Predict posterior.
+  Select **Least squares** to overlay the selected solution's least-squares point as a small open symbol.
+  The interval excludes uncertainty about which solution to keep. Parameters fitted only by least squares retain
+  their fitted values and standard errors.
   The plot is titled with the name of the series. When the curves say when their frames were measured (curves for
   Fitting that Analyze wrote of frames with a time stamp), the box beside the value draws it against **Time (s)**
   since the first fitted frame.
@@ -2814,7 +2826,11 @@ current frame finish before pausing. Completed results stay available.
   left-out points, method, every frame's state, reason and the unit its q was read in (`q_unit`, `q_unit_from`;
   `q_unit_of_files` is the setting for files without one), the poor fits (χ²ᵣ above 10) and which curves or frames
   were listed. The table ends with `flags`, `start_from` (previous, next, single or predict), `start_frame`,
-  `chain_break`, `predict_choice` and `fit_pass`, and the record says the start and the backward pass. **Fits as NXcanSAS…** writes, for every fitted
+  `chain_break`, `predict_choice` and `fit_pass`, and the record says the start and the backward pass.
+  For frames with predictions, the CSV includes the selected rank, single-frame probabilities, reference and smoothed
+  probability. The JSON stores the selection policy, all HMM state probabilities in rank order and the outcome of
+  each chained restart. **Save ▸ Series report…** writes these frame decisions and the chain-break thresholds as
+  a Markdown table with the source filenames. **Fits as NXcanSAS…** writes, for every fitted
   frame, the points fitted and the model at their q (one `.h5`, two entries per frame, each with the frame's
   record and its role, data or model; Q in 1/nm). **Results Database…** writes every frame's fit — state, χ²ᵣ, values and errors, flags, where
   it started — into `gimap_series.sqlite`; one in the folder of the curves or up to two folders above it (Analyze's,
@@ -4042,6 +4058,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Fitting ▸ Single analysis ▸ **Save ▸ Solutions…** (**Export Solutions…**) | `<curve>_solutions.csv` + `<curve>_solutions.json` (written as a pair) + `<curve>_solutions_curves.csv` | as Data and Fit | the JSON (the Data and Fit record with every solution, its values and intervals) |
 | Fitting ▸ **Save ▸ Plot…**, **Save ▸ Model…** | `<curve>_fit.png` / `.svg`; `<curve>_model.json` | as above | none; the model file |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
+| Fitting ▸ Batch / In-situ series ▸ **Save ▸ Series report…** | `series_fit.md` | series folder | frame decisions, probabilities and run settings |
 | Fitting ▸ Batch / In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
 | **Tools ▸ 1D Predict — Fit Many Curves…** | a run folder: `request.json`, `batch_summary.json` …, a subfolder per curve with `solutions.json`, `fitting_curves.csv` … | `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder; never removed automatically | `request.json` |
 | Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from (while it is there), else your home folder | `#` header lines and the JSON |

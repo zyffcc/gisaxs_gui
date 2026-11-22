@@ -8,42 +8,19 @@ previous frame's among those about as probable (``closest``). Stop cancels the f
 
 from __future__ import annotations
 
-import math
+from src.gimap.app.presentation.i18n import tr, trf
 
-from src.gimap.app.presentation.i18n import tr
-
+from ...application.series_selection import CLOSE_ENOUGH, FramePredictor, closest_index, ranked, smoothed_fits
 from ...application.single_predict import MAX_PARTICLES, predict_request, predicted
 
 METHODS = ("local", "global", "predict")
 NOT_PREDICT = "Predict each frame needs 1–3 particles in Single analysis' model."
-CLOSE_ENOUGH = 0.2
-"""Following the previous frame, Predict keeps the solution closest to it among those at least this share of the most
-probable one's probability."""
 
 
 def closest(solutions, previous_model):
-    """The most probable solution, or with a previous frame's model the closest of those about as probable (sizes and
-    distances compared in ln, the components by radius)."""
-    if not solutions:
-        raise RuntimeError("Predict parameters found no solution for this frame")
-    if previous_model is None:
-        return solutions[0]
-    top = max(s.probability for s in solutions)
-
-    def distance(model):
-        own = sorted(model.components, key=lambda c: c.value("R"))
-        other = sorted(previous_model.components, key=lambda c: c.value("R"))
-        if len(own) != len(other):
-            return float("inf")
-        total = 0.0
-        for a, b in zip(own, other):
-            for key in ("R", "D"):
-                if key in a.keys() and key in b.keys():
-                    total += abs(math.log(a.value(key) / b.value(key)))
-        return total
-
-    near = [s for s in solutions if s.probability >= CLOSE_ENOUGH * top]
-    return min(near, key=lambda s: distance(s.model))
+    """Most probable without a reference, otherwise the closest eligible mode in log coordinates."""
+    ordered = ranked(solutions)
+    return ordered[closest_index(ordered, previous_model, CLOSE_ENOUGH)]
 
 
 class FitSeriesPredictMixin:
@@ -51,10 +28,28 @@ class FitSeriesPredictMixin:
     ``single`` (Single analysis), ``view_model`` and ``_stop``."""
 
     def setup_series_predict(self) -> None:
+        self.reset_smoothing()
         self._series_job = None
-        self.method_predict.toggled.connect(lambda _on: self.follow_check.setEnabled(self.predicts_frames()
-                                                                                     and not self.independent_samples()))
-        self.follow_check.setEnabled(self.predicts_frames())
+        self.follow_check.toggled.connect(lambda on: self.smooth_check.setChecked(False) if on else None)
+        self.smooth_check.toggled.connect(lambda on: self.follow_check.setChecked(False) if on else None)
+        self.smooth_check.toggled.connect(lambda _: self._remember_choices())
+        self.smooth_scale.valueChanged.connect(lambda _: self._remember_choices())
+
+    def _smooth_active(self) -> bool:
+        return self.predicts_frames() and self.smooth_check.isChecked() and not self.independent_samples()
+
+    def _update_continuity_controls(self) -> None:
+        ordered = not self.independent_samples()
+        self.follow_check.setEnabled(self.predicts_frames() and ordered and not self.start_same.isChecked())
+        self.smooth_check.setVisible(self.predicts_frames())
+        self.smooth_check.setEnabled(ordered)
+        self.scale_row.setVisible(self._smooth_active())
+        self.backward_check.setEnabled(ordered and not self._smooth_active())
+
+    def _restore_continuity(self, state) -> None:
+        self.follow_check.setChecked(bool(state.get("follow", True)))
+        self.smooth_check.setChecked(bool(state.get("smooth", False)) and not self.independent_samples())
+        self.smooth_scale.setValue(float(state.get("smooth_scale", 0.1)))
 
     def predicts_frames(self) -> bool:
         return self.method_predict.isChecked()
@@ -95,10 +90,63 @@ class FitSeriesPredictMixin:
     def predictor(self, settings, previous, new_stage: bool):
         """``predict(data, start)`` for ``fit_frame``: Predict parameters on one frame (the particles of ``start``),
         the solution ``closest`` to the previous frame's model when asked to follow it."""
-        follows = settings.follow and settings.start != "same" and not new_stage
-        previous_model = previous.result.model if follows and previous is not None and previous.ok else None
-        solutions = self.predict_solutions()
-        return lambda data, start: closest(solutions(data, start), previous_model).model
+        follows = settings.follow and not settings.smooth and settings.start != "same" and not new_stage
+        return FramePredictor(self.predict_solutions(), previous if follows and previous is not None and previous.ok else None)
+
+    def reset_smoothing(self):
+        self._frame_modes = {}
+        self._independent_fits = {}
+        self._smooth_dirty = False
+        self._smoothing_error = ""
+
+    def remember_modes(self, frame, predictor):
+        """The GUI thread receives a completed worker's modes, including replacement files in Watch."""
+        if self._settings.smooth and predictor is not None:
+            self._frame_modes[frame.index] = predictor.ordered
+            self._independent_fits[frame.index] = frame
+            self._smooth_dirty = True
+
+    def _publish_modes(self, updates):
+        if all(self.fits.get(index) is frame for index, frame in updates.items()):
+            return
+        self.fits.update(updates)
+        self._unsaved = self._unsaved or any(frame.fitted for frame in updates.values())
+        self._rebuild_results()
+        self._mark_stages()
+        if self._selected is not None:
+            self._select(self._selected)
+        self._draw_trend()
+        self.refresh()
+
+    def begin_smoothing(self):
+        """Apply a joint selection when the queue drains, and again when Watch adds or replaces frames."""
+        if not self._smooth_dirty:
+            return False
+        self._smooth_dirty = False
+        fits, modes, curves = dict(self.fits), dict(self._frame_modes), dict(self._curves)
+        settings, epoch, stop = self._settings, self._loading_epoch, self._stop.is_set
+        boundaries = set()
+        if settings.start == "stages":
+            ordered = sorted(fits)
+            boundaries = {b for a, b in zip(ordered, ordered[1:]) if self.stage_of_frame(a) != self.stage_of_frame(b)}
+
+        def done(updates):
+            if self._loading_current(epoch) and self.running:
+                self._smoothing_error = ""
+                self._publish_modes(self._independent_fits if stop() else updates)
+                self._next()
+
+        def failed(message, _details):
+            if self._loading_current(epoch) and self.running:
+                self._publish_modes(self._independent_fits)
+                self._smoothing_error = message
+                self._log(trf("Series smoothing failed: {error}", error=tr(message)))
+                self._next()
+
+        self._status(lambda: tr("Smoothing the Predict solutions across frames…"))
+        self.tasks.submit("series-hmm", lambda: smoothed_fits(fits, modes, curves, settings, boundaries, stop),
+                          on_done=done, on_error=failed)
+        return True
 
     def cancel_series_job(self) -> None:
         if self._series_job:
