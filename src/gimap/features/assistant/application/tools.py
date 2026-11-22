@@ -17,6 +17,8 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
+from src.gimap.shared.radial_peaks import orientation_half_width
+
 from ..domain import (
     DEFAULT_BACKGROUND_WINDOW,
     DEFAULT_SHAPE_FACTOR,
@@ -50,9 +52,6 @@ from .pipeline_phases import fit_ring_pole, ring_step_summary
 from .pipeline_progress import FrameChanged
 from .ports import AnalysisWorkbench, Chooser, Confirmer, CurveFitter, FileExplorer, GeometryCalibrator, ResultStore
 from .tool_specs import FINAL, WRITE, tool_specs
-
-HALO_HALF_WINDOW = 0.04
-"""Largest half width of a ring window around a broad halo, as a fraction of its q."""
 
 _TYPES = {
     "number": (int, float),
@@ -469,10 +468,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         if q_half_width is not None and q_half_width > 0:
             half = float(q_half_width)
         elif peak is not None:
-            half = max(0.75 * peak.fwhm, 2.0 * search.step)
-            if "broad" in peak.flags:
-                # A wide window reaches the detector edges at some χ and mixes q there.
-                half = min(half, HALO_HALF_WINDOW * peak.q)
+            half = orientation_half_width(peak, search.step)
         else:
             half = 0.015 * center
         low, high = center - half, center + half

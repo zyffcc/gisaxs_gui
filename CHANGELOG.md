@@ -744,6 +744,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Analyze
 
+- With phases loaded, Analyze and Run Automatic Analysis fit a shared crystal fibre texture to each phase's assigned GIWAXS rings. The Pole Figure tab shows how each reflection family contributes, with mosaic width, oriented fraction, competing axes and per-ring residuals.
+
 - **Flat field (detector response).** Mask & corrections ▸ Corrections has a **Flat field** (**Choose…**, **×**;
   off by default; GISAXS and GIWAXS): every frame is divided by a detector image of its size (CBF, TIFF, EDF,
   NeXus/HDF5) or a `.npy` array, normalised to mean 1 over the pixels it keeps; pixels where it is at or below

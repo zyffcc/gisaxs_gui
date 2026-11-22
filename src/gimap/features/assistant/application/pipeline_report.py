@@ -16,6 +16,8 @@ from ..domain import AT_EDGE
 from .calibration_report import calibration_quality, calibration_rms
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
+from .pipeline_crystal import crystal_lines, compact_crystal
+from .report_numbers import _number, _fixed, _pm
 from .pipeline_phases import assignment_lines, pole_line
 from .report_language import ENGLISH, heading as section
 from .run_record import mask_lines, record_lines
@@ -44,29 +46,9 @@ def compact_report(report: dict) -> dict:
             {**peak, "fit": {key: value for key, value in peak["fit"].items() if key not in ("x", "y", "sigma")}}
             if peak.get("fit") else peak for peak in compact["peaks"]
         ]
+    if report.get("crystal_orientation"):
+        compact["crystal_orientation"] = [compact_crystal(phase) for phase in report["crystal_orientation"]]
     return compact
-
-
-def _number(value, digits: int = 4) -> str:
-    if value is None:
-        return "—"
-    if isinstance(value, float):
-        return f"{value:.{digits}g}"
-    return str(value)
-
-
-def _fixed(value, decimals: int) -> str:
-    """A number with a fixed number of decimals ("—" when there is none): one precision per table column."""
-    return "—" if value is None else f"{float(value):.{decimals}f}"
-
-
-def _pm(value, error, decimals: int) -> str:
-    """``value ± error`` with the column's decimals; an error smaller than they show keeps one significant digit."""
-    text = _fixed(value, decimals)
-    if value is None or not isinstance(error, (int, float)) or not error > 0:
-        return text
-    shown = f"{float(error):.{decimals}f}"
-    return f"{text} ± {shown if float(shown) > 0 else f'{float(error):.1g}'}"
 
 
 PIXEL_DECIMALS = 2
@@ -281,6 +263,8 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: st
             lines += [_hints_title(report) + ": " + "; ".join(hints), ""]
         if assignment_lines(report):
             lines += [section("Phase assignment", language), "", *assignment_lines(report), ""]
+        if report.get("crystal_orientation"):
+            lines += [section("Crystal orientation", language), "", *crystal_lines(report["crystal_orientation"])]
         lines += [section("Ring orientation", language), "", *_ring_lines(report.get("rings") or []), ""]
     lines += [section("Decisions", language), ""]
     lines += [f"- **{item['what']}**: {item['decision']} — {item['why']}" for item in report.get("decisions") or []]

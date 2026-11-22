@@ -120,6 +120,7 @@ The public GALAXI worked example gives q₊R = 3.13 for the 5.99 nm upright cyli
 | `pyfai_comparison.py` | GIMaP against pyFAI on the public frames: |q|, 2θ, q∥, q_z, solid angle and polarisation of every pixel, and the azimuthal I(q) on the same pixels and bins (Physics and Methods 3.7, 6.1). Needs pyFAI, which GIMaP does not install | `pyfai_comparison.json` |
 | `calibration_check.py` | Geometry Calibration checked (section below): GIMaP's calibration of the public pyFAI silver behenate frame against pyFAI's own calibration of the same frame, what GIMaP minimises and which 1σ it reports, and how often that 1σ covers the truth on simulated frames of known geometry (`calibration_coverage.py`). Part 1 needs pyFAI | `calibration_check.json`; every simulated frame in `per_cut/calibration_check_frames.json.gz` |
 | `pygid_comparison.py` | GIMaP against pygid on its two example frames: q∥ and q_z of every pixel, and the rings of pygid's polar map; with `--published DIR`, also the maps published with the examples (Zenodo 10.5281/zenodo.17466183) (Physics and Methods 3.7). Needs pygid | `pygid_comparison.json` |
+| `crystal_orientation.py` | Joint fits to Poisson draws of known MAPbI₃ and PbI₂ fibre textures and to the public P08 MAPbI₃ frame, using the supplied CIFs | [Results below](#crystal-orientation) |
 | `make_external_reference.py` | writes `tests/data/external/reference_values.json`: pyFAI's and pygid's q at fixed pixels of the public frames, which `tests/test_external_reference.py` checks GIMaP against without either installed. Needs pyFAI and pygid | `tests/data/external/reference_values.json` |
 | `galaxi_fit.py` | Fitting on the measured GALAXI cut, sphere and paracrystal (EIA or two paths, LMA or DA, with BornAgain's D held or free) (Physics and Methods 9.10) | `galaxi_fit.json` |
 | `galaxi_fit1d.py` | fit1d (removed in 0.2.0; a copy of the kit in `utils/gisaxs1d_gui_kit`) on the measured GALAXI cut and on BornAgain's model of it: one sphere in Born or DWBA, and the composition chosen by fit1d (Physics and Methods 9.12). Needs BornAgain | `galaxi_fit1d.json` |
@@ -303,3 +304,63 @@ points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife
 `posterior_newseed_auto2` repeats the stage `auto` on the same 300 cuts after the automatic analysis was changed to fit at the second level when it knows both angles (commit f73d9c8): the true composition is the most probable in 75 % of the cuts (27 % at the first level) and the median error of R is 0.8 % (13 %).
 
 `posterior_dwba_auto2` (commit 9c90e6a): with DWBA truth the automatic analysis's call chooses the true composition in 31 % of the cuts; by the largest q_zR of a cut: 80 % (median |ΔR/R| 1 %) at 1.2–1.7, 29 % (10 %) at 1.7–2.3 and 23 % (9 %) above 2.3; cuts of spheres alone 9 %, of cylinders alone 78 %. The q_zR flags of Predict mark the solutions above these limits.
+
+## Crystal orientation
+
+Run `python tools/benchmarks/crystal_orientation.py --part all --trials 32 --json results.json` in the GIMaP environment.
+The JSON contains the public automatic-analysis report and the estimates and 1σ errors for each synthetic draw.
+
+**Synthetic rings.** The generator integrates an antipodal Gaussian directly using 96-point azimuthal and
+16-point within-bin Gauss quadrature. Each of the three rings has its own intensity scale and a known constant
+background. Each generated reflection contributes its kinematic |F|². Two independent Poisson draws for ±χ
+are folded with the measured count errors. The low-angle wedge (|χ| < 5°), a detector gap (42–45°) and
+bins below αf = 0.30° are removed for a simulated wavelength of 1 Å and αi = 0.15°.
+Width and isotropic fraction are shared across all three rings. Each run searches the full set of candidate
+axes and compares fixed and free family weights. Since the oriented fraction is 1 − φ, it has the same interval
+coverage as φ.
+
+With 32 draws per phase (seeds 41027–41058), all 64 selected models included the true axis. Of the 59 fits
+classified as determined, every one selected the true single axis. The other five selected an additional
+axis with insufficient ΔBIC. Coverage counts below include every draw, including these five.
+
+| Phase | True axis | True FWHM | True φ | Correct single axis | FWHM within 1σ | φ within 1σ |
+|---|---|---:|---:|---:|---:|---:|
+| MAPbI₃ | (110) | 16° | 0.380 | 29/32 | 21/32 (66%) | 19/32 (59%) |
+| PbI₂ | (001) | 22° | 0.290 | 30/32 | 21/32 (66%) | 17/32 (53%) |
+
+At 32 draws the binomial standard error near 68% coverage is 8 percentage points. Mean fitted widths were
+16.009° and 21.991° and mean isotropic fractions were 0.3777 and 0.2885, respectively. Isotropic fraction
+errors undercovered in this test. The profiles use inverse variances estimated from the observed counts.
+
+**Public P08 frame.** The benchmark opens the dark-subtracted floating-point frame in offscreen Analyze, applies
+its manifest incidence angle (0.075°), and runs automatic analysis with the supplied PONI and the two
+CIFs in `tests/data/crystal/`. The PONI gives λ = 0.688801 Å and rotations (0.300556°, 0.063019°, 0°).
+The usual 12-peak search assigns 11 peaks. The orientation profiles use the pixel-scatter errors, local ring
+backgrounds, αf ≥ 0.15° and polarization 0.99. The old strongest-ring Gaussian fit gives χ²red = 31.16.
+
+| Phase | Best axes | Runner-up axes | ΔBIC | FWHM (°) | Oriented (%) | Isotropic (%) | Crystal f | Joint χ²red |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| MAPbI₃ | (001) + (112) | (212) + (001) | 247.71 | 29.38 ± 0.98 | 18.58 ± 3.05 | 81.42 ± 3.05 | 0.161 | 10.94 |
+| PbI₂ | (001) + (102) | (001) + (112) or (001) + (2 −1 2) | 44.71 | 31.26 ± 0.99 | 77.88 ± 10.96 | 22.12 ± 10.96 | 0.664 | 2.02 |
+
+The MAPbI₃ joint fit fails the goodness-of-fit threshold. Even with free family weights, the strongest ring has
+χ²red = 25.39. The fit gives its entire doublet weight to 002, compared with a kinematic fraction of 0.351.
+Its selected axes and fractions are diagnostic estimates. The PbI₂ result satisfies the selection criteria
+among the tested axes, but only its 001 ring was assigned. The two runner-up solutions have the same
+interplanar angle to this reflection. A second PbI₂ ring would independently test the
+inferred orientation. The local pygid example materials describe the preparation and radial peaks and give
+no independent fibre axis or mosaic width for this frame.
+
+| Phase | Ring q (Å⁻¹) | Families in extraction window | Ring χ²red | Measured ring f |
+|---|---:|---|---:|---:|
+| MAPbI₃ | 0.9972 | 002, 110 | 25.39 | 0.142 |
+| | 1.4091 | 112, 200 | 4.07 | 0.161 |
+| | 1.7247 | 202 | 9.14 | 0.159 |
+| | 1.9902 | 004, 220 | 19.21 | 0.094 |
+| | 2.2255 | 114, 222, 310 | 14.05 | 0.075 |
+| | 2.4382 | 204, 312 | 3.64 | 0.130 |
+| | 2.8148 | 224, 400 | 9.59 | 0.069 |
+| | 2.9854 | 006, 314, 402, 330 | 8.98 | 0.074 |
+| | 3.4480 | 404 | 4.74 | 0.293 |
+| | 4.1040 | 118, 523, 406, 514, 442 | 2.75 | 0.376 |
+| PbI₂ | 0.8989 | 001 | 2.02 | 0.494 |

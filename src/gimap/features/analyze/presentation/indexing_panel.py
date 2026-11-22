@@ -6,8 +6,6 @@ Analyze's I(χ) window (points, unmeasured bins left out) and the fitted distrib
 
 from __future__ import annotations
 
-import json
-import math
 from pathlib import Path
 from typing import Optional
 
@@ -19,9 +17,11 @@ from src.gimap.app.presentation.components.toast import show_toast
 from src.gimap.app.presentation.i18n import language_changed, tr, trf
 from src.gimap.app.presentation.theme import theme_color, theme_manager
 
-from ..application.export_record import analysis_metadata, export_stem
+from ..application.export_record import export_stem
 from ..application.indexing import POWDER, PhaseSpec, table_rows
-from ..application.pole_figure import pole_figure, pole_figure_csv
+from ..application.pole_figure import pole_figure
+from .crystal_orientation_panel import CrystalOrientationMixin
+from .indexing_export import write_crystal_export, write_pole_export
 from .indexing_texts import (
     MODEL_NAMES,
     orientation_text,
@@ -47,7 +47,7 @@ def _number(value, digits: int) -> str:
     return "" if value is None or not np.isfinite(value) else f"{value:.{digits}f}"
 
 
-class IndexingPanel(QDialog, IndexingView):
+class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
     def __init__(self, page: QWidget):
         super().__init__(page)
         self.setWindowFlag(Qt.Tool, True)
@@ -76,13 +76,16 @@ class IndexingPanel(QDialog, IndexingView):
         self.direction_combo.currentIndexChanged.connect(self._direction_chosen)
         self._direction_chosen()
         self._displayed_pole = None
+        self._setup_crystal_orientation()
         language_changed().connect(self._refresh_language)
         theme_manager().changed.connect(self._theme_changed)  # the warning colour of a phase
         self._fill_settings()
 
     def _refresh_language(self, *_args) -> None:
         self.refresh()
-        if self._displayed_pole is not None:
+        if self._crystal_mode():
+            self._show_crystal_ring()
+        elif self._displayed_pole is not None:
             self._show_pole(self._displayed_pole)
 
     def _theme_changed(self, *_args) -> None:
@@ -238,6 +241,7 @@ class IndexingPanel(QDialog, IndexingView):
         self._fill_editor()
         self._fill_reflections()
         self.ring_label.setText(ring_text(self._page.view_model.state.analysis))
+        self._refresh_crystal_options()
         self.reflected_check.setEnabled(self.refraction_check.isChecked())
         self.critical_spin.setEnabled(self.refraction_check.isChecked())
 
@@ -285,6 +289,9 @@ class IndexingPanel(QDialog, IndexingView):
 
     def fit_pole(self) -> None:
         """Fit the pole figure of the ring in Analyze's I(χ) window (on the task runner)."""
+        if self._crystal_mode():
+            self._fit_crystal_orientation()
+            return
         analysis = self._page.view_model.state.analysis
         background = None if self.background_check.isChecked() else self.background_spin.value()
         model, direction = self.model_combo.currentData(), self._direction()
@@ -300,7 +307,8 @@ class IndexingPanel(QDialog, IndexingView):
     def _pole_ready(self, result) -> None:
         self.model.last_pole = result
         self._displayed_pole = result
-        self._show_pole(result)
+        if not self._crystal_mode():
+            self._show_pole(result)
 
     def _show_pole(self, result) -> None:
         self.pole_plot.set_labels("χ (°)", tr("N(χ) ∝ crystallites per degree"))
@@ -331,46 +339,26 @@ class IndexingPanel(QDialog, IndexingView):
     def _export(self) -> None:
         analysis = self._page.view_model.state.analysis
         result = self.model.last_pole
-        if analysis is None or result is None:
+        crystal = self._crystal_mode()
+        ring = self._selected_crystal_ring() if crystal else None
+        if analysis is None or (crystal and ring is None) or (not crystal and result is None):
             self.status_label.setText(tr("Fit a pole figure first."))
             return
         folder = self._page.view_model.default_export_dir() or Path.home()
-        suggested = str(folder / f"{export_stem(analysis)}_pole_figure.csv")
+        suffix = "_crystal_orientation" if crystal else "_pole_figure"
+        suggested = str(folder / f"{export_stem(analysis)}{suffix}.csv")
         path, _filter = QFileDialog.getSaveFileName(self, tr("Export Pole Figure"), suggested, tr("CSV files (*.csv)"))
         if not path:
             return
-        written = write_pole_export(Path(path), analysis, result, self.model.record(analysis.geometry))
+        indexing = self.model.record(analysis.geometry)
+        if crystal:
+            phase = self._crystal_result[self.crystal_ring_combo.currentData()[0]]
+            written = write_crystal_export(Path(path), analysis, indexing, self._crystal_result, phase, ring)
+        else:
+            written = write_pole_export(Path(path), analysis, result, indexing)
         show_toast(self._page, trf("Wrote {name} and its record", name=written[0].name), level="ok",
                    action=(tr("Open Folder"), lambda: _open_folder(written[0].parent)))
         self.status_label.setText(trf("Wrote {files}.", files=", ".join(str(item) for item in written)))
-
-
-def write_pole_export(path: Path, analysis, result, indexing: dict) -> list[Path]:
-    """The pole figure as CSV at ``path`` and ``<stem>_indexing.json`` beside it (phases, reflections, fit)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    record = analysis_metadata(analysis)
-    header = {"source": record.get("source") or str(analysis.path), "frame": record.get("frame"),
-              "geometry": json.dumps(record.get("geometry"), ensure_ascii=False, default=str)}
-    path.write_text(pole_figure_csv(result, header), encoding="utf-8")
-    json_path = path.with_name(path.stem.replace("_pole_figure", "") + "_indexing.json")
-    payload = {"kind": "GIMaP indexing and pole figure", "analysis": record, "indexing": indexing,
-               "pole_figure": result.record()}
-    json_path.write_text(json.dumps(_finite(payload), ensure_ascii=False, indent=1, default=str), encoding="utf-8")
-    return [path, json_path]
-
-
-def _finite(value):
-    if isinstance(value, dict):
-        return {str(key): _finite(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_finite(item) for item in value]
-    if isinstance(value, (float, np.floating)):
-        return float(value) if math.isfinite(float(value)) else None
-    if isinstance(value, np.integer):
-        return int(value)
-    if isinstance(value, np.ndarray):
-        return _finite(value.tolist())
-    return value
 
 
 def _color(name: str):

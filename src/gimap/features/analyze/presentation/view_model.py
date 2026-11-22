@@ -101,6 +101,10 @@ class AnalyzeViewModel(
 
     # -- files (listing and the folder watch: ``sources_model.py``) -------------------------
 
+    @property
+    def frames(self) -> FrameSource:
+        return self._frames
+
     def request_for(
         self, path: Path, frame_index: int = 0, *, summed: Optional[tuple] = None
     ) -> AnalysisRequest:

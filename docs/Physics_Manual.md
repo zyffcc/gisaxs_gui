@@ -1618,6 +1618,8 @@ Implementation: `src/gimap/features/assistant/domain/orientation.py`
 
 ### 7.7 Ring orientation and the Hermans orientation factor
 
+With a phase assignment the same ring profiles also constrain the joint crystal orientation in §7.11.
+
 **Ring window.** The ring is centred on the fitted q_0 of the nearest radial peak (when one lies within
 `max(2 FWHM, 3 Δq)` of the requested q), with the half width
 
@@ -1987,6 +1989,26 @@ fraction, a background constant in χ and the sin χ measure on the hemisphere. 
 
 Implementation: `src/gimap/features/analyze/domain/crystal/pole_figure.py`, `pole_models.py`,
 `src/gimap/features/analyze/application/pole_figure.py`
+
+#### Crystal orientation from assigned rings
+
+For a given phase, all usable assigned rings in the radial peak search constrain the same crystal texture. The three-ring default in §7.5 applies to the individual ring summaries. The joint fit uses each peak's I(χ) extraction window (§7.7), local background, exit-angle selection, measured-bin mask and uncertainties. A window containing allowed reflections of another visible phase is listed among the exclusions. A positions-only CIF with unknown symmetry cannot supply an orientation assignment. A cell with no atom sites uses unit intensity for each allowed reflection.
+
+Let **n** be a reciprocal-lattice plane normal. For a unit reflection vector **ĝ** in ring r, ψ = arccos|**ĝ**·**n**|. With mosaic FWHM w, set s = w / √(8 ln 2) in radians. The antipodal spherical Gaussian K describes the distribution of **n** about the sample normal. Its normalisation C gives a mean density of one on the hemisphere. Uniform rotation around **n** gives the pole density G of **ĝ**:
+
+```text
+K(γ) = C {exp[−γ²/(2s²)] + exp[−(π−γ)²/(2s²)]},    ∫₀^{π/2} K(γ) sin γ dγ = 1
+G(χ,ψ) = (1/2π) ∫₀^{2π} K(arccos[cos χ cos ψ + sin χ sin ψ cos α]) dα
+N_r(χ) = A_r sin χ {φ + (1−φ) Σ_a t_a Σ_g W_rg G(χ,ψ_ga)},    Σ_a t_a = Σ_g W_rg = 1
+```
+
+The sum includes every allowed equivalent reflection in the extraction window. Each individual pole contributes |F|² (§7.10), so a family of multiplicity m has total weight m|F|² before normalisation. The alternative fit estimates nonnegative family weights independently for each ring and keeps the calculated proportions within a family. The family curves include their shares of the isotropic signal and add up to the plotted fit. Even Legendre moments evaluate the spherical average. The prediction is averaged over each 1° bin. Each ring has its own scale A_r. The width w and isotropic fraction φ are shared across rings and, in a mixture, across both oriented populations.
+
+The search compares isotropic material with one or two distinct fibre axes. Candidates are primitive (hkl) with |h|, |k|, |l| ≤ 2, grouped by the phase symmetry and inversion. The width range is 2°–120°, from twice the bin size to a broad distribution. For N measured bins and k fitted parameters, BIC = Σ[(N_obs − N_fit)/σ]² + k ln N. The count includes each scale, w, φ, one mixing fraction for two axes and one parameter per extra family weight when freed. Each axis set keeps its better weighting model. A pair must improve on both its constituent single axes to enter the ranking.
+
+An orientation is **determined** when the joint and every ring's reduced χ² are ≤ 5, the next distinct orientation or isotropic model is at least 6 BIC units worse, and the fitted parameters are identifiable with the width away from its limits and φ below the isotropic limit. The χ² ceiling follows the single-ring residual check. The BIC gap corresponds approximately to a 20:1 evidence ratio under the independent-bin likelihood. Per-ring degrees of freedom subtract that ring's share of the weighted Jacobian leverage. Conditional 1σ errors use the full parameter covariance scaled by max(1, χ²_red). Background, phase assignment, model selection and systematic error in |F|² are outside these errors.
+
+The fitted crystal Hermans factor is (1−φ) ∫ K(γ) P₂(cos γ) sin γ dγ over the hemisphere, with P₂(x) = (3x²−1)/2. In a mixture γ refers to each population's own fibre axis. Each ring also retains its model-free f over the measured bins (§7.7). An undetermined fit still reports the candidate parameters and ring residuals for inspection.
 
 ## 8. GISAXS automatic analysis
 

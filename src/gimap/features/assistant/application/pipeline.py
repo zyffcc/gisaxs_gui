@@ -454,9 +454,12 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         if search is None or not search.peaks:
             reason = search.reason if search is not None else "the radial curve could not be searched"
             self._decide("peaks", "none", reason)
+            if search is not None:
+                self._assign(search)
+                self._fit_crystal_orientation()
             return
         self._run.decisions.append(uncertainty_decision(status.get("error_model"), corrections=status.get("corrections")))
-        self._assign(search.peaks)
+        self._assign(search)
         self._call("compare_sectors")
         reliable = [peak for peak in search.peaks if is_reliable(peak)]  # no caveat, not cut off at the end of the data
         chosen = sorted(reliable, key=lambda peak: -peak.area)[: max(0, int(self.options.rings))]
@@ -480,6 +483,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         for decision in (texture_rule_decision(rings), horizon_decision(rings)):
             if decision is not None:
                 self._run.decisions.append(decision)
+        self._fit_crystal_orientation()
 
     # -- report ----------------------------------------------------------------------
 

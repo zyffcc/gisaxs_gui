@@ -183,6 +183,12 @@ def test_the_automatic_analysis_assigns_the_rings_and_fits_their_pole_figures(tm
             assert 0.0 <= pole["oriented_fraction"] <= 1.0 and pole["oriented_fraction_err"] >= 0.0
         markdown = pipeline_markdown(report)
         assert "## Phase assignment" in markdown and "pole figure (Gaussian + isotropic)" in markdown
+        assert "## Crystal orientation" in markdown and "measured ring f" in markdown
+        from src.gimap.features.assistant.application.pipeline_report import compact_report
+
+        ring = compact_report(report)["crystal_orientation"][0]["rings"][0]
+        assert "fitted" not in ring and "values" not in ring["components"][0]
+        assert ring["components"][0]["hkl"] and ring["effective_dof"] > 0
         assert "Phases: the nearest reflection of the phases given" in markdown
         assert "ambiguous" in markdown and "Δd/d =" in markdown and "Å⁻¹ unassigned" in markdown
         assert session.page.reflection_count() > 0  # the phases given are drawn in Analyze too

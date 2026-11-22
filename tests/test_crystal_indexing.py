@@ -57,40 +57,9 @@ from src.gimap.shared.geometry.q_inverse import q_of_positions
 DATA = Path(__file__).parent / "data" / "external"
 MANIFEST = json.loads((DATA / "manifest.json").read_text(encoding="utf-8")) if (DATA / "manifest.json").exists() else {}
 
-I4MCM = ["x,y,z", "-x,-y,z", "-y,x,z", "y,-x,z", "-x,y,-z+1/2", "x,-y,-z+1/2", "y,x,-z+1/2", "-y,-x,-z+1/2",
-         "-x,-y,-z", "x,y,-z", "y,-x,-z", "-y,x,-z", "x,-y,z+1/2", "-x,y,z+1/2", "-y,-x,z+1/2", "y,x,z+1/2"]
-
-
-def _centred(operations: list[str]) -> list[str]:
-    return operations + [",".join(f"{part}+1/2" for part in operation.split(",")) for operation in operations]
-
-
-MAPI_CIF = "\n".join([
-    "# tetragonal MAPbI3, the inorganic framework only (Pb, I); cell and I2 x as commonly reported",
-    "data_mapbi3",
-    "_chemical_name_common 'MAPbI3 (tetragonal)'",
-    "_cell_length_a 8.874(2)", "_cell_length_b 8.874(2)", "_cell_length_c 12.671(3)",
-    "_cell_angle_alpha 90", "_cell_angle_beta 90", "_cell_angle_gamma 90",
-    "_symmetry_space_group_name_H-M 'I 4/m c m'",
-    "loop_", "_symmetry_equiv_pos_site_id", "_symmetry_equiv_pos_as_xyz",
-    *[f"{index + 1} '{operation}'" for index, operation in enumerate(_centred(I4MCM))],
-    "loop_", "_atom_site_label", "_atom_site_type_symbol", "_atom_site_fract_x", "_atom_site_fract_y",
-    "_atom_site_fract_z", "_atom_site_occupancy", "_atom_site_U_iso_or_equiv",
-    "Pb1 Pb2+ 0 0 0 1 0.02",
-    "I1 I1- 0 0 0.25 1 0.04",
-    "I2 I1- 0.2142 0.7142 0 1 0.04",
-    "",
-])
-PBI2_CIF = "\n".join([
-    "data_PbI2", "_cell_length_a 4.557", "_cell_length_b 4.557", "_cell_length_c 6.979",
-    "_cell_angle_alpha 90", "_cell_angle_beta 90", "_cell_angle_gamma 120",
-    "_space_group_name_H-M_alt 'P -3 m 1'",
-    "loop_", "_space_group_symop_operation_xyz",
-    "x,y,z", "-y,x-y,z", "-x+y,-x,z", "-y,-x,-z", "-x+y,y,-z", "x,x-y,-z",
-    "-x,-y,-z", "y,-x+y,-z", "x-y,x,-z", "y,x,z", "x-y,-y,z", "-x,-x+y,z",
-    "loop_", "_atom_site_label", "_atom_site_fract_x", "_atom_site_fract_y", "_atom_site_fract_z",
-    "Pb1 0 0 0", "I1 0.33333 0.66667 0.265", "",
-])
+CRYSTAL_DATA = Path(__file__).parent / "data" / "crystal"
+MAPI_CIF = (CRYSTAL_DATA / "MAPbI3_tetragonal.cif").read_text(encoding="utf-8")
+PBI2_CIF = (CRYSTAL_DATA / "PbI2.cif").read_text(encoding="utf-8")
 LAB6_CIF = "\n".join([
     "data_LaB6", "_cell_length_a 4.1569", "_cell_length_b 4.1569", "_cell_length_c 4.1569",
     "_symmetry_space_group_name_H-M 'P 1'",
@@ -119,6 +88,23 @@ def test_every_scattering_factor_row_sums_to_its_atomic_number() -> None:
         assert np.all(np.diff(values) < 0), element  # falls with q
     assert f0("C", 0.5 * 4 * math.pi) == pytest.approx(1.69, abs=0.01)  # sin θ/λ = 0.5 Å⁻¹ (ITC Table 6.1.1.1)
     assert f0("Po", 0.0) == pytest.approx(84.0, abs=0.1)  # not tabulated: Bi scaled by Z
+
+
+def test_another_phase_in_the_extracted_band_excludes_an_otherwise_unambiguous_assignment():
+    from src.gimap.features.analyze.application.crystal_orientation import frame_crystal_orientation
+
+    phases = [PhaseSpec("A", (6., 6., 6., 90., 90., 90.)),
+              PhaseSpec("B", (5.2, 5.2, 5.2, 90., 90., 90.))]
+    q = 2 * math.pi / 6.
+    peak = {"q": q, "fwhm": .01, "q_err": .0001, "q_window": [q - .02, 1.24]}
+    found = assign_peaks([peak], phases)
+    assigned, = found["assignments"]
+    assert assigned["phase"] == "A" and assigned["overlapping_phases"] == ["B"]
+    assert not assigned["alternatives"]  # the other phase is outside the radial tolerance
+    frame = SimpleNamespace(kind="giwaxs", geometry=object(), reduction=object())
+    a, b = frame_crystal_orientation(frame, phases, assignment=found)
+    assert not a["ok"] and a["excluded_rings"][0]["overlapping_phases"] == ["B"]
+    assert not b["ok"] and not b["rings"]
 
 
 def test_symmetry_operations_are_read_in_the_usual_notations() -> None:

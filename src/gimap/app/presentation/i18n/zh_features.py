@@ -8,6 +8,7 @@ from .zh_assistant_service import ASSISTANT_SERVICE_ZH
 from .zh_calibration_residuals import CALIBRATION_RESIDUALS_ZH
 from .zh_calibration_uncertainty import CALIBRATION_UNCERTAINTY_ZH
 from .zh_coverage_report import COVERAGE_REPORT_ZH
+from .zh_crystal_orientation import CRYSTAL_ORIENTATION_ZH
 from .zh_fit_data import FIT_DATA_ZH
 from .zh_flat_field import FLAT_FIELD_ZH
 from .zh_geometry import GEOMETRY_ZH
@@ -54,7 +55,7 @@ FEATURES_ZH = {
     **ZH_GEOMETRY_CUTS, **GEOMETRY_ORIENTATION_ZH, **ZH_GEOMETRY_TILT, **SERIES_CHAIN_ZH, **REVIEW_PHASES_ZH,
     **RING_ASSIGNMENT_ZH, **ORIENTATION_REDUCTION_ZH, **ORIENTATION_REPORT_ZH, **SERIES_SELECTION_ZH,
     **REDUCTION_ERRORS_ZH, **HORIZON_SELECTION_ZH, **REPRODUCTION_ZH, **JOINT_HEIGHT_ZH,
-    **COVERAGE_REPORT_ZH, **POLE_REFERENCE_ZH,
+    **COVERAGE_REPORT_ZH, **POLE_REFERENCE_ZH, **CRYSTAL_ORIENTATION_ZH,
 }
 
 __all__ = ["FEATURES_ZH"]

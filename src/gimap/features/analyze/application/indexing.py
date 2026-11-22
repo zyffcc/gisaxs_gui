@@ -353,15 +353,22 @@ def assign_peaks(peaks: Sequence[dict], specs: Sequence[PhaseSpec], q_max: Optio
     if not visible:
         return {"phases": [], "rule": "", "assignments": []}
     largest = max((float(peak.get("q") or 0.0) + float(peak.get("fwhm") or 0.0) for peak in peaks), default=0.0)
-    settings = IndexingSettings(q_max=max(float(q_max or 0.0), largest + 0.05, 0.5))
+    window_limit = max((max(peak["q_window"]) for peak in peaks if "q_window" in peak), default=0.0)
+    settings = IndexingSettings(q_max=max(float(q_max or 0.0), largest + 0.05, window_limit, 0.5))
     found = candidates(overlays(visible, settings, None))
+    observed = [peak for peak in peaks if peak.get("q")]
     triples = [(float(peak["q"]), float(peak.get("q_err") or math.nan), float(peak.get("fwhm") or math.nan))
-               for peak in peaks if peak.get("q")]
+               for peak in observed]
     loose = {spec.name for spec in visible if spec.positions_only}
     assignments = []
-    for item in assign_all(triples, found):
+    for item, peak in zip(assign_all(triples, found), observed):
         record = item.record()
         record["tentative"] = bool(record["phase"] in loose)  # positions only: no extinctions, no intensities
+        if "q_window" in peak:
+            low, high = peak["q_window"]
+            record["q_window"] = [low, high]
+            record["overlapping_phases"] = sorted({line.phase for line in found
+                                                   if low <= line.q <= high and line.phase != record["phase"]})
         assignments.append(record)
     return {
         "phases": [spec.record() for spec in visible],

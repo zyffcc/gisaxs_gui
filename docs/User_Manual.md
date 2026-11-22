@@ -2146,6 +2146,29 @@ The report also shows any weak |χ| interval excluded next to the exit-angle cut
 `gimap_analysis/` next to the data by default) and `<frame>_indexing.json` beside it: the phases (with the CIF and its
 SHA-256), the reflection table, the settings and the fit. The CSV header and JSON record include measured f, f_iso and the scenarios at the systematic limits.
 
+**Crystal orientation (from phase).** Show the phases to be tested in **Phases**. In **Pole Figure**, select
+**Crystal orientation (from phase)** under **Model**, then choose **Fit Crystal Orientation**. GIMaP searches I(q)
+for peaks and jointly fits the usable rings assigned to each phase. Each ring has its own local background and
+intensity scale. The fit shares the crystal orientation, mosaic width and isotropic fraction across those rings.
+To set the window for one ring, move the purple band over its peak before fitting. If the band spans several
+detected peaks, each keeps its own window. Automatic analysis calculates its ring windows from the radial peaks.
+The minimum exit angle and **Fit up to χ** restrict the measured bins. A window containing reflections from
+different phases is excluded. Reflections of the same phase in one window contribute to the same curve.
+
+Select a phase and q value under **Show ring**. Points are the measured N(χ), the solid line is the joint fit
+and the dashed lines show the individual reflection families, including their shares of the isotropic population.
+The legend gives each family's share of the ring intensity.
+The results give the leading and runner-up fibre axes, their ΔBIC, mosaic FWHM, oriented and isotropic fractions,
+and reduced χ² for the joint fit and the displayed ring. For a two-axis fit, the shares give each axis's
+percentage of the oriented population, with its standard error. Read **Orientation determined** or
+**Orientation not determined** before interpreting the best axis. The crystal Hermans factor describes the fitted
+distribution of fibre axes. The measured ring f describes that ring over its measured angles.
+**Export…** writes the selected ring and its component curves to `<frame>_crystal_orientation.csv`
+and the phase results, settings and sources to `<frame>_crystal_orientation.json`. Automatic analysis with phases also
+includes a **Crystal orientation** section and a `crystal_orientation` record in the report JSON.
+
+![Phase-aware joint fit and reflection contributions to a MAPbI₃ ring in the public P08 frame](manual_images/en/07c_crystal_orientation.png)
+
 **In the automatic analysis.** With phases shown (or `--phase FILE.cif` on the command line, repeated for several),
 **Run Automatic Analysis** assigns each peak to the nearest reflection within max(3σ, FWHM/2): the **Peaks** table of
 Results gets the columns **phase**, **hkl** and **Δq**. An hkl marked **ambiguous** has two or more candidate

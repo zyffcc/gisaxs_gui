@@ -20,6 +20,7 @@ HEADINGS_ZH = {
     "Peaks (radial I(q))": "峰（径向 I(q)）",
     "Ring orientation": "取向",
     "Phase assignment": "物相指认",
+    "Crystal orientation": "晶体取向",
     "Decisions": "决策",
     "Steps": "步骤",
     "Cuts": "切线",

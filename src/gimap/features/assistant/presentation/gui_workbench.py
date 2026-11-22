@@ -134,6 +134,12 @@ class GuiWorkbench:
         fit = self._call(self._automation.prepare_pole, background, model, chi0_deg)
         return self._call(self._automation.store_pole, fit())
 
+    def crystal_orientation(self, assignment, check_cancel) -> list[dict]:
+        fit = self._call(self._automation.prepare_crystal_orientation, assignment, check_cancel)
+        result = fit()
+        self._call(lambda: None)  # a pinned run still belongs to the frame shown
+        return result
+
     def set_beam_center(self, x_px: float, y_px: float) -> dict:
         return self._apply(lambda done: self._automation.set_beam_center(x_px, y_px, done))
 

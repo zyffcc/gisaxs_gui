@@ -147,6 +147,15 @@ class AnalyzeFrame(FramePreprocessingMixin):
         shape = (int(analysis.data.shape[0]), int(analysis.data.shape[1]))
         return self._giwaxs_maps(shape, analysis.geometry, analysis.kind)
 
+    def measured_orientation_pixels(self, common, corrections, geometry, raw_data, raw_valid, name, mask_bitmap=None):
+        """Repeat pixel preparation before the Lorentz factor, its mask and mirror filling."""
+        settings = replace(corrections, lorentz=False, mirror_fill=False)
+        measured = {key: common[key] for key in ("metadata", "header_values", "summed_frames")}
+        poisson = self.correct_pixels(measured, raw_data, raw_valid, settings, geometry, GIWAXS, mask_bitmap=mask_bitmap)
+        if not settings.normalisation.is_identity:
+            self._normalise(measured, raw_data, raw_valid, settings, poisson, name)
+        return measured["data"], measured["valid"], reduction_errors(settings, measured)
+
     def cake(self, analysis: FrameAnalysis) -> CakeMap:
         """The GIWAXS frame unwrapped onto χ–q (``cake_map``), from the q maps already computed."""
         if analysis.geometry is None or analysis.kind == GISAXS:
@@ -290,13 +299,8 @@ class AnalyzeFrame(FramePreprocessingMixin):
             if corrections.lorentz or corrections.mirror_fill:
                 # Start before both operations: neither masked centre-plane pixels nor measured donors can
                 # be reconstructed from an already corrected and mirror-filled map.
-                settings = replace(corrections, lorentz=False, mirror_fill=False)
-                measured = {key: common[key] for key in ("metadata", "header_values", "summed_frames")}
-                poisson = self.correct_pixels(measured, raw_data, raw_valid, settings, geometry, GIWAXS,
-                                              mask_bitmap=mask_bitmap)
-                if not settings.normalisation.is_identity:
-                    self._normalise(measured, raw_data, raw_valid, settings, poisson, Path(request.path).name)
-                orientation = (measured["data"], measured["valid"], reduction_errors(settings, measured))
+                orientation = self.measured_orientation_pixels(common, corrections, geometry, raw_data, raw_valid,
+                                                               Path(request.path).name, mask_bitmap)
             reduction = reduce_giwaxs(
                 data, valid, geometry, request.giwaxs, maps=self._giwaxs_maps(shape, geometry),
                 with_map=request.with_map, counts=errors,

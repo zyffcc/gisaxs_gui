@@ -1715,6 +1715,25 @@ CIF 常常只写空间群（`_symmetry_space_group_name_H-M`、Hall 符号或编
 **导出…**（Export…）把极图写成 CSV（`<帧>_pole_figure.csv`，默认在数据旁边的 `gimap_analysis/` 中），旁边写
 `<帧>_indexing.json`：物相（带 CIF 及其 SHA-256）、衍射表、设置和拟合结果。CSV 表头和 JSON 均记录实测 f、f_iso 和决定系统变化上下限的情形。
 
+**晶体取向（依据物相）**（Crystal orientation (from phase)）。在**物相**（Phases）中勾选要分析的物相。
+在**极图**（Pole Figure）的**模型**（Model）中选择**晶体取向（依据物相）**，按**拟合晶体取向**（Fit Crystal Orientation）。
+GIMaP 在 I(q) 中寻峰，将每个物相可用的已指认衍射环联合拟合。各环分别使用自己的局部背景和强度比例因子，
+同一物相的各环共用晶体取向、镶嵌展宽和各向同性分数。要设置单个环的窗口，可在拟合前将紫色带移至其峰处。
+若带内有多个已检出的峰，各峰保留自己的窗口。自动分析根据径向峰计算各环窗口。
+最低出射角和**拟合到 χ**（Fit up to χ）限定参与拟合的实测分箱。
+一个窗口含有多个物相的衍射时予以排除。同一物相在窗口内的各个反射共同贡献于拟合曲线。
+
+在**显示衍射环**（Show ring）中选择物相和 q 值。点为实测 N(χ)，实线为联合拟合，虚线为各反射族的贡献，含各自所占的各向同性部分。
+图例中的百分比为各反射族对该环强度的贡献比例。
+结果给出最优和次优纤维轴、两者的 ΔBIC、镶嵌展宽半高宽、取向与各向同性晶粒的分数，以及联合拟合和所示衍射环各自的约化 χ²。
+双轴拟合还给出两根纤维轴在取向晶粒中各自所占的百分比及标准误差。
+解读取向轴前请先查看**已确定取向**（Orientation determined）或**未能确定取向**（Orientation not determined）的判断。
+晶体 Hermans 因子描述拟合得到的纤维轴分布，此环实测 f 描述该环实测角度内的取向。
+**导出…**将所选衍射环与各反射族的贡献写入 `<帧>_crystal_orientation.csv`，将各物相拟合结果、设置和来源写入
+`<帧>_crystal_orientation.json`。提供物相时，自动分析报告也包含**晶体取向**（Crystal orientation）一节，JSON 中对应 `crystal_orientation`。
+
+![公开 P08 帧中 MAPbI₃ 衍射环的联合拟合与各反射族的贡献](manual_images/zh/07c_crystal_orientation.png)
+
 **在自动分析中。** 显示有物相时（或命令行给出 `--phase FILE.cif`，多个物相重复给出），**运行自动分析**（Run Automatic Analysis）
 把每个峰指认到 max(3σ, FWHM/2) 以内最近的衍射：**结果**（Results）的 **峰**（Peaks）表增加 **物相**（phase）、**hkl** 和
 **Δq** 三列。hkl 标记为**多种可能**（ambiguous）表示窗口内有两个或更多候选衍射。将鼠标移到 hkl 上可查看备选，移到 Δq 上可查看

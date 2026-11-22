@@ -105,6 +105,10 @@ class AnalysisWorkbench(Protocol):
 
     def set_beam_center(self, x_px: float, y_px: float) -> dict: ...
 
+    def crystal_orientation(self, assignment: dict, check_cancel) -> list[dict]:
+        """Joint fit to the phase-resolved rings of the displayed frame."""
+        ...
+
     def set_halves(self, side: str) -> dict: ...
 
     def set_gisaxs_cuts(
