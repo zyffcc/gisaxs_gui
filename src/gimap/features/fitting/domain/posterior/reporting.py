@@ -22,7 +22,7 @@ QZR_FAILURE = 2.0
 QZR_TWO_PATH_COVERAGE = 1.7
 """In posterior_dwba_pairs.json (si_tp_new), sphere coverage drops from 60 % to 36 % across this edge."""
 QZR_UPRIGHT_SPHERE = 2.0
-"""Shape-ambiguity warning near the onset of strong DWBA model error (Physics and Methods §9.13)."""
+"""Above this fitted q₊R a sphere can be selected as an upright cylinder, including with known Si optics (§9.13)."""
 
 
 def grazing_flags(model, qz, level, reflected_beam=None, known_heights=None):
@@ -43,7 +43,8 @@ def grazing_flags(model, qz, level, reflected_beam=None, known_heights=None):
                 flags.append(f"qzR_fail:{label}")
         if component.family in ("cylinder", "vertical_cylinder"):
             height = component.value("h") if "h" in component.keys() else (known_heights or {}).get(str(n))
-            upright_ambiguous = component.family == "vertical_cylinder" and level in (2, 3) and product > QZR_UPRIGHT_SPHERE
+            upright_ambiguous = (component.family == "vertical_cylinder" and level in (2, 3, 4)
+                                 and product > QZR_UPRIGHT_SPHERE)
             if upright_ambiguous or (height is not None and 0.8 <= height / (2 * radius) <= 1.25):
                 flags.append(f"cyl_sphere:{label}")
     return flags

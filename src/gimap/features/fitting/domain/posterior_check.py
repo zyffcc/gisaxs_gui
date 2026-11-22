@@ -6,7 +6,7 @@ A check only: it reports intervals and how far the run can be trusted beside the
   the curve's σ with the model error floor added (σ² + (f I)², f = ``refine.MODEL_ERROR_FLOOR``), the likelihood of
   ``posterior.infer.Likelihood`` (the smooth multiplicative model error of amplitude τ and the scales integrated out)
   and its prior, uniform in the unit box of ``posterior.encoding``, in the network's coordinates z = logit(v) of the
-  composition's values (the effective reflection coefficient only on a cut with both angles).
+  composition's values (the effective reflection coefficient is sampled only at level 3).
 * ``FitTarget``: a manual fit (Refine or Search). Its free non-linear values, uniform in the fit's coordinates t ∈ [0, 1]
   (in ln for a range spanning a decade or more; the contact D ≥ 2R and the inequalities as in the fit), sampled in
   u = logit(t); the scales solved at every point, as the fit does (a profile, not a marginal); and
@@ -50,8 +50,10 @@ class PredictTarget:
 
     def __init__(self, q, intensity, sigma, *, composition: int, centre, qz: float = 0.0,
                  qz_minus: Optional[float] = None, law: str = "number_gauss", coupling: str = "lma",
-                 model_error_floor: float = MODEL_ERROR_FLOOR, importance_starts=()):
-        counts = Cut.prepare(q, intensity, sigma, qz, qz_minus)
+                 model_error_floor: float = MODEL_ERROR_FLOOR, importance_starts=(),
+                 substrate=None, grazing=None, upright_heights=None):
+        counts = Cut.prepare(q, intensity, sigma, qz, qz_minus, substrate=substrate, grazing=grazing,
+                             upright_heights=upright_heights)
         self.data = (replace(counts, sigma=np.hypot(counts.sigma, model_error_floor * np.abs(counts.intensity)))
                      if model_error_floor > 0 else counts)
         self.composition = int(composition)
@@ -89,7 +91,7 @@ class PredictTarget:
         full = self._full(z)
         values = physical(E.from_z(full, np.full(full.shape[0], self.data.ratio), self.composition), self.data.q_max)
         log_like, _amplitudes, _chi2 = self.likelihood(values)
-        out = log_like + E.log_prior(full, self.composition)
+        out = log_like + E.log_prior(full, self.composition, self.dims if self.data.substrate else None)
         return np.where(np.isfinite(out), out, -np.inf)
 
     def values(self, z) -> np.ndarray:

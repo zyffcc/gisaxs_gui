@@ -314,6 +314,8 @@ CUT_MODEL_FAMILIES = {"sphere": "sphere", "random_cylinder": "cylinder", "cylind
 def cut_model_solution(row: Mapping) -> FitModel:
     """A solution in Fitting's own conventions (``physics_backend`` "cut_model": Predict parameters): its values as they
     are, amplitudes as Int."""
+    if row.get("model"):
+        return model_from_dict(row["model"])
     components = []
     for item in row.get("components") or ():
         p = item["params"]
@@ -347,6 +349,8 @@ def model_from_solution(row: Mapping, base: Optional[FitModel] = None) -> tuple[
     if row.get("physics_backend") == "cut_model":
         proposed = cut_model_solution(row)
         model = constrain_proposal(proposed, base) if base is not None else proposed
+        if proposed.substrate is not None:
+            model = replace(model, globals={**model.globals, **{key: proposed.globals[key] for key in GRAZING}})
         return model, solution_deviation(model, row)
     converted = native_solution_mapping(row)
     proposed = from_manual(converted.mapping)
@@ -471,6 +475,10 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
 
     made_of = None if curve is None else prepare_points(curve, side, q_range, excluded, weighting=data.weight_mode,
                                                         resolution=model.resolution_mode)
+    geometry = grazing(model)
+    sphere_model = ("effective interface (q_z = 0)" if geometry is None else
+                    f"four-term DWBA on {model.substrate.label}" if model.substrate and
+                    getattr(geometry, "mode", None) == "dwba" else "two paths (direct + exit-reflected)")
     record = {
         "software_version": SOFTWARE,
         "model": model_to_dict(model),
@@ -490,8 +498,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
         "resolution": ({"mode": "file", "dq_nm^-1": data.dq.tolist()} if model.resolution_mode == "file" else
                        {"mode": "constant", "sigma_q_nm^-1": model.globals["q_resolution"].value}),
         "log_rmse": number(log_rmse(model, data)),
-        # spheres of a horizontal cut: q_z = 0 (effective interface) or the two-path model with the cut's angles
-        "sphere_model": "effective interface (q_z = 0)" if grazing(model) is None else "two paths (direct + exit-reflected)",
+        "sphere_model": sphere_model,
         "qz_plus_R": {f"{index}": round(value, 4) for index, value in qz_plus_r(model)},
         # every particle's radius by number (as microscopy and fit1d count) and by intensity (V²), and σ_nn/D
         "derived": [derived_values(component) for component in model.components],

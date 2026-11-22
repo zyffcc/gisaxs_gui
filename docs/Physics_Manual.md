@@ -2257,7 +2257,8 @@ Process with AI and the MCP tool `fit_horizontal_cut`, and on the command line (
 25 s per cut on one core.
 
 **Model and compositions.** When the geometry supplies α_i and λ and the cut is on the Yoneda band of exit angle α_f,
-the automatic fit uses the Born term at the cut's vacuum q_z = (2π/λ)(sin α_i + sin α_f), in nm⁻¹ for λ in nm
+the automatic fit uses four-term DWBA if the session or frame metadata identifies the substrate (level 4).
+Otherwise it uses the Born term at the cut's vacuum q_z = (2π/λ)(sin α_i + sin α_f), in nm⁻¹ for λ in nm
 (level 2, section 9.13). When either angle is unknown, it uses the effective interface at q_z = 0 (level 1).
 The report states the level under *Decisions*. Other model settings follow Fitting's defaults, with sizes Gaussian
 by number, the paracrystal of section 9.5 in the LMA, the beam tail A / (1 + (q/w)^ν) and a constant background (9.1).
@@ -2383,12 +2384,11 @@ and 9.12 keep what they were.
 **Units: Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ (an Analyze `_fit_input.dat`) is multiplied by 10.
 Sizes and distances are in nm, w in nm⁻¹, the spreads σ_R/R, σ_h/h, σnn/D are relative.
 
-**The cut's q_z.** Predict parameters takes the cut's geometry from Model's grazing-incidence values (αi, αf and λ;
-section 9.10): with both angles, spheres have the direct and the exit-reflected path, q₊ = k_i + k_f and
-q₋ = k_i − k_f, with a free effective reflection coefficient r (the two paths of section 9.10, section 9.13). The 1D
-Predict window takes its **Cut qz (nm⁻¹)** (chapter 10): spheres at the Born term of that q_z alone. Without either,
-q_z = 0, the effective interface. For Run Automatic Analysis, the Yoneda band's exit angle and the incidence angle
-give a single vacuum q_z for the fit (section 8.5).
+**The cut's q_z.** With αi, αf and λ, Predict parameters evaluates spheres with two paths and a free effective r
+when the substrate is unknown (section 9.10), or with four paths and fixed reflection coefficients when the substrate
+is known (section 9.17). Both Predict panels accept the substrate under **Cut geometry and substrate…**.
+The 1D Predict window also accepts a single **Cut qz (nm⁻¹)** for a Born fit (chapter 10). The effective interface
+uses q_z = 0. Run Automatic Analysis takes αf from the Yoneda band and αi and λ from the geometry (section 8.5).
 
 ### 9.1 Points that are fitted
 
@@ -2476,7 +2476,8 @@ For one size BornAgain and `cut_model` agree to 10⁻³ (median), more only at t
 curves go to zero. BornAgain's default gives the layer holding the particles their volume-averaged refractive index,
 which changes the reflection the DWBA terms carry: for spheres R = 4 nm on a paracrystal of D = 14 nm (about 17 % of
 the layer) the curve then differs by 32 % (median). `cut_model`, like `yoneda_truth.py` (and fit1d), uses the reflection
-of the bare substrate; the free effective r of the two-path model can take up such a difference (section 9.10). One
+of the specified substrate with air around the particles. In this comparison the substrate is bare Si.
+The free effective r of the two-path model can take up such a difference (section 9.10). One
 core computes 1000 curves of 500 points (R 1–15 nm, σR/R 0.05–0.4) in 1.4 s (spheres), 1.2 s (upright cylinders)
 and 11 s (random cylinders).
 
@@ -2681,7 +2682,8 @@ DA:   I = P(q) + C(q) (S(q) − 1)                                              
 - For upright cylinders with an explicit height distribution, let G(H) = H Σₚ cₚ sinc(QₚH/2) exp(−iQₚH/2)
   on the paths of the horizontal row. Its scale absorbs ⟨|G|²⟩. The coherent radial term is therefore multiplied
   by |⟨G⟩|²/⟨|G|²⟩, averaging the complex amplitudes by number. At q_z = 0 this factor is ⟨H⟩²/⟨H²⟩.
-  A single height gives a factor of one wherever the row scatters. Predict parameters uses the radial model for upright cylinders.
+  A single height gives a factor of one wherever the row scatters. Level 4 of Predict parameters can carry a given
+  height distribution into the DA. With fixed height, or with the LMA, the radial model suffices.
 - With one size, DA and LMA are the same curve for spheres and vertical cylinders; randomly oriented cylinders differ,
   their orientation being a disorder of its own. With a size spread, DA keeps the part `P − C` free of the spacing:
   more intensity below the structure peak, a weaker peak. At σR/R = 0.2 and σnn/D = 0.75, the low-q intensity of
@@ -2974,7 +2976,8 @@ reflection. Its limits:
   q_z = 0: on Si it is worse from R = 4 nm, because the exit-reflected path pulls the effective q_z below q₊.
 - Upright cylinders of one height retain the radial shape (9.28). Random cylinders stay at |q|.
 
-When the substrate is known (a material of the table or δ and β), Model's **Substrate** takes the four terms of (9.27) with its Fresnel coefficients instead of the free r: section 9.17.
+When the substrate is known, Model's **Substrate** supplies the reflection amplitudes for (9.27).
+Section 9.17 gives the Fresnel coefficient of a bare interface and the Parratt coefficient of a layered substrate.
 
 Implementation: `src/gimap/features/fitting/domain/fit_model.py` (`grazing`, `qz_plus_r`),
 `src/gimap/features/fitting/domain/scattering_model.py` (`sphere_two_path_pd`)
@@ -3118,9 +3121,9 @@ population's Int, the tail's A, the background) are not proposed: they are solve
 range, at most ρ = q_max/q_min = 300 (lower points are left out and counted) and at least 10. The curve is binned on
 128 logarithmic points (the σ-weighted mean of the measured points in each bin, a bin without points masked); the
 network reads ln I relative to its median, ln(σ/I), the mask and the position, and is told ln ρ, q₊/q_max and q₋/q_max
-and whether the cut has two paths: with both angles known (q₊ = k_i + k_f and q₋ = k_i − k_f, vacuum), spheres have
-the direct and the exit-reflected path with an effective reflection coefficient r (section 9.10); with only q₊, the
-Born term at q₊; with neither, the effective interface (encoding 4).
+and whether both angles are known (q₊ = k_i + k_f and q₋ = k_i − k_f, vacuum, encoding 4). The training curves
+with both angles have two sphere paths and a free r (section 9.10). On a known substrate the same network proposes
+values and the four-path likelihood below weights them.
 
 **The prior.** Uniform in a box: ln R̃ from 0.5 to 5ρ (every population above the previous one, by stick-breaking),
 σR/R 0.02–0.5, h/2R 0.1–10 with h̃ ≤ 200 and R̃ ≤ 50 for random cylinders, D/2R 1–20, σnn/D 0.02–0.5, w from 0.3 to
@@ -3250,29 +3253,44 @@ its Guinier region lies at or below the lowest q, and the decay the curve shows 
 q produce — on the *measured* benchmark curves the solution chosen has such an extra population, which takes up the
 roughness, on 10 of 100 and 20 of 300 curves; q_max·R < 1: it acts as a smooth background, as fit1d named such a population);
 and *qzR* for a sphere or random cylinder fitted at q_z = 0 whose q₊R at the cut is above 1.7 (below). The most
-probable goes into Model, the others to **Other solutions**. Model's fixed values and
-ranges are not used; **Refine the values in Model** afterwards keeps them. Time per curve on one core: about 6 s
+probable goes into Model, the others to **Other solutions**. Predict searches its prior range for each proposed
+parameter and keeps supplied level-4 upright-cylinder heights and widths fixed. **Refine the values in Model**
+afterwards uses Model's fixed values and ranges. Time per curve on one core: about 6 s
 with the composition given and about 26 s choosing among one or two populations (24 held-out cuts, one worker,
 Intel Core i9-13900HX; `tools/benchmarks/posterior_timing_summary.json`); on development curves with earlier
 versions, 30–70 s among one to three of spheres and upright cylinders, a few minutes when random cylinders are
 among the choice, and with both angles (two paths) about 2.4 times as long.
 
 Model's coupling (DA) and legacy size law (mean-parameterized log-normal) are used in steps 2–4. For the new
-manual number distributions, Predict uses its original Gaussian. The network, trained on the LMA and Gaussian
-sizes, is then only a proposal, which the weights correct. Predict uses three substrate levels. With both angles it
-uses the two paths of spheres with a free r (the terms that matter at the Yoneda angle, section 9.10), with q_z alone
-the Born term at it, else the effective interface.
+manual number distributions, Predict uses its original Gaussian except for upright cylinders supplied with a
+height distribution at level 4. The network, trained on the LMA and Gaussian
+sizes, is then only a proposal, which the weights correct.
 
-**Three levels of the substrate, and the flag *qzR*.** The horizontal cut is fitted at one of three levels:
+**Substrate levels and the flag *qzR*.** The information available about the cut determines its scattering model.
 
 1. the effective interface, the form factor at q_z = 0 (the default; no angle needed);
 2. the Born term at the cut's vacuum q₊ = k(sin α_i + sin α_f) (q_z alone: *Cut qz* of the 1D Predict window);
 3. the two paths of spheres, the Born term and the exit-reflected path with a free r (both angles: α_i, α_f and λ
-   under Model ▸ *Spheres in grazing incidence* on the Fit page).
+   under Model ▸ *Spheres in grazing incidence* on the Fit page), for an unknown substrate.
+4. the four DWBA paths of equation (9.40) with α_i, α_f, λ and a known substrate. For each proposed sphere radius,
+   the form factor uses P = ⟨|A|²⟩/⟨V²⟩ and, for DA, C = |⟨A⟩|²/⟨V²⟩, where A is the coherent sum of the four
+   volume amplitudes at that radius. The fixed r_i and r_f come from (9.41) for a bare interface or (9.41a) for
+   a stack. Refinement, amplitude fitting and posterior sampling use this geometry. The resulting intervals are
+   conditional on the angles and the supplied optical constants and thicknesses.
 
-Predict uses the same radial model of upright cylinders at every level (section 9.10). Random cylinders are averaged at q_z = 0 at levels 1
-and 3 and in Fitting's model at every level (at level 2 the network's posterior has them at the cut's q₊, the refined
-model at q_z = 0; section 9.4). For spheres, level 1 holds within about 5 % of R up to q₊R ≈ 1.7 (section 9.10). On the
+At level 4 the proposal still receives q₊/q_max and q₋/q_max. Its two sampled coordinates for the free r enter
+only the proposal correction. The likelihood is constant in these coordinates and their normalized prior integrates
+to one. Local posterior sampling omits both coordinates and their prior factors.
+
+For upright cylinders the horizontal scale absorbs the common axial intensity. At level 4 a given independent height
+distribution multiplies the DA coherent term by |⟨G(H)⟩|²/⟨|G(H)|²⟩ (section 9.5). The ratio is one for fixed height.
+For **The particles in Model**, the prediction record keeps each upright cylinder's supplied height and width together
+with its size law and LMA or DA setting. For example, a lognormal specified by its median keeps the standard deviation
+of ln(height) as its width. Refinement keeps these inputs fixed and preserves the order of populations by radius.
+The posterior check reads the same inputs from the saved solution.
+Random cylinders use q_z = 0 at levels 1 and 3. At level 2 the posterior uses q₊ and the refined
+model uses q_z = 0. At level 4 both use the orientational average at √(q² + q₊²) (section 9.4).
+For spheres, level 1 holds within about 5 % of R up to q₊R ≈ 1.7 (section 9.10). On the
 four-term DWBA curves on Si above (`posterior_dwba_pairs.json`) the median error of R at level 1 is 15 %, 20 % and
 29 % at q₊R 1.7–2.3, 2.3–3.5 and above 3.5; at level 3 it is 4.0 %, 6.7 % and 7.0 %; level 2 gives 4.0 %, 11 % and
 40 %. DWBA programs such as BornAgain and IsGISAXS evaluate the terms with the substrate's refractive index and need
@@ -3283,8 +3301,8 @@ no such approximation, so GIMaP says when it matters:
   above 1.7 at the cut's q_z, where the form factor at q_z = 0 (the default effective interface) biases the radius,
   usually too small; give both angles of the cut (αi, αf) so that spheres are fitted with the exit-reflected path
   (random cylinders stay at q_z = 0)*. This flag applies only at level 1.
-- Automatic analysis uses level 2 when it knows α_i, λ and the cut's Yoneda exit angle α_f. Predict applies its
-  level-2 flags below to the solution. For a cut away from the Yoneda band or without α_i, the fit uses level 1
+- Automatic analysis uses level 4 when it knows the substrate, α_i, λ and the cut's Yoneda exit angle α_f. With the
+  same geometry and an unknown substrate it uses level 2. For a cut away from the Yoneda band or without α_i, the fit uses level 1
   and has no measured q₊ for these flags. The report records the level and the source of q₊ (section 14.10).
 - The Fit page and the 1D Predict window take the level from the angles they are given. A curve file does not carry
   the angles of its cut. At level 1, users can enter the measured q₊ separately for flags on reflected-beam data. The fit still evaluates the effective interface at q_z = 0.
@@ -3294,12 +3312,13 @@ no such approximation, so GIMaP says when it matters:
   `qzR_fail:R_n` above 2, the approximate onset of strong model error in that comparison. Use level 3 or a
   four-term DWBA fit. Level 3 also raises `qzR_cov:R_n` above q₊R = 1.7. These sphere coverage thresholds
   also apply to random cylinders as a precaution.
-- At levels 2 and 3, an upright cylinder with q₊R > 2 receives `cyl_sphere:R_n`. Its radial profile can fit
-  scattering from spheres of a similar radius. The horizontal cut alone leaves its height undetermined.
+- At levels 2–4, an upright cylinder with fitted q₊R > 2 receives `cyl_sphere:R_n`. Its radial profile can fit
+  scattering from spheres of a similar radius. This substitution also occurred on simulated Si cuts fitted with
+  the known substrate at level 4 (see the [paired benchmark results](../tools/benchmarks/README.md)).
+  The horizontal cut alone leaves the cylinder height undetermined.
   At any level, a random or upright cylinder with a known height also receives this flag when
   q₊R > 1.2 and 0.8 ≤ h/(2R) ≤ 1.25.
-- For random cylinders the limit is the spheres', applied to the radius, which is a lower bound of their size; no
-  level evaluates them at the cut's q_z in Fitting's model, so the flag only warns.
+- The Born-approximation flags apply to levels 1–3. Level 4 already includes the reflected sphere amplitudes.
 - Predict assigns the flags after fitting. The fitted values, intervals and probabilities depend on the substrate level used.
 
 **The model error.** Without it (steps 4–5 with the counts' σ), the 68 % intervals held the truth in 60–64 % of the
@@ -3527,8 +3546,8 @@ with a second one whose paracrystal is at a bound or unconstrained (twice) or th
 *small* (D of the second 51.2 nm); before: two spheres on two draws and one on the third, D 42–53 nm. fit1d chose a
 sphere of R 0.18 nm on one of the draws. All these solutions were compared by BIC (the model does not describe the cut
 within σ: χ²/N 4–9), and their intervals are least-squares errors with the model error: the cut has a shoulder, not a
-resolved peak, so D is fixed to ±7–10 nm (±3 nm without the model error). fit1d's four-term DWBA, which Fitting does
-not have, describes the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm).
+resolved peak, so D is fixed to ±7–10 nm (±3 nm without the model error). fit1d's four-term DWBA
+described the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm).
 
 *Both angles* (two paths, r free). The two paths describe these cuts within their errors (χ²/N 0.96–1.55 against
 4.2–8.8), but they do not recover the particles: with one sphere population, R 8.4 nm on the measured cut and 500 nm
@@ -3711,14 +3730,18 @@ A(q_∥) = F(q_∥, k_i+k_f) + r_i F(q_∥, k_f−k_i) + r_f F(q_∥, k_i−k_f)
 r(α) = (k_z − k_z,s) / (k_z + k_z,s),   k_z = k sin α,   k_z,s = k √(sin²α − 2δ + 2iβ)                       (9.41)
 ```
 
-the same terms as (9.27), with the Fresnel coefficients of the bare substrate at αi and αf instead of an effective r;
-|r| and arg r are then not used. Random cylinders are averaged at |q| = √(q² + (k_i + k_f)²) (the Born term of the
+The four terms in (9.40) use the reflection amplitudes at αi and αf. Equation (9.41) gives the bare-interface
+amplitude and (9.41a) below gives it for a layered substrate. Both coefficients are fixed by the optical inputs.
+Random cylinders are averaged at |q| = √(q² + (k_i + k_f)²) (the Born term of the
 cut's q_z, as fit1d did). Upright cylinders with a height distribution use these four paths for the horizontal DA
 (sections 9.5, 9.10). Core–shell spheres stay at q_z = 0.
-The sizes are averaged by the direct quadrature of section 9.3 (the tables hold one or two paths, not four). The line
+The size average uses the quadrature of section 9.3. For batches of resolved sphere intensities, six-point
+interpolation in radius lets the size distributions share one table. On a densely sampled cut, a single
+distribution can be evaluated on a grid in q and interpolated with eight points. The largest lateral separation
+in a sphere of radius R is 2R, so the q step is at most 0.32/(2R_max) for the largest quadrature radius R_max.
+These interpolations precede multiplication by S(q) and resolution smearing. The line
 under the substrate says which level is in use (*Level: Four-term DWBA, substrate known on Si (δ = …, β = … at λ =
-… nm)*); with a substrate but without both angles the spheres stay at q_z = 0 and the line says that the substrate is
-used once αi and αf are given.
+… nm)*). With an incomplete pair of angles, the line explains that level 4 needs both αi and αf.
 
 **The table.** δ and β of a material of density ρ and mass fractions w_j of elements of atomic weight A_j and atomic
 scattering factors f₁ + i f₂:
@@ -3738,14 +3761,30 @@ and every point between the L edges of gold; f₁ is interpolated linearly in ln
 | Glass (plate) | 2.40 | NIST's “Glass, plate”: O 0.4598, Na 0.0964, Si 0.3366, Ca 0.1072 by mass | 7.74 · 10⁻⁶, 1.37 · 10⁻⁷ |
 | Au | 19.32 | Au | 4.71 · 10⁻⁵, 4.85 · 10⁻⁶ |
 
-The values of Si, SiO₂ and Au agree with CXRO's to 1 % (δ) and 2 % (β) (`tests/test_joint_dwba.py`). The table is of
-the bare material: a native oxide, a polymer film, roughness and the particle layer's own index are not part of it
-(section 9.10 shows how much a film changes r_f). Where they matter, type δ and β of an effective substrate, or use the
-two paths with a free r.
+The values of Si, SiO₂ and Au agree with CXRO's to 1 % (δ) and 2 % (β) (`tests/test_joint_dwba.py`).
 
-**Predict parameters does not use it.** Its network and posterior know the three levels of section 9.13; what Predict
-is given of the cut (q₊ and, with both angles, q₋) is the same with or without a substrate (a test compares the
-payloads), and its solutions come back without the substrate: choose it again to refine one in the four-term DWBA.
+**A film on the substrate.** Each finite layer has a thickness d in nm and its own δ and β at the cut's energy.
+Index the media from air (0) through the layers (1 … m) to the semi-infinite substrate (m+1). With
+p_j = k√(sin²α − 2δ_j + 2iβ_j) on the decaying branch and f_j = (p_j − p_{j+1})/(p_j + p_{j+1}), the
+Parratt recursion gives the reflection amplitude at the upper surface.
+
+```text
+R_m = f_m
+u_j = R_{j+1} exp(2i p_{j+1} d_{j+1})
+R_j = (f_j + u_j)/(1 + f_j u_j),    j = m−1, …, 0                                              (9.41a)
+```
+
+Insert R₀(α_i) and R₀(α_f) in (9.40). For m = 0 this gives the bare Fresnel amplitude (9.41).
+The implementation propagates the field and its normal derivative, an equivalent form that also handles a zero
+normal wavevector. Independent simultaneous matching at all interfaces checks the complex amplitude below, near
+and above the critical angles for one and two layers (`tests/test_layered_substrate.py`). The interfaces are
+smooth and the particle layer has the optical constants of air. A horizontal cut supplies no independent
+estimate of the layer thickness or optical constants in this fit.
+
+**Predict parameters.** The fourth level uses these same coefficients in the likelihood and bounded refinement
+(section 9.13). The fitted model records the substrate and any layers for subsequent evaluation. The recovery
+benchmark compares the same simulated cuts on Si and on a 100 nm polystyrene film over Si, keeping the cut
+at the Si Yoneda angle on both surfaces. The per-cut comparisons are grouped by q₊R. [Benchmark results](../tools/benchmarks/README.md)
 
 **Checked against BornAgain 24.1** (`tools/benchmarks/joint_dwba_bornagain.py`, average layer materials off as in
 section 9.2; Si of the table at λ = 0.1045 nm, δ = 3.46 · 10⁻⁶, β = 3.74 · 10⁻⁸; αi = 0.40°, the horizontal cut at the
@@ -3963,8 +4002,9 @@ logRMSE (natural logarithm, positive points), RMS/σ and the mean of the squared
 
 Section 9.13 on each half, with **Complete composition** as the composition (1–3 populations, each with the
 paracrystal) or, with *Auto*, the head's four most probable among all compositions and its most probable of every
-number of populations; q_z of the cut from **Cut qz
-(nm⁻¹)** (unticked: the effective interface). The eight most probable solutions of a half are its candidates, with
+number of populations. **Cut geometry and substrate…** selects level 4 with a known substrate and both angles.
+Otherwise **Cut qz (nm⁻¹)** selects the Born term when ticked and the effective interface when clear.
+The eight most probable solutions of a half are its candidates, with
 the stage *Network + posterior*; each carries its probability, its posterior intervals and flags (`solutions.json`:
 `probability`, `posterior`, `warnings`, `ess`). The run writes the files it wrote before 0.2.0 (`request.json`,
 `batch_summary.json`, `top20_candidates.json`, `fitting_run_summary.json`, and per half `solutions.json`,
@@ -5109,7 +5149,7 @@ window's records:
 | Mask | `mask`: `applied` (true or false), `file` (as above), `kind` (a mask image whose non-zero pixels are left out, or a GIMaP masks file with its number of drawn shapes), `masked_pixels`, and `bad_pixels_left_out` (section 14.4): the pixels found automatically are counted apart from the mask. `report.md` says the same under **Mask**, also when no mask was applied |
 | Analyze's record | `analysis_record`: the record of section 14.2 for the frame as it was reduced (geometry, corrections, error model, binning, markers, `input_sha256`), without `files` |
 | Results | the decisions with their reasons (`decisions`), the open questions (`needs_attention`), the steps, the peaks and rings (GIWAXS) or `gisaxs` (cuts, symmetry axis, halves, length scale, fit), `tables` and `folder` (the frame's folder, relative to the summary); in `summary.json` each frame also has `outputs` (the files written) |
-| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²ᵣ (`chi2`, with `points`: `fitted`, `given`, `below_window`, `unusable`), `flags`, `warnings` and `more_warnings` (the flags as sentences: of the particles and the solution, and of background, beam tail and resolution) and `intervals` (median, 68 % and 95 % limits; the texts print the refined value with the 68 % limits); `fitted_points` repeats the points of the fit; `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points; `substrate_level` and `sphere_model` record the approximation used. At level 2 (`Born term at the cut's q_z`), `cut_qz` holds the vacuum `q_z_inv_nm` and its inputs `alpha_i_deg`, `alpha_f_deg` and `wavelength_A`. At level 1 (`effective interface (q_z = 0)`), `cut_qz` is `null`. Section 9.13 explains the q_z·R flags |
+| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²ᵣ (`chi2`, with `points`: `fitted`, `given`, `below_window`, `unusable`), `flags`, `warnings` and `more_warnings` (the flags as sentences: of the particles and the solution, and of background, beam tail and resolution) and `intervals` (median, 68 % and 95 % limits; the texts print the refined value with the 68 % limits); `fitted_points` repeats the points of the fit; `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points; `substrate_level` and `sphere_model` record the approximation used. At level 2 (`Born term at the cut's q_z`), `cut_qz` holds the vacuum `q_z_inv_nm` and its inputs `alpha_i_deg`, `alpha_f_deg` and `wavelength_A`. Level 4 also records `substrate` (material or optical constants and any layers) and `grazing` (angles and wavelength in nm). When the file optics cannot be used, `substrate_metadata_warning` and the Decisions entry explain why. At level 1 (`effective interface (q_z = 0)`), `cut_qz` is `null`. Section 9.13 explains the q_z·R flags |
 
 - `summary.json` is one object: `software_version`, `created`, `options`, `arguments` (one sentence per pattern or
   folder among the arguments: how many files it stood for) and `frames`, the list of the frame reports without
@@ -5153,7 +5193,7 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 ### 15.1 Scattering physics
 
 - **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value unless Analyze is given the film's critical angle (q_z of one film, section 2.6), and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
-Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10), the four-term DWBA on a known bare substrate (section 9.17) and the vertical cut of a fit of several curves (section 9.18); a layered substrate, an oxide or a film on the wafer and roughness are not modelled. The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). GIWAXS intensity corrections and orientation fits can use refracted waves in a uniform film (sections 5.4, 7.11). The XRR extractor uses vacuum q_z (section 13.1). The Sputter island height H(t) uses the refracted wavevector transfer for fringe minima (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
+Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10), the four-term DWBA on a known bare or layered substrate for a horizontal cut (section 9.17) and the vertical cut of a fit of several curves (section 9.18); these models assume smooth interfaces. The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). GIWAXS intensity corrections and orientation fits can use refracted waves in a uniform film (sections 5.4, 7.11). The XRR extractor uses vacuum q_z (section 13.1). The Sputter island height H(t) uses the refracted wavevector transfer for fringe minima (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
 - **Absolute intensity.** A secondary standard sets the absolute scale for its measurement conditions (section 4.12). In grazing incidence, footprint, illuminated volume and interface effects require a sample-specific treatment. The scale parameter Int in Fitting is an empirical amplitude because the form factors use P(0) = 1 (section 9.4).
 - **Lorentz weighting.** The optional detector Jacobian applies to integrated crystalline intensities (§5.6).
 - **Texture.** The analysis assumes fibre symmetry. The systematic range tests the angular cuts, background, attenuation and edge fills (§§7.7, 7.11). A population concentrated beyond the measured angles can give f outside these scenarios.

@@ -5,6 +5,8 @@ import math
 
 import numpy as np
 
+from src.gimap.shared.material_optics import normal_wavevector_ratio
+
 
 REFRACTED_FILM_FORMULA = (
     "|ti tf|^2 (1-exp(-a*d))/a, a=2 Im(kzi+kzf), kz=k sqrt(sin^2(alpha)-2 delta+2i beta), "
@@ -19,8 +21,7 @@ def _surface_wave(sine, delta, beta):
     sine = np.asarray(sine, dtype=float)
     valid = (sine > 0.) & (sine <= 1.)
     s = np.where(valid, sine, 0.)
-    # With β >= 0, the principal root has Im >= 0 (the wave decays into the film).
-    normal = np.sqrt(s*s - 2*delta + 2j*beta)
+    normal = normal_wavevector_ratio(s, delta, beta)
     amplitude = np.divide(2*s, s + normal, out=np.zeros_like(normal), where=valid)
     return normal, np.abs(amplitude)**2
 

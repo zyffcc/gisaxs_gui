@@ -12,9 +12,11 @@ from __future__ import annotations
 
 from PyQt5.QtCore import QSignalBlocker
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application.single_predict import PARTICLES, network_available, predict_request, predicted
+from ...application.substrate_level import prediction_model
+from ..predict_substrate import ON_SUBSTRATE, PredictSubstrateDialog
 from .predict_progress import PredictProgressMixin, as_solutions
 from .predict_texts import solution_lines
 
@@ -26,6 +28,7 @@ class PredictPageMixin(PredictProgressMixin):
         self._predict_job_id = None
         self._predict_selection = None
         self.setup_predict_progress()  # the stages, the time, and what Stop keeps (predict_progress.py)
+        self.predict_substrate_button.clicked.connect(self.edit_predict_cut)
         for text, value in PARTICLES:
             self.predict_particles.addItem(tr(text), value)
         stored = self._remembered("predict_settings")
@@ -46,13 +49,30 @@ class PredictPageMixin(PredictProgressMixin):
     def predict_available(self) -> bool:
         return network_available()
 
+    def edit_predict_cut(self) -> None:
+        model = self.session.model
+        cut = dict(grazing={key: model.globals[key].value for key in ("wavelength", "alpha_i", "alpha_f")},
+                   substrate=None if model.substrate is None else model.substrate.to_dict())
+        dialog = PredictSubstrateDialog(cut, self)
+        if dialog.exec_():
+            self.set_model(prediction_model(model, dialog.cut()), label=("an edit in Model", {}))
+        dialog.deleteLater()
+
+    def refresh_predict_cut(self) -> None:
+        model = self.session.model
+        active = model.substrate is not None and all(model.globals[key].value > 0 for key in ("alpha_i", "alpha_f"))
+        self.predict_substrate_note.setText(trf(ON_SUBSTRATE, substrate=tr(model.substrate.label)) if active else "")
+        self.predict_substrate_note.setVisible(active)
+        self.reflected_beam.setVisible(not active)
+        self.predict_qz_row.setVisible(not active and self.reflected_beam.isChecked())
+
     def _start_predict(self, data, model, selection, curve) -> None:
         settings = self.predict_settings()
         particles = settings["particles"]
         if particles == "model" and not model.components:
             particles = "spheres_cylinders"  # nothing in Model yet: the network chooses
         request = predict_request(data, model, particles)
-        if self.reflected_beam.isChecked():
+        if self.reflected_beam.isChecked() and "substrate" not in request.payload:
             request.payload["reflected_beam"] = True
             if not request.payload["qz"] and self.measured_qz.value():
                 request.payload["measured_qz"] = self.measured_qz.value()

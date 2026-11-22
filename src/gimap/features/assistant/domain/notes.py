@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from .substrate_optics import material_name
+
 _NUMBER = r"(\d+(?:\.\d+)?)"
 _INCIDENCE = re.compile(
     r"(?:α\s*_?\s*i|alpha[\s_-]?i|\bai\b|incidence(?:\s+angle)?|incident\s+angle|掠?入射角)"
@@ -57,6 +59,15 @@ def energy_from_notes(text: str) -> Optional[float]:
     """The X-ray energy (keV) the notes give, when they give exactly one (1–200 keV)."""
     values = [float(match.group(1)) for match in _ENERGY.finditer(text or "")]
     return _unique([value for value in values if 1.0 <= value <= 200.0], 1e-3)
+
+
+def substrate_from_notes(text: str) -> Optional[str]:
+    """An explicit 'substrate = Si' field on its own line. Sample names and descriptions are ambiguous."""
+    fields = re.findall(r"^[ \t]*(?:substrate|基底|衬底)[ \t]*[:=：][ \t]*(.*?)[ \t]*$", text or "", re.I | re.M)
+    named = {material_name(field) for field in fields}
+    if len(named) > 1:
+        raise ValueError("The notes give conflicting substrate materials.")
+    return named.pop() if named else None
 
 
 def pixel_size_from_notes(text: str) -> Optional[float]:

@@ -30,7 +30,9 @@ from scipy.optimize import nnls
 from ..cut_model import model as cut
 from ..cut_model import resolution
 from ..cut_model.geometry import Geometry
+from ..substrates import Substrate
 from . import encoding as E
+from . import substrate_level
 
 AMPLITUDE_RANGE = 10.0
 TAIL_WIDTH_MAX = E.TAIL_WIDTH_MAX
@@ -59,8 +61,8 @@ TABLE_POINTS = 256
 @dataclass(frozen=True)
 class Cut:
     """A measured cut in the network's window: |q| (nm⁻¹, sorted), I, σ, the vacuum q₊ = k_i + k_f of the Born term
-    (0: the effective interface) and, when both angles are known, q₋ = k_i − k_f: then spheres have the exit-reflected
-    path too, with the effective reflection coefficient r of the values (``geometry``)."""
+    (0: the effective interface) and, when both angles are known, q₋ = k_i − k_f. With a known substrate, the
+    measured wavelength and both angles set the four scattering paths. Otherwise the two-path model fits r."""
     q: np.ndarray
     intensity: np.ndarray
     sigma: np.ndarray
@@ -70,14 +72,34 @@ class Cut:
     dropped: int = 0
     """Points below the window (q < q_max / RATIO_MAX), not used."""
     qz_minus: Optional[float] = None
+    substrate: Optional[Substrate] = None
+    dwba: Optional[Geometry] = None
+    upright_heights: tuple = ()
+
+    @property
+    def level(self) -> int:
+        return 4 if self.substrate is not None else 3 if self.reflected else 2 if self.qz > 0 else 1
+
+    def substrate_record(self) -> dict:
+        if self.substrate is None:
+            return {}
+        geometry = self.dwba
+        return dict(substrate=self.substrate.to_dict(), substrate_label=self.substrate.label,
+                    wavelength_nm=geometry.wavelength_nm, alpha_i_deg=geometry.alpha_i_deg,
+                    alpha_f_deg=geometry.alpha_f_deg, delta=geometry.delta, beta=geometry.beta)
+
+    def upright_height(self, slot: int):
+        return next((height for n, height in self.upright_heights if n == slot + 1), None)
 
     @property
     def reflected(self) -> bool:
         """Two paths (q₋ known and q₊ > 0)."""
-        return self.qz_minus is not None and self.qz > 0
+        return self.substrate is None and self.qz_minus is not None and self.qz > 0
 
     @classmethod
-    def prepare(cls, q, intensity, sigma=None, qz: float = 0.0, qz_minus: Optional[float] = None) -> "Cut":
+    def prepare(cls, q, intensity, sigma=None, qz: float = 0.0, qz_minus: Optional[float] = None, *,
+                substrate=None, grazing=None, upright_heights=None) -> "Cut":
+        """With a substrate, derive both vertical wave vectors from grazing (wavelength in nm, angles in degrees)."""
         q = np.abs(np.asarray(q, float)).ravel()
         y = np.asarray(intensity, float).ravel()
         s = None if sigma is None else np.asarray(sigma, float).ravel()
@@ -90,21 +112,28 @@ class Cut:
         q, y, s = q[order], y[order], s[order]
         q_max, ratio = E.window(q)
         inside = q >= q_max / ratio * (1 - 1e-12)
+        if substrate is not None:
+            substrate, geometry = substrate_level.resolve(substrate, grazing)
+            return cls(q[inside], y[inside], s[inside], geometry.qz_born, q_max, ratio, int(np.sum(~inside)),
+                       geometry.k_i - geometry.k_f, substrate, geometry, substrate_level.heights_by_slot(upright_heights))
         if qz_minus is not None and not abs(float(qz_minus)) < float(qz):
             raise ValueError("k_i − k_f must lie between −(k_i + k_f) and k_i + k_f")
         return cls(q[inside], y[inside], s[inside], float(qz), q_max, ratio, int(np.sum(~inside)),
                    None if qz_minus is None or qz <= 0 else float(qz_minus))
 
     def angles(self) -> tuple[float, float]:
-        """(α_i, α_f) in degrees at λ = 0.1 nm that give the cut's q₊ and q₋ (only k_i ± k_f matter)."""
+        """Measured (α_i, α_f) for DWBA, otherwise angles at λ = 0.1 nm giving the cut's k_i ± k_f."""
+        if self.dwba is not None:
+            return self.dwba.alpha_i_deg, self.dwba.alpha_f_deg
         k = 2 * math.pi / 0.1
         minus = self.qz_minus if self.reflected else 0.0
         return (math.degrees(math.asin(0.5 * (self.qz + minus) / k)),
                 math.degrees(math.asin(0.5 * (self.qz - minus) / k)))
 
     def geometry(self, reflection: complex = 0j) -> Geometry:
-        """The effective interface (q₊ = 0), the Born term at q₊, or (``reflected``) the two paths of a sphere with
-        the effective reflection coefficient ``reflection`` (λ = 0.1 nm; only k_i ± k_f matter)."""
+        """Select the interface, Born, two-path or fixed four-term model. Only level 3 takes a free reflection."""
+        if self.dwba is not None:
+            return self.dwba
         if self.qz <= 0:
             return Geometry()
         alpha_i, alpha_f = self.angles()
@@ -159,6 +188,7 @@ class Likelihood:
     def __init__(self, data: Cut, composition: int, law: str = "number_gauss", coupling: str = "lma"):
         self.data, self.composition, self.law, self.coupling = data, int(composition), law, coupling
         self.types = E.composition_types(composition)
+        self.height_fractions = substrate_level.height_fractions(data, self.types, law, coupling)
         q = data.q
         self.position = np.log(q / (data.q_max / data.ratio)) / np.log(data.ratio)
         self.basis = E.error_basis(self.position)  # (8, n)
@@ -179,17 +209,23 @@ class Likelihood:
         groups = [(np.flatnonzero(sharp), self.data.q), (np.flatnonzero(~sharp), None)]
         for slot, (family, structure) in enumerate(self.types):
             j = slot * E.PER_SLOT
+            height = self.data.upright_height(slot) if family == "vertical_cylinder" else None
+            law, coupling = height.settings(self.law, self.coupling) if height else (self.law, self.coupling)
             for rows_, grid in groups:
                 if not rows_.size:
                     continue
                 if grid is None:
                     grid = resolution.table_grid(self.data.q, float(np.max(sigma[rows_])), TABLE_POINTS)
-                kwargs = dict(law=self.law, coupling=self.coupling)
+                kwargs = dict(law=law, coupling=coupling)
                 if family == "sphere" and self.data.reflected:  # every sample its own r
                     terms = np.stack([cut.population_terms(
                         family, grid, radius=v[b, j], radius_spread=v[b, j + 1],
                         distance=v[b, j + 4] if structure else 0.0, distance_spread=v[b, j + 5] if structure else 0.0,
                         geometry=self.data.geometry(complex(v[b, g + 4], v[b, g + 5])), **kwargs)[0] for b in rows_])
+                elif slot in self.height_fractions:
+                    terms = substrate_level.upright_da_terms(
+                        grid, v[rows_, j], v[rows_, j + 1], v[rows_, j + 4], v[rows_, j + 5], law,
+                        geometry, self.height_fractions[slot])
                 else:
                     terms = cut.population_terms(
                         family, grid, radius=v[rows_, j], radius_spread=v[rows_, j + 1],
@@ -396,7 +432,7 @@ def sample_composition(network, h, data: Cut, composition: int, count: int, rng,
 def conditions(data: Cut) -> np.ndarray:
     """``encoding.conditions`` of a cut (1, CONDITIONS)."""
     return E.conditions([data.ratio], [data.qz / data.q_max],
-                        [data.qz_minus / data.q_max if data.reflected else np.nan])
+                        [data.qz_minus / data.q_max if data.reflected or data.substrate is not None else np.nan])
 
 
 def candidates(network, h, allowed: Optional[Sequence[int]] = None, count: int = 4) -> list[tuple[int, float]]:

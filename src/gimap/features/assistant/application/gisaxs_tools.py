@@ -13,6 +13,7 @@ from typing import Optional
 from src.gimap.shared import fit_names
 
 from ..domain import Profile, choose_halves, find_peaks, fit_curve, spacing_from_peaks
+from ..domain.substrate_optics import substrate_record
 from .gisaxs_choice import bounds_text, chance, probability, rivals, sizes
 from .models import ToolInputError, ToolOutcome
 
@@ -167,7 +168,8 @@ def _native(row: dict) -> dict:
     record = {key: [float(value) for value in row.get(source, ())] for key, source in (
         ("q_inv_nm", "native_q"), ("fit", "native_fit"), ("observed", "observed"), ("sigma", "sigma"),
         ("display_q", "display_q"), ("display_fit", "display_fit"))}
-    return {**record, "units": dict(row.get("unit_contract") or {}), "source": row.get("best_source")}
+    return {**record, "units": dict(row.get("unit_contract") or {}), "source": row.get("best_source"),
+            **({"model": row["model"]} if isinstance(row.get("model"), dict) else {})}
 
 
 class GisaxsToolsMixin:
@@ -279,13 +281,41 @@ class GisaxsToolsMixin:
         return self._ok(data, f"{spacing.kind} of the cut at |qy| = {spacing.q:.4g} Å⁻¹ → 2π/q* = "
                               f"{spacing.distance_nm:.3g} nm (a length scale, not necessarily the particle spacing)")
 
-    def _tool_fit_horizontal_cut(self, side: Optional[str] = None, components=None) -> ToolOutcome:
+    def _tool_fit_horizontal_cut(self, side: Optional[str] = None, components=None, substrate=None) -> ToolOutcome:
         if self.fitter is None:
             raise ToolInputError("No curve fitter is available in this session: use Send to Fitting in the GUI.")
         side, x, y, sigma, note = self._fit_input(side)
-        cut = cut_qz(self.results.status)
-        rows = self.fitter(x, y, sigma, components=tuple(components or ()), cancelled=self.cancelled,
-                           cut_qz=None if cut is None else cut["q_z_inv_nm"])
+        status = self.results.status or {}
+        cut = cut_qz(status)
+        surface = {}
+        fallback = ""
+        if substrate is None:
+            substrate = status.get("substrate")
+        from_header = substrate is None
+        if from_header:
+            substrate = (status.get("header") or {}).get("substrate")
+        if substrate is not None:
+            try:
+                known = substrate_record(substrate)
+            except ValueError as exc:
+                if not from_header:
+                    raise ToolInputError(str(exc)) from exc
+                fallback = str(exc)
+            else:
+                if cut is not None:
+                    surface = dict(substrate=known, grazing=dict(wavelength=cut["wavelength_A"] / 10.0,
+                                   alpha_i=cut["alpha_i_deg"], alpha_f=cut["alpha_f_deg"]))
+        fit_args = dict(components=tuple(components or ()), cancelled=self.cancelled,
+                        cut_qz=None if cut is None else cut["q_z_inv_nm"])
+        try:
+            rows = self.fitter(x, y, sigma, **fit_args, **surface)
+        except ValueError as exc:
+            # The fitting material table is authoritative about its energy range. Retry only that optical error.
+            if not (from_header and surface and str(exc).startswith("The table of substrates covers ")):
+                raise
+            fallback = "The material table does not cover the cut energy."
+            surface = {}
+            rows = self.fitter(x, y, sigma, **fit_args)
         if not rows:
             raise ToolInputError("Predict parameters found no solution.")
         solutions = [_solution(row) for row in rows]  # most probable first: the first is the one reported
@@ -293,8 +323,10 @@ class GisaxsToolsMixin:
             solutions[0]["alone"] = True
         self.results.gisaxs["fit"] = {
             "side": side, "curve": note, "points": int(x.size), "q_range_inv_angstrom": [float(x.min()), float(x.max())],
-            "substrate_level": 2 if cut is not None else 1,
-            "sphere_model": "Born term at the cut's q_z" if cut is not None else SPHERE_MODEL,
+            "substrate_level": 4 if surface else 2 if cut is not None else 1,
+            "sphere_model": rows[0]["scattering"] if surface else "Born term at the cut's q_z" if cut else SPHERE_MODEL,
+            **({"substrate_metadata_warning": fallback} if fallback else {}),
+            **surface,
             "cut_qz": cut,
             # the points χ²ᵣ is of: fitted, given, below_window (below the network's q window), unusable
             "fitted_points": None if not rows[0].get("points") else dict(rows[0]["points"]),
@@ -317,7 +349,8 @@ class GisaxsToolsMixin:
         if others:
             summary += ("; alternatives: " if by_bic else "; also probable: ") + "; ".join(
                 f"rank {item['rank']}, {_brief(item)}" for item in others)
-        return self._ok({"side": side, "curve": note, "points": int(x.size), "solutions": solutions[:TOP_SOLUTIONS],
+        return self._ok({"side": side, "curve": note, "points": int(x.size),
+                         **({"substrate_metadata_warning": fallback} if fallback else {}), "solutions": solutions[:TOP_SOLUTIONS],
                          "chosen": head}, summary)
 
 

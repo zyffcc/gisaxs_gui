@@ -10,15 +10,18 @@ fourth point of their tables from 4.9 to 30 keV (and every point between the L e
 is interpolated linearly in ln E and f₂ linearly in ln f₂ against ln E (within 0.15 % of f₁ and 0.35 % of f₂ of the
 full tables; the tables themselves are good to a few per cent near an absorption edge). Outside 4.9–30 keV the table
 refuses: δ and β are then typed. Materials (``MATERIALS``): Si (2.33 g/cm³), SiO₂ (2.20 g/cm³, thermal oxide or fused
-silica), plate glass (NIST's composition, 2.40 g/cm³) and Au (19.32 g/cm³). A rough or oxidised surface, a polymer film
-on the wafer and the particle layer's own index are not part of it (Physics and Methods 9.10, 15.1).
+silica), plate glass (NIST's composition, 2.40 g/cm³) and Au (19.32 g/cm³). Each entry represents a homogeneous
+material. A layered surface needs the thickness and optical constants of each film.
 """
 
 from __future__ import annotations
 
+import cmath
 import math
 from dataclasses import dataclass
 from typing import Mapping
+
+import numpy as np
 
 from src.gimap.shared.xray_scattering import ENERGY_RANGE_KEV, HC_KEV_NM, R_E_NM
 from src.gimap.shared.xray_scattering import scattering_factors as _forward_factors
@@ -78,3 +81,11 @@ def critical_angle_deg(material: str, wavelength_nm: float) -> float:
     """Small-angle critical angle √(2δ), in degrees, at the supplied wavelength."""
     delta, _ = optical_constants(material, wavelength_nm)
     return math.degrees(math.sqrt(2.0 * delta))
+
+
+def normal_wavevector_ratio(sine, delta: float, beta: float):
+    """Refracted kz/k for sin(α) in vacuum and n = 1 − δ + iβ, using the decaying root."""
+    real = sine * sine - 2 * delta
+    if isinstance(sine, np.ndarray):
+        return np.sqrt(real + 2j * beta)
+    return cmath.sqrt(complex(real, 2 * beta))

@@ -60,6 +60,14 @@ REPORT_ITEM = _object(
 
 
 def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
+    substrate = _object({
+        "material": {"type": "string", "description": "Si, SiO2, plate glass, Au, or custom δ and β."},
+        "delta": NUMBER, "beta": NUMBER,
+        "layers": {"type": "array", "items": _object({"thickness_nm": NUMBER, "delta": NUMBER, "beta": NUMBER},
+                                                     ("thickness_nm", "delta", "beta"))},
+    })
+    substrate["description"] = ("Explicit substrate at the measurement wavelength. For custom material give delta "
+                                "and beta. Layers are ordered from the particles down.")
     specs = [
         ToolSpec(
             "get_status",
@@ -91,6 +99,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
                     "standard": {"type": ["string", "null"], "enum": ["agbh", "lab6", "ceo2", "lab6_ceo2", None]},
                     "energy_kev": NUMBER_OR_NULL,
                     "incidence_deg": NUMBER_OR_NULL,
+                    "substrate": substrate,
                     "sample_roll_deg": NUMBER_OR_NULL,
                     "keep_incidence": {"type": "boolean"},
                     "yoneda_critical_deg": NUMBER_OR_NULL,
@@ -224,6 +233,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             _object({
                 "side": {"type": "string", "enum": ["mean", "negative", "positive"]},
                 "components": {"type": "array", "items": {"type": "integer", "enum": [1, 2, 3]}, "maxItems": 3},
+                "substrate": substrate,
             }, ()),
         ),
         ToolSpec(

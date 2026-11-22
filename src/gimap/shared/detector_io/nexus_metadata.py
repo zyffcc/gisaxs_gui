@@ -197,6 +197,59 @@ def _monitor(handle: h5py.File, entries: tuple[str, ...], frame: Optional[int]) 
     return None, None
 
 
+def _optics(handle, group, frame) -> dict:
+    out = {}
+    for key in ("delta", "beta"):
+        if key in group:
+            value, units = _number(handle, (group.name + "/" + key,), frame)
+            out[key] = value if units in ("", "1", "dimensionless") else None
+    return out
+
+
+def _film_fields(keys):
+    return any(any(word in key.casefold() for word in ("layer", "coating", "film", "roughness", "thickness"))
+               for key in keys)
+
+
+def _substrate(handle, entry, frame):
+    """The substrate of this NXentry only. Preserve incomplete film declarations for the fit's decision."""
+    base = entry.rstrip("/") + "/sample/substrate"
+    node = handle.get(base)
+    if node is None:
+        return None
+    if isinstance(node, h5py.Dataset):
+        material = _text_value(handle, (base,), frame)
+        if not (_film_fields(node.attrs) or _film_fields(node.parent) or _film_fields(node.parent.attrs)):
+            return material
+        return {"material": material, "unspecified_film": True}
+    surface = _optics(handle, node, frame)
+    material = node.get("material")
+    if "material" in node:
+        surface["material"] = _text_value(handle, (base + "/material",), frame)
+    if (set(node) - {"material", "delta", "beta", "top_layer"} or _film_fields(node.attrs)
+            or _film_fields(node.parent) or _film_fields(node.parent.attrs)
+            or (material is not None and _film_fields(material.attrs))):
+        surface["unspecified_film"] = True
+    if "top_layer" in node:
+        top = node.get("top_layer")
+        layer = {}
+        if isinstance(top, h5py.Group):
+            layer.update(_optics(handle, top, frame))
+            thickness = set(top) & {"thickness", "thickness_nm"}
+            if len(thickness) == 1 and not (set(top) - {"thickness_nm", "thickness", "delta", "beta"}):
+                key = thickness.pop()
+                value, units = _number(handle, (top.name + "/" + key,), frame)
+                scale = _scale(_WAVELENGTH_TO_ANGSTROM, units)
+                if key == "thickness_nm" and not units:
+                    layer["thickness_nm"] = value
+                elif value is not None and scale is not None:
+                    layer["thickness_nm"] = value * scale / 10.0
+                elif value is not None and (scale := _scale(_LENGTH_TO_METRE, units)) is not None:
+                    layer["thickness_nm"] = value * scale * 1e9
+        surface["top_layer"] = layer
+    return surface
+
+
 def extract_nexus_metadata(
     handle: h5py.File,
     detector_group: str = DEFAULT_DETECTOR_GROUP,
@@ -235,7 +288,9 @@ def extract_nexus_metadata(
     if stamp is None and "file_time" in handle.attrs:  # the Lambda server writes the time of the file only here
         stamp = str(_plain(np.asarray(handle.attrs["file_time"]).reshape(-1)[0]))
     monitor, monitor_source = _monitor(handle, entries, frame)
+    substrate = _substrate(handle, entry, frame)
     return {
+        **({"substrate": substrate} if substrate is not None else {}),
         **nexus_incidence(handle, entry, frame),
         "energy_kev": energy,
         "wavelength_angstrom": wavelength,

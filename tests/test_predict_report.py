@@ -48,7 +48,7 @@ def test_shape_warning_and_numbering(family):
     assert reporting.grazing_flags(upright, 1, 2, known_heights={"1": 4}) == ["cyl_sphere:R_1"]
 
 
-@pytest.mark.parametrize("level", [2, 3])
+@pytest.mark.parametrize("level", [2, 3, 4])
 def test_high_qz_upright_shape_warning_is_independent_of_height(level):
     model = fm.FitModel((fm.new_component("vertical_cylinder", radius=3),
                          fm.new_component("vertical_cylinder", radius=2)))
@@ -56,6 +56,15 @@ def test_high_qz_upright_shape_warning_is_independent_of_height(level):
     for heights in (None, {"1": 4, "2": 20}):
         assert reporting.grazing_flags(model, 1.01, level, known_heights=heights) == ["cyl_sphere:R_1", "cyl_sphere:R_2"]
     assert reporting.grazing_flags(model, 1.01, 1) == []
+
+
+def test_level_four_high_qz_warns_only_about_the_fitted_upright_shape():
+    model = fm.FitModel((fm.new_component("vertical_cylinder", radius=3),
+                         fm.new_component("sphere", radius=2.5),
+                         fm.new_component("cylinder", radius=3.5))).with_parameter((2, "h"), value=21)
+    for reflected_beam in (False, True):
+        assert reporting.grazing_flags(model, 2 / 3, 4, reflected_beam) == []
+        assert reporting.grazing_flags(model, 1.0, 4, reflected_beam) == ["cyl_sphere:R_2"]
 
 
 def test_reflection_phase_summary_respects_the_branch_of_the_fit():

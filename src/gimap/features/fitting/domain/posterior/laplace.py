@@ -177,6 +177,8 @@ def local_posterior(data: Cut, composition: int, centre, tau: float, rng: np.ran
     samples are weighted against the mixture of the rounds' proposals."""
     likelihood = Likelihood(data, composition, law, coupling)
     active = E.active(composition)[0]
+    if data.substrate is not None:
+        active[E.GLOBAL.start + 4:E.GLOBAL.start + 6] = False   # both reflection coefficients are known
     centre = np.array(centre, float)
     centre[E.GLOBAL.start + 3] = tau
     unit = np.clip(E.to_unit(dimensionless(centre[None, :], data.q_max), [data.ratio], composition), 1e-6, 1 - 1e-6)
@@ -227,7 +229,7 @@ def local_posterior(data: Cut, composition: int, centre, tau: float, rng: np.ran
         parts = np.array([first_log_q(z)] + [_t_log(z[:, every], m, c) for m, c in later])
         top = np.max(parts, axis=0)
         log_q = top + np.log(np.mean(np.exp(parts - top), axis=0))
-        log_w = np.concatenate(log_like_all) + E.log_prior(z, composition) - log_q
+        log_w = np.concatenate(log_like_all) + E.log_prior(z, composition, active if data.substrate else None) - log_q
         log_w = np.where(np.isfinite(log_w), log_w, -np.inf)
         w = np.exp(log_w - np.max(log_w))
         ess = float(w.sum() ** 2 / np.sum(w * w))

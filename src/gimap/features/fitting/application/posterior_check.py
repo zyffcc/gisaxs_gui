@@ -24,7 +24,7 @@ from ..domain.fit_engine import FitData
 from ..domain.fit_model import FitModel
 from ..domain.posterior.refine import MODEL_ERROR_FLOOR, model_values
 from ..domain.posterior_check import ENSEMBLES, CheckResult, FitTarget, PredictTarget, run_check
-from .single_predict import compositions, cut_geometry, cut_qz_minus
+from .single_predict import compositions, cut_geometry, cut_qz_minus, upright_distributions
 
 NOTHING = ("Nothing to check: put a solution of Predict parameters in Model, or fit with Refine or Search first.")
 CHANGED = "The model changed since the run: the check is of the model it was started for."
@@ -58,11 +58,16 @@ def target_for(model: FitModel, data: Optional[FitData], solutions=(), result=No
         centre = model_values(model, composition)
         if centre is None:
             raise ValueError(NOTHING)
-        qz, _grazing = cut_geometry(model)
+        qz, grazing = cut_geometry(model)
         diagnostics = getattr(solution, "diagnostics", None) or {}
-        law = model.components[0].law
-        coupling = model.components[0].coupling
+        substrate = model.substrate if diagnostics.get("substrate_level") == 4 else None
+        heights = upright_distributions(model) if substrate else {}
+        # Height-specified uprights carry their own law and coupling. Every other population uses
+        # Predict's shared defaults, which can differ from those of the first upright.
+        default = next((c for c in model.components if not c.heights), model.components[0]) if heights else model.components[0]
+        law, coupling = default.law, default.coupling
         target = PredictTarget(data.q, data.intensity, data.sigma, composition=composition, centre=centre,
+                               substrate=substrate, grazing=grazing, upright_heights=heights,
                                qz=diagnostics.get("cut_qz", qz),
                                qz_minus=diagnostics.get("cut_qz_minus", cut_qz_minus(model)), law=law, coupling=coupling,
                                model_error_floor=diagnostics.get("model_error_floor", MODEL_ERROR_FLOOR),

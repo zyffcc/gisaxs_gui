@@ -43,7 +43,7 @@ standard error of the spacing spread differed by 5.69% between the two runs.
 ## The runs the paper quotes
 
 The recovery numbers of *Predict parameters* in the GIMaP paper, in Physics and Methods 9.13 and in the network's
-`MODEL_CARD.md` come from the runs below. All were made with one version of the fitting code: git tree
+`MODEL_CARD.md` come from the runs below. The original 200-cut and extended runs used git tree
 `7e68831a52cf841a56fe05f8cc4e36ee62b41cb7` of `src/gimap/features/fitting/domain` (commits 2eb0243 and 7179b85 have
 this tree), the network `flow_v1` (its SHA-256 is in every summary), ten workers on an Intel Core i9-13900HX; the
 timing run alone used one worker. Each summary written at 7179b85 names the commit and the tree (`code`);
@@ -59,6 +59,11 @@ timing run alone used one worker. Each summary written at 7179b85 names the comm
 | DWBA on Si, both angles given | `posterior_dwba_tp_summary.json` | `per_cut/posterior_dwba_tp.json.gz` | `--n 200 --workers 10 --scattering dwba --substrate si --cut two_path` |
 | DWBA on Si, q_z given | `posterior_dwba_born_summary.json` | `per_cut/posterior_dwba_born.json.gz` | `--n 200 --workers 10 --scattering dwba --substrate si --cut born` |
 | DWBA on Si, neither given | `posterior_dwba_eia_summary.json` | `per_cut/posterior_dwba_eia.json.gz` | `--n 200 --workers 10 --scattering dwba --substrate si --cut eia` |
+| DWBA on known Si, specified and chosen compositions | `posterior_dwba4_si_summary.json` | `per_cut/posterior_dwba4_si.json.gz` | `--n 200 --workers 1 --scattering dwba --substrate si --cut dwba` |
+| DWBA on known Si, automatic analysis | `posterior_dwba4_si_auto_summary.json` | `per_cut/posterior_dwba4_si_auto.json.gz` | `--n 200 --workers 1 --scattering dwba --substrate si --cut dwba --stages auto --auto-level 4` |
+| DWBA on known 100 nm polystyrene on Si, specified and chosen compositions | `posterior_dwba4_ps100_summary.json` | `per_cut/posterior_dwba4_ps100.json.gz` | `--n 200 --workers 1 --scattering dwba --substrate ps100 --cut dwba` |
+| DWBA on known 100 nm polystyrene on Si, automatic analysis | `posterior_dwba4_ps100_auto_summary.json` | `per_cut/posterior_dwba4_ps100_auto.json.gz` | `--n 200 --workers 1 --scattering dwba --substrate ps100 --cut dwba --stages auto --auto-level 4` |
+| Same draws compared by largest q₊R and composition | `posterior_dwba4_pairs.json` | – | `posterior_pairs.py --by-cut`, below |
 | the DWBA runs paired with the first, by q₊R | `posterior_dwba_pairs.json` | – | `posterior_pairs.py`, below |
 | Fitting's own model as the truth | `posterior_own_summary.json` | `per_cut/posterior_own.json.gz` | `--n 200 --workers 10 --truth own --seed0 20260601` |
 | model error floor 3 % | `posterior_floor03_summary.json` | `per_cut/posterior_floor03.json.gz` | `--n 200 --workers 10 --model-error-floor 0.03` |
@@ -102,14 +107,229 @@ The public GALAXI worked example gives q₊R = 3.13 for the 5.99 nm upright cyli
 (`history/README.md`). A new run writes `NAME_summary.json` here and `results/NAME.json` (not committed); files named
 `*_new_summary.json` are left out of the repository.
 
+## Four-term DWBA on a known substrate
+
+Each substrate uses the 200 original draws (seed 20261116), λ = 0.1045 nm, αᵢ = 0.40° and the Si Yoneda exit
+angle. For ps100 the truth and the fit both place a 100 nm polystyrene film on Si. Changing the substrate changes
+the simulated intensity and Poisson counts. The particle parameters, measurement settings and noise seeds remain
+paired by cut index. The independent simulator uses the same optical constants as the fit. It includes surface
+roughness, resolution and a beam tail on half of the cuts. The level-2 and level-3 DWBA comparisons both use Si.
+The Born `choose` comparison uses these same particle draws. The Born `auto` reference uses 300 draws from a
+different seed and provides an independent comparison.
+
+The `fit` stage gives Predict the true composition. The `choose` stage compares compositions with a paracrystal
+in every population. The `auto` stage also considers populations without a paracrystal. All three use the same
+proposal network and the substrate's fixed reflection coefficients throughout the likelihood and refinement.
+
+Composition recovery requires the correct multiset of particle families. The truth's mode requires that
+composition and every fitted R and D within 20 % of its input. A listed mode also counts an alternative of
+probability at least 0.05. The parameter errors and coverages compare populations in order of increasing
+radius whenever the fit returns the correct number of populations. Each q₊R bin uses the largest true R
+of the cut, including upright cylinders. The shape-confusion counts use the *fitted* q₊R to evaluate the
+warning a user would see. They compare a single input population with a single fitted population and
+count errors in population number separately. Times are median elapsed seconds per cut for each stage.
+
+With composition free, level 4 selected the correct families on 71.5 % of Si cuts and 75.0 % of ps100 cuts
+(`choose`), compared with 33.0 % and 69.5 % for levels 2 and 3 on Si and 76.5 % for Born truth. Median radius
+error fell from 7.99 % and 6.09 % to 1.26 % on Si, near the Born value of 0.89 %. On Si the 68/95 % radius
+intervals covered 60/78 % of true radii, compared with 60/77 % for Born truth.
+
+Automatic selection recovered the families on 69.5 % of Si cuts and 74.0 % of ps100 cuts. In the largest
+true q₊R bins 1.7–2.3 and ≥2.3, recovery rose from 29/23 % at level 2 on Si to 75/68 % at level 4 on Si
+and 71/74 % on ps100. For the 100 cuts containing only spheres (one or two populations), recovery rose from
+9 % to 66 % on Si and reached 72 % on ps100. Of the 50 cuts with one upright cylinder, 78 % were correct at
+level 2 on Si and 76 % at level 4 on each substrate. The network's candidate list included the true particle
+families on all 200 cuts in each level-4 selection run. These runs used the existing network and proposal starts.
+
+Among single-population cuts fitted as one upright cylinder at fitted q₊R > 2, spheres accounted for 2/27
+(`choose`) and 2/25 (`auto`) on Si, and 0/24 and 0/23 on ps100. The Si results motivated retaining the
+`cyl_sphere` advisory at level 4. The archives use the numerical code at `fda067c`. After adding the advisory,
+`278df6af` reproduced all numerical fields of Si cut 100 exactly and flagged its upright-cylinder solution.
+Median times for `fit`, `choose` and `auto` were 9.5, 57.7 and 38.0 s on Si and 8.9, 53.8 and 39.7 s on ps100.
+These runs used one worker per substrate on the same machine. The historical runs used eight or ten concurrent
+fits, so the timing differences also reflect CPU contention.
+
+| Truth and fitted level | Stage | Cuts | Composition (%) | Truth mode first / listed (%) | Median error R / D (%) | R coverage 68 / 95 (%) | D coverage 68 / 95 (%) | Median s/cut |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Born truth, level 2 | fit | 200 | given | 89.0 / 93.0 | 0.61 / 0.07 | 67 / 85 | 85 / 95 | 15.2 |
+| Si, level 2 | fit | 200 | given | 72.5 / 73.0 | 5.61 / 0.20 | 26 / 39 | 57 / 71 | 13.7 |
+| Si, level 3 | fit | 200 | given | 87.0 / 96.5 | 2.96 / 0.06 | 57 / 73 | 88 / 99 | 28.6 |
+| Si, level 4 | fit | 200 | given | 95.5 / 97.5 | 0.55 / 0.06 | 72 / 90 | 88 / 99 | 9.5 |
+| ps100, level 4 | fit | 200 | given | 95.5 / 97.0 | 0.53 / 0.06 | 77 / 94 | 89 / 100 | 8.9 |
+| Born truth, level 2 | choose | 200 | 76.5 | 72.0 / 85.5 | 0.89 / 0.06 | 60 / 77 | 87 / 96 | 69.4 |
+| Si, level 2 | choose | 200 | 33.0 | 32.5 / 44.5 | 7.99 / 0.07 | 28 / 41 | 78 / 96 | 43.8 |
+| Si, level 3 | choose | 200 | 69.5 | 59.5 / 88.0 | 6.09 / 0.06 | 56 / 67 | 89 / 100 | 93.6 |
+| Si, level 4 | choose | 200 | 71.5 | 69.0 / 90.5 | 1.26 / 0.06 | 60 / 78 | 88 / 99 | 57.7 |
+| ps100, level 4 | choose | 200 | 75.0 | 72.0 / 91.0 | 0.82 / 0.06 | 64 / 84 | 88 / 99 | 53.8 |
+| Born truth, level 2 (300 cuts) | auto | 300 | 75.3 | 70.7 / 85.7 | 0.80 / 0.07 | 67 / 82 | 86 / 96 | 49.7 |
+| Si, level 2 | auto | 200 | 30.5 | 30.0 / 44.0 | 8.18 / 0.07 | 28 / 40 | 78 / 96 | 55.2 |
+| Si, level 4 | auto | 200 | 69.5 | 67.0 / 89.0 | 1.28 / 0.06 | 60 / 78 | 88 / 99 | 38.0 |
+| ps100, level 4 | auto | 200 | 74.0 | 71.0 / 89.5 | 0.83 / 0.06 | 64 / 84 | 88 / 99 | 39.7 |
+
+<details>
+<summary>Composition, truth mode, errors, coverage and timing by cut class</summary>
+
+**<1.2**
+
+| Truth and fitted level | Stage | Cuts | Composition (%) | Truth mode first / listed (%) | Median error R / D (%) | R coverage 68 / 95 (%) | D coverage 68 / 95 (%) | Median s/cut |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Born truth, level 2 (300 cuts) | auto | 4 | 100.0 | 100.0 / 100.0 | 0.67 / 0.06 | 75 / 100 | 75 / 100 | 31.5 |
+
+**1.2–1.7**
+
+| Truth and fitted level | Stage | Cuts | Composition (%) | Truth mode first / listed (%) | Median error R / D (%) | R coverage 68 / 95 (%) | D coverage 68 / 95 (%) | Median s/cut |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Born truth, level 2 | fit | 25 | given | 100.0 / 100.0 | 0.41 / 0.04 | 68 / 84 | 92 / 100 | 9.8 |
+| Si, level 2 | fit | 25 | given | 100.0 / 100.0 | 1.28 / 0.03 | 40 / 60 | 92 / 100 | 5.6 |
+| Si, level 3 | fit | 25 | given | 92.0 / 96.0 | 1.05 / 0.03 | 52 / 72 | 92 / 100 | 6.9 |
+| Si, level 4 | fit | 25 | given | 100.0 / 100.0 | 0.37 / 0.06 | 72 / 96 | 92 / 100 | 4.4 |
+| ps100, level 4 | fit | 25 | given | 100.0 / 100.0 | 0.28 / 0.05 | 76 / 96 | 92 / 100 | 4.3 |
+| Born truth, level 2 | choose | 25 | 76.0 | 76.0 / 84.0 | 0.48 / 0.04 | 59 / 82 | 86 / 100 | 40.1 |
+| Si, level 2 | choose | 25 | 84.0 | 84.0 / 88.0 | 1.04 / 0.05 | 36 / 68 | 86 / 100 | 23.9 |
+| Si, level 3 | choose | 25 | 80.0 | 76.0 / 84.0 | 1.05 / 0.03 | 65 / 78 | 87 / 100 | 49.3 |
+| Si, level 4 | choose | 25 | 80.0 | 80.0 / 88.0 | 0.34 / 0.05 | 64 / 91 | 91 / 100 | 54.6 |
+| ps100, level 4 | choose | 25 | 80.0 | 80.0 / 88.0 | 0.28 / 0.05 | 68 / 91 | 91 / 100 | 44.9 |
+| Born truth, level 2 (300 cuts) | auto | 35 | 65.7 | 65.7 / 77.1 | 0.20 / 0.06 | 78 / 81 | 89 / 96 | 27.6 |
+| Si, level 2 | auto | 25 | 80.0 | 80.0 / 88.0 | 1.04 / 0.07 | 38 / 71 | 86 / 100 | 28.3 |
+| Si, level 4 | auto | 25 | 76.0 | 76.0 / 88.0 | 0.34 / 0.05 | 65 / 95 | 95 / 100 | 39.8 |
+| ps100, level 4 | auto | 25 | 76.0 | 76.0 / 84.0 | 0.28 / 0.05 | 70 / 95 | 95 / 100 | 34.7 |
+
+**1.7–2.3**
+
+| Truth and fitted level | Stage | Cuts | Composition (%) | Truth mode first / listed (%) | Median error R / D (%) | R coverage 68 / 95 (%) | D coverage 68 / 95 (%) | Median s/cut |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Born truth, level 2 | fit | 24 | given | 91.7 / 91.7 | 0.26 / 0.05 | 77 / 96 | 92 / 100 | 6.9 |
+| Si, level 2 | fit | 24 | given | 100.0 / 100.0 | 0.85 / 0.09 | 54 / 65 | 77 / 88 | 5.6 |
+| Si, level 3 | fit | 24 | given | 87.5 / 100.0 | 2.63 / 0.05 | 54 / 62 | 88 / 100 | 16.5 |
+| Si, level 4 | fit | 24 | given | 100.0 / 100.0 | 0.36 / 0.04 | 65 / 96 | 88 / 100 | 4.3 |
+| ps100, level 4 | fit | 24 | given | 91.7 / 91.7 | 0.34 / 0.06 | 81 / 92 | 85 / 100 | 4.0 |
+| Born truth, level 2 | choose | 24 | 87.5 | 87.5 / 91.7 | 0.30 / 0.03 | 68 / 88 | 84 / 100 | 33.9 |
+| Si, level 2 | choose | 24 | 33.3 | 33.3 / 41.7 | 9.60 / 0.03 | 33 / 46 | 79 / 100 | 25.9 |
+| Si, level 3 | choose | 24 | 66.7 | 58.3 / 95.8 | 8.50 / 0.04 | 52 / 52 | 80 / 100 | 46.4 |
+| Si, level 4 | choose | 24 | 75.0 | 75.0 / 91.7 | 0.42 / 0.04 | 54 / 79 | 92 / 100 | 42.6 |
+| ps100, level 4 | choose | 24 | 70.8 | 70.8 / 87.5 | 0.50 / 0.03 | 67 / 79 | 88 / 100 | 52.8 |
+| Born truth, level 2 (300 cuts) | auto | 38 | 86.8 | 86.8 / 89.5 | 0.39 / 0.05 | 70 / 95 | 89 / 100 | 23.9 |
+| Si, level 2 | auto | 24 | 29.2 | 29.2 / 37.5 | 9.64 / 0.03 | 30 / 43 | 83 / 100 | 35.0 |
+| Si, level 4 | auto | 24 | 75.0 | 75.0 / 87.5 | 0.42 / 0.04 | 54 / 79 | 92 / 100 | 31.3 |
+| ps100, level 4 | auto | 24 | 70.8 | 70.8 / 83.3 | 0.50 / 0.03 | 67 / 79 | 88 / 100 | 34.9 |
+
+**≥2.3**
+
+| Truth and fitted level | Stage | Cuts | Composition (%) | Truth mode first / listed (%) | Median error R / D (%) | R coverage 68 / 95 (%) | D coverage 68 / 95 (%) | Median s/cut |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Born truth, level 2 | fit | 151 | given | 86.8 / 92.1 | 0.76 / 0.07 | 66 / 84 | 83 / 94 | 23.7 |
+| Si, level 2 | fit | 151 | given | 63.6 / 64.2 | 7.43 / 0.27 | 22 / 34 | 51 / 67 | 14.9 |
+| Si, level 3 | fit | 151 | given | 86.1 / 96.0 | 3.31 / 0.06 | 58 / 74 | 88 / 99 | 34.6 |
+| Si, level 4 | fit | 151 | given | 94.0 / 96.7 | 0.66 / 0.06 | 73 / 89 | 88 / 99 | 12.7 |
+| ps100, level 4 | fit | 151 | given | 95.4 / 97.4 | 0.67 / 0.06 | 76 / 94 | 89 / 100 | 10.6 |
+| Born truth, level 2 | choose | 151 | 74.8 | 68.9 / 84.8 | 1.00 / 0.07 | 60 / 76 | 87 / 95 | 78.1 |
+| Si, level 2 | choose | 151 | 24.5 | 23.8 / 37.7 | 8.93 / 0.07 | 27 / 37 | 77 / 95 | 47.9 |
+| Si, level 3 | choose | 151 | 68.2 | 57.0 / 87.4 | 6.30 / 0.06 | 55 / 67 | 90 / 100 | 109.8 |
+| Si, level 4 | choose | 151 | 69.5 | 66.2 / 90.7 | 1.46 / 0.07 | 60 / 77 | 88 / 98 | 61.9 |
+| ps100, level 4 | choose | 151 | 74.8 | 70.9 / 92.1 | 0.95 / 0.06 | 64 / 83 | 88 / 99 | 56.1 |
+| Born truth, level 2 (300 cuts) | auto | 223 | 74.4 | 68.2 / 86.1 | 1.07 / 0.07 | 66 / 80 | 86 / 96 | 53.0 |
+| Si, level 2 | auto | 151 | 22.5 | 21.9 / 37.7 | 9.23 / 0.07 | 27 / 37 | 77 / 95 | 58.7 |
+| Si, level 4 | auto | 151 | 67.5 | 64.2 / 89.4 | 1.51 / 0.06 | 60 / 77 | 87 / 98 | 40.5 |
+| ps100, level 4 | auto | 151 | 74.2 | 70.2 / 91.4 | 0.96 / 0.06 | 64 / 83 | 88 / 99 | 43.0 |
+
+**Spheres only (one or two)**
+
+| Truth and fitted level | Stage | Cuts | Composition (%) | Truth mode first / listed (%) | Median error R / D (%) | R coverage 68 / 95 (%) | D coverage 68 / 95 (%) | Median s/cut |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Born truth, level 2 | fit | 100 | given | 83.0 / 88.0 | 0.70 / 0.06 | 65 / 83 | 85 / 93 | 16.6 |
+| Si, level 2 | fit | 100 | given | 63.0 / 64.0 | 7.58 / 0.33 | 13 / 20 | 48 / 64 | 14.3 |
+| Si, level 3 | fit | 100 | given | 78.0 / 96.0 | 5.17 / 0.05 | 53 / 65 | 90 / 99 | 35.0 |
+| Si, level 4 | fit | 100 | given | 92.0 / 95.0 | 0.69 / 0.06 | 67 / 87 | 90 / 99 | 7.6 |
+| ps100, level 4 | fit | 100 | given | 92.0 / 94.0 | 0.68 / 0.06 | 77 / 92 | 89 / 100 | 8.6 |
+| Born truth, level 2 | choose | 100 | 70.0 | 64.0 / 82.0 | 1.04 / 0.05 | 55 / 72 | 87 / 93 | 67.2 |
+| Si, level 2 | choose | 100 | 10.0 | 10.0 / 19.0 | 10.81 / 0.05 | 12 / 21 | 81 / 96 | 42.7 |
+| Si, level 3 | choose | 100 | 66.0 | 53.0 / 85.0 | 7.92 / 0.05 | 50 / 59 | 91 / 100 | 96.1 |
+| Si, level 4 | choose | 100 | 67.0 | 62.0 / 87.0 | 1.72 / 0.06 | 59 / 73 | 91 / 99 | 55.1 |
+| ps100, level 4 | choose | 100 | 72.0 | 67.0 / 88.0 | 0.88 / 0.06 | 62 / 79 | 90 / 99 | 52.8 |
+| Born truth, level 2 (300 cuts) | auto | 150 | 71.3 | 66.0 / 83.3 | 1.03 / 0.07 | 65 / 82 | 86 / 97 | 51.7 |
+| Si, level 2 | auto | 100 | 9.0 | 9.0 / 19.0 | 10.81 / 0.05 | 13 / 21 | 81 / 96 | 54.0 |
+| Si, level 4 | auto | 100 | 66.0 | 61.0 / 86.0 | 1.72 / 0.06 | 59 / 74 | 91 / 99 | 39.2 |
+| ps100, level 4 | auto | 100 | 72.0 | 67.0 / 87.0 | 0.87 / 0.06 | 63 / 80 | 90 / 99 | 39.2 |
+
+**Upright cylinders only**
+
+| Truth and fitted level | Stage | Cuts | Composition (%) | Truth mode first / listed (%) | Median error R / D (%) | R coverage 68 / 95 (%) | D coverage 68 / 95 (%) | Median s/cut |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Born truth, level 2 | fit | 50 | given | 100.0 / 100.0 | 0.26 / 0.06 | 74 / 94 | 84 / 100 | 8.5 |
+| Si, level 2 | fit | 50 | given | 100.0 / 100.0 | 0.26 / 0.06 | 74 / 94 | 84 / 100 | 5.6 |
+| Si, level 3 | fit | 50 | given | 100.0 / 100.0 | 0.26 / 0.06 | 74 / 94 | 84 / 100 | 5.6 |
+| Si, level 4 | fit | 50 | given | 100.0 / 100.0 | 0.26 / 0.06 | 74 / 100 | 84 / 100 | 5.6 |
+| ps100, level 4 | fit | 50 | given | 100.0 / 100.0 | 0.26 / 0.06 | 74 / 100 | 84 / 100 | 5.3 |
+| Born truth, level 2 | choose | 50 | 86.0 | 86.0 / 86.0 | 0.23 / 0.06 | 70 / 95 | 77 / 100 | 43.8 |
+| Si, level 2 | choose | 50 | 86.0 | 86.0 / 86.0 | 0.23 / 0.06 | 70 / 95 | 77 / 100 | 26.2 |
+| Si, level 3 | choose | 50 | 80.0 | 80.0 / 86.0 | 0.23 / 0.06 | 79 / 95 | 76 / 100 | 45.2 |
+| Si, level 4 | choose | 50 | 82.0 | 82.0 / 88.0 | 0.23 / 0.06 | 71 / 100 | 80 / 100 | 52.5 |
+| ps100, level 4 | choose | 50 | 80.0 | 80.0 / 88.0 | 0.25 / 0.06 | 70 / 100 | 80 / 100 | 56.8 |
+| Born truth, level 2 (300 cuts) | auto | 75 | 84.0 | 84.0 / 85.3 | 0.23 / 0.06 | 89 / 100 | 87 / 100 | 42.8 |
+| Si, level 2 | auto | 50 | 78.0 | 78.0 / 84.0 | 0.23 / 0.06 | 72 / 95 | 77 / 100 | 39.4 |
+| Si, level 4 | auto | 50 | 76.0 | 76.0 / 84.0 | 0.25 / 0.05 | 68 / 100 | 82 / 100 | 36.9 |
+| ps100, level 4 | auto | 50 | 76.0 | 76.0 / 84.0 | 0.25 / 0.05 | 68 / 100 | 82 / 100 | 41.4 |
+
+**Spheres and upright cylinders**
+
+| Truth and fitted level | Stage | Cuts | Composition (%) | Truth mode first / listed (%) | Median error R / D (%) | R coverage 68 / 95 (%) | D coverage 68 / 95 (%) | Median s/cut |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Born truth, level 2 | fit | 50 | given | 90.0 / 96.0 | 1.03 / 0.08 | 68 / 83 | 84 / 94 | 27.9 |
+| Si, level 2 | fit | 50 | given | 64.0 / 64.0 | 7.08 / 0.20 | 22 / 39 | 57 / 68 | 17.0 |
+| Si, level 3 | fit | 50 | given | 92.0 / 94.0 | 3.27 / 0.08 | 55 / 74 | 88 / 99 | 37.9 |
+| Si, level 4 | fit | 50 | given | 98.0 / 100.0 | 0.80 / 0.06 | 78 / 91 | 87 / 99 | 17.5 |
+| ps100, level 4 | fit | 50 | given | 98.0 / 100.0 | 0.83 / 0.06 | 78 / 93 | 92 / 99 | 14.6 |
+| Born truth, level 2 | choose | 50 | 80.0 | 74.0 / 92.0 | 1.30 / 0.08 | 63 / 77 | 91 / 98 | 88.7 |
+| Si, level 2 | choose | 50 | 26.0 | 24.0 / 54.0 | 5.97 / 0.09 | 32 / 44 | 75 / 93 | 52.8 |
+| Si, level 3 | choose | 50 | 66.0 | 52.0 / 96.0 | 6.67 / 0.08 | 55 / 67 | 91 / 99 | 121.7 |
+| Si, level 4 | choose | 50 | 70.0 | 70.0 / 100.0 | 1.58 / 0.06 | 58 / 77 | 87 / 98 | 65.5 |
+| ps100, level 4 | choose | 50 | 76.0 | 74.0 / 100.0 | 1.30 / 0.06 | 65 / 83 | 89 / 99 | 50.5 |
+| Born truth, level 2 (300 cuts) | auto | 75 | 74.7 | 66.7 / 90.7 | 1.25 / 0.06 | 61 / 75 | 86 / 95 | 54.6 |
+| Si, level 2 | auto | 50 | 26.0 | 24.0 / 54.0 | 5.97 / 0.09 | 32 / 44 | 75 / 93 | 65.7 |
+| Si, level 4 | auto | 50 | 70.0 | 70.0 / 100.0 | 1.58 / 0.06 | 58 / 77 | 87 / 98 | 38.1 |
+| ps100, level 4 | auto | 50 | 76.0 | 74.0 / 100.0 | 1.30 / 0.06 | 65 / 83 | 89 / 99 | 40.0 |
+
+</details>
+
+To repeat the runs, set `GIMAP_HOME` to a temporary directory and run these commands from the repository root.
+Each substrate runs the plain and automatic commands in sequence on one worker, with up to two workers on the machine.
+The paired output goes in `results/` beside the new per-cut files.
+
+```bash
+N=src/gimap/features/fitting/domain/posterior/data/flow_v1
+B=tools/benchmarks
+P=$B/per_cut
+R=$B/results
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+for substrate in si ps100; do
+  (
+    name=posterior_dwba4_$substrate
+    python $B/posterior_recovery.py --network $N --out "${name}_repeat" --n 200 --workers 1 --scattering dwba --substrate "$substrate" --cut dwba &&
+    python $B/posterior_recovery.py --network $N --out "${name}_auto_repeat" --n 200 --workers 1 --scattering dwba --substrate "$substrate" --cut dwba --stages auto --auto-level 4
+  ) &
+done
+wait
+python $B/posterior_pairs.py --by-cut $R/posterior_dwba4_pairs.json \
+  born=$P/posterior_recovery.json.gz si_l2=$P/posterior_dwba_born.json.gz si_l3=$P/posterior_dwba_tp.json.gz \
+  si_auto2=$P/posterior_dwba_auto2.json.gz si_l4=$R/posterior_dwba4_si_repeat.json \
+  ps100_l4=$R/posterior_dwba4_ps100_repeat.json si_auto4=$R/posterior_dwba4_si_auto_repeat.json \
+  ps100_auto4=$R/posterior_dwba4_ps100_auto_repeat.json
+python $B/posterior_pairs.py --by-cut $R/posterior_dwba4_born_auto_reference.json born_auto2=$P/posterior_newseed_auto2.json.gz
+```
+
+The pairing command above uses the fresh `results/<name>.json` files and recomputes timings for that machine.
+To reproduce the published tables, use the four bundled archives as its level-4 inputs:
+`si_l4=$P/posterior_dwba4_si.json.gz`, `ps100_l4=$P/posterior_dwba4_ps100.json.gz`,
+`si_auto4=$P/posterior_dwba4_si_auto.json.gz` and `ps100_auto4=$P/posterior_dwba4_ps100_auto.json.gz`.
+
 ## The scripts
 
 | Script | What it measures | Summary |
 |---|---|---|
 | `recovery_cases.py` | the held-out curves of the 1D recovery benchmarks: fit1d's 200 (seed 20261116), their draw and their curve from the independent forward model `yoneda_truth.py`; shared by the scripts below | – |
 | `fit1d_recovery.py` | how well *Predict parameters (fit1d)* (removed in 0.2.0; a copy of the kit in `GISAXS1D_KIT_HOME`) recovered known parameters on the 200 curves of `recovery_cases.py` (Physics and Methods, section 9.12); with `--set extended` on 1200 curves of `heldout_cases.py` | `history/fit1d_recovery_summary.json`, `history/fit1d_heldout_summary.json` (a new run writes beside the script) |
-| `posterior_recovery.py` | how well *Predict parameters* (the proposal network, its posterior and refinement) recovers known parameters on fit1d's 200 held-out curves (`--set fit1d`) or on curves of `heldout_cases.py` (`--set extended`; 600 in the paper's run): errors, coverage of the 68 %/95 % intervals, how often the most probable solution is in the truth's mode, the composition chosen, time per curve on one core (Physics and Methods, section 9.13); `--truth own` draws the same cases in Predict's own model (the coverage when the model is exact), `--model-error-floor`, `--explored`, `--moves`, `--moved-solutions`, `--per-count` and `--widths` set those steps, `--constant module.NAME=value` any other constant of `refine` or `infer`; `--scattering dwba` draws the same curves with the four DWBA terms (`--substrate si` or `ps100`, 100 nm polystyrene on Si); `--cut` says what Predict is given of the cut: `born` its q₊ = k_i + k_f (the Born term at it; the default), `two_path` both angles (spheres with the exit-reflected path at q₋ = k_i − k_f and a free effective reflection coefficient), `eia` nothing (the effective interface) | `posterior_*_summary.json` and `per_cut/` (*The runs the paper quotes*, above); earlier runs in `history/` |
-| `posterior_pairs.py` | pairs runs of `posterior_recovery.py` on the same cases that differ in the truth's physics or Predict's geometry: errors of R and D by q₊R for spheres and upright cylinders, composition and truth's mode by the largest sphere's q₊R, whether χ²/N marks the spheres that are off (Physics and Methods 9.13, *The waves the surface reflects*) | `posterior_dwba_pairs.json`; earlier ones in `history/` |
+| `posterior_recovery.py` | how well *Predict parameters* (the proposal network, its posterior and refinement) recovers known parameters on fit1d's 200 held-out curves (`--set fit1d`) or on curves of `heldout_cases.py` (`--set extended`; 600 in the paper's run): errors, coverage of the 68 %/95 % intervals, how often the most probable solution is in the truth's mode, the composition chosen, time per curve on one core (Physics and Methods, section 9.13); `--truth own` draws the same cases in Predict's own model (the coverage when the model is exact), `--model-error-floor`, `--explored`, `--moves`, `--moved-solutions`, `--per-count` and `--widths` set those steps, `--constant module.NAME=value` any other constant of `refine` or `infer`; `--scattering dwba` draws the same curves with the four DWBA terms (`--substrate si` or `ps100`, 100 nm polystyrene on Si); `--cut` says what Predict is given of the cut: `born` its q₊ = k_i + k_f (the Born term at it; the default), `two_path` both angles (spheres with the exit-reflected path at q₋ = k_i − k_f and a free effective reflection coefficient), `dwba` both angles and the substrate optics (four fixed paths), `eia` nothing (the effective interface). `--stages auto --auto-level 4` runs automatic analysis with these known optics | `posterior_*_summary.json` and `per_cut/` (*The runs the paper quotes*, above); earlier runs in `history/` |
+| `posterior_pairs.py` | pairs runs of `posterior_recovery.py` on the same cases that differ in the truth's physics or Predict's geometry: errors of R and D by q₊R for spheres and upright cylinders, composition and truth's mode by the largest sphere's q₊R, whether χ²/N marks the spheres that are off (Physics and Methods 9.13, *The waves the surface reflects*). `--by-cut` compares the largest true q₊R, true composition, parameters, intervals, timing and single-population shape substitutions, checking the draws match | `posterior_dwba4_pairs.json`, `posterior_dwba_pairs.json`; earlier ones in `history/` |
 | `evidence_integration_check.py` | Predict's evidence, the scales integrated by Laplace at their least-squares values after the model error's spline coefficients (8 B-splines, a partition of unity, so a constant in them trades against every scale), against the scales and the coefficients integrated together (adaptive importance sampling, each value checked by a second run), on six one-population cuts of the first benchmark set (both halves) with four compositions each (the truth, without its paracrystal, the other family, two populations): the difference at the refined solution, at τ/2 and 2τ and at 40 draws of each solution's posterior, and what it changes in each solution's evidence and in the log Bayes factors against the truth (statistics referee, round 5, S7 ii). The joint integral is larger by 0.3–1.8 for the true composition (it grows with τ, spread 0.3–1.0 within a posterior); the log Bayes factors of the compositions that describe the curve change by −0.9 to +1.7 (+5.6 for one at χ²/N 1.5), those of compositions far off by +24 to +1350 in their favour, and no ranking changes | `evidence_integration_check.json` |
 | `summary_tables.py` | prints the tables of Physics and Methods 9.13 and 10.3 and of the model card from the stored summaries (`--lang zh` for the Chinese headers, `--only recovery extended sensitivity own dwba pairs timing v5 large card`); computes nothing again | – |
 | `search_baseline.py` | the baseline without a network: Fitting's *Search the ranges, then refine* from its default values on the same 200 held-out curves, the true composition given (median error of R 2.8 % / 6.7 %, 90th percentile 81 % / 136 %, about 10 s per curve; Predict parameters 0.5 % / 0.7 % and 10 % / 14 %, `posterior_recovery_summary.json`) | `search_baseline_summary.json` |

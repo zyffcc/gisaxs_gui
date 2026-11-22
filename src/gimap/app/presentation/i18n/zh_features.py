@@ -41,6 +41,7 @@ from .zh_pole_reference import POLE_REFERENCE_ZH
 from .zh_posterior_mcmc import POSTERIOR_MCMC_ZH
 from .zh_predict_report import PREDICT_REPORT_ZH
 from .zh_predict_sampling import PREDICT_SAMPLING_ZH
+from .zh_predict_substrate import PREDICT_SUBSTRATE_ZH
 from .zh_reduction_errors import REDUCTION_ERRORS_ZH
 from .zh_reproduction import REPRODUCTION_ZH
 from .zh_report_numbers import REPORT_NUMBERS_ZH
@@ -63,6 +64,7 @@ from .zh_usability_giwaxs import USABILITY_GIWAXS_ZH
 from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 
 FEATURES_ZH = {
+    **PREDICT_SUBSTRATE_ZH,
     **ANALYZE_NUMBERS_ZH, **FITTING_NUMBERS_ZH, **REPORT_NUMBERS_ZH,
     **CELL_REFINEMENT_ZH, **CELL_ORIENTATION_ZH, **CELL_SERIES_ZH,
     **SAMPLE_ROLL_ZH,

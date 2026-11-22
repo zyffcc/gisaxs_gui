@@ -225,6 +225,7 @@ def candidate_row(fit: dict, index: int) -> Optional[dict]:
         return None
     return {
         "workflow": "native_v5", "rank": solution.get("rank", index + 1),
+        **({"physics_backend": "cut_model", "model": points["model"]} if "model" in points else {}),
         "combination": solution.get("combination") or solution.get("model"),
         "side": fit.get("side") or "", "components": components, "global_params": dict(solution.get("globals") or {}),
         "native_q": list(points["q_inv_nm"]), "native_fit": list(points.get("fit") or ()),

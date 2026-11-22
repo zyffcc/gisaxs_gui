@@ -20,8 +20,10 @@ Q = k_i + k_f in ``born`` and ``dwba`` (the Born term, as fit1d).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
+
+from .reflectivity import Layer, parratt
 
 MODES = ("eia", "born", "two_path", "dwba")
 
@@ -37,6 +39,8 @@ class Geometry:
     refl_phase: float = 0.0
     delta: float = 0.0
     beta: float = 0.0
+    layers: tuple[Layer, ...] = ()
+    substrate_label: str = field(default="", compare=False)
 
     def __post_init__(self):
         if self.mode not in MODES:
@@ -76,6 +80,12 @@ class Geometry:
         ks = self.k * complex(math.sin(a) ** 2 - 2.0 * self.delta, 2.0 * self.beta) ** 0.5
         return (kz0 - ks) / (kz0 + ks)
 
+    def reflection(self, alpha_deg: float) -> complex:
+        """Amplitude reflected by the bare substrate or by the stack below the particles."""
+        if self.layers:
+            return parratt(self.k, alpha_deg, self.delta, self.beta, self.layers)
+        return self.fresnel(alpha_deg)
+
     def sphere_terms(self) -> tuple[tuple[complex, float], ...]:
         """(coefficient, Q) of each scattering path for a particle standing on the substrate."""
         if self.mode == "eia":
@@ -88,7 +98,7 @@ class Geometry:
                 return ((1.0 + 0.0j, k_i + k_f),)  # the Born term alone (and the tables of a single path)
             r = self.refl_amp * complex(math.cos(self.refl_phase), math.sin(self.refl_phase))
             return ((1.0 + 0.0j, k_i + k_f), (r, k_i - k_f))
-        r_i, r_f = self.fresnel(self.alpha_i_deg), self.fresnel(self.exit_angle_deg)
+        r_i, r_f = self.reflection(self.alpha_i_deg), self.reflection(self.exit_angle_deg)
         return ((1.0 + 0.0j, k_f + k_i), (r_i, k_f - k_i), (r_f, k_i - k_f), (r_i * r_f, -(k_f + k_i)))
 
     def random_cylinder_qz(self) -> float:

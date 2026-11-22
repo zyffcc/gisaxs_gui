@@ -2,8 +2,8 @@
 
 The substrate is unknown (the default: the effective interface, the Born term or the two paths with a free r, as the
 angles and |r| say), a material of the table (Si, SiO₂, plate glass, Au: δ and β at the cut's λ from Henke's f₁, f₂)
-or δ and β typed. With a substrate and both angles the spheres are in the four-term DWBA with its Fresnel
-coefficients. The manual DA also uses these paths for upright cylinders with a height distribution.
+or δ and β typed. With a substrate and both angles the four-term DWBA uses the reflection of the substrate
+and any film specified under Fit. The DA uses these paths for upright cylinders with a given height distribution.
 The line under the row says which level is in use and, for the DWBA, δ and β.
 """
 
@@ -17,11 +17,8 @@ from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application.substrate_level import CUSTOM, SUBSTRATE_CHOICES, level
 
-SUBSTRATE_TIP = ("The substrate under the particles. Unknown: the spheres at q_z = 0, at the Born term or with two "
-                 "paths and a free r, as αi, αf and |r| say. A material of the table or δ and β typed: with αi and "
-                 "αf the spheres are in the four-term DWBA with the substrate's Fresnel coefficients (|r| and arg r "
-                 "are then not used). The table holds the bare materials (Henke's tables, 4.9–30 keV); an oxide, a "
-                 "polymer film or roughness are not part of it.")
+SUBSTRATE_TIP = ("With both cut angles and a known substrate, Predict and Refine use four-term DWBA. "
+                 "The material table covers 4.9–30 keV. To enter a film, open Cut geometry and substrate in Fit.")
 LEVEL_LINE = "Level: {level}"
 DWBA_LINE = "Level: {level} on {substrate} (δ = {delta}, β = {beta} at λ = {wavelength} nm)"
 NEEDS_ANGLES = "Level: {level}. The substrate is used once αi and αf are given."

@@ -1,11 +1,13 @@
 """Pairs of posterior_recovery.py runs on the same held-out cases that differ only in the truth's physics (the Born
 term or the four DWBA terms, Si or polystyrene on Si: --scattering, --substrate), in what Predict is given of the
-cut (--cut born, two_path or eia) or in the network (--network).
+cut (--cut born, two_path, dwba or eia) or in the network (--network).
 Per population, the error of R and D (the true composition given, the most probable solution) binned by q+R, the
 vacuum q_z of the cut times the true R, for spheres and upright cylinders; per curve, by its largest sphere's q+R,
 how often the composition is chosen right (``comp``), the true composition listed (``set``), the truth's mode first
 or listed, and the median chi2/N; and whether chi2/N > 2 marks the curves where a sphere's R is off by more than 10 %.
 usage: python tools/benchmarks/posterior_pairs.py OUT.json LABEL=results/RUN.json [LABEL=results/RUN.json ...]
+(--by-cut before OUT.json: fit, choose and auto by the largest q+R of any population and by composition,
+including timing and 68/95% coverage for R and D; requires identical case draws.)
 (the per-curve files posterior_recovery.py writes to results/, or their gzip-compressed copies in per_cut/; prints a
 table and writes it to OUT.json)"""
 import gzip
@@ -65,6 +67,13 @@ def stats(values):
 
 
 def main():
+    if sys.argv[1] == "--by-cut":
+        from posterior_cut_classes import compare_runs
+
+        report = compare_runs([arg.split("=", 1) for arg in sys.argv[3:]], QPLUS)
+        Path(sys.argv[2]).write_text(json.dumps(report, indent=1, allow_nan=False), encoding="utf-8")
+        print(f"Wrote {len(report['runs'])} runs of {report['n_curves']} cuts to {sys.argv[2]}")
+        return
     out_path = sys.argv[1]
     runs = [arg.split("=", 1) for arg in sys.argv[2:]]
     loaded = {label: rows(path) for label, path in runs}

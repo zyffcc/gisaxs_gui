@@ -21,7 +21,8 @@ The intensity is GIMaP's one forward model of a cut, ``cut_model`` (Physics and 
 Spheres of a horizontal GISAXS cut: with αi = αf = 0 (the default) the sphere is evaluated at q_z = 0, the
 effective interface approximation. With the angles and λ of the cut it is the sum of the direct and the
 exit-reflected path, A = f(√(q² + q₊²) R) e^{-i q₊ R} + r f(√(q² + q₋²) R) e^{-i q₋ R}, r = |r| e^{i arg r} free;
-with a known ``substrate`` (``substrates``) as well, the four-term DWBA with the substrate's Fresnel coefficients.
+with a known ``substrate`` (``substrates``) as well, the four-term DWBA with Fresnel reflection at a bare
+interface or Parratt reflection from its layers.
 A model with a ``cut`` is a vertical cut of a fit of several curves (``vertical_cut``, ``joint_fit``).
 
 q in nm⁻¹, sizes in nm. Model files of earlier versions (``gimap_fit_model_v1``: σD/D = (σnn/D)/√(2π), intensity-weighted
@@ -292,8 +293,7 @@ def grazing(model: FitModel):
         return model.cut
     g = {key: float(model.globals[key].value) for key in GRAZING}
     if model.substrate is not None and g["alpha_i"] > 0 and g["alpha_f"] > 0:
-        delta, beta = model.substrate.optical(g["wavelength"])
-        return Geometry("dwba", g["wavelength"], g["alpha_i"], g["alpha_f"], delta=delta, beta=beta)
+        return model.substrate.geometry(g["wavelength"], g["alpha_i"], g["alpha_f"])
     geometry = from_angles(g["alpha_i"], g["alpha_f"], g["wavelength"], g["refl_amp"], g["refl_phase"])
     return None if geometry.mode == "eia" else geometry
 

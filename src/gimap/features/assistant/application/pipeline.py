@@ -171,6 +171,8 @@ class PipelineOptions:
     """Known film or substrate critical angle for identifying a GISAXS band, independent of q refraction."""
     yoneda_material: Optional[str] = None
     """Material assigned to the GISAXS band when no explicit numeric αc is given."""
+    substrate: Optional[dict | str] = None
+    """Substrate of this GISAXS sample, as a material key or an optical-constants record at the cut's wavelength."""
 
 
 @dataclass
