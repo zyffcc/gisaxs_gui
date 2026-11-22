@@ -93,7 +93,7 @@ def test_the_peak_table_is_compact_and_says_the_rest_in_its_tooltips() -> None:
     for column, (full, how) in enumerate(PEAK_COLUMNS):  # the full name, its unit and how it is obtained, on hover
         assert table.horizontalHeaderItem(column).toolTip() == f"{full}\n{how}"
     cells = [[table.item(row, column).text() for column in range(6)] for row in range(table.rowCount())]
-    assert cells[0] == ["0.9931", "6.327", f"{0.01385:.3g}", "✓", "≥ 40.8", "OOP"]
+    assert cells[0] == ["0.993", "6.33", "0.0138", "✓", "≥ 40.8", "OOP"]
     assert cells[1][3:] == ["✓", "≥ 26.8", "IP*"]  # one sector only
     assert cells[2][3] == "⚠ spike" and cells[2][5] == "both" and cells[2][4] == "—"
     assert cells[3][3] == "⚠ weak" and cells[3][5] == "n/a"
@@ -152,16 +152,16 @@ def test_tables_copy_their_rows_and_result_lines_can_be_selected() -> None:
     QTest.keyClick(table, Qt.Key_C, Qt.ControlModifier)  # Ctrl+C: the selected row with the column names
     copied = QApplication.clipboard().text().split("\n")
     # pasted rows carry the full column names with their units, not the short headers that fit the panel
-    assert copied[0] == "\t".join(full for full, _how in PEAK_COLUMNS) and copied[1].startswith("1.724\t3.644\t")
+    assert copied[0] == "\t".join(full for full, _how in PEAK_COLUMNS) and copied[1].startswith("1.72\t3.64\t")
     series = panel.findChild(QTableWidget, "guidedSeriesTable")
     assert series.property("gimapTableCopy") and series.selectionMode() == QAbstractItemView.ExtendedSelection
     assert series.item(0, 0).textAlignment() & Qt.AlignRight
-    assert series.item(0, 3).text().startswith("shifted +0.003 Å⁻¹")
+    assert series.item(0, 3).text().startswith("shifted +0.0031 Å⁻¹")
     assert table.property("gimapTableCopy") and table.contextMenuPolicy() == Qt.ActionsContextMenu
     selectable = [line for line in panel.findChildren(QLabel) if line.textInteractionFlags() & Qt.TextSelectableByMouse]
     texts = [line.text() for line in selectable]
     assert any(text.startswith("GIWAXS — 5 peaks") for text in texts)  # the outcome line
-    assert "233.2 mm" in texts and any(text.startswith("Ring q ≈ 0.9931") for text in texts)
+    assert "233 mm" in texts and any(text.startswith("Ring q ≈ 0.9931") for text in texts)
     assert label("x", panel).textInteractionFlags() & Qt.TextSelectableByMouse
     assert badge("x", "success", panel).textInteractionFlags() & Qt.TextSelectableByMouse
     panel.deleteLater()
@@ -177,17 +177,17 @@ def test_the_results_are_composed_in_chinese_and_again_after_a_switch(zh) -> Non
     panel.refresh_language()
     texts = [line.text() for line in panel.findChildren(QLabel)]
     assert "峰" in texts and "几何" in texts and "距离" in texts
-    assert "环 q ≈ 0.9931 Å⁻¹：f = 0.610, f_iso = 0.00 —— 沿表面法线取向（面外，χ ≈ 0°）" in texts
+    assert "环 q ≈ 0.9931 Å⁻¹：f = 0.61, f_iso = 0.00 —— 沿表面法线取向（面外，χ ≈ 0°）" in texts
     assert "共 40 帧的序列：这些结果来自第 31–40 帧（最终状态）。" in texts
     assert "仪器配置“P08 Lambda”" in texts
     table = panel.peak_table
     assert table.horizontalHeaderItem(3).text() == "可信度" and table.horizontalHeaderItem(0).text() == "q"
     assert table.horizontalHeaderItem(3).toolTip().endswith("是否为晶体峰：尖峰、晕环和弱峰都会被标出。")
     assert [table.item(row, 3).text() for row in range(5)] == ["✓", "✓", "⚠ 尖峰", "⚠ 弱", "⚠ 边缘"]
-    assert table.item(2, 5).text() == "两者" and table.item(3, 5).text() == "无法判断" and table.item(0, 0).text() == "0.9931"
+    assert table.item(2, 5).text() == "两者" and table.item(3, 5).text() == "无法判断" and table.item(0, 0).text() == "0.993"
     assert table.currentRow() == 3  # the peak selected before the switch
     series = panel.findChild(QTableWidget, "guidedSeriesTable")
-    assert series.horizontalHeaderItem(1).text() == "开头" and series.item(0, 3).text().startswith("移动 +0.003 Å⁻¹")
+    assert series.horizontalHeaderItem(1).text() == "开头" and series.item(0, 3).text().startswith("移动 +0.0031 Å⁻¹")
     apply_language(DEFAULT_LANGUAGE)
     panel.refresh_language()
     assert panel.peak_table.horizontalHeaderItem(3).text() == "trust" and panel.peak_table.currentRow() == 3

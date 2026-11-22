@@ -10,8 +10,10 @@ from PyQt5.QtCore import QSignalBlocker, QTimer, Qt
 from PyQt5.QtWidgets import QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import format_number
 
 from ...application import FIT_NONE, FrameFitPreview
+from ..batch_texts import model_value_text, spacing_text
 
 
 def parameter_label(column: str) -> str:
@@ -22,10 +24,21 @@ def parameter_label(column: str) -> str:
     return {"chi2": "χ²ᵣ", "log rmse": "log RMSE"}.get(text, text)  # the reduced χ² of Predict parameters
 
 
-def _number(value) -> str:
-    if isinstance(value, (int, float, np.number)):
-        return f"{value:.6g}" if math.isfinite(float(value)) else ""
-    return str(value if value is not None else "")
+def _cell_text(column, value, row, interval=None) -> str:
+    if not isinstance(value, (int, float, np.number)):
+        return str(value if value is not None else "")
+    if column == "points":
+        return str(value)
+    if interval is not None:
+        return model_value_text(value, interval)
+    if column.endswith(" err"):
+        error = value
+    elif column.endswith(" d (A)"):
+        target = column.removesuffix(" d (A)")
+        return spacing_text(value, row.get(target + " q (1/A)"), row.get(target + " q err"), value_only=True)
+    else:
+        error = row.get(column.removesuffix(" (1/A)") + " err")
+    return format_number(value, error, value_only=True)
 
 
 class SeriesFitResultsMixin:
@@ -112,9 +125,10 @@ class SeriesFitResultsMixin:
                         value = tr({"mean": "Mean of both halves", "positive": "q > 0 half", "negative": "q < 0 half"}.get(value, value))
                     elif column == "note":
                         value = tr(str(value))
-                    item = QTableWidgetItem(_number(value))
+                    text = _cell_text(column, value, entry.values, entry.intervals.get(column))
+                    item = QTableWidgetItem(text)
                     item.setToolTip(trf("{file}\nFrame {n}", file=entry.ref[0], n=entry.ref[1] + 1) if column == "frame"
-                                    else _number(value))
+                                    else text)
                     if column == "state" and not entry.ok:
                         item.setData(Qt.UserRole, "failed")
                     table.setItem(row, index, item)

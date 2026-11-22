@@ -512,7 +512,15 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
         }
         notes = [trf(template, **values) for template, values in
                  fit_names.diagnostic_lines(r.get("diagnostics") or {}, r.get("ess"))]
-        self.parameters.setPlainText("\n".join([*self._row_notes(r), *notes, tr(UNITS_NOTE)]) + "\n\n"
+        intervals = []
+        many = len(r.get("components") or ()) > 1
+        for name, values in (r.get("posterior") or {}).items():
+            if len(values) >= 4 and values[0] is not None and all(v is not None for v in values[2:4]):
+                shown = fit_names.interval_text(values[0], *values[2:4], fit_names.unit_of(name))
+                intervals.append(f"{fit_names.display_name(name, many, tr)} {shown}")
+        if intervals:
+            notes.append(trf("Least-squares value [reported 68 % interval] — {values}.", values="; ".join(intervals)))
+        self.parameters.setPlainText("\n".join([*self._row_notes(r), tr(UNITS_NOTE), *notes]) + "\n\n"
                                      + json.dumps(detail, indent=2, ensure_ascii=False))
 
     def _cancel(self):

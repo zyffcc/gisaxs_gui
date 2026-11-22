@@ -150,7 +150,7 @@ def test_the_english_result_texts_are_unchanged(tmp_path) -> None:
         assert dialog.preview_info_label.text() == "scan_agbh.cbf"
         # The centre of the fit (index 123.5, 234.5) in the pixels of Analyze: + 0.5.
         assert [dialog.candidate_table.item(0, column).text() for column in range(6)] == [
-            "Silver behenate (AgBH)", "1456.70 mm", "124.0, 235.0", "3", "1.25 px", "Medium",
+            "Silver behenate (AgBH)", "1456.7 mm", "124, 235", "3", "1.25 px", "Medium",
         ]
         assert _legend(dialog) == "━━ Center ┄┄┄ Detected ━━ Matched ╌╌╌ Other theoretical"
         _show(dialog, _result(tmp_path / "scan_agbh.cbf", warnings=[ONE_RING_WARNING, COVERAGE_WARNING]))
@@ -202,7 +202,7 @@ def test_a_result_is_shown_in_chinese_and_kept_in_english(tmp_path, chinese) -> 
         assert dialog.preview_info_label.text() == "scan_agbh.cbf"
         assert dialog.candidate_table.item(0, 0).text() == "山嵛酸银（AgBH）"
         assert dialog.candidate_table.item(0, 5).text() == "中"
-        assert dialog.candidate_table.item(0, 1).text() == "1456.70 mm"  # values and units stay
+        assert dialog.candidate_table.item(0, 1).text() == "1456.7 mm"  # values and units stay
         assert _legend(dialog) == "━━ 中心 ┄┄┄ 检测到的环 ━━ 匹配的环 ╌╌╌ 其他理论环"
         # What is exported and what the assistant reads stays the engine's English.
         assert result.selected_candidate.confidence == "Medium"

@@ -18,6 +18,7 @@ from typing import Optional
 
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import applied_angle
 
 from ...application import settings_from_record, settings_record
 
@@ -146,7 +147,7 @@ def _setup_summary(settings) -> str:
     if settings.incidence_deg is not None:  # an αi typed for the beamtime, not the profile's
         parts.append(trf("αi {value}°", value=f"{settings.incidence_deg:g}"))
     if settings.sample_roll_deg is not None:
-        parts.append(f"ψ {settings.sample_roll_deg:g}°")
+        parts.append(f"ψ {applied_angle(settings.sample_roll_deg, settings.sample_roll_measurement)}°")
     regions = len(settings.giwaxs.regions) + len(settings.gisaxs.regions)  # (GIWAXS regions, GISAXS cuts)
     if regions:
         parts.append(tr("{n} cut regions").format(n=regions))

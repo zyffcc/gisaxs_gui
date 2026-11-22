@@ -1,6 +1,11 @@
 """Display frame-derived incidence and its comparison with the angle entered in Analyze."""
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import format_number
+
+
+def measured_incidence(record):
+    return trf("Measured αi  {estimate}°", estimate=format_number(record["deg"], record.get("error_deg")))
 
 
 def incidence_text(record, kind):
@@ -12,15 +17,14 @@ def incidence_text(record, kind):
             continue
         estimate = record.get(name)
         if estimate:
-            value = f"{estimate['deg']:.3f} ± {estimate['error_deg']:.3f}°"
+            value = format_number(estimate["deg"], estimate.get("error_deg")) + "°"
         elif name == "yoneda" and record.get("material_optics_error"):
             value = tr("Outside the optical table")
         else:
             value = tr("Needs a material αc" if name == "yoneda" and not record.get("critical_angle_deg") else "Unavailable")
         observed.append(f"{tr(label)}  {value}")
     if record.get("deg") is not None:
-        observed.insert(0, trf("Measured αi  {value} ± {error}°", value=f"{record['deg']:.3f}",
-                               error=f"{record['error_deg']:.3f}"))
+        observed.insert(0, measured_incidence(record))
     else:
         observed.insert(0, tr("Incidence estimates disagree." if record.get("method") == "disagreement"
                               else "No incidence angle could be measured."))

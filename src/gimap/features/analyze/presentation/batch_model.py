@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr
+from src.gimap.shared.numbers import format_number
 
 from ..application import (
     FIT_MODEL,
@@ -241,7 +242,8 @@ class BatchModelMixin:
             self._remember_batch_preview(run, peak_preview(outcome, fits, values))
             run.fit_keys = run.fit_keys or [target.key for target, _fit in fits]
             run.last_fit = "; ".join(
-                f"{target.name}: q {fit.center:.4f} Å⁻¹, FWHM {fit.fwhm:.4f}" if fit.ok else f"{target.name}: {fit.message}"
+                f"{target.name}: q {format_number(fit.center, fit.center_err)} Å⁻¹, FWHM {format_number(fit.fwhm, fit.fwhm_err)}"
+                if fit.ok else f"{target.name}: {fit.message}"
                 for target, fit in fits[:3]
             )
             if choices.fit_curves:

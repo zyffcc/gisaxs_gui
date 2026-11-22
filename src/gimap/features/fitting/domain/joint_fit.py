@@ -171,7 +171,7 @@ class _JointProblem:
         self._reported = now
         dof = max(1, self.points - len(self.keys) - self.linear)
         self.progress(min(0.99, self.evaluations / max(1, self.total)), PROGRESS_LINE.format(
-            phase=self.phase, evaluations=self.evaluations, chi2=f"{self.best[0] / dof:.4g}"))
+            phase=self.phase, evaluations=self.evaluations, chi2=f"{self.best[0] / dof:.3g}"))
 
 
 def joint_residuals(models: Sequence[FitModel], curves: Sequence[JointCurve]) -> np.ndarray:

@@ -173,7 +173,7 @@ def test_a_batch_summary_is_titled_by_the_procedure_that_ran() -> None:
     one = batch_markdown([NO_GEOMETRY, _giwaxs(), UNREADABLE])
     assert one.startswith("# GIWAXS — batch\n") and "##" not in one.split("## Open questions")[0]
     assert "| lonely.tif | needs input | 1 | — | — | — | calibration |" in one
-    assert "| film.tif | OK | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.610 | — |" in one
+    assert "| film.tif | OK | 1 | agbh.poni | 0.899, 1.41* | 0.899: 0.61 | — |" in one
     assert batch_markdown([_gisaxs(), UNREADABLE]).startswith("# GISAXS — batch\n")
 
 
@@ -183,15 +183,28 @@ def test_a_mixed_batch_keeps_the_results_of_its_gisaxs_frames() -> None:
     assert text.startswith("# GIMaP — batch\n\n3 frame(s); each has its own report.md.\n")
     giwaxs, gisaxs, rest = text.index("## GIWAXS"), text.index("## GISAXS"), text.index("## Not analysed")
     assert giwaxs < gisaxs < rest < text.index("Open questions")
-    assert "| film.tif | needs input | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.610 | incidence angle αi |" in text[giwaxs:gisaxs]
+    assert "| film.tif | needs input | 1 | agbh.poni | 0.899, 1.41* | 0.899: 0.61 | incidence angle αi |" in text[giwaxs:gisaxs]
     # Halves, spacing and best fit of the GISAXS frame: they were dropped from a table of GIWAXS columns.
-    row = "| dots.tif | needs input | mean | 53.5 (shoulder) | sphere R 9.40 nm, D 53.4 nm, χ²ᵣ 1.31 | incidence angle αi |"
-    assert row in text[gisaxs:rest]
+    assert "| dots.tif | needs input | mean | 53.5 (shoulder) | [1] | incidence angle αi |" in text[gisaxs:rest]
+    assert "- [1] sphere R 9.4 nm, D 53.4 nm, χ²ᵣ 1.31" in text[gisaxs:rest]
     assert "| missing.tif | error: No such file: missing.tif | — | — |" in text[rest:]
     # αi is asked once for each procedure, in its words, with the flag that answers it.
     asked = [line for line in text.splitlines() if line.startswith("- **incidence angle αi**")]
     assert len(asked) == 2 and "missing wedge" in asked[0] and "exit angle αf" in asked[1]
     assert all(line.endswith("→ `--incidence-deg A`") for line in asked)
+
+
+def test_many_observations_in_a_batch_row_keep_their_values_and_report_link() -> None:
+    peaks = [{"q": (index + 11) / 100} for index in range(16)]
+    rings = [{"q": peak["q"], "herman": 0.48} for peak in peaks]
+    report = _giwaxs("film-series.tif", folder="many observations from one synthetic long exposure",
+                     peaks=peaks, rings=rings)
+    text = batch_markdown([report])
+    row = next(line for line in text.splitlines() if line.startswith("| film-series.tif |"))
+    assert len(row) < 100 and "[report.md][r1]" in row
+    assert "[r1]: many%20observations%20from%20one%20synthetic%20long%20exposure/report.md" in text
+    assert "[1]" in row and "- [1] " + "; ".join(f"{peak['q']}: 0.48" for peak in peaks) in text
+    assert "[2]" in row and "- [2] " + ", ".join(str(peak["q"]) for peak in peaks) in text
 
 
 def test_a_technique_asked_for_but_never_started_is_not_what_ran(tmp_path: Path) -> None:

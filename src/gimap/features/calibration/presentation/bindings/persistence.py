@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ..pixel_coordinates import shown_center
+from ..result_numbers import geometry_text
 from .energy_source import FROM_IMPORT
 
 LOGGER = logging.getLogger(__name__)
@@ -53,12 +53,10 @@ class PersistenceMixin:
 
     def _applied_text(self, candidate, profile) -> str:
         # The centre as the saved instrument profile holds it and as Analyze shows it.
-        center_x, center_y = shown_center(candidate)
+        center_x, center_y, distance = geometry_text(candidate)
         text = trf(
             "Geometry calibration applied: centre ({x}, {y}) px, distance {distance} mm.",
-            x=f"{center_x:.2f}",
-            y=f"{center_y:.2f}",
-            distance=f"{candidate.distance_mm:.2f}",
+            x=center_x, y=center_y, distance=distance,
         )
         if profile is not None:
             text += " " + trf(

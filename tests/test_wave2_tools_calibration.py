@@ -94,7 +94,7 @@ def test_apply_confirms_once_with_a_toast_naming_the_instrument_profile(tmp_path
         assert len(toasts) == 1
         text = toasts[0].text()
         # The fit's pixel-centre index (123.5, 234.5) is said as Analyze and the saved profile show it.
-        assert "Geometry calibration applied: centre (124.00, 235.00) px, distance 1456.70 mm." in text
+        assert "Geometry calibration applied: centre (124, 235) px, distance 1456.7 mm." in text
         geometry = dialog.view_model.last_profile.geometry
         assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == (124.0, 235.0)
         assert "Saved as instrument profile" in text and dialog.view_model.last_profile.name in text

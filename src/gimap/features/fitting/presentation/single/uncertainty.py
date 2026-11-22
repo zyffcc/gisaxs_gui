@@ -21,6 +21,8 @@ from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import QApplication, QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared import fit_names
+from src.gimap.shared.numbers import format_number
 
 from ...application.fit_report import FORMATS, format_of, report, suffix
 from ...application.fit_uncertainty import (
@@ -113,7 +115,7 @@ class UncertaintyMixin:
             self.profile_run.setEnabled(False)
         else:
             chi = "χ²ᵣ" if result.weighting == "sigma" else "var ln I"
-            self.uncertainty_summary.setText(trf(SUMMARY, chi=chi, value=f"{result.chi2_reduced:.4g}",
+            self.uncertainty_summary.setText(trf(SUMMARY, chi=chi, value=f"{result.chi2_reduced:.3g}",
                                                  points=result.points, free=result.free))
             self._fill_values(model, result)
             self._fill_matrix(model, result)
@@ -133,8 +135,8 @@ class UncertaintyMixin:
                         and parameter.value else "—")
             mark = " ⚠" if path in loose or path in result.at_bounds else ""
             cells = (path_name(model, path, full=True, unit=True), parameter_name(path) + (f" = {parameter.tie}"
-                     if parameter.tie else ""), f"{parameter.value:.6g}",
-                     "—" if error is None or not math.isfinite(error) else f"{error:.3g}" + mark, relative)
+                     if parameter.tie else ""), format_number(parameter.value, error, value_only=True),
+                     format_number(error, error, value_only=True) + mark, relative)
             for column, text in enumerate(cells):
                 item = QTableWidgetItem(text)
                 if mark and column == 3:
@@ -213,9 +215,11 @@ class UncertaintyMixin:
                                                                        np.ones(2))], markers=[True, None])
         low, high = profile.interval()
         error = result.errors.get(profile.path)
-        text = trf(PROFILE_RESULT, low=tr(OPEN_SIDE) if low is None else f"{low:.4g}",
-                   high=tr(OPEN_SIDE) if high is None else f"{high:.4g}", best=f"{profile.best_value:.4g}",
-                   error="—" if error is None or not math.isfinite(error) else f"{error:.3g}")
+        _, lo_text, hi_text = fit_names.interval_values(profile.best_value, low, high)
+        text = trf(PROFILE_RESULT, low=tr(OPEN_SIDE) if low is None else lo_text,
+                   high=tr(OPEN_SIDE) if high is None else hi_text,
+                   best=format_number(profile.best_value, error, value_only=True),
+                   error=format_number(error, error, value_only=True))
         if np.nanmin(delta) < -BETTER:  # a point of the grid, the others fitted again, beat the fit
             text += " " + tr(FOUND_BETTER)
         if profile.stopped:

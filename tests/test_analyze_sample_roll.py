@@ -18,6 +18,19 @@ def _incidence():
     return SimpleNamespace(as_dict=lambda: dict(estimate, horizon=estimate, specular=None, yoneda=None, method="horizon"))
 
 
+@pytest.mark.parametrize(("value", "record", "expected"), [
+    (.35, dict(deg=.35, error_deg=.013, decision="agreement"), "0.35"),
+    (.35, dict(deg=.35, error_deg=.013, decision="user_override"), "0.35"),
+    (.27, dict(deg=.35, error_deg=.013, decision="measured"), "0.27"),
+    (.15, dict(deg=.15, error_deg=.072, origin="measured", significant=False), "0.150"),
+    (.15, dict(deg=.15, error_deg=.072, origin="automatic", significant=False), "0.15"),
+])
+def test_only_an_applied_estimate_supplies_the_angle_precision(value, record, expected):
+    from src.gimap.shared.numbers import applied_angle
+
+    assert applied_angle(value, record) == expected
+
+
 def test_measure_roll_on_worker_and_round_trip(page, monkeypatch, tmp_path):
     main = get_ident()
     result = RollMeasurement(RollEstimate(1.234, .12), RollEstimate(1.236, .1), 1.235619, .1, "combined", "specular rod")
@@ -42,6 +55,10 @@ def test_measure_roll_on_worker_and_round_trip(page, monkeypatch, tmp_path):
     current = model.state.analysis
     assert current.geometry.sample_roll_deg == result.deg
     assert "1.24 ± 0.10°" in page.roll_estimate_label.text()
+    assert page.roll_step_button.text() == "ψ 1.24°"
+    assert "ψ = 1.24°" in page.summary_label.text()
+    assert "αi = 0.500°" in page.summary_label.text()
+    assert "0.500 ± 0.012°" in page.incidence_spin.toolTip()
     assert current.sample_roll_measurement["method"] == "combined"
     assert current.geometry.incidence_deg == pytest.approx(.5)
     assert "0.075°" in page.incidence_estimate_label.text() and "3σ" in page.incidence_estimate_label.text()

@@ -9,6 +9,8 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
+from src.gimap.shared.numbers import format_number
+
 from src.gimap.features.fitting.application import fit_report
 from src.gimap.features.fitting.application.fit_uncertainty import (
     chi2_profile,
@@ -84,8 +86,9 @@ def test_the_report_names_the_data_the_model_every_value_and_the_pairs(tmp_path)
     for needle in ("# GIMaP fit report", "sample_fit_input.dat", "SHA-256", "Points fitted: 220", "χ²ᵣ",
                    "| 1·Sphere R (nm) | R_1 |", "Correlations (|r| > 0.9)", "Contact: particles do not overlap"):
         assert needle in text, needle
-    r_error = f"{result.errors[(0, 'R')]:.3g}"
-    assert r_error in text
+    error = result.errors[(0, "R")]
+    value = result.model.get((0, "R")).value
+    assert f"| R_1 | {format_number(value, error, value_only=True)} | {format_number(error, error, value_only=True)} |" in text
     html = fit_report.report(result.model, data, curve, side="mean", q_range=None, result=result, fmt="html")
     assert html.startswith("<!doctype html>") and "<table>" in html and "R_1" in html
     plain = fit_report.report(result.model, data, curve, side="mean", q_range=None, result=result, fmt="text")

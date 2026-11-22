@@ -150,7 +150,7 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08, tm
     warning = "orientation factor is not determined by the measured χ range (systematic range [0.0731, 0.148])"
     assert any(warning in line for line in text.splitlines() if "q ≈ 0.997" in line)
     assert any(warning in item["why"] for item in report["needs_attention"] if item["item"] == "orientation factor")
-    assert "Measured f = 0.133 ± 0.00267 (stat) [0.0731, 0.148], f_iso = 0.046" in text
+    assert f"Measured f = {ring['herman']:.4f} ± 0.0027 (stat) [0.0731, 0.148], f_iso = 0.046" in text
     assert "Lower limit from attenuated bins and horizon gap continued" in text
     assert "Upper limit from attenuated bins removed, horizon gap empty" in text
     assert "1 − φ is conditional on the background b" in text and "(stat) [" in text

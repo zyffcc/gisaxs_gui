@@ -9,8 +9,9 @@ from PyQt5.QtCore import QSignalBlocker, Qt
 
 from src.gimap.app.presentation.components.curve_plot import LineStyle
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import format_number
 
-from .indexing_texts import ring_text
+from .indexing_texts import percent_text, ring_text
 
 CRYSTAL_MODE = "crystal_orientation"
 CRYSTAL_LABEL = "Crystal orientation (from phase)"
@@ -21,15 +22,6 @@ def _axes(directions):
     if directions is None:
         return "—"
     return " + ".join("(" + " ".join(str(i) for i in axis) + ")" for axis in directions) or tr("Isotropic")
-
-
-def _number(value, error=None, *, decimals=2, scale=1):
-    if value is None or not np.isfinite(value):
-        return "—"
-    result = f"{value * scale:.{decimals}f}"
-    if error is not None and np.isfinite(error):
-        result += f" ± {error * scale:.{decimals}f}"
-    return result
 
 
 def _film_summary(optics):
@@ -49,16 +41,16 @@ def _summary(phase, ring):
     reasons = [tr(reason) for reason in phase.get("reasons", [])]
     populations = [
         trf("{plane} ∥ substrate · mosaic FWHM {width}° · {fraction}% of phase",
-            plane=_axes([p["axis"]]), width=_number(p["fwhm_deg"], p["fwhm_err_deg"]),
-            fraction=_number(p["fraction"], p["fraction_err"], decimals=1, scale=100))
+            plane=_axes([p["axis"]]), width=format_number(p["fwhm_deg"], p["fwhm_err_deg"]),
+            fraction=percent_text(p["fraction"], p["fraction_err"]))
         for p in phase["populations"]
     ]
     weights = tr("Free reflection weights") if phase.get("family_weights") == "free" else tr("Kinematic reflection weights")
     near_random = phase.get("near_random", [])
     fraction_label = ("Resolved oriented {oriented}% · isotropic including near-random {isotropic}%"
                       if near_random else "Total oriented {oriented}% · isotropic {isotropic}%")
-    stats = dict(delta=_number(phase.get("delta_bic"), decimals=1), joint=_number(phase["reduced_chi2"]),
-                 ring=_number(ring["reduced_chi2"]))
+    stats = dict(delta=format_number(phase.get("delta_bic")), joint=format_number(phase["reduced_chi2"]),
+                 ring=format_number(ring["reduced_chi2"]))
     if near_random:
         comparison = trf("Profile-model ΔBIC {delta} · joint χ²red {joint} · ring χ²red {ring}", **stats)
     else:
@@ -69,11 +61,12 @@ def _summary(phase, ring):
         *populations,
         *[trf("Near-random · {reason}", reason=tr(p["reason"])) for p in near_random],
         trf(fraction_label,
-            oriented=_number(phase["oriented_fraction"], phase["oriented_fraction_err"], decimals=1, scale=100),
-            isotropic=_number(phase["fraction_iso"], phase["fraction_iso_err"], decimals=1, scale=100)),
+            oriented=percent_text(phase["oriented_fraction"], phase["oriented_fraction_err"]),
+            isotropic=percent_text(phase["fraction_iso"], phase["fraction_iso_err"])),
         comparison,
         trf("Crystal Hermans f {crystal} · measured ring f {ring}",
-            crystal=_number(phase["herman_crystal"], decimals=3), ring=_number(ring["herman_measured"], decimals=3))
+            crystal=format_number(phase["herman_crystal"]),
+            ring=format_number(ring["herman_measured"], ring.get("herman_measured_err")))
         + f" · {weights}",
         _film_summary(phase.get("film_optics", {})),
     ]

@@ -31,6 +31,7 @@ from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.components.detector_view import display_image, display_levels
 from src.gimap.app.presentation.components.levels import to_intensity
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import applied_angle, format_number
 
 from ...application import (
     AUTO,
@@ -56,7 +57,7 @@ from ...application import (
     source_name,
 )
 from ..batch_dialog import BatchExportDialog
-from ..batch_texts import made_of_text, try_failed_text
+from ..batch_texts import made_of_text, model_parameters_text, spacing_text, try_failed_text
 from ..source_texts import warning_texts
 from ..texts import curve_title, message_text
 
@@ -379,7 +380,7 @@ class BatchExportMixin:
         else:
             parts.append(tr("no geometry"))
         if state.sample_roll_deg is not None:
-            parts.append(f"ψ {state.sample_roll_deg:g}°")
+            parts.append(f"ψ {applied_angle(state.sample_roll_deg, state.sample_roll_measurement)}°")
         if state.incidence_deg is not None:
             parts.append(f"αi {state.incidence_deg:g}°")
         regions = len(state.giwaxs.regions)
@@ -566,25 +567,23 @@ def fit_summary(result, choices: BatchChoices) -> tuple[str, str]:
                 ok = False
                 lines.append(tr("{name}: not fitted — {why}").format(name=target.name, why=tr(fit.message)))
                 continue
-            lines.append(tr("{name}: q = {q} ± {dq} Å⁻¹ (d = {d} Å), FWHM {w} Å⁻¹, area {a}, χ²ᵣ {chi}").format(
-                name=target.name, q=f"{fit.center:.4f}", dq=f"{fit.center_err:.1g}",
-                d=f"{2 * math.pi / fit.center:.3f}", w=f"{fit.fwhm:.4f}", a=f"{fit.area:.3g}", chi=f"{fit.chi2_red:.2f}",
+            lines.append(trf(
+                "{name}: q = {q} Å⁻¹ (d = {d} Å), FWHM {w} Å⁻¹, area {a}, χ²ᵣ {chi}",
+                name=target.name, q=format_number(fit.center, fit.center_err),
+                d=spacing_text(2 * math.pi / fit.center, fit.center, fit.center_err),
+                w=format_number(fit.fwhm, fit.fwhm_err), a=format_number(fit.area, fit.area_err),
+                chi=format_number(fit.chi2_red),
             ))
         return "\n".join(lines), "ok" if ok else "warning"
     if not result:
         return tr("No solution."), "warning"
     best = result[0]
-    parts = []
-    for component in best.get("components") or ():
-        params = component.get("params") or {}
-        parts.append(", ".join(f"{key} = {float(value):.3g}" for key, value in params.items()
-                               if isinstance(value, (int, float)) and key in ("R", "h", "D", "sigma_R", "pdi")))
     chance = best.get("bic_weight", best.get("probability"))
-    template = ("{model} (BIC weight {p}), {params} nm, χ²ᵣ = {chi}" if "bic_weight" in best else
-                "Most probable: {model} (p = {p}), {params} nm, χ²ᵣ = {chi}")
+    template = ("{model} (BIC weight {p}), {params}, χ²ᵣ = {chi}" if "bic_weight" in best else
+                "Most probable: {model} (p = {p}), {params}, χ²ᵣ = {chi}")
     text = tr(template).format(  # χ²ᵣ of Predict parameters, over its fitted points
         model=model_name(best), p="—" if chance is None else f"{float(chance):.2f}",
-        params="; ".join(part for part in parts if part), chi=f"{float(best.get('best_chi2_weighted', math.nan)):.3g}",
+        params=model_parameters_text(best), chi=format_number(best.get("best_chi2_weighted")),
     )
     made_of = made_of_text(best)  # the halves and the points it was fitted on
     return (f"{text}\n{made_of}" if made_of else text), "ok"

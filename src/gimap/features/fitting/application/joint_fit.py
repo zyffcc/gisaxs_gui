@@ -333,7 +333,7 @@ def needs_attention(result: JointResult, specs: Sequence[CurveSpec]) -> list[tup
         if spec.kind == "vertical":
             chi2 = result.reduced_chi2_for(index)
             if chi2 > 3.0:
-                messages.append((LAYER_WARNING, {"name": spec.name, "chi2": f"{chi2:.4g}"}))
+                messages.append((LAYER_WARNING, {"name": spec.name, "chi2": f"{chi2:.3g}"}))
     if result.height_range_check is not None and result.height_range_check.unavailable:
         messages.append((result.height_range_check.unavailable, {}))
     messages.extend((HEIGHT_RANGE_WARNING, {"height": row["height"]}) for row in height_range_rows(result)

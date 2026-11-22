@@ -2,8 +2,14 @@
 
 from typing import Callable
 
+from src.gimap.shared.numbers import applied_angle
+
 from ..application import TECHNIQUE_NAMES
 from .texts import flat_detector_summary, tilt_summary
+
+
+def incidence_angle_text(analysis):
+    return applied_angle(analysis.geometry.incidence_deg, getattr(analysis, "incidence_measurement", None))
 
 
 def geometry_summary(analysis, translate: Callable[[str], str] = str) -> str:
@@ -25,7 +31,8 @@ def geometry_summary(analysis, translate: Callable[[str], str] = str) -> str:
     }.get(analysis.resolution.how, "")
     parts = [
         head, f"D = {geometry.distance_m * 1e3:.1f} mm", f"λ = {geometry.wavelength_angstrom:.4f} Å",
-        f"αi = {geometry.incidence_deg:.3f}°", f"ψ = {geometry.sample_roll_deg:g}°",
+        f"αi = {incidence_angle_text(analysis)}°",
+        f"ψ = {applied_angle(getattr(geometry, 'sample_roll_deg', 0.), getattr(analysis, 'sample_roll_measurement', None))}°",
         translate(TECHNIQUE_NAMES.get(analysis.kind, (analysis.kind or "").upper())), origin,
     ]
     flat = getattr(analysis, "flat_detector", None)  # a .poni tilt the flat geometry leaves out

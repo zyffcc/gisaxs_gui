@@ -1848,8 +1848,8 @@ paracrystalline disorder; none of these is subtracted. A size is also marked a l
 No size is given when FWHM is above 0.15 q_0 (a halo: the report gives 2π/FWHM as a correlation length, not a crystal
 size), or when FWHM ≤ FWHM_instr.
 
-Example (invented values): q_0 = 1.50 Å⁻¹, FWHM = 0.030 ± 0.0006 Å⁻¹ give d = 4.189 Å and
-τ ≥ 188.5 ± 3.8 Å, reported as τ ≥ 18.85 nm.
+For example, q_0 = 1.50 Å⁻¹ and FWHM = 0.03000 ± 0.00060 Å⁻¹ give d = 4.19 Å and
+τ ≥ 188.5 ± 3.8 Å. In nm the report gives τ ≥ 18.85 ± 0.38 nm.
 
 Implementation: `src/gimap/features/assistant/domain/size.py`
 
@@ -1857,7 +1857,7 @@ Implementation: `src/gimap/features/assistant/domain/size.py`
 
 For each peak: q_0 ± σ, d ± σ_d, FWHM ± σ, height, local background, area, SNR, χ²_red, flags and caveat, the sector
 preference and ρ_oi, and the size with its lower-bound mark and note. For each ring: the q window, coverage (unweighted
-share of measured 1° bins), C_w, measured f ± σ_f [systematic range], isotropic reference, peak directions, missing and shadowed ranges, fitted f and oriented fraction. The record keeps the background, polarisation, exit threshold, scenario results and fit-quality reasons. Reported f, its statistical error and the systematic limits have three significant digits. The peak table gives q to 4 decimals, d to 3, FWHM to 4, SNR and size to 1, and detector positions to 0.01 px. Search limits, settings and open questions accompany the results.
+share of measured 1° bins), C_w, measured f ± σ_f [systematic range], isotropic reference, peak directions, missing and shadowed ranges, fitted f and oriented fraction. The record keeps the background, polarisation, exit threshold, scenario results and fit-quality reasons. Reports round each positive statistical uncertainty to two significant digits and the estimate to the same decimal place. Decimal ties round to even. The systematic range is shown separately. In compact tables, parentheses give the uncertainty in units of the last displayed digit. Search limits, settings and open questions accompany the results.
 
 - *q*: kinematic, no refraction correction. Near or below the film's critical angle, refraction shifts q_z by up to
   about k sin α_i, and the line gives that number for the frame (`2π/λ · sin α_i`; 0.0119 Å⁻¹ for the public P08
@@ -1868,7 +1868,7 @@ share of measured 1° bins), C_w, measured f ± σ_f [systematic range], isotrop
 
 - *phase assignment* when phases were given, and *pole figure* when rings were analysed (sections 7.10, 7.11).
 
-*Incidence angle* records the nominal value from the run options, notes, Analyze command bar, a unit-labelled sample incidence in the selected frame header, or instrument profile, in that order. A frame sum uses a header value only when its members agree. The frame measurement in §2.3 supplies a missing nominal angle and replaces a nominal angle that differs by more than three measured standard errors. **Keep entered αi** or `--keep-incidence` retains the nominal angle and still reports the comparison. When both sources are missing, the run uses 0° and asks for αi. Numbers in the JSON report are rounded to four significant digits; the beam centre keeps full precision.
+*Incidence angle* records the nominal value from the run options, notes, Analyze command bar, a unit-labelled sample incidence in the selected frame header, or instrument profile, in that order. A frame sum uses a header value only when its members agree. The frame measurement in §2.3 supplies a missing nominal angle and replaces a nominal angle that differs by more than three measured standard errors. **Keep entered αi** or `--keep-incidence` retains the nominal angle and still reports the comparison. When both sources are missing, the run uses 0° and asks for αi. The JSON record keeps geometry and peak-fit values to 15 significant digits. The tool-response snapshots use the precision specified in section 14.10.
 
 Implementation: `src/gimap/features/assistant/application/pipeline_rows.py`
 
@@ -2323,8 +2323,7 @@ Further rules of the report (`gisaxs_choice.py`):
   than the σ of its points, so none of the compositions tried describes the cut and its R and D are not measurements.
   The limit is that of Fitting's poor fits of a series (χ²_red > 10; User Manual, section 6.5).
 
-Every number of these texts is formatted once from the fit record (R, h, D to 4 decimals of nm), so a value reads the
-same in the table and in *Needs attention* (48.3484 nm is 48.3 nm in both). **Save Fit Table…** writes one line per
+The table and *Needs attention* use the same fit record. Where a 68 % interval is available, its half-width sets the decimal place for R, h and D. **Save Fit Table…** writes one line per
 population of each solution: rank, model, χ²ᵣ (`chi2`; a `#` line gives the fitted points), probability, log RMSE, the parameters (nm; the spreads relative), the
 68 % intervals of R, h and D, `at_bounds` (`name:upper` or `name:lower`) and `chosen`.
 
@@ -5130,7 +5129,7 @@ window's records:
   `not_applied` when the axis was too far to be used). `geometry.critical_angle_deg` is `null` when no critical
   angle was given (q is kinematic). `tables` keeps the tools' answers as the
   AI saw them (four significant digits), except `geometry_used`. Every crystallite size names its unit:
-  `tables.crystallite_sizes[].size_A`, `size_err_A`, `size_nm`, `size_err_nm`, beside `peaks[].size_nm`.
+  `tables.crystallite_sizes[].size_A`, `size_err_A`, `size_nm`, `size_err_nm`, beside `peaks[].size_nm` and `peaks[].size_err_nm`.
 - `report.md` has a section **Record**: the release, each input file with its SHA-256, the calibration file with
   its path and SHA-256, the instrument profile with its source (a profile a tool made from a file names the file's
   full path in brackets), the corrections and the error model. The window's **Save Report…** attaches the same keys

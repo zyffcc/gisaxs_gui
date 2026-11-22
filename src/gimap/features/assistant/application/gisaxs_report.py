@@ -6,8 +6,10 @@ import math
 from pathlib import Path
 
 from src.gimap.shared import fit_names
+from src.gimap.shared.numbers import format_number
 
-from .gisaxs_choice import ASK_PROBABILITY, LENGTH_SCALE, POOR_CHI2, bounds_text, chance, chosen, probability, sizes
+from .gisaxs_choice import ASK_PROBABILITY, LENGTH_SCALE, POOR_CHI2, bounds_text, chance, chosen, component_number, probability, sizes
+from .report_table import batch_table, table_row
 from .report_language import ENGLISH, heading
 
 
@@ -61,11 +63,7 @@ def cut_spans(cuts: dict, status) -> tuple[str, str]:
 
 
 def _number(value, digits: int = 4) -> str:
-    if value is None:
-        return "—"
-    if isinstance(value, float):
-        return f"{value:.{digits}g}"
-    return str(value)
+    return format_number(value, digits=digits)
 
 
 def _pixel(value) -> str:
@@ -74,32 +72,24 @@ def _pixel(value) -> str:
     return "—" if value is None else f"{float(value):.2f}"
 
 
-FIT_DECIMALS = {"R": 2, "h": 2, "D": 1, "sigma_R": 3, "sigma_h": 3, "sigma_D": 3, "sigma_nn": 3, "chi2": 2,
-                "distance_nm": 1}
-"""The decimals of each fitted quantity in the tables, the same in every row (R 8.60 next to R 9.44, not R 8.6)."""
-
-
-def _fixed(value, key: str) -> str:
-    return "—" if value is None else f"{float(value):.{FIT_DECIMALS[key]}f}"
-
-
-def _parameters(component: dict) -> str:
+def _parameters(solution: dict, index: int) -> str:
+    component = solution["components"][index]
     # The disorder of the distance under the name of Fitting's Model table, σnn/D (a row of an earlier version has
     # only σD/D = σnn/D / √(2π), and keeps that name).
     disorder = ("sigma_nn", "σnn/D") if component.get("sigma_nn") is not None else ("sigma_D", "σD/D")
     names = (("R", "R"), ("sigma_R", "σR/R"), ("h", "h"), ("sigma_h", "σh/h"), ("D", "D"), disorder)
     units = {"R": " nm", "h": " nm", "D": " nm"}
     return ", ".join(
-        f"{label} {_fixed(component[key], key)}{units.get(key, '')}" for key, label in names if component.get(key) is not None
+        f"{label} {component_number(solution, key, index)}{units.get(key, '')}" for key, label in names if component.get(key) is not None
     )
 
 
 def _all_parameters(solution: dict) -> str:
     """The parameters of every component (``1: R …; 2: R …`` when there are two populations)."""
-    components = solution.get("components") or [{}]
+    components = solution.get("components") or []
     if len(components) == 1:
-        return _parameters(components[0])
-    return "; ".join(f"{number}: {_parameters(component)}" for number, component in enumerate(components, start=1))
+        return _parameters(solution, 0)
+    return "; ".join(f"{i + 1}: {_parameters(solution, i)}" for i in range(len(components)))
 
 
 def _probability(solution: dict) -> str:
@@ -118,15 +108,17 @@ def fit_rows(fit: dict) -> list[str]:
     index, _solution = chosen(fit)
     kind = fit_names.BIC_WEIGHT if fit_names.weight_key(_solution or {}) == "bic_weight" else "probability"
     lines = [f"| rank | model | {kind} | parameters | χ²ᵣ | note |", "|---|---|---|---|---|---|"]
+    footnotes = []
     for number, row in enumerate(solutions):
         more = len(row.get("more_warnings") or ())  # of background, beam tail and resolution: under the table
         notes = ([bounds_text(row)] + list(row.get("warnings") or ())
                  + ([] if row.get("converged", True) else ["not converged"])
                  + ([f"{more} more on background, beam tail and resolution (below)"] if more else []))
         rank = f"{row['rank']} (chosen)" if number == index else row["rank"]
-        lines.append(f"| {rank} | {row['model']} | {_probability(row)} | {_all_parameters(row)} | "
-                     f"{_fixed(row['chi2'], 'chi2')} | {'; '.join(note for note in notes if note)} |")
-    return lines
+        cells = [rank, row["model"], _probability(row), _all_parameters(row), format_number(row.get("chi2")),
+                 "; ".join(note for note in notes if note)]
+        lines.append(table_row(cells, footnotes, move_columns=(5, 3)))
+    return lines + (["", *footnotes] if footnotes else [])
 
 
 def cut_locations(cuts, status):
@@ -189,7 +181,6 @@ def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
                       "normalised over the solutions compared." if by_bic else
                       f"Posterior probabilities compare the solutions by their evidences. {fit_names.RELATIVE}.")
         diagnostics = fit_names.diagnostic_lines((selected or {}).get("diagnostics") or {}, (selected or {}).get("ess"))
-        medians = (selected or {}).get("posterior_summary") or {}
         lines += [
             f"Curve: {fit.get('curve')} ({fit.get('points')} points, |qy| {_number((fit.get('q_range_inv_angstrom') or [None])[0], 3)}–"
             f"{_number((fit.get('q_range_inv_angstrom') or [None, None])[1], 3)} Å⁻¹).",
@@ -199,10 +190,7 @@ def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
             "",
             *fit_rows(fit),
             *_more_lines(fit),
-            *(["", "| parameter | least-squares value | posterior median | posterior 68 % |",
-                "|---|---|---|---|", *[f"| {name} | {_number(selected.get('least_squares_values', {}).get(name))} | "
-                f"{_number(row['median'])} | {_number(row['low68'])}–{_number(row['high68'])} |"
-                for name, row in medians.items()]] if medians else []),
+            *_posterior_rows(selected or {}),
             *[f"- {template.format(**values)}" for template, values in diagnostics],
             "",
             "Predict parameters: GIMaP's network proposes compositions — one or two populations of spheres and "
@@ -222,6 +210,22 @@ def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
             f"{fit_names.legend(max(len(row.get('components') or ()) for row in fit.get('solutions') or [{}]))}.",
         ]
     return lines + [""]
+
+
+def _posterior_rows(solution):
+    medians = solution.get("posterior_summary") or {}
+    if not medians:
+        return []
+    refined = solution.get("least_squares_values") or {}
+    intervals = solution.get("intervals") or {}
+    lines = ["", "| parameter | least-squares value | posterior median | posterior 68 % |", "|---|---|---|---|"]
+    for name, row in medians.items():
+        median, low, high = fit_names.interval_values(row.get("median"), row.get("low68"), row.get("high68"))
+        reported = intervals.get(name) or {}
+        width = fit_names.interval_half_width(reported.get("low68"), reported.get("high68"))
+        best = format_number(refined.get(name), width, value_only=True)
+        lines.append(f"| {name} | {best} | {median} | {low}–{high} |")
+    return lines
 
 
 def _points_lines(fit: dict) -> list[str]:
@@ -253,33 +257,30 @@ def gisaxs_batch_row(report: dict) -> tuple[str, str, str]:
     gisaxs = report.get("gisaxs") or {}
     halves = (gisaxs.get("halves") or {}).get("side") or "—"
     spacing = gisaxs.get("spacing")
-    spacing_text = "—" if not spacing else _fixed(spacing["distance_nm"], "distance_nm") + (
+    spacing_text = "—" if not spacing else _number(spacing["distance_nm"], 3) + (
         "" if spacing.get("kind") == "maximum" else " (shoulder)")
     _index, best = chosen(gisaxs.get("fit"))
     if best is None:
         return halves, spacing_text, "—"
     said = chance(best, "p ")
-    text = (f"{best['model']} {sizes(best, ' ', FIT_DECIMALS)}, χ²ᵣ {_fixed(best['chi2'], 'chi2')}"
+    text = (f"{best['model']} {sizes(best, ' ')}, χ²ᵣ {format_number(best.get('chi2'))}"
             + (f", {said}" if said else ""))
     return halves, spacing_text, text + (f" ⚠ {bounds_text(best)}" if bounds_text(best) else "")
 
 
-def gisaxs_batch_table(reports: list[dict], state_of, labels=None) -> list[str]:
+def gisaxs_batch_table(reports: list[dict], state_of, labels=None, *, link_ids=None) -> list[str]:
     """The GISAXS frames of a batch; ``labels``: what each frame is called, by ``id(report)`` (default: its name)."""
     labels = labels or {}
-    lines = [
-        "| frame | status | halves | 2π/q* (nm) | chosen fit | open questions |",
-        "|---|---|---|---|---|---|",
-    ]
+    headers = ["frame", "status", "halves", "2π/q* (nm)", "chosen fit", "open questions"]
+    rows = []
     for report in reports:
         halves, spacing, fit = gisaxs_batch_row(report)
-        attention = report.get("needs_attention") or []
-        lines.append(
-            f"| {labels.get(id(report)) or Path(report.get('frame') or '').name} | {state_of(report)} | {halves} | "
-            f"{spacing} | {fit} | "
-            f"{', '.join(item['item'] for item in attention) or '—'} |"
-        )
-    return lines
+        asked = ", ".join(item["item"] for item in report.get("needs_attention") or []) or "—"
+        name = labels.get(id(report)) or Path(report.get("frame") or "").name
+        rows.append([name, state_of(report), halves, spacing, fit, asked])
+    if link_ids is None:
+        link_ids = {id(report): number for number, report in enumerate(reports, 1)}
+    return batch_table(headers, reports, rows, move_columns=(2, 3, 4, 5), link_ids=link_ids)
 
 
 __all__ = [

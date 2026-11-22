@@ -231,8 +231,13 @@ def test_frames_of_one_name_in_different_folders_keep_their_own_reports(two_of_o
         assert f"File: `{frame}`" in (folder / "report.md").read_text(encoding="utf-8")
         assert json.loads((folder / "report.json").read_text(encoding="utf-8"))["inputs"]["frame"][0]["path"] == frame
     summary = (out / "summary.md").read_text(encoding="utf-8")
-    assert "| galaxi_data.tif (galaxi_data_a) |" in summary and "| [report.md](galaxi_data_a/report.md) |" in summary
-    assert "| galaxi_data.tif (galaxi_data_b) |" in summary and "| [report.md](galaxi_data_b/report.md) |" in summary
+    for number, report in enumerate(reports, 1):
+        folder = report["folder"]
+        row = next(line for line in summary.splitlines() if line.startswith(f"| galaxi_data.tif ({folder}) |"))
+        assert len(row) < 100
+        inline = f"[report.md]({folder}/report.md)" in row
+        referenced = f"[report.md][r{number}]" in row and f"[r{number}]: {folder}/report.md" in summary
+        assert inline or referenced
     assert "Pattern x: 2 file(s) matched." in summary and "需要处理" not in summary
     listed = json.loads((out / "summary.json").read_text(encoding="utf-8"))
     assert [frame["folder"] for frame in listed["frames"]] == ["galaxi_data_a", "galaxi_data_b"]
@@ -286,7 +291,9 @@ def test_every_csv_starts_with_the_same_lines_that_name_the_inputs(two_of_one_na
     head = heads["fit_solutions.csv"]
     assert head[0] == f"# {SOFTWARE} (command line); settings and decisions in report.json"
     assert head[1] == f"# input: galaxi_data.tif sha256 {digest}" and head[2].startswith("# frame: ")
-    assert head[3].startswith("# geometry: distance 1730.0000 mm, direct beam (") and "alpha_i 0.2 deg" in head[3]
+    report = json.loads((folder / "report.json").read_text(encoding="utf-8"))
+    angle = report["geometry"]["incidence_deg"]
+    assert head[3].startswith("# geometry: distance 1730.0000 mm, direct beam (") and f"alpha_i {angle:.4g} deg" in head[3]
     assert head[4] == "# error model: poisson, observed sample shot variance"
     solutions = (folder / "fit_solutions.csv").read_text(encoding="utf-8").splitlines()
     assert solutions[5].startswith("# GISAXS fit solutions [") and solutions[6].startswith("# units: ")

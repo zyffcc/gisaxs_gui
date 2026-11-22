@@ -1,8 +1,9 @@
 """Choose the sample frame before reducing cuts or fitting crystal orientations."""
 
+from src.gimap.shared.numbers import applied_angle, format_number
+
 from .pipeline_geometry import INCIDENCE_ITEM
 from .pipeline_progress import PipelineStopped
-from .report_numbers import _pm
 
 MANUAL_ROLL = "Sample roll set in Analyze."
 PROFILE_ROLL = "Sample roll from the instrument geometry."
@@ -44,11 +45,11 @@ def choose_frame_angles(pipeline):
             why = DISAGREE_ROLL
     pipeline.catalog.results.status = status
     used = status["geometry"]["sample_roll_deg"]
-    pipeline._decide("Sample roll ψ", f"{used:.4g}°", why)
+    pipeline._decide("Sample roll ψ", f"{applied_angle(used, status.get('sample_roll_measurement'))}°", why)
     incidence = status.get("incidence_measurement")
     if incidence:
         final = status["geometry"]["incidence_deg"]
-        pipeline._decide("Incidence angle from frame", f"αi = {final:.5g}°", incidence_reason(incidence))
+        pipeline._decide("Incidence angle from frame", f"αi = {applied_angle(final, incidence)}°", incidence_reason(incidence))
         if incidence.get("applied_deg") is not None or (incidence.get("reference_deg") or 0) > 0:
             pipeline._incidence = final
             pipeline._run.attention[:] = [entry for entry in pipeline._run.attention if entry["item"] != INCIDENCE_ITEM]
@@ -62,7 +63,7 @@ def incidence_reason(record):
                else "no nominal αi")
     if value is None:
         return f"{nominal}. The frame estimate is unresolved ({record['method']})."
-    measured = f"frame αi = {_pm(value, error, 4)}° ({record['method']})"
+    measured = f"frame αi = {format_number(value, error)}° ({record['method']})"
     if reference is not None and reference > 0:
         apart = "differ by more than 3σ" if abs(value - reference) > 3 * error else "agree within 3σ"
         comparison = f"{nominal} and {measured} {apart}."
@@ -83,7 +84,7 @@ def incidence_lines(report):
     methods = ("horizon", "specular", "yoneda") if report.get("procedure") == "gisaxs" else ("horizon", "specular")
     for method in methods:
         estimate = record.get(method)
-        value = _pm(estimate["deg"], estimate["error_deg"], 4) + "°" if estimate else "unresolved"
+        value = format_number(estimate["deg"], estimate["error_deg"]) + "°" if estimate else "unresolved"
         if method == "yoneda" and not record.get("critical_angle_deg"):
             value = "requires the critical angle of the material giving the band"
         if method == "yoneda" and record.get("yoneda_material"):

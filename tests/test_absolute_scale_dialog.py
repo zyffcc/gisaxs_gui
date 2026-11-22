@@ -31,6 +31,9 @@ def test_curve_fit_then_apply_with_the_sample_thickness(tmp_path):
     assert dialog.calibration is not None, dialog.feedback.text()
     assert dialog.calibration.fit.q == pytest.approx([.01, .02, .03, .04])
     assert dialog.calibration.fit.factor == pytest.approx(.01632 / (1500 / .2))
+    from src.gimap.shared.numbers import format_number
+
+    assert format_number(dialog.calibration.fit.factor, dialog.calibration.fit.sigma_factor) in dialog.fit_summary.text()
     assert len(dialog.overlay.plot.listDataItems()) == 2
     assert len(dialog.residual.plot.listDataItems()) == 2
     dialog.q_min.setText(".015")
@@ -89,7 +92,7 @@ def test_saved_standard_can_be_reused_without_refitting(qt_application):
     try:
         apply_language("zh", [dialog])
         assert dialog.saved_button.text() == "使用已保存的比例因子"
-        assert "水" in dialog.saved_label.text()
+        assert dialog.saved_label.text().startswith("已保存 A_abs = 2.500e-6 ± 1.0e-8 · 水")
         assert dialog.profile_label.text() == "Synthetic instrument"
         dialog.saved_button.click()
         assert received == [.7]

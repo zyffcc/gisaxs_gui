@@ -53,7 +53,7 @@ def test_the_report_states_pixel_size_energy_and_what_the_asymmetry_is(galaxi) -
     report, folder = galaxi
     text = (folder / "report.md").read_text(encoding="utf-8")
     geometry = text.split("## Geometry")[1].split("## ")[0]
-    assert "- pixel size 172 µm, energy 9.253 keV" in geometry
+    assert "- pixel size 172 µm, energy 9.25 keV" in geometry
     assert f"  - {ASYMMETRY_DEFINITION}" in text and ASYMMETRY_DEFINITION.startswith("asymmetry: ")
     record = json.loads((folder / "report.json").read_text(encoding="utf-8"))
     assert record["geometry"]["critical_angle_deg"] is None  # none was given: not 0.0
@@ -65,8 +65,9 @@ def test_the_report_states_pixel_size_energy_and_what_the_asymmetry_is(galaxi) -
 
 def test_the_fit_table_names_the_disorder_as_the_model_table_does() -> None:
     new = {"R": 9.4, "sigma_R": 0.3, "D": 53.4, "sigma_nn": 0.25, "sigma_D": 0.0997}
-    assert _parameters(new) == "R 9.40 nm, σR/R 0.300, D 53.4 nm, σnn/D 0.250"
-    assert _parameters({"R": 9.4, "D": 53.4, "sigma_D": 0.4}) == "R 9.40 nm, D 53.4 nm, σD/D 0.400"  # an old row
+    assert _parameters({"components": [new]}, 0) == "R 9.4 nm, σR/R 0.3, D 53.4 nm, σnn/D 0.25"
+    old = {"R": 9.4, "D": 53.4, "sigma_D": 0.4}
+    assert _parameters({"components": [old]}, 0) == "R 9.4 nm, D 53.4 nm, σD/D 0.4"
 
 
 def test_the_language_option_says_what_it_translates() -> None:

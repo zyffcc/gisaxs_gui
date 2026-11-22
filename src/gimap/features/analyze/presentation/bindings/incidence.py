@@ -22,6 +22,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_state
 
 from ..views.analyze_page_view import INCIDENCE_FROM_PROFILE, INCIDENCE_TIP
+from .incidence_text import measured_incidence
 
 OVERRIDE_TIP = "αi set by you: {value}° · profile: {profile}°"
 RESTORED_NOTICE = "αi {value}° from your last session (profile: {profile}°)"
@@ -174,8 +175,7 @@ class IncidenceMixin:
         set_state(self.incidence_spin, "override", value is not None or active)
         self.incidence_reset_action.setEnabled(value is not None or bool(measured))
         if active:
-            self.incidence_spin.setToolTip(trf("Measured αi  {value} ± {error}°", value=f"{measured['deg']:.3f}",
-                                               error=f"{measured['error_deg']:.3f}"))
+            self.incidence_spin.setToolTip(measured_incidence(measured))
             return
         if header is not None:
             self.incidence_spin.setToolTip(

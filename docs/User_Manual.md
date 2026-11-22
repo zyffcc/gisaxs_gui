@@ -3680,7 +3680,8 @@ Analyze and Geometry Calibration: pixel corners lie on whole numbers, so the cen
 first pixel is (0.5, 0.5); x counts from the left edge and y from the top edge (section 4.4). Hover over the centre
 fields or the *ROI x* / *ROI y* headers to read this in the window. A centre can be copied between the
 three windows as it is. XRR rounds the applied beam centre to two decimal places. Geometry Calibration
-shows three decimal places and Analyze shows four. All three use the coordinates saved by **Apply**.
+shows the fitted centre to the precision of its uncertainty, and Analyze shows four decimal places.
+All three use the coordinates saved by **Apply**.
 
 - The preview, its cross and ROI circle, and the *ROI x* / *ROI y* columns use the same pixels.
 - A centre picked with the mouse is the point clicked: with radius 0, the pixel you click is the pixel
@@ -4196,6 +4197,13 @@ names the SHA-256 of the weights, checked when they are loaded). The request rec
 random-seed policy: Predict parameters uses a fixed seed.
 
 ## 12. Output files
+
+**Reading a reported uncertainty.** Reports and result labels round a positive uncertainty to two
+significant digits and the estimate to the same decimal place. For example, `8.9335(22) Å` in a
+cell table means `8.9335 ± 0.0022 Å`. A measured angle keeps that precision when the report repeats
+the angle it applied. A reported zero uncertainty appears as `± 0` or `(0)`. When an uncertainty
+is unavailable, the estimate appears on its own. Numbered notes below a table give the details of long entries.
+Display rounding affects neither calculations nor the precision of JSON and CSV exports.
 
 GIMaP never changes your data files. Exports from Analyze go by default into a folder
 **`gimap_analysis/` next to the data**; most other exports ask for a place and propose one. Some propose a place

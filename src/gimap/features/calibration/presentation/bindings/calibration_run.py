@@ -21,7 +21,7 @@ from ...application import (
 )
 
 
-from ..pixel_coordinates import shown_center
+from ..result_numbers import geometry_text
 from ..residual_text import rms_text, rms_tip, rms_title
 from ..workers import CalibrationWorker
 
@@ -132,13 +132,13 @@ class CalibrationRunMixin:
             return
         self.candidate_table.setRowCount(len(self.result.candidates))
         for row, candidate in enumerate(self.result.candidates):
-            center_x, center_y = shown_center(candidate)  # the pixels of Analyze, as everywhere in the window
+            center_x, center_y, distance = geometry_text(candidate)
             values = (
                 tr(self.view_model.standard_display_name(candidate.standard_key)),
-                f"{candidate.distance_mm:.2f} mm",
-                f"{center_x:.1f}, {center_y:.1f}",
+                f"{distance} mm",
+                f"{center_x}, {center_y}",
                 str(candidate.matched_ring_count),
-                rms_text(candidate, 2),  # the residual of the geometry shown (ring points with the tilt)
+                rms_text(candidate),  # the residual of the geometry shown (ring points with the tilt)
                 tr(candidate.confidence),
             )
             for column, value in enumerate(values):

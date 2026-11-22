@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import FormattedText, language_changed, tr, trf
 from src.gimap.app.presentation.task_runner import TaskRunner
+from src.gimap.shared.numbers import format_number
 
 from ...application import CURVE_SUFFIXES, LoadCurveRequest
 from ...application.joint_fit import (
@@ -297,12 +298,15 @@ class JointFitDialog:
             box.setFlags(Qt.ItemIsUserCheckable | (Qt.NoItemFlags if height else Qt.ItemIsEnabled))
             box.setCheckState(Qt.Checked if (height or before.get(path, path in default)) else Qt.Unchecked)
             table.setItem(line, 1, box)
-            value, error = f"{model.get(path).value:.5g}", "—"
+            value, error = format_number(model.get(path).value), "—"
             if path in fitted_paths:
                 found = values_of(result, path)
-                value = " | ".join(f"{v:.5g}" for v, _e in found) if len({v for v, _e in found}) > 1 else f"{found[0][0]:.5g}"
-                error = " | ".join("—" if not math.isfinite(e) else f"{e:.3g}" for _v, e in found[:1 if len(
-                    {v for v, _e in found}) == 1 else None])
+                cells = [(format_number(v, e, value_only=True), format_number(e, e, value_only=True))
+                         for v, e in found]
+                if all(cell == cells[0] for cell in cells):
+                    cells = cells[:1]
+                value = " | ".join(v for v, _ in cells)
+                error = " | ".join(e for _, e in cells)
             table.setItem(line, 2, QTableWidgetItem(value))
             table.setItem(line, 3, QTableWidgetItem(error))
 
@@ -372,7 +376,7 @@ class JointFitDialog:
                 if key in component.keys():
                     value = component.value(key)
                     error = errors.get((owner, key), math.nan)
-                    estimate = f"{value:.5g} ± {error:.3g}" if math.isfinite(error) else f"{value:.5g}"
+                    estimate = format_number(value, error)
                     values.append(f"{key} = {estimate} nm")
             dimensions.append(" · ".join([tr(FAMILIES[component.family][0]), *values]))
         self.joint_dimensions.setText(trf("Last fit: {dimensions}", dimensions="\n".join(dimensions)))
@@ -437,7 +441,7 @@ class JointFitDialog:
     def _report_blocks(self) -> list:
         result = self.result
         outcome = tr("stopped") if result.stopped else tr("converged") if result.converged else tr("not converged")
-        lines = [trf(SUMMARY, chi2=f"{result.chi2_reduced:.4g}", points=sum(result.points), curves=len(result.points),
+        lines = [trf(SUMMARY, chi2=f"{result.chi2_reduced:.3g}", points=sum(result.points), curves=len(result.points),
                      free=result.free, outcome=outcome, evaluations=result.evaluations, seconds=result.seconds)]
         for i, spec in enumerate(self.result_specs):
             value, points, weighting = result.curve_chi2[i], result.points[i], result.weightings[i]
@@ -450,10 +454,11 @@ class JointFitDialog:
                                  degrees=f"{cut.min_exit_angle_deg:.5g}"))
                 chi2 = result.reduced_chi2_for(i)
                 if math.isfinite(chi2):
-                    lines.append(trf("Vertical reduced χ² = {value}", value=f"{chi2:.4g}"))
+                    lines.append(trf("Vertical reduced χ² = {value}", value=f"{chi2:.3g}"))
         for row in height_range_rows(result):
-            lines.append(trf(HEIGHT_RANGE_LINE, height=row["height"], selected=f"{row['selected_nm']:.5g}",
-                             alternate=f"{row['alternate_nm']:.5g}",
+            lines.append(trf(HEIGHT_RANGE_LINE, height=row["height"],
+                             selected=format_number(row["selected_nm"], row["selected_sigma_nm"]),
+                             alternate=format_number(row["alternate_nm"], row["alternate_sigma_nm"]),
                              multiple=f"{result.height_range_check.min_exit_angle_ac:g}"))
         lines.append(tr(HEIGHT_ASSUMPTION))
         attention = [trf(template, **values) for template, values in needs_attention(result, self.result_specs)]
@@ -515,8 +520,8 @@ class JointFitDialog:
                 if path_key[0] == "globals" and not parameter.free:
                     continue
                 error = errors.get(path_key, math.nan)
-                rows.append([spec.name, path_name(model, path_key, unit=True, full=True), f"{parameter.value:.6g}",
-                             f"{error:.4g}" if math.isfinite(error) else "—"])
+                rows.append([spec.name, path_name(model, path_key, unit=True, full=True),
+                             format_number(parameter.value, error, value_only=True), format_number(error, error, value_only=True)])
         if rows:
             parts += [("h2", tr("Parameters")), ("table", [tr("Curve"), tr("Parameter"), tr("Value"), "± 1σ"], rows)]
         return self._save_text(path, render(parts, "markdown"))

@@ -76,8 +76,8 @@ def test_phase_model_shows_joint_fit_and_reflection_curves(tmp_path, monkeypatch
 
         report = "\n".join(crystal_lines([phase]))
         assert "refraction and attenuation of the incident and exit waves" in report
-        assert "FWHM 25.00 ± 0.40°, fraction of this phase 0.560 ± 0.030" in report
-        assert "FWHM 6.00 ± 0.20°, fraction of this phase 0.140 ± 0.020" in report
+        assert "| (1 1 0) | 25.00(40) | 0.560(30) |" in report
+        assert "| (1 1 0) | 6.00(20) | 0.140(20) |" in report
         panel.crystal_ring_combo.setCurrentIndex(1)
         assert "1.980" in panel.pole_plot.figure_state()["title"]
         fitted, excluded = panel.pole_plot.figure_state()["curves"][:2]
