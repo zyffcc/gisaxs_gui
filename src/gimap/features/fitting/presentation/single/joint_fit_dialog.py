@@ -125,29 +125,28 @@ class JointFitDialog:
             self._say(tr("Single analysis has no curve open."), "warning")
             return False
         self.add_spec(CurveSpec(curve.name, curve.q, curve.intensity, curve.sigma, "horizontal", path=curve.path,
-                                source=curve.source,
-                                **self._page_globals()))
+                                dq=curve.dq, source=curve.source, **self._page_globals()))
         return True
 
     def add_file(self, path, geometry=None) -> bool:
         """A curve file: its kind and geometry from the file (Analyze's vertical cut) or ``geometry``, else those of
         the page's Model."""
         path = Path(path)
-        outcome = self.view_model.load_curve(LoadCurveRequest(path, self.page.unit_setting()))
+        outcome = self.view_model.load_curve(LoadCurveRequest(path, self.page.unit_setting(), keep_missing_sigma=True))
         if outcome.error is not None:
             self._say(trf(NOT_ADDED, name=path.name, reason=tr(outcome.error.message)), "error")
             return False
         loaded = outcome.value
         curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=path.name, path=str(path),
-                                  unit=loaded.q_source_unit)
+                                  unit=loaded.q_source_unit, dq=loaded.dq)
         found = {**self._page_globals(), **hints(getattr(loaded, "observation", None)), **dict(geometry or {})}
         kind = found.pop("kind", "horizontal")
         alpha_f = found.pop("horizontal_alpha_f", None)
         if kind == "horizontal" and alpha_f is not None:
             found["alpha_f"] = alpha_f
-        allowed = {"alpha_i", "alpha_f", "wavelength", "q_parallel", "critical_angle"}
-        self.add_spec(CurveSpec(path.name, curve.q, curve.intensity, curve.sigma, kind, path=str(path), source=curve.source,
-                                **{k: v for k, v in found.items() if k in allowed}))
+        allowed = {"alpha_i", "alpha_f", "wavelength", "q_parallel", "critical_angle", "band_crosses_specular"}
+        self.add_spec(CurveSpec(path.name, curve.q, curve.intensity, curve.sigma, kind, path=str(path),
+                                dq=curve.dq, source=curve.source, **{k: v for k, v in found.items() if k in allowed}))
         return True
 
     def add_files_dialog(self) -> None:
@@ -160,6 +159,7 @@ class JointFitDialog:
         if 0 <= row < len(self.specs):
             del self.specs[row]
             self._render()
+            self._warn()
 
     def _selected(self) -> None:
         row = self.joint_curves.currentRow()
@@ -202,6 +202,8 @@ class JointFitDialog:
         found = warnings(self.specs)
         if found:
             self._say(" ".join("⚠ " + trf(template, **values) for template, values in found), "warning")
+        elif self.joint_status.text().startswith("⚠ "):
+            self._say("", "info")
 
     def _sync_substrate(self) -> None:
         custom = self.joint_substrate.currentData() == CUSTOM
@@ -372,6 +374,7 @@ class JointFitDialog:
                              weighting=tr("σ") if weighting == "sigma" else tr("ln I")))
         if len(set(result.weightings)) > 1:
             lines.append("⚠ " + tr(MIXED))
+        lines.extend("⚠ " + trf(template, **values) for template, values in warnings(self.result_specs))
         if result.at_bounds:
             from ...application.joint_fit import key_name
 
@@ -416,6 +419,7 @@ class JointFitDialog:
                 combo.setItemText(index, tr(text))
         self._render()
         self._summary()
+        self._warn()
 
     def dispose(self) -> None:
         self._stop.set()

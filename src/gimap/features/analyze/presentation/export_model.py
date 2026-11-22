@@ -75,13 +75,13 @@ class ExportModelMixin:
         if self.settings is not None:
             self.settings.set("analyze", EXPORT_FOLDER_KEY, str(folder))
 
-    def export(self, destination: Optional[Path] = None) -> list[Path]:
+    def export(self, destination: Optional[Path] = None, *, extra_metadata: Optional[dict] = None) -> list[Path]:
         analysis = self.state.analysis
         if analysis is None:
             raise ValueError("Open a frame first.")
         target = Path(destination) if destination is not None else self.default_export_dir()
         # its curve for Fitting says the Cuts step's halves
-        return self._export(analysis, target, halves=self.fit_side, nxcansas=self.export_nxcansas)
+        return self._export(analysis, target, extra_metadata, halves=self.fit_side, nxcansas=self.export_nxcansas)
 
     def export_q_map(self, path: Path) -> Path:
         analysis = self.state.analysis
@@ -92,6 +92,10 @@ class ExportModelMixin:
     def series_row(self, request: AnalysisRequest, key: str) -> tuple:
         """Thread-safe: ``(x, intensity, x_label, row label, (path, frame_index))`` of one frame's curve."""
         analysis = self.analyze(replace(request, with_map=False))  # one curve per frame: no q map
+        return self.series_row_of(analysis, key)
+
+    def series_row_of(self, analysis: FrameAnalysis, key: str) -> tuple:
+        """The same row of a frame already analysed (the one on screen): nothing is read again."""
         x, intensity, x_label = series_row(analysis, key)
         label = spool_row(self.series_spool, analysis, key, row_label(analysis))
         return x, intensity, x_label, label, (Path(analysis.path), int(analysis.frame_index))
@@ -163,12 +167,10 @@ class ExportModelMixin:
             if live_key == "default":
                 live_key = "horizontal" if analysis.kind == "gisaxs" else "radial"
             try:
-                x, intensity, label = series_row(analysis, live_key)
+                row = self.series_row_of(analysis, live_key)
             except ValueError as exc:
                 return ExportedFiles(written, live_key=live_key, live_row=None, live_error=str(exc))
-            name = spool_row(self.series_spool, analysis, live_key, row_label(analysis))
-            return ExportedFiles(written, live_key=live_key, live_row=(
-                x, intensity, label, name, (Path(analysis.path), int(analysis.frame_index))))
+            return ExportedFiles(written, live_key=live_key, live_row=row)
         return written
 
     def _save_frame_images(

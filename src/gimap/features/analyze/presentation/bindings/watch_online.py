@@ -16,8 +16,8 @@ new frame.
   ``gimap_analysis/gimap_series.sqlite`` next to the data (``application.store_rows``), once a second; Compare reads
   it (Add Series ▸ Results Database…). Export ▾ ▸ Save Results Database… writes the whole map at any time.
 * **Fit New Frames in Fitting…**: exports the frame on screen, switches Export New Frames While Watching on and
-  opens the folder of the exports in Fitting ▸ In-situ series, where Start with Watch for new curves fits every new
-  frame from the result of the one before.
+  opens the folder of the exports in Fitting ▸ In-situ series with Watch for new curves ticked, and starts there
+  once the curves are listed: every new frame is fitted from the result of the one before.
 """
 
 from __future__ import annotations
@@ -48,8 +48,8 @@ WHAT_WAITING, WHAT_FAILED, WHAT_NO_CURVE = "waiting", "failed", "no curve"
 RECORD_FAILED = "Could not write the results database: {error}"
 RECORDED = "Saved {n} frames to {name}"
 FIT_NEEDS_WATCH = "Watch a folder first: Fit New Frames in Fitting fits the frames written into it."
-FIT_HANDED = ("Fitting ▸ In-situ series lists the curves written so far: tick Watch for new curves and press Start — "
-              "every new frame is then fitted from the result of the one before.")
+FIT_HANDED = ("Fitting ▸ In-situ series fits the curves written so far and watches for new ones: every new frame is "
+              "fitted from the result of the one before.")
 MOST_SKIPPED = 2000
 """The log keeps the latest this many entries (a folder of unreadable files does not grow it without end)."""
 
@@ -270,7 +270,7 @@ class WatchOnlineMixin:
             return False
         if not self.auto_export_check.isChecked():
             self.auto_export_check.setChecked(True)
-        if not send(folder):
+        if not send(folder, watch=True):
             return False
         self._status(tr(FIT_HANDED), "info")
         return True

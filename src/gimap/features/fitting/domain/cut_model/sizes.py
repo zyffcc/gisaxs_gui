@@ -1,6 +1,6 @@
 """Size distributions of one population: quadrature nodes and number weights, and their moments.
 
-Three laws, all truncated at ±``SPAN`` widths:
+The original three laws (saved fits and Predict):
 
 * ``number_gauss``: a Gaussian of the particle count in R, mean ``mean`` and standard deviation ``rel · mean``,
   cut at max(0, mean(1 − 4 rel)) and mean(1 + 4 rel) (fit1d's sizes and those of ``tools/benchmarks/yoneda_truth``).
@@ -28,7 +28,9 @@ from functools import lru_cache
 
 import numpy as np
 
-LAWS = ("number_gauss", "lognormal", "intensity_gauss")
+from . import manual_sizes
+
+LAWS = ("number_gauss", "lognormal", "intensity_gauss", *manual_sizes.LAWS)
 SPAN = 4.0
 PANEL_NODES = 8
 MIN_PANELS = 2
@@ -81,6 +83,12 @@ def _arrays(mean, rel) -> tuple[np.ndarray, np.ndarray]:
 def extent(law: str, mean, rel, power: float = 6.0) -> np.ndarray:
     """Width (nm) of the truncated distribution of every row (``power`` as in ``nodes``)."""
     mean, rel = _arrays(mean, rel)
+    if law == "lognormal_median":
+        lo, hi = manual_sizes.lognormal_span(mean, rel, power)
+        return np.exp(hi) - np.exp(lo)
+    if law == "schulz":
+        lo, hi = manual_sizes.gamma_span(mean, rel, power)
+        return hi - lo
     if law == "lognormal":
         lo, hi = _lognormal_span(mean, rel, power)
         return np.exp(hi) - np.exp(lo)
@@ -90,6 +98,10 @@ def extent(law: str, mean, rel, power: float = 6.0) -> np.ndarray:
 def upper(law: str, mean, rel, power: float = 6.0) -> np.ndarray:
     """The largest size (nm) of the truncated distribution of every row."""
     mean, rel = _arrays(mean, rel)
+    if law == "lognormal_median":
+        return np.exp(manual_sizes.lognormal_span(mean, rel, power)[1])
+    if law == "schulz":
+        return manual_sizes.gamma_span(mean, rel, power)[1]
     if law == "lognormal":
         return np.exp(_lognormal_span(mean, rel, power)[1])
     return mean * (1.0 + SPAN * rel)
@@ -100,6 +112,11 @@ def characteristic(law: str, mean, rel, power: float = 6.0) -> np.ndarray:
     and two widths above the median of a log-normal weighted by V² ∝ R^power (the scale of the oscillations that
     survive the size average, for the grids of a random cylinder)."""
     mean, rel = _arrays(mean, rel)
+    if law == "lognormal_median":
+        return mean * np.exp(power * rel**2 + 2.0 * rel)
+    if law == "schulz":
+        factor = 1.0 + power * rel**2
+        return mean * (factor + 3.0 * rel * np.sqrt(factor))
     if law == "lognormal":
         s = np.sqrt(np.log1p(rel**2))
         return np.exp(np.log(mean) - 0.5 * s**2 + power * s**2 + 2.0 * s)
@@ -126,7 +143,14 @@ def nodes(law: str, mean, rel, *, power: float, panels: int) -> tuple[np.ndarray
     mean, rel = _arrays(mean, rel)
     narrow = rel <= 1e-12
     safe = np.where(narrow, 1.0, rel)
-    if law == "lognormal":
+    if law == "lognormal_median":
+        u, w = _composite(*manual_sizes.lognormal_span(mean, safe, power), max(panels, 8))
+        radii = np.exp(u)
+        density = np.exp(-0.5 * ((u - np.log(mean)[:, None]) / safe[:, None]) ** 2)
+    elif law == "schulz":
+        radii, w = _composite(*manual_sizes.gamma_span(mean, safe, power), max(panels, 8))
+        density = manual_sizes.gamma_weights(radii, mean, safe)
+    elif law == "lognormal":
         s = np.sqrt(np.log1p(safe**2))
         centre = np.log(mean) - 0.5 * s**2
         u, w = _composite(*_lognormal_span(mean, safe, power), panels)
@@ -168,6 +192,8 @@ def size_report(law: str, mean: float, rel: float, power: float) -> dict:
     """The moments of one population's sizes, by number and by intensity, on a fine fixed rule.
 
     ``number`` is ``None`` when the number distribution is not defined (``TAIL_SHARE``)."""
+    if law in ("lognormal_median", "schulz"):
+        return manual_sizes.moments(law, mean, rel, power)
     radii, weights = nodes(law, mean, rel, power=power, panels=64)
     m = moments(radii, weights, power)
     number = (float(m["number"][0][0]), float(m["number"][1][0]))

@@ -277,6 +277,7 @@ class FormSetupMixin:
             self.custom_max_spin,
             self.background_check,
             self.tilt_check,
+            self.rot3_spin,
         ):
             widget.setEnabled(not running)
         # Auto Calibration waits for an energy (``EnergySourceMixin``): none is made up.
@@ -395,6 +396,7 @@ class FormSetupMixin:
             self._manual_section_opened = False
             # Manual mode off means the fitted solution, also after values were committed.
             self._restore_fitted_geometry()
+            self._refresh_manual_result()
         self.manual_panel.setVisible(checked)
         self.manual_group.setMaximumHeight(16777215 if checked else 40)
         blocker = QSignalBlocker(self.manual_refine_button)

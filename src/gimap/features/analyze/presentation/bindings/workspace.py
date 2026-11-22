@@ -323,7 +323,14 @@ class WorkspaceMixin:
             lines.append(f"· {tr(' and ').join(parts) or tr('corrections')}: {_pixels(extra, total)}")
         show_card(self.mask_summary_label, "\n".join(lines))
         share = 100.0 * (total - int(valid.sum())) / max(total, 1)
-        self.set_step_state("mask", "ok", tr("{share} % of the pixels left out").format(share=f"{share:.2g}"))
+        said = []  # the step says first whether the intensities are scaled, not only its closed sections
+        use = getattr(analysis, "normalisation", None)
+        if use is not None:
+            said.append(trf("intensity × {factor}", factor=f"{use.factor:.3g}"))
+        if corrections is not None and getattr(corrections, "lorentz", False):
+            said.append(tr("Lorentz factor"))
+        said.append(tr("{share} % of the pixels left out").format(share=f"{share:.2g}"))
+        self.set_step_state("mask", "ok", " · ".join(said))
         self._intro("mask")
 
     def _show_cut_state(self, analysis: FrameAnalysis) -> None:

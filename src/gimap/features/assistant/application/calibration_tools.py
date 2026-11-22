@@ -46,6 +46,7 @@ from ..domain import (
     text_hints,
     wavelength_angstrom,
 )
+from .calibration_report import fitted_rings
 from .models import PERMISSION_CONFIRM, ToolInputError, ToolOutcome
 from .run_record import profile_source
 
@@ -367,7 +368,7 @@ class CalibrationToolsMixin:
         ending = suffix(path)
         name = Path(path).name
         if ending == ".poni":
-            geometry = parse_poni(self.explorer.read_text(path))
+            geometry = parse_poni(self.explorer.read_text(path), frame_shape=self._frame().get("shape"))
             values = {
                 "distance_mm": geometry.distance_mm,
                 "beam_center_x_px": geometry.beam_center_x_px,
@@ -438,10 +439,7 @@ class CalibrationToolsMixin:
             result = self.calibrator.calibrate(path, standard=standard, **options)
             self.results.calibrations.append(result)
             payload = {**result, "calibration_index": len(self.results.calibrations) - 1, "assessment": assessment(result)}
-            summary = (
-                f"{result.get('standard')}: {result.get('matched_rings')} rings, rms {result.get('rms_residual_px', 0):.2g} px, "
-                f"{result.get('distance_mm', 0):.1f} mm"
-            )
+            summary = f"{result.get('standard')}: {fitted_rings(result)}, {result.get('distance_mm', 0):.1f} mm"
             return self._ok(payload, summary)
         fits, failures = [], []
         for key in SUPPORTED_STANDARDS:
@@ -466,6 +464,7 @@ class CalibrationToolsMixin:
             {
                 "calibration_index": item["calibration_index"], "standard": item.get("standard"),
                 "matched_rings": item.get("matched_rings"), "rms_residual_px": item.get("rms_residual_px"),
+                "initial_point_rms_px": item.get("initial_point_rms_px"), "point_rms_px": item.get("point_rms_px"),
                 "confidence": item.get("confidence"), "distance_mm": item.get("distance_mm"),
                 "beam_center_px": item.get("beam_center_px"), "assessment": assessment(item),
                 "line_q_error_percent": None if line_quality(item) is None else round(100 * line_quality(item), 3),
@@ -517,7 +516,7 @@ class CalibrationToolsMixin:
             origin = (
                 f"the saved calibration {Path(result.get('source_image', '')).name}" if result.get("from_file") else
                 f"{result.get('standard')} calibration of {Path(result.get('source_image', '')).name} "
-                f"({result.get('matched_rings')} rings, rms {result.get('rms_residual_px', 0):.2g} px)"
+                f"({fitted_rings(result)})"
             )
         elif source == "file":
             path = arguments.get("path")
@@ -559,6 +558,8 @@ class CalibrationToolsMixin:
     def _tool_use_geometry(self, source: str, **arguments) -> ToolOutcome:
         values, origin = self._geometry_values({"source": source, **arguments})
         source = profile_source(self.actor, origin, arguments.get("path") or values.get("source_image"))  # with its path
+        if self.results.provider:
+            source += f" ({self.results.provider} · {self.results.model})"
         status = self.workbench.use_geometry(values, arguments.get("profile_name"), source)
         self.results.geometry_used = {**values, "source": origin}
         self.results.status = status

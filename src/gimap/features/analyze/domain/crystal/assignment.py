@@ -7,7 +7,7 @@ any phase when
 
 The window takes the larger of the statistical error and the half width: σ(q_0) of a strong ring is often
 10⁻⁴ Å⁻¹, smaller than the cell constants or the geometry are known, while a reflection within the half width
-still lies under the peak. The deviation is stated as Δq = q_0 − q_hkl, in units of σ(q_0) and as Δd/d = −Δq/q_hkl.
+still lies under the peak. The relative spacing difference is (d_0 − d_hkl)/d_hkl = −Δq/q_0.
 Other reflections within δ (of the same or another phase) are listed as alternatives, nearest first: the
 assignment is the nearest, not a proof.
 """
@@ -31,6 +31,7 @@ class Candidate:
     q: float
     intensity: float = 1.0
     multiplicity: int = 1
+    families: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -55,21 +56,23 @@ class Assignment:
 
     @property
     def relative_d(self) -> Optional[float]:
-        """Δd/d = −Δq / q_hkl."""
-        return None if self.delta_q is None or self.match is None else -self.delta_q / self.match.q
+        """(d_obs − d_hkl)/d_hkl, with d = 2π/q."""
+        return None if self.delta_q is None or self.q <= 0 else -self.delta_q / self.q
 
     def record(self) -> dict:
         nearest = self.match
         return {
             "q": self.q, "q_err": self.q_err, "fwhm": self.fwhm, "tolerance": self.tolerance,
             "assigned": self.assigned,
+            "ambiguous": bool(self.alternatives or (nearest and len(nearest.families) > 1)),
             "phase": None if nearest is None else nearest.phase,
             "hkl": None if nearest is None else nearest.label,
             "q_hkl": None if nearest is None else nearest.q,
             "d_hkl_A": None if nearest is None else 2.0 * math.pi / nearest.q,
             "delta_q": self.delta_q, "delta_sigma": self.delta_sigma, "relative_d": self.relative_d,
             "alternatives": [
-                {"phase": item.phase, "hkl": item.label, "q_hkl": item.q, "delta_q": self.q - item.q}
+                {"phase": item.phase, "hkl": item.label, "q_hkl": item.q, "delta_q": self.q - item.q,
+                 "relative_d": (item.q - self.q) / self.q if self.q > 0 else None}
                 for item in self.alternatives
             ],
         }

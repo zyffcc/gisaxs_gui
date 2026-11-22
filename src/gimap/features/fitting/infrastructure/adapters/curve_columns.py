@@ -20,11 +20,13 @@ header says of it (``curve_units``), else none (the setting for files without on
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
 from ...application.curve_sources import ColumnMapping, CurveTablePreview
 from ...application.models import COLUMNS_TO_CHOOSE
+from src.gimap.shared.nxcansas import q_unit
 from .curve_tables import _column_kind, inspect_curve_table
 from .curve_units import _units_in, file_q_unit
 
@@ -65,19 +67,41 @@ def header_columns(preview: CurveTablePreview) -> Optional[ColumnMapping]:
         units = [column_unit(names[index]) for index in q]
         if len({_base(names[index]) for index in q}) != 1 or None in units or len(set(units)) != len(units):
             return None  # q of different axes (qy, qz), or the same name twice: not to be guessed
-    return ColumnMapping(q[0], intensity[0], sigma[0] if sigma else None, tuple(names), preview.column_count)
+    if len(preview.resolution_columns) > 1:
+        return None
+    dq = preview.resolution_columns[0] if preview.resolution_columns else None
+    return ColumnMapping(q[0], intensity[0], sigma[0] if sigma else None, tuple(names), preview.column_count, dq)
 
 
-def csv_columns(path: Path) -> Optional[ColumnMapping]:
-    """The columns of a CSV curve: by its header (``header_columns``); ``None`` for a table without a header of at
-    most ``POSITIONAL_COLUMNS`` columns (read by place). ``ValueError(COLUMNS_TO_CHOOSE)`` when neither decides."""
+def curve_columns(path: Path, selection: Optional[ColumnMapping] = None) -> Optional[ColumnMapping]:
+    """Use named columns for CSV and for any table with named dQ. Preserve positional reads of older text files."""
     preview = inspect_curve_table(Path(path))
+    if selection is not None:
+        if selection.dq is None and len(preview.resolution_columns) == 1:
+            return replace(selection, dq=preview.resolution_columns[0])
+        return selection
+    if path.suffix.lower() != ".csv" and not preview.resolution_columns:
+        return None
     found = header_columns(preview)
     if found is not None:
         return found
     if not preview.has_header and preview.column_count <= POSITIONAL_COLUMNS:
         return None
     raise ValueError(COLUMNS_TO_CHOOSE)
+
+
+def resolution_unit(name: str) -> Optional[str]:
+    """The stated inverse-length unit of a dQ column. Bare names use the unit of q."""
+    unit_text = re.sub(r"^(?:dq|sigma[_ ]?q|σ[_ ]?q)", "", name.strip(), flags=re.IGNORECASE)
+    unit_text = unit_text.strip(" _")
+    if unit_text.startswith(("(", "[")) and unit_text.endswith((")", "]")):
+        unit_text = unit_text[1:-1].strip()
+    if not unit_text:
+        return None
+    unit = q_unit(unit_text)
+    if unit is None:
+        raise ValueError("The unit of dQ must be an inverse length.")
+    return unit
 
 
 def column_q_unit(path: Path, columns: ColumnMapping) -> Optional[str]:
@@ -90,4 +114,4 @@ def column_q_unit(path: Path, columns: ColumnMapping) -> Optional[str]:
     return file_q_unit(path) if columns.q == 0 else None
 
 
-__all__ = ["POSITIONAL_COLUMNS", "column_q_unit", "column_unit", "csv_columns", "header_columns"]
+__all__ = ["POSITIONAL_COLUMNS", "column_q_unit", "column_unit", "curve_columns", "header_columns", "resolution_unit"]

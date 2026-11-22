@@ -7,9 +7,11 @@ on the GUI thread."""
 
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 from typing import Optional, Sequence
 
+from ..application import TRANSMISSION
 from ..application.indexing import PLANE, POWDER, PhaseSpec, phase_from_cif
 from ..application.pole_figure import CHI_MAX, GAUSSIAN, pole_figure
 
@@ -33,6 +35,13 @@ def phase_of(entry, index: int) -> PhaseSpec:
 class IndexingAutomationMixin:
     """Needs ``self._page`` (the Analyze page, with ``indexing`` and ``indexing_changed``)."""
 
+    def set_orientation_min_exit(self, degrees: float, done) -> None:
+        page = self._page
+        options = page.view_model.state.corrections
+        page.view_model.set_orientation_options(options.lorentz_band_px, degrees, options.orientation_polarization)
+        page._sync_normalisation_widgets()
+        self.reanalyse(done)
+
     def set_phases(self, phases: Sequence) -> dict:
         """Replace the phases; returns ``{"phases": [records]}`` (ValueError for a file or cell that cannot be read)."""
         page = self._page
@@ -48,13 +57,21 @@ class IndexingAutomationMixin:
 
     def assign_peaks(self, peaks: Sequence[dict]) -> dict:
         """``{"phases", "rule", "assignments"}`` for peaks ``{"q", "q_err", "fwhm"}`` (no phases: empty lists)."""
-        return self._page.indexing.assign(list(peaks))
+        analysis = self._page.view_model.state.analysis
+        return self._page.indexing.assign(list(peaks), geometry=getattr(analysis, "geometry", None),
+                                          transmission=getattr(analysis, "kind", None) == TRANSMISSION)
 
     def pole_figure(self, background: Optional[float] = None, model: str = GAUSSIAN,
                     chi0_deg: Optional[float] = None, chi_max: float = CHI_MAX) -> dict:
         """The pole figure of the ring in the I(χ) window and its fit, as a record."""
-        result = pole_figure(self._page.view_model.state.analysis, model=model, chi0_deg=chi0_deg,
-                             background=background, chi_max=chi_max)
+        return self.store_pole(self.prepare_pole(background, model, chi0_deg, chi_max)())
+
+    def prepare_pole(self, background=None, model=GAUSSIAN, chi0_deg=None, chi_max=CHI_MAX):
+        """Snapshot the selected ring on the GUI thread. The fit can run on the worker."""
+        return partial(pole_figure, self._page.view_model.state.analysis, model=model, chi0_deg=chi0_deg,
+                       background=background, chi_max=chi_max)
+
+    def store_pole(self, result) -> dict:
         self._page.indexing.last_pole = result
         return result.record()
 

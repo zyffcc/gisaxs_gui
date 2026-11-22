@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 import time
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -244,6 +246,7 @@ def test_the_last_applied_calibration_is_read_back_in_xrr_units():
 
     geometry = SettingsXrrGeometryAdapter(settings).last_calibration()
     assert geometry == XrrCalibrationGeometry(
+        rot1_deg=0.0, rot2_deg=0.0, rot3_deg=0.0,
         distance_mm=1575.48,
         energy_kev=10.0,
         pixel_size_x_um=pytest.approx(75.0),
@@ -261,6 +264,7 @@ def test_the_last_applied_calibration_is_read_back_in_xrr_units():
 
 
 CALIBRATION = XrrCalibrationGeometry(
+    rot1_deg=2.0, rot2_deg=-1.0, rot3_deg=3.0,
     distance_mm=1575.48,
     energy_kev=10.0,
     pixel_size_x_um=75.0,
@@ -292,6 +296,54 @@ def test_geometry_starts_from_the_last_calibration_and_says_so():
         assert "AgBh_00001.cbf" in tag.toolTip()
         assert not dialog.geometry_note.isHidden()
         assert "AgBh_00001.cbf" in dialog.geometry_note.text()
+    finally:
+        _dispose(dialog)
+
+
+def test_xrr_rotation_sources_follow_the_frame_and_keep_explicit_edits(tmp_path):
+    from src.gimap.features.xrr.infrastructure.serialization import request_from_payload, request_to_payload
+
+    _app()
+    calibration = replace(CALIBRATION, image_shape=(101, 81))
+    dialog = XrrSeriesDialog(view_model=_view_model(calibration=calibration), app_context=object())
+    try:
+        dialog.rot3_spin.setValue(7.0)
+        dialog._on_inspected(_inspection(shape=(101, 81), metadata={"rot1_rad": math.radians(-5)}))
+        geometry = dialog._geometry()
+        assert (geometry.rot1_rad, geometry.rot2_rad, geometry.rot3_rad) == pytest.approx(np.radians([-5, -1, 7]))
+        sources = dialog.geometry_sources()
+        assert (sources["rot1"], sources["rot2"], sources["rot3"]) == ("file", "calibration", "typed")
+        request = replace(_request(tmp_path), geometry=geometry)
+        assert request_from_payload(request_to_payload(request)).geometry == geometry
+        exported = ExportXrrCurve(LocalXrrCurveExportAdapter(), LocalXrrRecordAdapter()).execute(
+            ExportXrrCurveRequest(tmp_path/"tilt.csv", XrrExtractionResult((_point(0),)), settings=request,
+                                  geometry_sources=sources, calibration=calibration))
+        record = json.loads(exported.record_path.read_text(encoding="utf-8"))
+        assert record["geometry"]["rot3_rad"] == geometry.rot3_rad
+        assert record["geometry"]["sources"]["rot2"] == "calibration"
+        dialog._on_inspected(_inspection(shape=(140, 91)))
+        assert (dialog.rot1_spin.value(), dialog.rot2_spin.value(), dialog.rot3_spin.value()) == (0, 0, 7)
+    finally:
+        _dispose(dialog)
+
+
+@pytest.mark.parametrize("orientation,typed", [(5, False), (2.5, True)])
+def test_invalid_xrr_file_orientation_and_tilt_have_a_warning_and_keep_the_source(orientation, typed):
+    _app()
+    dialog = XrrSeriesDialog(view_model=_view_model(calibration=CALIBRATION), app_context=object())
+    try:
+        if typed:
+            dialog.orientation_spin.setValue(4)
+        dialog._on_inspected(_inspection(metadata={"pyfai_orientation": orientation, "rot1_rad": math.pi,
+                                                    "rot3_rad": math.radians(736)}))
+        assert dialog.orientation_spin.value() == (4 if typed else 3)
+        assert dialog.geometry_sources()["orientation"] == ("typed" if typed else "calibration")
+        assert dialog.rot1_spin.value() == CALIBRATION.rot1_deg
+        assert dialog.geometry_sources()["rot1"] == "calibration"
+        assert dialog.geometry_sources()["rot3"] == "file" and dialog.rot3_spin.value() == pytest.approx(16)
+        note = dialog.series_summary.text()
+        assert "Unsupported detector geometry in the file" in note and f"pyfai_orientation={orientation}" in note
+        assert "rot1_rad=" in note
     finally:
         _dispose(dialog)
 

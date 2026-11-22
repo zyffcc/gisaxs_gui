@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Optional
 
 from .detector_geometry import DetectorGeometry
+from .detector_response import DetectorResponse
 from .detector_tilt import DetectorTilt
 
 SCHEMA_VERSION = 1
@@ -48,6 +49,7 @@ class InstrumentProfile:
     """
     standard_calibration: Optional[dict] = field(default=None, hash=False)
     """Absolute intensity scale and its measurement record, saved separately from the geometry source."""
+    detector_response: DetectorResponse = field(default_factory=DetectorResponse)
 
     def __post_init__(self) -> None:
         if not str(self.name).strip():
@@ -58,9 +60,10 @@ class InstrumentProfile:
                 raise ValueError(f"Invalid detector shape {self.detector_shape!r}.")
             object.__setattr__(self, "detector_shape", (rows, columns))
         tilt = self.dropped_tilt
-        if tilt is not None and not self.geometry.tilted:
+        if tilt is not None and not self.geometry.requires_projection:
             object.__setattr__(
-                self, "geometry", self.geometry.with_rotations(tilt.rot1_rad, tilt.rot2_rad, tilt.rot3_rad)
+                self, "geometry", replace(self.geometry, rot1_rad=tilt.rot1_rad, rot2_rad=tilt.rot2_rad,
+                                          rot3_rad=tilt.rot3_rad, orientation=tilt.orientation)
             )
 
     def match_score(self, *, detector_name: Optional[str], shape: Optional[tuple[int, int]]) -> int:
@@ -115,6 +118,8 @@ class InstrumentProfile:
             values[TILT_KEY] = self.dropped_tilt.to_dict()
         if self.standard_calibration is not None:
             values["standard_calibration"] = self.standard_calibration
+        if self.detector_response != DetectorResponse():
+            values["detector_response"] = asdict(self.detector_response)
         return values
 
     @classmethod
@@ -129,6 +134,7 @@ class InstrumentProfile:
             updated_at=str(values.get("updated_at", "")),
             dropped_tilt=DetectorTilt.from_dict(values.get(TILT_KEY) or values.get(OLD_TILT_KEY)),
             standard_calibration=values.get("standard_calibration"),
+            detector_response=DetectorResponse(**(values.get("detector_response") or {})),
         )
 
 

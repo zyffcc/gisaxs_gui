@@ -26,6 +26,7 @@ class XYData:
     I: np.ndarray
     err: Optional[np.ndarray]  # None if not provided & not synthesized
     meta: dict  # path, delimiter, start_line, bad_lines, has_error, etc.
+    dq: Optional[np.ndarray] = None  # resolution column, in the units stated by its header
 
 
 @dataclass
@@ -35,6 +36,7 @@ class LoadOptions:
     comment_prefixes: tuple = ("#", "%", ";", "//")
     # Accept \t, ',', ';', or any whitespace; auto-detect
     encodings_try: tuple = ("utf-8", "utf-8-sig", "latin-1")
+    keep_missing_sigma: bool = False  # the manual fit may choose weights independently of this column
 
 
 # Why a file is not a curve: English, the pages show them in the interface language (``tr``).
@@ -116,6 +118,14 @@ def _to_float(tok: str, treat_comma_decimal: bool) -> float:
     return float(tok)
 
 
+def _optional_float(row, index, treat_comma_decimal):
+    """Keep the observation when an optional uncertainty is missing or unreadable."""
+    try:
+        return _to_float(row[index], treat_comma_decimal)
+    except (IndexError, ValueError):
+        return np.nan
+
+
 # ---------- Public API ----------
 
 
@@ -155,7 +165,11 @@ def load_xy_any(path: str, options: LoadOptions = LoadOptions()) -> XYData:
         try:
             q = _to_float(parts[0], treat_comma_decimal)
             I = _to_float(parts[1], treat_comma_decimal)
-            error = _to_float(parts[2], treat_comma_decimal) if has_error_column else None
+            error = None
+            if has_error_column:
+                cell = parts[2].strip() if len(parts) > 2 else ""
+                error = (_optional_float(parts, 2, treat_comma_decimal) if options.keep_missing_sigma
+                         else _to_float(cell, treat_comma_decimal))
             q_list.append(q)
             I_list.append(I)
             if error is not None:
@@ -180,7 +194,7 @@ def load_xy_any(path: str, options: LoadOptions = LoadOptions()) -> XYData:
 
     # Drop non-finite rows
     mask = np.isfinite(q) & np.isfinite(I)
-    if err is not None:
+    if err is not None and not options.keep_missing_sigma:
         mask &= np.isfinite(err)
     nonfinite_rows = int(mask.size - np.count_nonzero(mask))  # NaN or inf in q, I or σ: left out, and counted
     q, I = q[mask], I[mask]

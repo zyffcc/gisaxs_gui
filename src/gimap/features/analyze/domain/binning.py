@@ -6,28 +6,11 @@ import math
 
 import numpy as np
 
-
-def scatter_sigma(sums, squares, counts) -> np.ndarray:
-    """Standard error of each mean from the scatter of its own values, ``s/√n``.
-
-    For frames that are not photon counts (dark- or background-subtracted, flat-panel detectors)
-    the Poisson error ``√sum/n`` says nothing: read noise and the subtraction dominate. A mean of
-    fewer than two values takes the median scatter of the others.
-    """
-    sums, squares, counts = (np.asarray(value, dtype=np.float64) for value in (sums, squares, counts))
-    with np.errstate(invalid="ignore", divide="ignore"):
-        variance = (squares - sums**2 / np.maximum(counts, 1)) / np.maximum(counts - 1, 1)
-    variance = np.clip(variance, 0.0, None)
-    several = counts >= 2
-    typical = float(np.median(variance[several])) if several.any() else 0.0
-    variance = np.where(several, variance, typical)
-    return np.sqrt(variance / np.maximum(counts, 1))
+from .curve_errors import PixelErrors, curve_sigma, pixel_errors, scatter_sigma
 
 
 def counts_and_scale(counts, mask) -> tuple[bool, np.ndarray | None]:
-    """``counts`` of a reduction — ``True`` (photon counts), ``False`` (not counts) or a per-pixel array
-    (photon counts times that factor, after intensity corrections) — as ``(Poisson?, scale of the
-    pixels in mask)``."""
+    """Return the counting flag and masked scale for a legacy bool or scale-map input."""
     if isinstance(counts, np.ndarray):
         return True, counts[mask]
     return bool(counts), None
@@ -36,13 +19,9 @@ def counts_and_scale(counts, mask) -> tuple[bool, np.ndarray | None]:
 class BinnedMean:
     """Mean of ``values`` per bin of ``x`` over fixed edges, fed in chunks.
 
-    Values exactly on the last edge fall into the last bin; values outside the
-    edges or non-finite are ignored.  ``sigma`` is the Poisson standard error
-    of the mean, ``sqrt(max(sum, 1))/n`` — at least one count, as the GISAXS
-    cuts (``native_profile``), so a bin of zeros never gets σ = 0, which a
-    weighted fit cannot use; with ``counts=False`` it is the standard error
-    from the scatter of the bin's values (``scatter_sigma``), for frames that
-    are not photon counts.
+    Values exactly on the last edge fall into the last bin. Values outside the
+    edges and nonfinite values are ignored. Accumulated moments and variances
+    support the error models for measured and merged points in Physics Manual §6.
     """
 
     def __init__(self, edges: np.ndarray):
@@ -55,7 +34,8 @@ class BinnedMean:
         self._squares = np.zeros(size, dtype=np.float64)
         self._counts = np.zeros(size, dtype=np.int64)
         self._variances: np.ndarray | None = None
-        """Σ scale × value per bin, once values with a ``scale`` were added (else the Poisson sum)."""
+        """Sum of sample shot variances or of variances from a supplied σ frame."""
+        self._extra = np.zeros(size, dtype=np.float64)
         self._scales: np.ndarray | None = None
         """Σ scale per bin (1 for a value added without one), kept with ``_variances``: the variance of one
         count at the bin's mean factor, (Σ scale / n)², is the least variance a bin of counts is given."""
@@ -70,52 +50,92 @@ class BinnedMean:
             low, high = low - half, low + half
         return cls(np.linspace(low, high, bins + 1))
 
-    def add(self, x: np.ndarray, values: np.ndarray, scale: np.ndarray | None = None) -> None:
-        """``scale``: per value, the factor the photon counts were multiplied by (intensity corrections);
-        the Poisson variance of such a value is ``scale × value``."""
+    def add(self, x, values, scale=None, *, errors: PixelErrors | None = None) -> None:
+        """Accumulate this chunk and its variance terms. The model is selected in result()."""
         x = np.asarray(x, dtype=np.float64).ravel()
         values = np.asarray(values, dtype=np.float64).ravel()
         if x.shape != values.shape:
             raise ValueError("x and values must have the same number of elements.")
-        finite = np.isfinite(x) & np.isfinite(values)
-        x, values = x[finite], values[finite]
+        errors = errors if errors is not None else PixelErrors(scale=scale)
         size = self._counts.size
         index = np.searchsorted(self.edges, x, side="right") - 1
         index[x == self.edges[-1]] = size - 1
-        keep = (index >= 0) & (index < size)
-        added = np.bincount(index[keep], minlength=size)
-        self._sums += np.bincount(index[keep], weights=values[keep], minlength=size)
-        self._squares += np.bincount(index[keep], weights=values[keep] ** 2, minlength=size)
-        self._counts += added
-        if scale is not None:
-            scale = np.asarray(scale, dtype=np.float64).ravel()[finite][keep]
-            if self._variances is None:
-                self._variances = self._sums - np.bincount(index[keep], weights=values[keep], minlength=size)
-                self._scales = (self._counts - added).astype(np.float64)  # the values so far: a factor of 1
-            self._variances += np.bincount(index[keep], weights=values[keep] * scale, minlength=size)
-            self._scales += np.bincount(index[keep], weights=scale, minlength=size)
-        elif self._variances is not None:
-            self._variances += np.bincount(index[keep], weights=values[keep], minlength=size)
-            self._scales += added
+        keep = np.isfinite(x) & np.isfinite(values) & (index >= 0) & (index < size)
+        index = index[keep]
+        added = np.bincount(index, minlength=size)
 
-    def result(self, *, counts: bool = True) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """``(centres, mean, sigma, pixels)`` for the bins that received data."""
-        centres = 0.5 * (self.edges[:-1] + self.edges[1:])
-        filled = self._counts > 0
-        pixels = self._counts[filled]
-        sums = self._sums[filled]
-        mean = sums / pixels
-        if counts:
-            # At least the variance of one count (``native_profile``: sqrt(max(sum, 1))/n); after intensity
-            # corrections, of one count at the bin's mean factor.
+        def selected(array):
+            return np.broadcast_to(np.asarray(array, dtype=float).ravel(), values.shape)[keep]
+
+        def bin_sum(array):
+            return np.bincount(index, weights=array, minlength=size)
+
+        observed = values[keep]
+        if errors.scale is not None or errors.variance is not None or self._variances is not None:
             if self._variances is None:
-                variance, least = sums, 1.0
+                self._variances = self._sums.copy()
+                self._scales = self._counts.astype(float)
+            scale = 1.0 if errors.scale is None else selected(errors.scale)
+            variance = observed * scale if errors.variance is None else selected(errors.variance)
+            self._variances += bin_sum(variance)
+            self._scales += added if errors.scale is None else bin_sum(scale)
+        if errors.extra_variance is not None:
+            self._extra += bin_sum(selected(errors.extra_variance))
+        self._sums += bin_sum(observed)
+        self._squares += bin_sum(observed ** 2)
+        self._counts += added
+
+    def result(self, *, counts=True, merge=False) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Centres, means, errors and occupancies. Pass the frame's PixelErrors as counts."""
+        centres = 0.5 * (self.edges[:-1] + self.edges[1:])
+        ids = np.flatnonzero(self._counts)
+        x, pixels = centres[ids], self._counts[ids]
+        starts = _sparse_starts(x, pixels) if merge else None
+        errors = pixel_errors(counts)
+
+        def totals(array):
+            if array is None:
+                return None
+            filled = array[ids]
+            return np.add.reduceat(filled, starts) if starts is not None else filled
+
+        breaks = np.r_[True, np.diff(ids) != 1][:len(ids)]
+        independent = None
+        if starts is not None:
+            # Keep the measured errors of the constituent bins for ordinary
+            # scatter and observed Poisson. A radial intensity gradient between
+            # two neighbouring bins is not pixel noise inside either bin.
+            if errors.model == "scatter":
+                raw_sigma = scatter_sigma(self._sums[ids], self._squares[ids], pixels, pooled=False)
+            elif errors.model == "poisson" and errors.poisson_variance == "observed":
+                raw_sigma = curve_sigma(errors, pixels, self._sums[ids], None,
+                                        None if self._variances is None else self._variances[ids],
+                                        None if self._scales is None else self._scales[ids], self._extra[ids], breaks)
             else:
-                variance, least = self._variances[filled], (self._scales[filled] / pixels) ** 2
-            sigma = np.sqrt(np.maximum(variance, least)) / pixels
+                raw_sigma = None
+            if raw_sigma is not None:
+                independent = np.sqrt(np.add.reduceat((pixels * raw_sigma)**2, starts))
+            pixels = totals(self._counts)
+            x = np.add.reduceat(x * self._counts[ids], starts) / pixels
+            merged_breaks = breaks[starts]
+            if errors.model == "poisson" and errors.poisson_variance == "smoothed":
+                # Sparse joining can bridge one empty bin. Such a joined point
+                # has no contiguous smoothing window on either side.
+                internal_gap = np.add.reduceat(breaks, starts) > merged_breaks
+                merged_breaks |= internal_gap
+                merged_breaks[1:] |= internal_gap[:-1]
+            breaks = merged_breaks
+        sums = totals(self._sums)
+        if independent is None:
+            sigma = curve_sigma(errors, pixels, sums, totals(self._squares), totals(self._variances),
+                                totals(self._scales), totals(self._extra), breaks)
         else:
-            sigma = scatter_sigma(sums, self._squares[filled], pixels)
-        return centres[filled], mean, sigma, pixels
+            sigma = independent / pixels
+            sparse = pixels < 10
+            if errors.model == "scatter" and errors.pooled_scatter and sparse.any():
+                pooled = scatter_sigma(sums, totals(self._squares), pixels)
+                sigma[sparse] = pooled[sparse]
+        return x, sums / pixels, sigma, pixels
 
 
 MIN_POINT_PIXELS = 8
@@ -125,56 +145,40 @@ with its neighbours: near the beam, at the edge of a sector, a gap or the missin
 only a few pixels and its mean is mostly noise."""
 
 
-def merge_sparse_bins(
-    x: np.ndarray, mean: np.ndarray, sigma: np.ndarray, pixels: np.ndarray, *, min_pixels: int | None = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Join consecutive sparse bins until each point has enough pixels.
-
-    A point made of several bins has the pixel-weighted mean of their ``x`` and of their means
-    (the mean of all its pixels), the error ``sqrt(Σ n²σ²)/Σn`` of those independent means (for
-    photon counts the Poisson error ``sqrt(sum)/n`` of all its pixels), and their pixel count. Bins
-    are only joined with a neighbour no further than 2.5 bin steps (the median step) away, so a real
-    gap in the data stays a gap. A curve whose bins all have enough pixels is returned as is.
-    """
-    x, mean, sigma, pixels = (np.asarray(value) for value in (x, mean, sigma, pixels))
+def _sparse_starts(x, pixels, min_pixels=None):
+    """First occupied bin in each merged point, or None if every bin stays separate."""
     if pixels.size < 3:
-        return x, mean, sigma, pixels
+        return None
     wanted = int(min_pixels) if min_pixels is not None else max(
         MIN_POINT_PIXELS, int(round(SPARSE_FRACTION * float(np.median(pixels))))
     )
-    if int(pixels.min()) >= wanted:
+    if pixels.min() >= wanted:
+        return None
+    step = float(np.median(np.diff(x)))
+    starts, total = [0], 0
+    for i, n in enumerate(pixels):
+        gap = i > 0 and step > 0 and x[i] - x[i - 1] > 2.5 * step
+        if gap or total >= wanted:
+            starts.append(i)
+            total = 0
+        total += n
+    tail = starts[-1]
+    if total < wanted and tail > 0 and step > 0 and x[tail] - x[tail - 1] <= 2.5 * step:
+        starts.pop()
+    return np.asarray(starts) if len(starts) < len(x) else None
+
+
+def merge_sparse_bins(
+    x: np.ndarray, mean: np.ndarray, sigma: np.ndarray, pixels: np.ndarray, *, min_pixels: int | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Join sparse points of an existing curve with pixel weights and propagate their independent errors."""
+    x, mean, sigma, pixels = (np.asarray(value) for value in (x, mean, sigma, pixels))
+    starts = _sparse_starts(x, pixels, min_pixels)
+    if starts is None:
         return x, mean, sigma, pixels
-    step = float(np.median(np.diff(x))) if x.size > 1 else 0.0
-    groups: list[list[int]] = []
-    current: list[int] = []
-    total = 0
-    for index in range(x.size):
-        if current and step > 0 and x[index] - x[current[-1]] > 2.5 * step:
-            groups.append(current)
-            current, total = [], 0
-        current.append(index)
-        total += int(pixels[index])
-        if total >= wanted:
-            groups.append(current)
-            current, total = [], 0
-    if current:
-        if groups and total < wanted and step > 0 and x[current[0]] - x[groups[-1][-1]] <= 2.5 * step:
-            groups[-1].extend(current)  # a sparse tail joins the last point
-        else:
-            groups.append(current)
-    if all(len(group) == 1 for group in groups):
-        return x, mean, sigma, pixels
-    out_x, out_mean, out_sigma, out_pixels = [], [], [], []
-    for group in groups:
-        n = pixels[group].astype(np.float64)
-        count = float(n.sum())
-        sums = float((mean[group] * n).sum())
-        out_x.append(float((x[group] * n).sum() / count))
-        out_mean.append(sums / count)
-        # Independent means weighted by their pixels: σ² = Σ n²σ² / (Σn)²; for photon counts Σ n²σ² = Σ sum.
-        out_sigma.append(float(np.sqrt(float((n**2 * sigma[group] ** 2).sum())) / count) if count else float("nan"))
-        out_pixels.append(int(count))
-    return np.array(out_x), np.array(out_mean), np.array(out_sigma), np.array(out_pixels, dtype=np.int64)
+    n = np.add.reduceat(pixels, starts)
+    return (np.add.reduceat(x * pixels, starts) / n, np.add.reduceat(mean * pixels, starts) / n,
+            np.sqrt(np.add.reduceat((sigma * pixels) ** 2, starts)) / n, n)
 
 
 def binned_mean(
@@ -187,7 +191,7 @@ def binned_mean(
 
 def native_profile(
     values: np.ndarray, valid: np.ndarray, x: np.ndarray, *, axis: int, counts_model: bool = True,
-    scale: np.ndarray | None = None,
+    scale: np.ndarray | None = None, errors: PixelErrors | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """One point per measured detector line: the mean over ``axis`` of its valid pixels.
 
@@ -195,14 +199,8 @@ def native_profile(
     ``axis=1`` each row of a band of columns (a vertical cut).  Returns
     ``(x, mean, sigma, pixels)`` sorted by ``x`` for the lines with data;
     ``x`` is the mean coordinate of the line's valid pixels and ``sigma`` the
-    Poisson standard error of the mean, ``sqrt(max(sum, 1))/n`` (at least one
-    count, so a line of zeros never gets σ = 0), or with ``counts=False`` the
-    error from the scatter of the line's values (``scatter_sigma``).  Nothing is
-    interpolated or rebinned, so detector gaps stay gaps.
-
-    ``scale`` (photon counts only): per pixel, the factor its counts were multiplied by (a flat field, ``1/F_ff``);
-    a pixel's Poisson variance is then ``scale × value`` and the least variance of a line that of one count at
-    the line's mean factor, as ``BinnedMean`` does.
+    standard error of the line mean from the same model as ``BinnedMean``.
+    Each line retains its native coordinates, including detector gaps.
     """
     values = np.asarray(values, dtype=np.float64)
     x = np.asarray(x, dtype=np.float64)
@@ -214,18 +212,24 @@ def native_profile(
     pixels = counts[keep]
     centres = x_sums[keep] / pixels
     mean = sums[keep] / pixels
-    if counts_model and scale is not None:
-        scale = np.asarray(scale, dtype=np.float64)
-        variances = np.where(valid, values * scale, 0.0).sum(axis=axis)[keep]
-        least = (np.where(valid, scale, 0.0).sum(axis=axis)[keep] / pixels) ** 2
-        sigma = np.sqrt(np.maximum(variances, least)) / pixels
-    elif counts_model:
-        sigma = np.sqrt(np.maximum(sums[keep], 1.0)) / pixels
-    else:
-        squares = np.where(valid, values**2, 0.0).sum(axis=axis)
-        sigma = scatter_sigma(sums[keep], squares[keep], pixels)
+    errors = errors if errors is not None else PixelErrors(model="poisson" if counts_model else "scatter", scale=scale)
     order = np.argsort(centres, kind="stable")
-    return centres[order], mean[order], sigma[order], pixels[order].astype(np.int64)
+    ids = np.flatnonzero(keep)[order]
+    pixels = pixels[order]
+    breaks = np.r_[True, np.abs(np.diff(ids)) != 1][:len(ids)]
+
+    def totals(array):
+        return np.where(valid, array, 0.0).sum(axis=axis, dtype=np.float64)[ids]
+
+    squares = totals(values**2) if errors.model == "scatter" else None
+    variance = errors.variance
+    if variance is None and errors.scale is not None:
+        variance = values * errors.scale
+    sigma = curve_sigma(errors, pixels, sums[ids], squares,
+                        None if variance is None else totals(variance),
+                        None if errors.scale is None else totals(errors.scale),
+                        0.0 if errors.extra_variance is None else totals(errors.extra_variance), breaks)
+    return centres[order], mean[order], sigma, pixels.astype(np.int64)
 
 
 def binned_mean_2d(

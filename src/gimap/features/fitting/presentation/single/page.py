@@ -69,6 +69,8 @@ TOAST_LEVELS = ("warning", "error")
 well is said in the status line only — one place, not two that overlap."""
 CHOOSE_CURVE = "{name} holds {count} curves. Which one is to be fitted?"
 """An NXcanSAS file of several curves (Open Curve…, a dropped file): asked once, by the curves' titles."""
+CHOOSE_MEASURED = "{name} holds {count} measured curves (and the models fitted to them). Which one is to be fitted?"
+"""A file of fits (the points fitted and the model of each): only its measured curves are offered, the first chosen."""
 PREFERENCES_KEY = "fitting_single_page"
 STARTING_MODEL = "Starting model, not set up yet"
 """The Model step while its model is the starting guess (nobody set it up, nor was it fitted)."""
@@ -227,19 +229,23 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
 
     def open_curve_file(self, path) -> bool:
         """Open Curve… and a dropped file: an NXcanSAS file of several curves asks which one (by their titles)."""
-        titles = ()
+        titles, measured = (), ()
         if Path(path).suffix.lower() not in (".dat", ".txt"):
             try:
-                titles = self.view_model.inspect_curve_table(path).curve_titles
+                preview = self.view_model.inspect_curve_table(path)
+                titles, measured = preview.curve_titles, preview.measured_curves
             except (OSError, ValueError, RuntimeError):
                 titles = ()  # open_curve says why the file cannot be read
-        if len(titles) > 1:
-            items = [f"{number}: {title}" for number, title in enumerate(titles, 1)]
-            chosen, ok = QInputDialog.getItem(self, tr("Choose a Curve"), trf(CHOOSE_CURVE, name=Path(path).name,
-                                                                           count=len(titles)), items, 0, False)
+        fits = len(measured) < len(titles)  # a file of fits: its measured curves, not the models beside them
+        if len(titles) > 1 and len(measured) == 1:
+            path = InSituSourceFrame(Path(path), frame_index=measured[0]).token
+        elif len(titles) > 1 and measured:
+            items = [f"{index + 1}: {titles[index]}" for index in measured]
+            chosen, ok = QInputDialog.getItem(self, tr("Choose a Curve"), trf(
+                CHOOSE_MEASURED if fits else CHOOSE_CURVE, name=Path(path).name, count=len(measured)), items, 0, False)
             if not ok:
                 return False
-            path = InSituSourceFrame(Path(path), frame_index=items.index(chosen)).token
+            path = InSituSourceFrame(Path(path), frame_index=measured[items.index(chosen)]).token
         if self.open_curve(path):
             return True
         if self.view_model.state.error_message != COLUMNS_TO_CHOOSE:
@@ -257,7 +263,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         path = Path(path)
         source = _saved_source(path)
         name = source.display_name if source is not None else path.name.split("::gimap", 1)[0]
-        outcome = self.view_model.load_curve(LoadCurveRequest(path, unit or self.unit_setting()))
+        outcome = self.view_model.load_curve(LoadCurveRequest(path, unit or self.unit_setting(), keep_missing_sigma=True))
         if outcome.error is not None:  # (columns to choose: Open Curve… asks next, open_curve_file)
             self._status(lambda: tr("Could not open {name}: {reason}").format(name=name, reason=tr(outcome.error.message)),
                          "info" if outcome.error.message == COLUMNS_TO_CHOOSE else "error")
@@ -267,7 +273,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         if made.get("format") == "NXcanSAS" and int(made.get("curves_in_file") or 1) > 1:  # which of its curves
             name = f"{Path(str(made.get('path'))).name} · curve {made.get('curve')}"  # a name, as records keep it
         curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=name, path=str(path),
-                                  unit=loaded.q_source_unit, unit_from=getattr(loaded, "q_unit_from", ""),
+                                  unit=loaded.q_source_unit, dq=loaded.dq, unit_from=getattr(loaded, "q_unit_from", ""),
                                   rows_left_out=getattr(loaded, "rows_left_out", 0), columns=made.get("columns"))
         self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
@@ -331,8 +337,14 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
     # -- the model ------------------------------------------------------------------------
 
     def _model_edited(self, model) -> None:
+        old = self.session.model
         if self.session.set_model(model, label=("an edit in Model", {})):
             self._model_changed()
+            if (model.resolution_mode, model.weighting) != (old.resolution_mode, old.weighting):
+                try:
+                    self.session.data()
+                except ValueError as exc:
+                    self._status(tr(str(exc)), "warning")
 
     def _model_changed(self, *, editor: bool = False) -> None:
         if editor:
@@ -340,6 +352,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.model_editor.set_model(self.session.model, result.errors if result else {},
                                         result.at_bounds if result else ())
         self._remember(model=model_to_dict(self.session.model))
+        self._fill_curve_card()
         self._redraw()
         self._refresh_steps()
         self.render_results()

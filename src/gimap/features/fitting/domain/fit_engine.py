@@ -29,7 +29,8 @@ from scipy.optimize import differential_evolution, least_squares, lsq_linear
 from scipy.stats import qmc
 
 from . import fit_links, linked_fit
-from .fit_model import LINEAR, NETWORK_FAMILIES, FitModel, component_form, evaluate, grazing, resolution_shape
+from .fit_resolution import INVALID_DQ
+from .fit_model import LINEAR, NETWORK_FAMILIES, FitModel, evaluate, particle_forms, resolution_shape
 
 TINY = 1e-300
 CORRELATED = 0.95
@@ -61,27 +62,41 @@ class FitData:
     q: np.ndarray
     intensity: np.ndarray
     sigma: Optional[np.ndarray] = None
+    dq: Optional[np.ndarray] = None
+    """Gaussian q-resolution widths in nm⁻¹ when using resolution from the file."""
+    weight_mode: str = "file"
 
     @classmethod
-    def prepare(cls, q, intensity, sigma=None) -> "FitData":
+    def prepare(cls, q, intensity, sigma=None, *, dq=None, weighting="file") -> "FitData":
         """|q| > 0 in nm⁻¹, finite points, sorted. With σ, the points whose σ is not a number above 0 are left out
         (``PreparedCurve.invalid_sigma`` counts them); σ is dropped only when no point has one."""
         q = np.abs(np.asarray(q, dtype=float)).reshape(-1)
         y = np.asarray(intensity, dtype=float).reshape(-1)
         keep = np.isfinite(q) & np.isfinite(y) & (q > 0)
-        s = None if sigma is None else np.asarray(sigma, dtype=float).reshape(-1)
-        if s is not None and s.shape == q.shape:
-            keep_sigma = keep & np.isfinite(s) & (s > 0)
-            if keep_sigma.any():
-                keep = keep_sigma
+        if weighting == "file":
+            s = None if sigma is None else np.asarray(sigma, dtype=float).reshape(-1)
+            if s is not None and s.shape == q.shape and np.any(keep & np.isfinite(s) & (s > 0)):
+                keep &= np.isfinite(s) & (s > 0)
             else:
-                s = None
-        else:
+                s = None  # the existing fallback for a file with no usable σ
+        elif weighting in ("relative", "poisson", "none"):
+            keep &= y > 0
             s = None
+            if weighting == "relative":
+                s = y
+            elif weighting == "poisson":
+                s = np.sqrt(np.maximum(y, 0))
+        else:
+            raise ValueError(f"Unknown weighting {weighting!r}")
         if s is None:
-            keep &= y > 0  # relative residuals need I > 0
+            keep &= y > 0  # logarithmic residuals need I > 0
+        if dq is not None:
+            dq = np.asarray(dq, dtype=float).reshape(-1)
+            if dq.shape != q.shape or not np.all(np.isfinite(dq[keep]) & (dq[keep] >= 0)):
+                raise ValueError(INVALID_DQ)
         order = np.argsort(q[keep])
-        return cls(q[keep][order], y[keep][order], None if s is None else s[keep][order])
+        return cls(q[keep][order], y[keep][order], None if s is None else s[keep][order],
+                   None if dq is None else dq[keep][order], weighting)
 
     @property
     def weighting(self) -> str:
@@ -112,11 +127,15 @@ class FitResult:
     """The covariance matrix of the free parameters (rows of ``covariance_paths``; NaN in the rows of a direction
     the curve does not see); empty when it could not be computed."""
     covariance_paths: tuple = ()
+    restarts: int = 0
+    """How many times the least squares was run again from its own result and improved it (a manual fit,
+    ``single_fit.fit_resolving``); 0 for a fit made once."""
     start_model: Optional[FitModel] = field(default=None, compare=False, repr=False)
     evaluation_budget: Optional[int] = None
     seed: int = 1729
     population_seeds: tuple = field(default=(), compare=False, repr=False)
     stopped_after: Optional[int] = None
+    restart_budget: Optional[int] = None
 
 
 def stopped_result(result: FitResult) -> FitResult:
@@ -126,7 +145,7 @@ def stopped_result(result: FitResult) -> FitResult:
 
 def residuals(model: FitModel, data: FitData) -> np.ndarray:
     """(I − model)/σ, or ln(I/model) without σ (the residual plot)."""
-    return _residual(evaluate(model, data.q), data)
+    return _residual(evaluate(model, data.q, dq=data.dq), data)
 
 
 def _residual(predicted: np.ndarray, data: FitData) -> np.ndarray:
@@ -136,7 +155,7 @@ def _residual(predicted: np.ndarray, data: FitData) -> np.ndarray:
 
 
 def log_rmse(model: FitModel, data: FitData) -> float:
-    predicted = evaluate(model, data.q)
+    predicted = evaluate(model, data.q, dq=data.dq)
     good = (data.intensity > 0) & (predicted > 0)
     if not good.any():
         return math.nan
@@ -262,7 +281,7 @@ class _Problem:
             if not valid:
                 raise ValueError("a link cannot be evaluated")
             with np.errstate(all="ignore"):
-                residual = _residual(evaluate(model, self.data.q, cache=self.cache), self.data)
+                residual = _residual(evaluate(model, self.data.q, cache=self.cache, dq=self.data.dq), self.data)
         except (ValueError, FloatingPointError, ZeroDivisionError):
             residual = np.full(self.data.q.shape, 1e6)
         if not np.all(np.isfinite(residual)):
@@ -278,9 +297,8 @@ class _Problem:
         q, g = self.data.q, model.globals
         k = float(g["k"].value)
         columns, fixed = [], np.full_like(q, 0.0 if ("globals", "background") in self.linear else g["background"].value)
-        forms, paths = {}, grazing(model)
+        forms = particle_forms(model, q, self.data.dq, self.cache, scale_columns=True)
         for index, component in enumerate(model.components):
-            forms[index] = component_form(component, q, self.cache, paths)
             if (index, "Int") in self.linear:
                 continue
             fixed = fixed + k * component.value("Int") * forms[index]

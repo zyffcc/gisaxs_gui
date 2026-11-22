@@ -40,6 +40,7 @@ from typing import Any, Mapping, Optional
 import numpy as np
 
 from .detector_geometry import DetectorGeometry
+from .orientation import oriented_position, orientation_number
 from .q_mapping import region_displacements
 
 TILT_LIMIT_DEG = 1.0
@@ -72,6 +73,16 @@ class DetectorTilt:
     rot3_rad: float
     pixel1_m: float
     pixel2_m: float
+    orientation: int = 3
+    shape: tuple[int, int] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "orientation", orientation_number(self.orientation))
+        if self.shape is not None:
+            rows, cols = self.shape
+            if rows <= 0 or cols <= 0:
+                raise ValueError("The detector dimensions must be positive.")
+            object.__setattr__(self, "shape", (int(rows), int(cols)))
 
     @property
     def tilt_deg(self) -> float:
@@ -93,19 +104,24 @@ class DetectorTilt:
         integers, row 0 at the top) — ``x = (poni2 − L tan rot1) / pixel2``, ``y = (poni1 + L tan rot2 / cos rot1) /
         pixel1`` (pyFAI's ``Geometry.getFit2D`` conversion)."""
         distance = self.distance_m
-        return (
+        return oriented_position(
             (self.poni2_m - distance * math.tan(self.rot1_rad)) / self.pixel2_m,
             (self.poni1_m + distance * math.tan(self.rot2_rad) / math.cos(self.rot1_rad)) / self.pixel1_m,
+            self.orientation, self.shape,
         )
 
     def flat_geometry(self, wavelength_angstrom: float = 1.0, incidence_deg: float = 0.0) -> DetectorGeometry:
         """GIMaP's flat geometry made from this ``.poni``: its direct beam, the distance to it and its pixel sizes
         (``parse_poni`` gives the same numbers). |q| errors relative to the tilted geometry depend on neither λ nor αi."""
         x, y = self.direct_beam_px()
-        return DetectorGeometry(self.pixel2_m, self.pixel1_m, self.beam_distance_m, x, y, wavelength_angstrom, incidence_deg)
+        return DetectorGeometry(self.pixel2_m, self.pixel1_m, self.beam_distance_m, x, y, wavelength_angstrom,
+                                incidence_deg, orientation=self.orientation)
 
-    def to_dict(self) -> dict[str, float]:
-        return {key: float(value) for key, value in asdict(self).items()}
+    def to_dict(self) -> dict:
+        values = asdict(self)
+        if self.orientation == 3:  # Keep the record of a native detector compatible with earlier versions.
+            del values["orientation"], values["shape"]
+        return values
 
     @classmethod
     def from_dict(cls, values: Optional[Mapping[str, Any]]) -> Optional["DetectorTilt"]:
@@ -113,7 +129,8 @@ class DetectorTilt:
         if not values:
             return None
         try:
-            return cls(**{name: float(values[name]) for name in cls.__dataclass_fields__})
+            fields = {name: float(values[name]) for name in cls.__dataclass_fields__ if name not in ("orientation", "shape")}
+            return cls(**fields, orientation=orientation_number(values.get("orientation", 3)), shape=values.get("shape"))
         except (KeyError, TypeError, ValueError):
             return None
 
@@ -166,8 +183,9 @@ class FlatDetectorError:
 def tilted_rays(tilt: DetectorTilt, rows: np.ndarray, columns: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """``(t1, t2, t3)``: the vector from the sample to the pixel centres (``rows``, ``columns``: broadcastable index
     arrays) in pyFAI's laboratory frame, t3 along the beam."""
-    p1 = (np.asarray(rows, dtype=np.float64) + 0.5) * tilt.pixel1_m - tilt.poni1_m
-    p2 = (np.asarray(columns, dtype=np.float64) + 0.5) * tilt.pixel2_m - tilt.poni2_m
+    x, y = oriented_position(np.asarray(columns, dtype=np.float64) + 0.5, np.asarray(rows, dtype=np.float64) + 0.5,
+                             tilt.orientation, tilt.shape)
+    p1, p2 = y * tilt.pixel1_m - tilt.poni1_m, x * tilt.pixel2_m - tilt.poni2_m
     distance = tilt.distance_m
     c1, s1 = math.cos(tilt.rot1_rad), math.sin(tilt.rot1_rad)
     c2, s2 = math.cos(tilt.rot2_rad), math.sin(tilt.rot2_rad)

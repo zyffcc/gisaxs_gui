@@ -1,11 +1,15 @@
 """The chained fit of the In-situ series page (``application/series_chain``) and two more ways to save its results.
 
 * **The previous result; Predict parameters where the chain breaks** (Start step): every frame is refined from the
-  result of the frame before it; where that chain breaks — a failed or unconverged fit, a new stage, a flagged or
-  poor fit, a jump of χ²ᵣ — the frame is fitted again by Predict parameters (the page's ``predictor``, unchanged)
-  and the better fit is kept. A model Predict parameters cannot take (no particle, more than three) is refined only.
+  result of the frame before it; where that chain breaks (a failed or unconverged fit, a new stage, a jump of χ²ᵣ;
+  never a value at a bound) the frame is fitted again by Predict parameters (the page's ``predict_solutions``,
+  unchanged), from the solution closest to the frame before among the probable ones, and the better fit is kept. A
+  model Predict parameters cannot take (no particle, more than three) is refined only.
+* **The Started from column** of the table says where each frame's kept fit started: “continued from frame n”, “restarted
+  from Predict (why the chain broke)”, the backward pass, the model of Single analysis; the rule that chose Predict's
+  solution is on hover (``start_texts.py``).
 * **Then a backward pass**: once every frame is done, from the last but one to the first, each frame is refined from
-  the kept result of the frame after it; the better fit of the two passes is kept, and its row says “backward”.
+  the kept result of the frame after it; the better fit of the two passes is kept, and its row says “backward pass”.
 * **Save ▸ Fits as NXcanSAS…**: for every fitted frame the points fitted and the model (one file, an entry each).
 * **Save ▸ Results Database…**: every frame's fit — state, χ²ᵣ, values and errors, flags, where it started — into
   the series' results database (``gimap_series.sqlite``; one found in the folder of the curves or up to two folders
@@ -14,7 +18,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -32,6 +35,7 @@ from ...application.series_chain import (
     better,
     chained_fit,
     frame_flags,
+    keep_pass_attempts,
     observation_time,
 )
 from ...application.series_fit import file_name, parameter_columns
@@ -72,11 +76,13 @@ class FitSeriesChainMixin:
         return model is not None and 1 <= len(model.components) <= MAX_PARTICLES
 
     def fit_marks(self, settings, previous, start) -> dict:
-        """What a frame fitted by the usual way says of itself: where its fit started and in which pass."""
+        """What a frame fitted by the usual way says of itself: where its fit started (and from which frame's result)
+        and in which pass."""
+        follows = previous is not None and previous.ok and start is previous.result.model
         origin = "predict" if settings.method == "predict" else (
-            ("next" if self._fit_pass == BACKWARD else "previous")
-            if previous is not None and previous.ok and start is previous.result.model else "single")
-        return {"start_from": origin, "fit_pass": self._fit_pass}
+            ("next" if self._fit_pass == BACKWARD else "previous") if follows else "single")
+        return {"start_from": origin, "fit_pass": self._fit_pass,
+                "start_frame": previous.index + 1 if follows and origin != "predict" else 0}
 
     def chain_fitter(self, settings, previous, new_stage: bool):
         """``fit(index, path, curve, start)`` of a chained series for the worker of one frame (thread-safe: no widget is
@@ -84,10 +90,9 @@ class FitSeriesChainMixin:
         if settings.method == "predict" or settings.start != CHAIN:
             return None
         stop, single, fit_pass = self._stop.is_set, self._start_model, self._fit_pass
-        predict = self.predictor(replace(settings, method="predict"), previous, new_stage) if self._chain_predicts() \
-            else None
+        solutions = self.predict_solutions() if self._chain_predicts() else None
         return lambda index, path, curve, start: chained_fit(
-            index, path, curve, start, single, settings, previous, new_stage=new_stage, stop=stop, predict=predict,
+            index, path, curve, start, single, settings, previous, new_stage=new_stage, stop=stop, solutions=solutions,
             fit_pass=fit_pass)
 
     # -- the backward pass ---------------------------------------------------------------------------
@@ -124,7 +129,7 @@ class FitSeriesChainMixin:
         kept = better(before, frame)
         if kept is frame:
             self._backward_better += 1
-        return kept
+        return keep_pass_attempts(kept, before, frame)
 
     def _chain_finished(self) -> None:
         if self._fit_pass == BACKWARD:
@@ -160,8 +165,10 @@ class FitSeriesChainMixin:
         return [index + 1 for index in indices], "frame"
 
     def flags_cell(self, frame) -> str:
-        """The Flags cell of a frame's row, in the interface language (details are data: names, numbers)."""
-        return "; ".join(tr(kind) + (f": {detail}" if detail else "") for kind, detail in frame_flags(frame))
+        """The Flags cell of a frame's row, in the interface language (details are data: names, numbers). Where the
+        chain broke and the backward pass are said in the Started from cell (``start_texts.start_text``), not here again."""
+        return "; ".join(tr(kind) + (f": {detail}" if detail else "") for kind, detail in frame_flags(frame)
+                         if kind not in ("chain broke", "backward"))
 
     # -- saving ----------------------------------------------------------------------------------------
 

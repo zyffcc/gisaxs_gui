@@ -215,8 +215,6 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
         """The curve a map is about to stack: its key, and its English title from the frame on screen. The map
         is named after that curve from then on, whatever the combo shows later (another choice not built yet,
         a frame of another kind on screen, another language)."""
-        # A late frame can still be writing a recipe. Reuse the folder until those workers finish.
-        self.view_model.begin_series_spool(replace_existing=not self.tasks.is_busy() and not self._batch_inflight)
         self._series_key = key
         analysis = self.view_model.state.analysis
         reduction = analysis.reduction if analysis is not None else None
@@ -302,6 +300,7 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
         self._batch_live = False
         self._series_map, self._series_name = None, None
         self._series_rows = []
+        self._series_memory = {}
         if not self.batch_running() and not self.tasks.is_busy():
             self.view_model.release_series_spool()
         self._forget_records()

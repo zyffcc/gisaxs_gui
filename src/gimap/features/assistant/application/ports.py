@@ -16,6 +16,7 @@ class AssistantLlm(Protocol):
     """
 
     model: str
+    provider: str
 
     def respond(
         self,
@@ -40,6 +41,8 @@ class AnalysisWorkbench(Protocol):
     def set_mode(self, mode: str) -> dict: ...
 
     def set_incidence(self, degrees: Optional[float]) -> dict: ...
+
+    def set_orientation_min_exit(self, degrees: float) -> dict: ...
 
     def set_critical_angle(self, degrees: Optional[float]) -> dict:
         """The film's critical angle for the refraction of q_z (``None``: kinematic q_z); returns the status."""
@@ -73,7 +76,7 @@ class AnalysisWorkbench(Protocol):
 
     def show(self, view: Optional[str] = None, lower_profile: Optional[str] = None) -> None: ...
 
-    def export_curves(self) -> list[str]: ...
+    def export_curves(self, extra_metadata: Optional[dict] = None) -> list[str]: ...
 
     def preview_png(self, max_size: int = 900) -> Optional[bytes]: ...
 
@@ -180,8 +183,8 @@ class GeometryCalibrator(Protocol):
 
 
 class CurveFitter(Protocol):
-    """Predict parameters on one curve (|q| > 0, q in Å⁻¹): the distinct solutions, most probable first
-    (Fitting's ``create_curve_fit``: rows with ``probability``, values, ``posterior`` intervals, curves)."""
+    """Predict parameters on one curve (|q| > 0, q in Å⁻¹), yielding solutions in descending comparison weight.
+    Fitting's ``create_curve_fit`` supplies probability or BIC weight, parameter summaries, diagnostics and curves."""
 
     def __call__(self, q_inv_angstrom, intensity, sigma, *, components=(), report=None, cancelled=None,
                  cut_qz=None) -> list[dict]:
@@ -239,6 +242,7 @@ class AgentRuntime(Protocol):
     """
 
     model: str
+    resolved_model: str
 
     def run(
         self,

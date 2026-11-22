@@ -5,14 +5,19 @@ Read from the first data block that gives a cell:
 * ``_cell_length_a/b/c`` (Å) and ``_cell_angle_alpha/beta/gamma`` (°); standard uncertainties in brackets,
   ``8.874(2)``, are dropped;
 * the symmetry operations of ``_space_group_symop_operation_xyz`` or ``_symmetry_equiv_pos_as_xyz`` (also with
-  a dot, ``_space_group_symop.operation_xyz``), and the Hermann–Mauguin symbol;
+  a dot, ``_space_group_symop.operation_xyz``), the Hermann–Mauguin and Hall symbols and the number of the space
+  group;
 * the atom sites: ``_atom_site_label``, ``_atom_site_type_symbol``, ``_atom_site_fract_x/y/z``,
   ``_atom_site_occupancy`` (default 1), ``_atom_site_U_iso_or_equiv`` or ``_atom_site_B_iso_or_equiv``
   (B = 8π² U; default 0).
 
-Without operations only the lattice centring of the Hermann–Mauguin symbol is applied (its first letter), and the
-reader says so (``warnings``). Quoted values, semicolon text fields and comments are understood; everything else
-in the file (bonds, anisotropic displacements, refinement details) is ignored.
+Without operations they are generated from the Hall symbol, the Hermann–Mauguin symbol or the number
+(``space_groups.py``; ``symmetry`` is then ``symbol`` and ``notes`` says so). When that is not possible (a symbol
+that cannot be read or is not in the table, a cell of another shape, no space group named), the phase gives
+positions only (``symmetry`` ``none``): every hkl of the cell, without intensities or extinctions, and
+``warnings`` says why. The name is ``_chemical_name_common``, ``_chemical_name_mineral`` or the data block's name;
+the sum formula (``formula``) only when there is nothing else. Quoted values, semicolon text fields and comments are
+understood; everything else in the file (bonds, anisotropic displacements, refinement details) is ignored.
 """
 
 from __future__ import annotations
@@ -25,10 +30,22 @@ from typing import Optional
 
 from .cell import UnitCell
 from .scattering import element_of
+from .space_groups import SpaceGroupError, space_group
 
 SYMOP_TAGS = ("_space_group_symop_operation_xyz", "_symmetry_equiv_pos_as_xyz")
 SPACE_GROUP_TAGS = ("_space_group_name_h-m_alt", "_symmetry_space_group_name_h-m", "_space_group_name_h-m")
-NAME_TAGS = ("_chemical_name_common", "_chemical_name_mineral", "_chemical_formula_sum", "_chemical_name_systematic")
+HALL_TAGS = ("_space_group_name_hall", "_symmetry_space_group_name_hall")
+NUMBER_TAGS = ("_space_group_it_number", "_symmetry_int_tables_number")
+NAME_TAGS = ("_chemical_name_common", "_chemical_name_mineral")
+FORMULA_TAGS = ("_chemical_formula_sum", "_chemical_formula_structural", "_chemical_formula_moiety")
+FROM_SYMBOL = "{count} symmetry operations generated from the space group {symbol} (No. {number}): the file lists none."
+"""A note of a phase whose operations come from its space group."""
+NO_SPACE_GROUP = "The file names no space group."
+POSITIONS_ONLY = ("No symmetry operations: positions only. Every hkl of the cell is listed, without intensities or "
+                  "extinctions, and rings assigned to this phase are tentative.")
+"""The warnings of a phase without operations (after the reason: ``space_groups.SpaceGroupError``)."""
+GENERIC_BLOCKS = ("global", "i", "1", "cif", "data", "phase", "structure", "unnamed", "unknown")
+"""Data block names that say nothing about the phase (``data_global``, ``data_I``)."""
 _ESD = re.compile(r"\(\d+\)$")
 
 
@@ -50,6 +67,13 @@ class CifStructure:
     space_group: str = ""
     atoms: tuple[AtomSite, ...] = ()
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    symmetry: str = "file"
+    """Where the operations come from: ``file``, ``symbol`` (generated from the space group) or ``none``
+    (positions only)."""
+    notes: tuple[str, ...] = ()
+    """What was derived and how (``FROM_SYMBOL``, ``space_groups.ORIGIN_TAKEN``)."""
+    formula: str = ""
+    space_group_number: int = 0
 
 
 def _tokens(text: str) -> list[str]:
@@ -193,19 +217,54 @@ def parse_cif(text: str) -> CifStructure:
             if items.get(tag):
                 operations = tuple(value for value in items[tag] if value not in ("?", "."))
                 break
-        space_group = _first(items, SPACE_GROUP_TAGS)
+        symbol = _first(items, SPACE_GROUP_TAGS)
+        number_ = number_of(_first(items, NUMBER_TAGS))
+        atoms = _atoms(items, warnings)
+        symmetry, notes = "file", []
         if not operations:
-            warnings.append(
-                "The file lists no symmetry operations: only the atoms as listed are used"
-                + (f", with the lattice centring of {space_group}." if space_group else " (P1).")
-            )
-        name = _first(items, NAME_TAGS) or block_name or "phase"
-        return CifStructure(" ".join(name.split()), cell, operations, space_group, _atoms(items, warnings), tuple(warnings))
+            symmetry, operations, symbol, number_ = _derived(symbol, number_, _first(items, HALL_TAGS), cell, atoms,
+                                                             warnings, notes)
+        formula = " ".join(_first(items, FORMULA_TAGS).split())
+        name = _first(items, NAME_TAGS) or _block_name(block_name) or formula or "phase"
+        return CifStructure(" ".join(name.split()), cell, operations, symbol, atoms, tuple(warnings), symmetry,
+                            tuple(notes), formula, number_)
     raise ValueError("No data block with a unit cell (_cell_length_a, _b, _c) in this file.")
+
+
+def number_of(value: str) -> int:
+    """The space-group number of a CIF value (0 when it is none)."""
+    found = number(value)
+    return int(found) if found is not None and found == int(found) and 1 <= found <= 230 else 0
+
+
+def _block_name(name: str) -> str:
+    """The data block's name, unless it says nothing (``data_global``)."""
+    text = str(name).strip()
+    return "" if not text or text.casefold() in GENERIC_BLOCKS else text
+
+
+def _derived(symbol: str, number_: int, hall: str, cell: UnitCell, atoms, warnings: list, notes: list):
+    """``(symmetry, operations, symbol, number)`` from the space group named, when the file lists no operations."""
+    sites = [atom.xyz for atom in atoms]
+    try:
+        try:
+            group = space_group(symbol, number=number_ or None, hall=hall, cell=cell.as_tuple(), sites=sites)
+        except SpaceGroupError:
+            raise
+        except ValueError:  # an unreadable Hall symbol: the Hermann–Mauguin symbol or the number may still do
+            group = space_group(symbol, number=number_ or None, cell=cell.as_tuple(), sites=sites)
+    except SpaceGroupError as error:
+        warnings.extend([str(error) if symbol or number_ or hall else NO_SPACE_GROUP, POSITIONS_ONLY])
+        return "none", (), symbol, number_
+    notes.append(FROM_SYMBOL.format(count=len(group.operations), symbol=group.symbol, number=group.number))
+    if group.note:
+        notes.append(group.note)
+    return "symbol", group.texts, symbol or group.symbol, group.number or number_
 
 
 def read_cif(path) -> CifStructure:
     return parse_cif(Path(path).read_text(encoding="utf-8", errors="replace"))
 
 
-__all__ = ["AtomSite", "CifStructure", "number", "parse_cif", "read_cif"]
+__all__ = ["AtomSite", "CifStructure", "FROM_SYMBOL", "NO_SPACE_GROUP", "POSITIONS_ONLY", "number", "number_of",
+           "parse_cif", "read_cif"]

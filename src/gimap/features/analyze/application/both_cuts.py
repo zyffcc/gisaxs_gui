@@ -14,16 +14,16 @@ import math
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
-
-from src.gimap.shared.geometry.q_inverse import q_of_positions
+from src.gimap.shared.geometry.q_inverse import qy_on_horizon
 
 from ..domain.gisaxs import exit_angle_deg_at_row
+from ..domain.vertical_band import rod_columns
 from .export_record import analysis_metadata, export_stem, fit_input_observation
 
 GISAXS = "gisaxs"
 NOT_GISAXS = "Both cuts are those of a GISAXS frame: this frame has no horizontal and vertical cut."
 NO_VERTICAL = "The vertical cut of this frame is empty: set it in the Cuts step first."
+NO_HORIZON = "The vertical band has no unique intersection with the sample horizon. Its in-plane q is undefined."
 VERTICAL_SUFFIX = "_fit_input_qz.dat"
 
 
@@ -41,25 +41,30 @@ def cut_geometry(analysis) -> dict:
     if row is None:
         rows = horizontal.region.get("rows") or (0, 0)
         row = 0.5 * (float(rows[0]) + float(rows[1]))
-    column = vertical.region.get("center_column")
-    if column is None:
-        columns = vertical.region.get("columns") or (0, 0)
-        column = 0.5 * (float(columns[0]) + float(columns[1]))
-    qy, _qz = q_of_positions(geometry, np.array([float(column)]), np.array([geometry.horizon_row()]))
-    return {
+    columns = vertical.region["columns"]
+    column = vertical.region.get("center_column", 0.5 * sum(columns))
+    qy = qy_on_horizon(geometry, float(column))
+    if not math.isfinite(qy):
+        raise ValueError(NO_HORIZON)
+    values = {
         "cut": "vertical",
         "alpha_i_deg": float(geometry.incidence_deg),
         "wavelength_nm": float(geometry.wavelength_angstrom) / 10.0,
-        "q_parallel_nm": abs(float(qy[0])) * 10.0,
+        "q_parallel_nm": abs(float(qy)) * 10.0,
         "critical_angle_deg": float(getattr(geometry, "critical_angle_deg", 0.0) or 0.0),
         "horizontal_alpha_f_deg": float(exit_angle_deg_at_row(geometry, float(row))),
     }
+    if "rows" in vertical.region:
+        values["band_crosses_specular"] = rod_columns(geometry, vertical.region["rows"], columns) is not None
+    return values
 
 
 def write_both_cuts(export, analysis, destination, halves: Optional[str] = None) -> tuple[Path, Path, dict]:
     """(horizontal file, vertical file, ``cut_geometry``): the horizontal cut by ``export.fit_input`` (Analyze's
     ``ExportFrame``), the vertical one beside it by the same writer."""
     geometry = cut_geometry(analysis)
+    if not all(math.isfinite(value) for value in geometry.values() if isinstance(value, float)):
+        raise ValueError(NOT_GISAXS)
     horizontal = export.fit_input(analysis, destination, halves=halves)
     curve = analysis.reduction.curve("vertical")
     metadata = analysis_metadata(analysis, curve_keys=["fit_input_qz"])
@@ -71,8 +76,6 @@ def write_both_cuts(export, analysis, destination, halves: Optional[str] = None)
     metadata.update(observation=observation, files=[path.name])
     export.writer.write_record(path.with_suffix(".json"), metadata)
     vertical = export.writer.write_xy(_for_fitting(curve), path, metadata)
-    if not all(math.isfinite(value) for value in geometry.values() if isinstance(value, float)):
-        raise ValueError(NOT_GISAXS)
     return Path(horizontal), Path(vertical), geometry
 
 

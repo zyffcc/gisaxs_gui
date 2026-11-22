@@ -6,8 +6,12 @@ import math
 from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.orientation_notes import orientation_notes
 
-MODEL_NAMES = {"gaussian": "Gaussian + isotropic", "maier_saupe": "Maier–Saupe + isotropic"}
+from .texts import message_text
+
+MODEL_NAMES = {"gaussian": "Gaussian + isotropic", "gaussian_mosaic": "Gaussian mosaic + isotropic",
+               "maier_saupe": "Maier–Saupe + isotropic"}
 
 
 def _pm(value: Optional[float], error: Optional[float], digits: int) -> str:
@@ -33,15 +37,28 @@ def phase_cell_text(spec) -> str:
 
 
 def symmetry_text(spec) -> str:
+    """The Symmetry column of a phase: where its operations come from and what its intensities are. A phase
+    without operations says so first, with ⚠, for as long as it is listed."""
     atoms = len(spec.atoms)
-    if spec.operations:
-        text = trf("{group}{count} operations from the CIF", group=f"{spec.space_group}, " if spec.space_group else "",
+    group = f"{spec.space_group}, " if spec.space_group else ""
+    if getattr(spec, "positions_only", False):
+        return "⚠ " + trf("{group}positions only: no symmetry operations, every hkl, no intensities",
+                          group=group)
+    if getattr(spec, "symmetry", "") == "symbol":
+        text = trf("{group}{count} operations from the space group (none in the CIF)", group=group,
                    count=len(spec.operations))
+    elif spec.operations:
+        text = trf("{group}{count} operations from the CIF", group=group, count=len(spec.operations))
     else:
         text = trf("lattice centring {centring}", centring=spec.centring)
     if atoms:
         return text + "; " + trf("{atoms} atom sites: |F|² from the atoms", atoms=atoms)
     return text + "; " + tr("no atoms: every allowed reflection has intensity 1")
+
+
+def phase_notes(spec) -> str:
+    """The warnings and the notes of a phase (how its symmetry was found or why it was not), one per line."""
+    return "\n".join(message_text(text) for text in (*spec.warnings, *getattr(spec, "notes", ())))
 
 
 def ring_text(analysis, *, short: bool = False) -> str:
@@ -56,35 +73,62 @@ def ring_text(analysis, *, short: bool = False) -> str:
                low=f"{low:.3f}", high=f"{high:.3f}")
 
 
-def pole_result_text(result) -> str:
+def _bounded(text: str, name: str, at_bound) -> str:
+    return text + " " + tr("(at its bound)") if name in at_bound else text
+
+
+def _fit_lines(result):
     fit = result.fit
-    if not fit.ok:
-        return trf("No fit: {reason}", reason=tr(fit.message))
     values, errors = fit.values, fit.errors
-    profile = fit.profile
-    lines = [
+    return [
         trf("{model}: oriented fraction {fraction}, FWHM {fwhm}°, direction χ0 = {chi0}°",
             model=tr(MODEL_NAMES.get(fit.model, fit.model)),
-            fraction=_pm(values.get("oriented_fraction"), errors.get("oriented_fraction"), 3),
-            fwhm=_pm(values.get("fwhm_deg"), errors.get("fwhm_deg"), 2),
-            chi0=_pm(values.get("chi0_deg"), errors.get("chi0_deg"), 1)),
-        trf("Hermans f = {f} (fitted distribution, missing wedge filled; oriented part {f_oriented}); "
-            "from the measured bins {f_measured}",
+            fraction=_bounded(_pm(values.get("oriented_fraction"), errors.get("oriented_fraction"), 3), "fraction_iso",
+                              fit.at_bound),
+            fwhm=_bounded(_pm(values.get("fwhm_deg"), errors.get("fwhm_deg"), 2), "width", fit.at_bound),
+            chi0=_bounded(_pm(values.get("chi0_deg"), errors.get("chi0_deg"), 1), "chi0_deg", fit.at_bound)),
+        trf("Fitted Hermans f = {f} (missing wedge filled, oriented part {f_oriented})",
             f=_pm(values.get("herman"), errors.get("herman"), 3),
-            f_oriented=_pm(values.get("herman_oriented"), errors.get("herman_oriented"), 3),
-            f_measured=_pm(profile.herman_measured() if profile is not None else None, None, 3)),
+            f_oriented=_pm(values.get("herman_oriented"), errors.get("herman_oriented"), 3)),
         trf("2D order 2<cos²χ> − 1 = {order}; χ²_red = {chi2} over {points} bins up to χ = {chi_max}°; "
             "weighted coverage {coverage}",
             order=_pm(values.get("order_2d"), errors.get("order_2d"), 3), chi2=f"{fit.chi2_red:.3g}",
             points=fit.points, chi_max=f"{result.chi_max:g}",
-            coverage=f"{profile.weighted_coverage:.3f}" if profile is not None else "—"),
-        trf("Background {value} counts/pixel ({source}); {lorentz}",
-            value=f"{result.background:.4g}", source=tr(result.background_source),
-            lorentz=tr("I(χ) already Lorentz-corrected") if result.lorentz else tr("Lorentz factor sin χ applied")),
+            coverage=f"{fit.weighted_coverage:.3f}" if fit.weighted_coverage is not None else "—"),
     ]
-    if fit.message:
-        lines.append(fit.message)
+
+
+def pole_result_text(result) -> str:
+    """Show fit quality and the independently measured moment on the requested angular range."""
+    fit = result.fit
+    lines = []
+    if not fit.ok:
+        lines.append(trf("Pole fit not determined ({reasons}).", reasons=tr(fit.message)))
+    elif fit.quality_reasons:
+        lines.append("⚠ " + trf("Pole fit not determined ({reasons}).",
+                                reasons=", ".join(tr(reason) for reason in fit.quality_reasons)))
+    measured, error, _ = fit.measured_moment
+    if measured is not None:
+        text = trf("Measured f = {value}", value=f"{measured:#.3g}")
+        if error is not None:
+            text += " ± " + f"{error:#.3g} (" + tr("stat") + ")"
+        limits = result.systematics.get("range")
+        if limits:
+            text += trf(" [{low}, {high}] (systematic)", low=f"{limits[0]:#.3g}", high=f"{limits[1]:#.3g}")
+        lines.append(text)
+    if fit.ok:
+        lines.extend(_fit_lines(result))
+    lines.append(trf("Background {value} counts/pixel ({source}). 1 − φ is conditional on the background b.",
+                     value=f"{result.background:.4g}", source=tr(result.background_source)))
+    if result.min_exit_deg is not None:
+        lines.append(trf("Excluded αf < {angle}°. Polarisation {factor}.",
+                         angle=f"{result.min_exit_deg:g}", factor=tr("off") if result.polarization is None
+                         else f"{result.polarization:g}"))
+    if result.systematics.get("incomplete"):
+        lines.append(tr("Some systematic estimates are unavailable."))
+    lines.extend(orientation_notes(result.systematics, result.systematics, trf))
     return "\n".join(lines)
 
 
-__all__ = ["MODEL_NAMES", "orientation_text", "phase_cell_text", "pole_result_text", "ring_text", "symmetry_text"]
+__all__ = ["MODEL_NAMES", "orientation_text", "phase_cell_text", "phase_notes", "pole_result_text",
+           "ring_text", "symmetry_text"]

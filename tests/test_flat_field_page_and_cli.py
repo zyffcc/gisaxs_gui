@@ -30,8 +30,8 @@ from tests.test_review_analyze_run_and_clear import _frames, _profiles
 DATA = Path(__file__).parent / "data" / "external"
 XEUSS = DATA / "giwaxs_xeuss_pbte"
 GALAXI = DATA / "gisaxs_galaxi"
-TIPS = ("Flat field (detector response): every frame is divided by it, normalised to mean 1; pixels where it is at or "
-        "below 0.05 are left out. A detector frame of the same size or a .npy file", "Stop dividing by the flat field")
+TIPS = ("Choose a uniformly exposed frame D_ff. Each sample is divided by its normalised response F_ff.",
+        "Stop dividing by the flat field")
 
 
 def _close(page) -> None:

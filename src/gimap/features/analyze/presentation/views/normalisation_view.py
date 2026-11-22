@@ -20,6 +20,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.app.presentation.components import AdvancedSection
+from .command_bar import ElidedLabel
 
 EXPOSURE_ITEMS = (("Off", "off"), ("From the file header", "header"), ("Typed", "value"))
 MONITOR_ITEMS = (("Off", "off"), ("Typed", "value"))
@@ -27,9 +28,7 @@ MONITOR_ITEMS = (("Off", "off"), ("Typed", "value"))
 MIN_FIELD = 70
 """Least width (px) of a value field of the section: it fits the narrow step panel with its label beside it."""
 NORMALISATION_TIP = (
-    "Off by default. After the other corrections every frame is multiplied by A / (t · M · T · d): exposure time t, "
-    "monitor M, transmission T, thickness d, absolute-scale factor A. σ is multiplied by the same factor; q and the "
-    "shape of the curves do not change."
+    "Multiply intensity and σ by A_abs / (t_exp · M · T · d) using the selected terms."
 )
 
 
@@ -71,7 +70,7 @@ class NormalisationView:
 
     def _dark_row(self, section) -> None:
         dark = QHBoxLayout()
-        self.dark_label = QLabel("No dark frame", section)
+        self.dark_label = ElidedLabel("No dark frame", section, padding=0)
         self.dark_label.setObjectName("analyzeDarkLabel")
         self.dark_label.setProperty("gimapRole", "muted")
         self.dark_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -79,8 +78,7 @@ class NormalisationView:
         self.dark_button.setObjectName("analyzeDarkButton")
         self.dark_button.setText("Choose…")
         self.dark_button.setToolTip(
-            "Dark frame (detector without beam: dark current, offset), subtracted from every frame before the "
-            "background. σ then comes from the scatter of the pixels")
+            "Choose the dark frame K recorded with the beam off.")
         self.dark_clear_button = QToolButton(section)
         self.dark_clear_button.setText("×")
         self.dark_clear_button.setAutoRaise(True)
@@ -98,12 +96,12 @@ class NormalisationView:
         self.dark_scale_spin.setSingleStep(0.05)
         self.dark_scale_spin.setValue(1.0)
         self.dark_scale_spin.setKeyboardTracking(False)
-        self.dark_scale_spin.setToolTip("frame − scale × dark (e.g. the exposure-time ratio)")
+        self.dark_scale_spin.setToolTip("Multiply K by this scale before subtracting it from the sample.")
         self.dark_frame_spin = QSpinBox(section)
         self.dark_frame_spin.setRange(0, 100000)
         self.dark_frame_spin.setToolTip("Frame of a NeXus dark file")
         form.addRow("Dark scale", self.dark_scale_spin)
-        form.addRow("Dark frame", self.dark_frame_spin)
+        form.addRow("Frame of K", self.dark_frame_spin)
         section.add_layout(form)
 
     def _normalisation_section(self, parent) -> AdvancedSection:
@@ -135,12 +133,12 @@ class NormalisationView:
         self.transmission_spin.setToolTip("Transmission of the sample, above 0 and at most 1")
         self.thickness_check = QCheckBox("Thickness d", section)
         self.thickness_spin = _spin(section, 1e-6, 1e5, 1.0, 6, " mm")
-        self.absolute_check = QCheckBox("Absolute scale A", section)
+        self.absolute_check = QCheckBox("Absolute scale A_abs", section)
         self.absolute_edit = _number_edit(
             section, "Absolute-scale factor, e.g. from a glassy-carbon or water measurement in the same set-up")
         self.absolute_edit.setText("1")
         rows = (  # a source (header or typed) with its typed value below it; a check with its value beside it
-            (QLabel("Exposure t", section), self.exposure_combo), (None, self.exposure_spin),
+            (QLabel("Exposure t_exp", section), self.exposure_combo), (None, self.exposure_spin),
             (QLabel("Monitor M", section), self.monitor_combo), (None, self.monitor_edit),
             (self.transmission_check, self.transmission_spin),
             (self.thickness_check, self.thickness_spin),
@@ -161,14 +159,25 @@ class NormalisationView:
         return section
 
     def _lorentz_row(self, section) -> None:
-        self.lorentz_check = QCheckBox("Lorentz factor (fibre texture)", section)
+        self.lorentz_check = QCheckBox("Lorentz factor for peak areas", section)
         self.lorentz_check.setObjectName("analyzeLorentzCheck")
         self.lorentz_check.setToolTip(
-            "Crystallites oriented at random about the surface normal: divide by L = 1/(cos αi cos αf |sin 2θf|) "
-            "(GIXSGUI). I(χ) then counts the crystallites per degree of χ; the Hermans factor of the automatic "
-            "analysis is then not weighted by sin χ again. Only for crystalline peaks: it also scales diffuse "
-            "scattering and the I(q) of a ring")
+            "Weight crystalline intensities by cos αi |qy|/k. The radial curve sums these pixels in each q bin.")
         section.add_widget(self.lorentz_check)
+        form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        self.lorentz_band_spin = _spin(section, 0.0, 100.0, 2.0, 1, " px")
+        self.lorentz_band_spin.setToolTip("Exclude |qy|/k below this many horizontal pixel widths divided by distance.")
+        self.orientation_exit_spin = _spin(section, -0.001, 90.0, -0.001, 3, " °")
+        self.orientation_exit_spin.setSpecialValueText("Automatic")
+        self.orientation_exit_spin.setSingleStep(0.05)
+        self.orientation_exit_spin.setToolTip("Automatic uses twice the film critical angle, or twice the incidence angle.")
+        form.addRow("Incidence-plane half-width", self.lorentz_band_spin)
+        form.addRow("Orientation minimum αf", self.orientation_exit_spin)
+        section.add_layout(form)
+        self.orientation_polar_check = QCheckBox("Polarise ring profiles by default", section)
+        self.orientation_polar_check.setToolTip("Use f = 0.99 for orientation when the frame polarisation is off.")
+        section.add_widget(self.orientation_polar_check)
 
 
 __all__ = ["EXPOSURE_ITEMS", "MONITOR_ITEMS", "NORMALISATION_TIP", "NormalisationView"]

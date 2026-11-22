@@ -69,7 +69,7 @@ def test_the_normalisation_section_says_the_header_values_and_by_what_the_frame_
         analysis = page.view_model.state.analysis
         assert analysis.normalisation.factor == np.float64(1.0 / (20.0 * 5000.0 * 0.5))
         assert page.normalisation_status.text() == (
-            "Multiplied by 2e-05: t = 20 s (file header), M = 5000 (file header), T = 0.5 (typed); "
+            "Multiplied by 2e-05: t_exp = 20 s (file header), M = 5000 (file header), T = 0.5 (typed); "
             "intensity in counts/(pixel·s·monitor)")
         radial, before = analysis.reduction.curve("horizontal"), plain.reduction.curve("horizontal")
         np.testing.assert_allclose(radial.intensity, before.intensity * 2e-5, rtol=1e-5)
@@ -77,7 +77,7 @@ def test_the_normalisation_section_says_the_header_values_and_by_what_the_frame_
         apply_language("zh", [page])
         page._show_normalisation()
         assert page.header_values_label.text() == "文件头中：曝光 20 s; Monitor = 5000"
-        assert page.normalisation_status.text().startswith("已乘以 2e-05：t = 20 s (文件头)")
+        assert page.normalisation_status.text().startswith("已乘以 2e-05：t_exp = 20 s (文件头)")
         assert page.normalisation_section.toggle_button.text() == "归一化"
         apply_language("en", [page])
         # A typed value that is not a number is refused with the reason, and nothing changes.
@@ -105,11 +105,16 @@ def test_the_dark_frame_and_the_lorentz_factor_are_set_from_their_controls(tmp_p
         monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *_args, **_kw: (str(dark), "")))
         page.dark_button.click()
         page.lorentz_check.setChecked(True)
+        page.lorentz_band_spin.setValue(4.5)
+        page.orientation_exit_spin.setValue(0.35)
+        page.orientation_polar_check.setChecked(False)
         page._options_timer.stop()
         page.run_analysis()
         _done(page)
         analysis = page.view_model.state.analysis
         assert analysis.corrections.dark_path == str(dark) and analysis.corrections.lorentz
+        assert analysis.corrections.lorentz_band_px == 4.5 and analysis.corrections.orientation_min_exit_deg == 0.35
+        assert not analysis.corrections.orientation_polarization
         np.testing.assert_allclose(np.nanmax(analysis.raw_data - 3.0 - np.where(analysis.valid, 0, np.nan)),
                                    np.nanmax(analysis.raw_data) - 3.0)
         assert page.dark_label.text() == "dark.tif" and "dark dark.tif" in page.settings_summary()

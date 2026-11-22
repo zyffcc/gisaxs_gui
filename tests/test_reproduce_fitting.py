@@ -46,6 +46,7 @@ def test_manual_fit_restarts_from_recorded_model_and_budget(tmp_path):
         different = reproduce_record(edited, tmp_path / "rerun")
         assert different["tables"]["parameters"]["columns"]["0_R"]["status"] == "different"
         source.write_text("different bytes", encoding="ascii")
+        assert page.project_state()["results"]["curve_sha256"] == recipe["source"]["sha256"]
         with pytest.raises(ValueError, match="SHA-256 mismatch.*" + source.name):
             reproduce_record(record_path, tmp_path / "changed")
         source.unlink()
@@ -92,6 +93,25 @@ def test_predict_repeats_the_posterior_and_selected_curve(tmp_path, monkeypatch)
         page.dispose()
 
 
+def test_refine_replays_accepted_restarts_from_the_original_model(tmp_path):
+    from src.gimap.features.fitting.application.fit_state import result_from_dict, result_to_dict
+    from src.gimap.features.fitting.application.single_fit import fit_record, fit_resolving
+    from tests.test_refine_restarts import _data, _model
+
+    data, start = _data(), _model(7.)
+    result, _, _ = fit_resolving(start, data, max_evaluations=12)
+    assert result.restarts > 0
+    restored = result_from_dict(result_to_dict(result))
+    record = fit_record(restored.model, data, None, result=restored, side="mean", q_range=None)
+    recipe = record["reproduction"]
+    assert recipe["start_model"]["components"][0]["params"]["R"]["value"] == 7.
+    assert recipe["restart_budget"] == 12 and recipe["restarts"] == result.restarts
+    path = tmp_path / "refine.json"
+    path.write_text(json.dumps(record, allow_nan=False), encoding="utf-8")
+    report = reproduce_record(path, tmp_path / "replayed")
+    assert report["status"] == "identical", report
+
+
 def test_joint_fit_repeats_shared_parameter_and_independent_scales(tmp_path):
     from src.gimap.features.fitting.application.joint_fit import CurveSpec, joint_record, run_joint_fit
     from src.gimap.features.fitting.application.single_fit import evaluate
@@ -106,6 +126,35 @@ def test_joint_fit_repeats_shared_parameter_and_independent_scales(tmp_path):
     report = reproduce_record(path, tmp_path / "replayed")
     assert report["status"] == "identical", report
     assert {"curve_1_fit_curve", "curve_2_fit_curve", "covariance", "joint_fit"} <= report["tables"].keys()
+
+
+def test_joint_fit_replays_file_widths_and_vertical_geometry(tmp_path):
+    from src.gimap.features.fitting.application.joint_fit import (
+        CurveSpec, curve_model, joint_record, run_joint_fit, substrate_of,
+    )
+    from src.gimap.features.fitting.application.single_fit import evaluate
+
+    q = np.linspace(.5, 1.5, 32)
+    dq = np.linspace(.002, .035, q.size)
+    base = replace(_sphere(5.2), resolution_mode="file", weighting="poisson")
+    for path, parameter in base.parameters():
+        if parameter.free and path != (0, "Int"):
+            base = base.with_parameter(path, free=False)
+    substrate = substrate_of("Si")
+    horizontal = CurveSpec("first", q, np.ones_like(q), dq=dq)
+    vertical = CurveSpec("second", q, np.ones_like(q), kind="vertical", alpha_i=.2, wavelength=.1, q_parallel=.3)
+    specs = [replace(spec, intensity=evaluate(curve_model(spec, base, substrate, True), q, dq=spec.dq))
+             for spec in (horizontal, vertical)]
+    result = run_joint_fit(specs, base, substrate, set())
+    record = joint_record(result, specs, substrate)
+    first, second = record["reproduction"]["curves"]
+    assert first["points"]["dq"] == dq.tolist() and first["points"]["weight_mode"] == "poisson"
+    assert second["start_model"]["vertical_cut"]["q_parallel"] == .3
+    path = tmp_path / "joint.json"
+    path.write_text(json.dumps(record, allow_nan=False), encoding="utf-8")
+    report = reproduce_record(path, tmp_path / "replayed")
+    assert report["status"] == "identical", report
+    assert report["tables"]["curve_1_fit_curve"]["columns"]["dQ_nm^-1"]["status"] == "identical"
 
 
 def test_1d_predict_summary_replays_its_verified_side_record(tmp_path, monkeypatch):

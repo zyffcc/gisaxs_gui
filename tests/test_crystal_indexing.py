@@ -234,10 +234,31 @@ def test_a_ring_is_assigned_to_the_nearest_reflection_within_its_window() -> Non
     near = assign(1.0012, 2e-4, 0.010, candidates)
     assert near.match.label == "110" and near.delta_q == pytest.approx(0.0012)
     assert near.tolerance == pytest.approx(0.005) and [item.phase for item in near.alternatives] == ["B"]
-    assert near.delta_sigma == pytest.approx(6.0) and near.relative_d == pytest.approx(-0.0012)
+    assert near.delta_sigma == pytest.approx(6.0) and near.relative_d == pytest.approx(1.000 / 1.0012 - 1)
+    record = near.record()
+    assert record["ambiguous"] and record["alternatives"][0]["relative_d"] == pytest.approx(1.004 / 1.0012 - 1)
     assert not assign(1.2, 1e-4, 0.01, candidates).assigned
     sharp = assign(1.4146, 4e-4, 0.001, candidates)  # 3σ = 0.0012 is the larger window
     assert sharp.assigned and sharp.tolerance == pytest.approx(0.0012)
+    assert not sharp.record()["ambiguous"]
+    coincident = Candidate("cubic", "300, 221", 3, families=("300", "221"))
+    assert assign(3.0, 0.001, 0.01, [coincident]).record()["ambiguous"]
+
+
+def test_report_names_the_radial_axis_and_every_unassigned_peak():
+    from src.gimap.features.assistant.application.pipeline_assignment import assignment_lines
+
+    geometry = DetectorGeometry(172e-6, 172e-6, 0.25, 600.0, 1100.0, 1.0, 0.2)
+    spec = PhaseSpec("cubic", (5, 5, 5, 90, 90, 90), orientation="powder")
+    peaks = [{"q": q, "q_err": 0.0003, "fwhm": 0.02} for q in (1.258, 1.32)]
+    for critical, basis in ((0.0, "kinematic |q|"), (0.1, "transmitted-channel |q|")):
+        assignment = assign_peaks(peaks, [spec], geometry=geometry.with_critical_angle(critical))
+        assert assignment["unassigned_q"] == [1.32]
+        expected = geometry.wavevector_inv_angstrom * math.sin(geometry.incidence_rad)
+        assert assignment["q_axis"]["k_sin_alpha_i_inv_A"] == pytest.approx(expected)
+        report = "\n".join(assignment_lines({"phase_assignment": assignment}))
+        assert basis in report and "transmitted and reflected channels" in report
+        assert "Δd/d = " in report and "Δq = " in report and "1.3200 Å⁻¹ unassigned" in report
 
 
 @pytest.mark.skipif(not MANIFEST, reason="public test data not downloaded (tests/data/external)")
@@ -279,7 +300,7 @@ def test_the_rings_of_the_public_p08_frame_are_mapbi3_and_pbi2(tmp_path: Path) -
 
 # -- pole figure -----------------------------------------------------------------------------
 
-def _synthetic(model: str, fraction: float, width: float, chi0: float, *, lorentz: bool = False, seed: int = 3):
+def _synthetic(model: str, fraction: float, width: float, chi0: float, *, seed: int = 3):
     chi = np.arange(-89.5, 90.0, 1.0)
     rho = pole_models.pole_density(np.radians(np.abs(chi)), model, fraction, width, chi0)
     background, scale = 40.0, 5000.0
@@ -287,16 +308,12 @@ def _synthetic(model: str, fraction: float, width: float, chi0: float, *, lorent
     sigma = np.sqrt(raw)
     raw = raw + np.random.default_rng(seed).normal(0.0, sigma)
     raw[np.abs(chi) < 4.0] = np.nan  # the missing wedge
-    if not lorentz:
-        return chi, raw, sigma, background
-    sine = np.abs(np.sin(np.radians(chi)))
-    return chi, raw * sine, sigma * sine, background * float(np.nanmean(sine))
+    return chi, raw, sigma, background
 
 
-@pytest.mark.parametrize("lorentz", [False, True])
-def test_the_pole_figure_fit_recovers_width_isotropic_fraction_and_f(lorentz: bool) -> None:
-    chi, intensity, sigma, background = _synthetic("gaussian", 0.35, 12.0, 0.0, lorentz=lorentz)
-    profile = fold_profile(chi, intensity, sigma, background, lorentz=lorentz)
+def test_the_pole_figure_fit_recovers_width_isotropic_fraction_and_f() -> None:
+    chi, intensity, sigma, background = _synthetic("gaussian", 0.35, 12.0, 0.0)
+    profile = fold_profile(chi, intensity, sigma, background)
     assert not profile.measured[:4].any() and profile.measured[4:].all()
     fit = fit_pole_figure(profile, "gaussian", chi0_deg=0.0, chi_max=90.0)
     values, errors = fit.values, fit.errors

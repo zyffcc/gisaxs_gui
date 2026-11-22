@@ -67,8 +67,9 @@ class SolutionsExportMixin:
     def export_solutions_dialog(self, path=None):
         from .results import folder_action, write_pair, write_text_whole
 
-        session, data = self.session, self._data()
-        if not session.solutions or data is None or not data.q.size:
+        session = self.session
+        predicted_data = session.data(predict=True)
+        if not session.solutions or predicted_data is None or not predicted_data.q.size:
             self._status(tr(NO_SOLUTIONS), "warning")
             return None
         path = path or self._save_path(SAVE_SOLUTIONS, f"{self._stem()}_solutions.csv", "CSV (*.csv)")
@@ -77,8 +78,11 @@ class SolutionsExportMixin:
         path = Path(path)
         curves_path = path.with_name(path.stem + CURVES_SUFFIX + ".csv")
         names, rows = solutions_table(session.solutions, session.model)
-        curve_names, columns = solutions_curves(session.solutions, data)
-        record = fit_record(session.model, data, session.curve, side=session.side, q_range=session.q_range,
+        curve_names, columns = solutions_curves(session.solutions, predicted_data)
+        manual_data = self._data()
+        selected = session.model if manual_data is not None else session.solutions[0].model
+        record = fit_record(selected, manual_data or predicted_data, session.curve, side=session.side,
+                            q_range=session.q_range,
                             result=session.result if session.result_is_current() else None, excluded=session.excluded)
         record.update(self.solutions_record(record, exporting_solutions=True))
         record["files"] = {"table": path.name, "curves": curves_path.name}

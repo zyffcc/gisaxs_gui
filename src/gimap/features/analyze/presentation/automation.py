@@ -147,6 +147,7 @@ class AnalyzeAutomation(IndexingAutomationMixin):  # set_phases, assign_peaks, p
             "resolved_by": analysis.resolution.how,  # chosen, matched, or file: the .poni beside the frame (no profile)
             "flat_detector": analysis.flat_detector.to_dict() if analysis.flat_detector is not None else None,
             "tilt_deg": geometry.tilt_deg,
+            "orientation": geometry.orientation,
             "rotations_deg": [math.degrees(geometry.rot1_rad), math.degrees(geometry.rot2_rad),
                               math.degrees(geometry.rot3_rad)],
             "critical_angle_deg": geometry.critical_angle_deg or None,  # None: none given, q is kinematic
@@ -156,11 +157,16 @@ class AnalyzeAutomation(IndexingAutomationMixin):  # set_phases, assign_peaks, p
             "background": Path(corrections.background_path).name if corrections.background_path else None,
             "flat_field": None if analysis.flat_field is None else {  # what the frame was divided by
                 "file": analysis.flat_field.name, "masked_pixels": analysis.flat_field.masked_pixels,
-                "normalisation_mean": analysis.flat_field.mean},
+                "normalisation_mean": analysis.flat_field.mean, "floor": analysis.flat_field.floor},
+            "pooled_scatter": analysis.corrections.pooled_scatter,
+            "poisson_variance": analysis.corrections.poisson_variance,
             "valid_range": [corrections.minimum, corrections.maximum],
             "gap_guard_px": corrections.gap_guard_px,
             "dark": Path(corrections.dark_path).name if corrections.dark_path else None,
-            "lorentz": bool(corrections.lorentz),  # I(χ) divided by the fibre-texture Lorentz factor: no 2nd sin χ
+            "lorentz": bool(corrections.lorentz),
+            "lorentz_band_px": corrections.lorentz_band_px,
+            "orientation_min_exit_deg": corrections.orientation_min_exit_deg,
+            "orientation_polarization": corrections.orientation_polarization,
             "normalisation": None if analysis.normalisation is None else analysis.normalisation.to_record(),
         }
         reduction = analysis.reduction
@@ -202,6 +208,7 @@ class AnalyzeAutomation(IndexingAutomationMixin):  # set_phases, assign_peaks, p
                 "yoneda_row": None if yoneda is None else float(yoneda.row),
                 "horizon_row": markers.get("horizon_row"),
                 "vertical_columns": [float(left), float(right)],
+                "vertical_source": markers.get("vertical_source"),
                 "vertical_pixel_columns": _pixel_span(reduction.curve("vertical"), "columns"),
                 "halves": view_model.fit_side,
                 "symmetry": self._symmetry,
@@ -506,8 +513,8 @@ class AnalyzeAutomation(IndexingAutomationMixin):  # set_phases, assign_peaks, p
         analysis = self._page.view_model.state.analysis
         return None if analysis is None else analysis_metadata(analysis)
 
-    def export_current(self) -> list[str]:
-        written = self._page.view_model.export()
+    def export_current(self, extra_metadata: Optional[dict] = None) -> list[str]:
+        written = self._page.view_model.export(extra_metadata=extra_metadata)
         self._page._status(exported_text(written), "ok")
         return [str(path) for path in written]
 

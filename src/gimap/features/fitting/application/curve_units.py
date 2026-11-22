@@ -17,6 +17,9 @@ FROM_FRAME = "cut from a detector frame as Analyze cuts it"
 FROM_REQUEST = "the current curve, sent in this unit"
 """Where the unit a curve's q was read in comes from (``q_unit_from`` of curves and records)."""
 
+IN_NM = {"angstrom": 10.0, "nm": 1.0, "m": 1e-9}
+"""Factors from an inverse-length unit of q or dQ to nm⁻¹."""
+
 
 def q_unit_read(stated_unit: Optional[Callable], path, setting: str) -> tuple[str, str]:
     """``(unit, where it came from)`` of the file ``path``: the unit its header states (``FROM_FILE``), else

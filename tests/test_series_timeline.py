@@ -66,9 +66,29 @@ def test_a_quiet_series_has_no_jumps_and_a_window_compares_only_its_columns():
     assert other.reference_row == 59 and other.reference[59] == 0.0
 
 
+def test_radius_step_and_isolated_bad_exposures_in_a_200_frame_timeline():
+    # Analytic sphere form factor. X is in Å⁻¹, the radius in Å. Frame 101 begins the second stage.
+    radius = np.repeat([36.0, 49.0], 100)
+    qr = radius[:, None] * X
+    amplitude = 3.0 * (np.sin(qr) - qr * np.cos(qr)) / qr**3
+    level = 120.0 + 9000.0 * amplitude**2
+    odd_rows = (28, 74, 154)
+    for row in odd_rows:
+        level[row, 72:88] += 8000.0  # a single exposure with a bright patch
+    image = np.random.default_rng(913).poisson(level).astype(float)
+    series = build_series_map(_rows(image), "radial")
+    stages, timeline = stages_of(series), timeline_of(series)
+    assert stages.count == 2 and stages.boundaries[2] == (100,)
+    assert {frame.row for frame in stages.odd} == set(odd_rows)
+    assert 100 in timeline.jumps
+    # An odd exposure differs both from the frame before and from the frame after it.
+    assert all(any(jump in (row, row + 1) for jump in timeline.jumps) for row in odd_rows)
+    assert set(timeline.jumps) <= {100, *odd_rows, *(row + 1 for row in odd_rows)}
+
+
 def _rows(image):
     return [(X, image[row], "q (Å⁻¹)", RowLabel(f"film_{row:03d}", source=f"C:/run/film_{row:03d}.tif",
-                                                  timestamp=f"2026-01-01T00:00:{row:02d}"),
+                                                  timestamp=f"2026-01-01T00:{row // 60:02d}:{row % 60:02d}"),
              (Path(f"C:/run/film_{row:03d}.tif"), 0)) for row in range(image.shape[0])]
 
 

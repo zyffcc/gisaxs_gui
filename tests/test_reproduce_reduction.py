@@ -41,7 +41,7 @@ def exported(request, tmp_path_factory):
         path=frame, mode=mode, incidence_deg=0.463 if mode == "gisaxs" else 0.3,
         gisaxs=GisaxsCutSettings(horizontal_row=50.5),
         giwaxs=GiwaxsSettings(chi_q_window=(1.8, 2.0), bins=113),
-        corrections=Corrections(dark_path=str(dark), dark_scale=0.75, mask_shapes=(circle,)),
+        corrections=Corrections(dark_path=str(dark), dark_scale=0.75, mask_shapes=(circle,), lorentz=mode == "giwaxs"),
         with_map=False,
     ))
     assert analysis.drawn_mask[50, 50] and not analysis.drawn_mask[50, 62]
@@ -52,12 +52,17 @@ def exported(request, tmp_path_factory):
     return record, curve, analysis.drawn_mask, dark
 
 
-def test_public_cut_and_azimuth_reproduce_bit_for_bit(exported, tmp_path, capsys):
+def test_public_cut_and_azimuth_reproduce_bit_for_bit(exported, tmp_path, capsys, monkeypatch):
     record, curve, mask, _ = exported
     payload = json.loads(record.read_text(encoding="utf-8"))
     recipe = payload["reproduction"]
     assert recipe["mask"]["sha256"] == hashlib.sha256(mask.astype("u1").tobytes()).hexdigest()
     assert recipe["software_version"] and len(recipe["commit"]) == 40
+
+    def refuse_mask_redraw(*args, **kwargs):
+        pytest.fail("Replay must use the saved mask for every reduction, including ring orientation.")
+
+    monkeypatch.setattr(AnalyzeFrame, "_user_mask", refuse_mask_redraw)
     assert launch(["reproduce", str(record), "--out", str(tmp_path)]) == 0
     assert "identical" in capsys.readouterr().out
     comparison = json.loads((tmp_path / "comparison.json").read_text(encoding="utf-8"))
@@ -136,6 +141,7 @@ def test_summed_nexus_names_every_chunk_and_replays_calibration_terms(tmp_path):
     from src.gimap.features.analyze.domain.normalisation import Normalisation
     from src.gimap.integrations.state import InMemoryInstrumentProfileRepository
     from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
+    from src.gimap.shared.geometry.detector_response import DetectorResponse
     from tests.test_analyze_nexus_sources import H, W, _master, _stack
 
     frame = _master(tmp_path, "example", chunks=(2, 2))
@@ -143,7 +149,10 @@ def test_summed_nexus_names_every_chunk_and_replays_calibration_terms(tmp_path):
     flat = tmp_path / "flat.npy"
     np.save(flat, 1 + np.arange(H * W, dtype=float).reshape(H, W) / (H * W))
     geometry = DetectorGeometry(1.72e-4, 1.72e-4, 2.0, 16.5, 20.0, 1.34, 0.2)
-    profile = InstrumentProfile("test", geometry, None, (H, W))
+    sigma = tmp_path / "sigma.npy"
+    np.save(sigma, np.linspace(1, 3, H * W).reshape(H, W))
+    response = DetectorResponse(counts_per_adu=1.5, offset_adu=0.25, error_model="sigma", sigma_path=str(sigma))
+    profile = InstrumentProfile("test", geometry, None, (H, W), detector_response=response)
     request = AnalysisRequest(frame, frame_index=3, summed_frames=((frame, 1),), mode="gisaxs",
                               gisaxs=GisaxsCutSettings(horizontal_row=8.5), profile_name="test", with_map=False,
                               corrections=Corrections(
@@ -154,11 +163,16 @@ def test_summed_nexus_names_every_chunk_and_replays_calibration_terms(tmp_path):
     path = next(file for file in files if file.suffix == ".json")
     record = json.loads(path.read_text(encoding="utf-8"))
     assert record["frame_index"] == 3 and record["summed_frames"][0]["frame_index"] == 1
-    result = reproduce_record(path)
-    assert result["status"] == "identical"
     chunks = sorted(tmp_path.glob("example_data_*.h5"))
     refs = record["reproduction"]["inputs"]
-    assert len(chunks) == 2 and all(refs[str(file)]["sha256"] for file in [*chunks, frame, flat, background])
+    assert len(chunks) == 2 and all(refs[str(file)]["sha256"] for file in [*chunks, frame, flat, background, sigma])
+    assert record["corrections"]["error_model"] == "sigma"
+    # Resolve the detector profile's sigma file by its verified input path, also when the inputs move.
+    moved_sigma = sigma.rename(path.parent / sigma.name)
+    refs[str(sigma)]["path"] = moved_sigma.name
+    path.write_text(json.dumps(record), encoding="utf-8")
+    result = reproduce_record(path)
+    assert result["status"] == "identical"
     chunks[0].unlink()
     with pytest.raises(ValueError, match="Missing referenced file.*" + chunks[0].name):
         reproduce_record(path, tmp_path / "incomplete")

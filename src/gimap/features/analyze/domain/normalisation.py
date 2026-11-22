@@ -2,18 +2,16 @@
 
 After every other correction each pixel is multiplied by one constant of the frame,
 
-    I_norm = A · I / (t · M · T · d),
+    I_norm = A_abs · I / (t_exp · M · T · d),
 
-``t`` the exposure time (s), ``M`` a monitor value (counts of an ion chamber or diode, a flux or the ring current),
-``T`` the transmission of the sample (0 < T ≤ 1), ``d`` its thickness and ``A`` the scale factor. Thickness is entered
+``t_exp`` the exposure time (s), ``M`` a monitor value (counts of an ion chamber or diode, a flux or the ring current),
+``T`` the transmission of the sample (0 < T ≤ 1), ``d`` its thickness and ``A_abs`` the scale factor. Thickness is entered
 in mm and converted to cm for a secondary-standard calibration. Each term is optional (1 when it is off);
-none is on by default. ``t`` and ``M`` are taken from the file header or typed; ``T`` and ``d`` are typed. A
+none is on by default. ``t_exp`` and ``M`` are taken from the file header or typed; ``T`` and ``d`` are typed. A
 sum of frames is divided by the sum of their exposure times and of their monitor values.
 
-The normalisation only scales: q, the shape of every curve and the error model do not change. For photon counts
-the variance of a pixel multiplied by ``c`` is ``c × value`` (Poisson carried through the factor, as for the flat
-field: ``BinnedMean.add``); a frame whose σ comes from the scatter of its pixels keeps that model, and the scatter
-scales with ``c`` by itself. Either way σ of every point is ``c`` times what it was.
+Multiplication by c preserves q and multiplies each point's standard error by |c|.
+Both sample and reference variances scale by c².
 """
 
 from __future__ import annotations
@@ -27,8 +25,8 @@ OFF, HEADER, VALUE = "off", "header", "value"
 SOURCES = (OFF, HEADER, VALUE)
 EXPOSURE_KEY = "exposure_time_s"
 """The reader's name of the exposure time in a frame's metadata (CBF, EDF, NeXus)."""
-APPLIED_AS = ("I_norm = A * I / (t * M * T * d), after every other correction (one constant per frame); "
-              "q unchanged; sigma multiplied by the same constant (photon counts: Poisson variance c * value)")
+APPLIED_AS = ("I_norm = A_abs * I / (t_exp * M * T * d), after every other correction (one constant per frame); "
+              "q unchanged; sigma multiplied by the same constant")
 NO_EXPOSURE = "The header of {name} gives no exposure time: type it or turn the exposure off."
 NO_MONITOR = "The header of {name} has no monitor value “{key}”: choose another or type it."
 BAD_VALUE = "{what} must be a positive number."

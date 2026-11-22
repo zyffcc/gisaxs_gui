@@ -82,6 +82,8 @@ POOR_FIT_HINT = (
 )
 """A converged reported solution with χ²ᵣ above ``POOR_CHI2`` (the limit of Fitting's poor fit)."""
 PROBABLE = "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model."
+BIC_DECISION = "Predict parameters on {curve} compared the solutions by BIC weight after evidence sampling failed."
+BIC_RIVALS = "{n} solutions have a BIC weight of at least {limit} ({solutions})."
 PROBABLE_HINT = "Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves."
 """Another solution is probable too (``gisaxs_choice.rivals``): the person chooses the model."""
 SPACING = "length scale"
@@ -145,7 +147,7 @@ class GisaxsProcedureMixin:
         cuts = status.get("gisaxs") or {}
         # What the numbers are, in every report (the GIWAXS run says the same in its own words).
         self._decide(**refraction_decision(status.get("geometry"), "gisaxs", given=self._incidence is not None))
-        self._decide(**uncertainty_decision(status.get("error_model"), "gisaxs"))
+        self._decide(**uncertainty_decision(status.get("error_model"), "gisaxs", corrections=status.get("corrections")))
         flat = flat_field_decision(status)
         if flat is not None:
             self._decide(**flat)
@@ -244,13 +246,15 @@ class GisaxsProcedureMixin:
             return
         _index, best = chosen(fit)
         over = fit_names.points_text(best.get("points") or fit.get("fitted_points"))
-        self._decide("fit", _solution_text(best), PREDICTED.format(curve=fit.get("curve"),
-                                                                   points=f" ({over})" if over else ""))
+        by_errors = fit_names.weight_key(best) == "bic_weight"
+        reason = BIC_DECISION if by_errors else PREDICTED
+        self._decide("fit", _solution_text(best), reason.format(curve=fit.get("curve"), points=f" ({over})" if over else ""))
         ranges = _interval_text(best)
         if ranges:  # the refined values with their intervals; from the errors when the sampling did not converge
-            by_errors = best.get("compared_by") == "bic" or "bic" in (best.get("flags") or ())
             self._decide("fit intervals", (INTERVALS_BIC if by_errors else INTERVALS).format(values=ranges),
-                         INTERVALS_WHY)
+                         "reported by the fit" if by_errors else INTERVALS_WHY)
+        for template, values in fit_names.diagnostic_lines(best.get("diagnostics") or {}, best.get("ess")):
+            self._decide("fit", template.format(**values), "reported by the fit")
         for warning in best.get("warnings") or ():
             self._decide("fit caveat", warning, "reported by the fit")
         if best.get("more_warnings"):  # one line for the values that are not the particles'
@@ -280,6 +284,10 @@ class GisaxsProcedureMixin:
         caveat = interface_caveat(best, fit.get("cut_qz"))
         if caveat:  # fitted at q_z = 0 while q_z·R of the cut is beyond what that treatment holds for
             self._attention("fit", caveat, None, QZ_R_HINT)
+        grazing = [flag for flag in best.get("flags") or () if flag.split(":", 1)[0] in fit_names.GRAZING_FLAGS
+                   and not flag.startswith("qzR:")]
+        for note in fit_names.sentences(grazing, len(best.get("components") or ()) > 1):
+            self._attention("fit", note, None, "")
         if poor_fit(best):  # converged, but far from the curve: Fitting's poor-fit limit
             self._attention("fit", POOR_FIT.format(model=best["model"], chi2=f"{best['chi2']:.3g}", limit=f"{POOR_CHI2:g}"),
                             None, POOR_FIT_HINT)
@@ -298,7 +306,8 @@ class GisaxsProcedureMixin:
                      + "; ".join(_solution_text(item) for item in agree)
                      + " (2π/q* is a length scale, not necessarily the particle spacing). ")
         listed = "; ".join(f"rank {item['rank']}, {_solution_text(item)}" for item in probable)
-        self._attention("model", PROBABLE.format(n=len(probable), limit=f"{ASK_PROBABILITY:g}", solutions=listed),
+        template = BIC_RIVALS if fit_names.weight_key(probable[0]) == "bic_weight" else PROBABLE
+        self._attention("model", template.format(n=len(probable), limit=f"{ASK_PROBABILITY:g}", solutions=listed),
                         None, hint + PROBABLE_HINT)
 
     def _gisaxs_report(self) -> Optional[dict]:

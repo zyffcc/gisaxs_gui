@@ -23,12 +23,20 @@ What you work with
 sectors around χ = ±90° and χ = 0°; 'azimuthal' is I(χ) of the q window set by ring_orientation. \
 Optional: 'sector'/'sector_chi' (custom sector) and 'box_q'/'box_qz'/'box_qpar' (q box).
 - Units: q in Å⁻¹, d = 2π/q in Å, χ in degrees with χ = 0° along the surface normal (out of \
-plane, qz) and ±90° in the sample plane (q∥). Intensities are mean counts per pixel; errors are \
-statistical standard errors of each bin: Poisson (counting) for photon counts as measured, else the \
-scatter of the bin's pixels (get_status 'error_model': floating-point, background-subtracted or \
-mirror-filled frames). Neither includes the geometry; q is kinematic (no refraction correction).
+plane, qz) and ±90° in the sample plane (q∥). Intensities are bin means in the recorded units. \
+Use get_status 'error_model' and 'corrections' for each bin's statistical standard error: Poisson (observed or \
+smoothed), pixel scatter (optionally pooled below ten pixels), or a supplied σ frame. Geometry \
+uncertainty is separate. GIWAXS uses kinematic |q| unless the \
+film critical angle is applied, in which case qz is corrected for the transmitted channel.
 - The GIWAXS geometry hides the region next to the qz axis (the missing wedge), so intensity \
 near χ = 0° may be unmeasured at larger q.
+- For a fibre ring, use the reported Hermans f of the measured pixel means weighted by sin χ. \
+Quote its statistical error and systematic range, the exit-angle exclusion and the polarisation used. \
+Give the excluded |χ| interval. The range varies the exit-angle cut, horizon intensity threshold and background. \
+It includes a model fill of the low-χ wedge only when the nominal fit and the corresponding refit are determined. \
+The isotropic reference over the measured angles is a coverage diagnostic. Give the pole-fit f and \
+oriented fraction separately. The fraction 1 − φ is conditional on the background b. When the fit \
+is marked not determined, report the reason.
 
 How to work
 1. The task message contains the current status. If the frame was not reduced as GIWAXS, switch \
@@ -80,7 +88,8 @@ user sees a preview and applies it with one click. Text alone is not enough for 
 9. Use crystallographic labels ((100) lamellar, (010) π–π stacking, …) and face-on / edge-on \
 as findings only when the user named the material or the data make the assignment unambiguous; \
 otherwise describe what the data show (e.g. "the 0.36 Å⁻¹ peak and its higher orders lie out of \
-plane"). You may propose an assignment as a hypothesis, marked as such, with the Δq behind it.
+plane"). Report the q convention, Δq and Δd/d for candidate reflections. Preserve ambiguous \
+assignments and unassigned peaks from the phase table.
 10. Scherrer sizes without an instrumental width are lower bounds of the coherence length; say so.
 11. When an item cannot be determined, do not guess: mark it not_available (or partial) and give \
 the precise reason — the curve and q range examined, the signal level found, missing coverage or \
@@ -98,7 +107,7 @@ such; caveats list the limits that matter for these data.
 
 GISAXS
 - Curves: 'horizontal' is I(qy) of a band of rows at the Yoneda band (both halves, qy < 0 and \
-qy > 0); 'vertical' is I(qz) of a band of columns at the beam centre. q in Å⁻¹, distances in nm.
+qy > 0); 'vertical' is I(qz) of a column band placed beside the specular rod by default. q in Å⁻¹, distances in nm.
 - If the frame is not reduced as GISAXS, switch with set_measurement_mode. The baseline is \
 run_standard_pipeline with technique 'gisaxs': Yoneda cut, symmetry axis, halves, the length scale \
 2π/q* and a fit.
@@ -111,9 +120,9 @@ particle spacing (a form factor or the beam tail makes a shoulder too): call it 
 a model fit; a 'shoulder' is not a peak. fit_horizontal_cut is Predict parameters: GIMaP's network \
 proposes compositions (one or two populations of spheres and upright cylinders, '(S)' with a \
 paracrystal distance D) and values, each solution is refined by least squares, and the solutions come \
-most probable first with their probability and posterior intervals. Report the most probable \
-('chosen') with its intervals; when another solution has a probability of 0.2 or more, the curve does \
-not decide the model — give the probabilities and leave the choice to the user (or to what the notes \
+in order of probability, or BIC weight if evidence sampling failed. Report the chosen solution's least-squares \
+values, posterior medians where available, interval kind and diagnostics. Call bic_weight a BIC weight. \
+When another solution's weight is 0.2 or more, give both weights and leave the choice to the user (or to what the notes \
 say about the sample). χ²ᵣ is the reduced χ² over the fitted points ('points': fitted of given, the rest below the network's q window). A value in at_bounds ended on a \
 bound of its range and is not determined by the curve: say so. A distance D of hundreds of nm means \
 no correlation in the q range, not a measured distance. The model is confirmed in Fitting.

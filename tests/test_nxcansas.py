@@ -181,6 +181,15 @@ def test_analyze_writes_only_the_curves_against_q_and_says_which_q_each_is() -> 
         "film_frame0003: vertical title; Q is q_z", "film_frame0003: box_qpar title; Q is q_par (in the sample plane)"]
     assert sas[0].instrument == Instrument(1.0, 2.0, "D", (1e-4, 1e-4), 0.2) and sas[0].q_unit == "1/angstrom"
     assert json.loads(sas[0].record)["curve"]["key"] == "horizontal" and nxcansas_name("s") == "s_nxcansas.h5"
+    for model, options, phrase in (
+        ("poisson", {"poisson_variance": "smoothed"}, "neighbouring bins"),
+        ("pixel_scatter", {"pooled_scatter": True}, "fewer than ten pixels"),
+        ("sigma_frame", {}, "supplied pixel standard deviations"),
+    ):
+        selected = dict(metadata, error_model=model, corrections=options)
+        item = sas_curves(curves[:1], selected, run="frame")[0]
+        assert phrase in item.description
+        assert json.loads(item.record)["error_model"] == model
 
 
 @pytest.fixture(scope="module")

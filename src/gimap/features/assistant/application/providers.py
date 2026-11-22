@@ -11,8 +11,10 @@ point and the settings can fetch the provider's own list.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import urlsplit
 
 KIND_OPENAI = "openai"
 """OpenAI chat completions at ``base_url``."""
@@ -80,6 +82,32 @@ def provider_url(preset: ProviderPreset, override: Optional[str]) -> str:
     return text or preset.base_url
 
 
+def service_name(name: str, address: str, default: str = "") -> str:
+    """Identify an endpoint override without including credentials, query strings or path tokens."""
+    if not address or address.rstrip("/") == default.rstrip("/"):
+        return name
+    try:
+        parts = urlsplit(address)
+        host, port_number = parts.hostname, parts.port
+    except ValueError:
+        return name  # the client reports an invalid address
+    if not host:
+        return name
+    if ":" in host:
+        host = f"[{host}]"
+    port = f":{port_number}" if port_number is not None else ""
+    return f"{name} ({parts.scheme}://{host}{port})"
+
+
+def anthropic_service() -> str:
+    return service_name("Anthropic", os.environ.get("ANTHROPIC_BASE_URL", ""), "https://api.anthropic.com")
+
+
+def provider_service(key: str, address: str) -> str:
+    preset = provider(key)
+    return service_name(preset.name, address, preset.base_url)
+
+
 __all__ = [
     "AZURE_API_VERSION",
     "KIND_AZURE",
@@ -87,6 +115,9 @@ __all__ = [
     "PROVIDERS",
     "PROVIDER_KEYS",
     "ProviderPreset",
+    "anthropic_service",
     "provider",
+    "provider_service",
     "provider_url",
+    "service_name",
 ]

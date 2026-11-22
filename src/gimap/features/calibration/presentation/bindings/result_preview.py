@@ -23,6 +23,7 @@ from ...application import (
 
 
 from ..pixel_coordinates import fitted_center, image_extent, image_limits, shown_center
+from ..residual_text import rms_text, rms_tip, rms_title
 from ..preview_style import (
     CENTER_COLOR,
     DETECTED_RING_COLOR,
@@ -97,6 +98,14 @@ class ResultPreviewMixin:
         """
         try:
             self._show_overlay_legend()
+            if self.result is not None:
+                candidate = self.result.selected_candidate
+                self._show_tilt(candidate)
+                self._show_rms(candidate)
+                for row, other in enumerate(self.result.candidates):
+                    item = self.candidate_table.item(row, 4)
+                    if item is not None:
+                        item.setToolTip(rms_title(other) + " " + rms_tip(other))
             if getattr(self, "_shown_warnings", None):
                 self._show_warnings(self._shown_warnings)
         except RuntimeError:  # the dialog is being destroyed
@@ -143,7 +152,7 @@ class ResultPreviewMixin:
                 value=f"{value:.2g}", unit=unit, method=tr(candidate.uncertainty_method)))
         self._show_tilt(candidate)
         self.result_labels["Matched rings"].setText(str(candidate.matched_ring_count))
-        self.result_labels["RMS residual"].setText(f"{candidate.rms_residual_px:.3f} px")
+        self._show_rms(candidate)
         # Confidence and warnings are the engine's English (also in the exported record), shown translated.
         self.result_labels["Confidence"].setText(tr(candidate.confidence))
         self._show_warnings(candidate.warnings)
@@ -165,25 +174,31 @@ class ResultPreviewMixin:
         self.redraw_preview()
         self._fit_results_height()
 
+    def _show_rms(self, candidate: CalibrationCandidate) -> None:
+        label = self.result_labels["RMS residual"]
+        tip = rms_tip(candidate)
+        label.setText(rms_text(candidate))
+        label.setToolTip(tip)
+        self.resultRmsTitle.setText(rms_title(candidate))
+        self.resultRmsTitle.setToolTip(tip)
+
     def _show_tilt(self, candidate: CalibrationCandidate) -> None:
         """The Detector tilt row: rot1, rot2 (± 1σ) when they were fitted, else why not."""
         label = self.result_labels["Detector rotation"]
         if not candidate.tilt_refined:
-            label.setText(tr("not refined"))
+            label.setText(trf("rot3 fixed at {rot3}°", rot3=f"{candidate.rot3_deg:g}")
+                          if candidate.rot3_deg else tr("not refined"))
             label.setToolTip(tr("Tick Refine rot1, rot2 and calibrate again; the tilt needs three or more matched rings."))
             return
         rot1, rot2 = candidate.rot1_deg, candidate.rot2_deg
         angles = f"{rot1:.3f}°, {rot2:.3f}°"  # rot1, rot2: numbers and symbols only; what they are and 1σ: the tooltip
         label.setText(angles)
-        tip = trf("pyFAI's rot1 and rot2 (rot3 = {rot3}°), fitted with the centre and the distance.",
+        tip = trf("The fit refined rot1 and rot2 with the centre and distance. It held rot3 fixed at {rot3}°.",
                   rot3=f"{candidate.rot3_deg:g}")
         if candidate.rot1_sigma_deg is not None and candidate.rot2_sigma_deg is not None:
             tip += " " + trf("1σ: {rot1}°, {rot2}° ({method}).", rot1=f"{candidate.rot1_sigma_deg:.2g}",
                              rot2=f"{candidate.rot2_sigma_deg:.2g}", method=tr(candidate.uncertainty_method))
-        if candidate.point_rms_px is not None and candidate.untilted_point_rms_px is not None:
-            tip += " " + trf("Ring points: RMS {tilted} px tilted, {flat} px without the tilt.",
-                             tilted=f"{candidate.point_rms_px:.3f}", flat=f"{candidate.untilted_point_rms_px:.3f}")
-        label.setToolTip(tip)
+        label.setToolTip(tip)  # (the residual with and without the tilt: the RMS row and its tooltip)
 
     def _show_warnings(self, warnings) -> None:
         """The Warning row: the engine's warnings (translated) in the warning style, why they matter as its

@@ -1,12 +1,14 @@
-# Reproducible direct dependencies for Python 3.10 on Windows x64, macOS arm64 / x86_64 and Linux x86_64 (CI only).
+# Release dependencies for Python 3.10 and 3.11 on Windows x64, macOS arm64 / x86_64 and Linux x86_64 (CI only on Linux).
 # Archive pip-freeze.txt and conda-explicit.txt with each build to pin transitive dependencies too.
 -r requirements-full.txt
 numpy==1.26.4
 # The macOS 14 Accelerate wheels have a Mach-O zero-fill defect on macOS 27 (scipy/scipy#25635).
 # Use the official OpenBLAS wheels, with their published hashes, on both Mac architectures.
 scipy==1.15.3; platform_system != 'Darwin'
-scipy @ https://files.pythonhosted.org/packages/a0/6e/0c3bf90fae0e910c274db43304ebe25a6b391327f3f10b5dcc638c090795/scipy-1.15.3-cp310-cp310-macosx_12_0_arm64.whl#sha256=ad3432cb0f9ed87477a8d97f03b763fd1d57709f1bbde3c9369b1dff5503b253 ; platform_system == 'Darwin' and platform_machine == 'arm64'
-scipy @ https://files.pythonhosted.org/packages/78/2f/4966032c5f8cc7e6a60f1b2e0ad686293b9474b65246b0c642e3ef3badd0/scipy-1.15.3-cp310-cp310-macosx_10_13_x86_64.whl#sha256=a345928c86d535060c9c2b25e71e87c39ab2f22fc96e9636bd74d1dbf9de448c ; platform_system == 'Darwin' and platform_machine == 'x86_64'
+scipy @ https://files.pythonhosted.org/packages/a0/6e/0c3bf90fae0e910c274db43304ebe25a6b391327f3f10b5dcc638c090795/scipy-1.15.3-cp310-cp310-macosx_12_0_arm64.whl#sha256=ad3432cb0f9ed87477a8d97f03b763fd1d57709f1bbde3c9369b1dff5503b253 ; platform_system == 'Darwin' and platform_machine == 'arm64' and python_version == '3.10'
+scipy @ https://files.pythonhosted.org/packages/78/2f/4966032c5f8cc7e6a60f1b2e0ad686293b9474b65246b0c642e3ef3badd0/scipy-1.15.3-cp310-cp310-macosx_10_13_x86_64.whl#sha256=a345928c86d535060c9c2b25e71e87c39ab2f22fc96e9636bd74d1dbf9de448c ; platform_system == 'Darwin' and platform_machine == 'x86_64' and python_version == '3.10'
+scipy @ https://files.pythonhosted.org/packages/4a/4a/66ba30abe5ad1a3ad15bfb0b59d22174012e8056ff448cb1644deccbfed2/scipy-1.15.3-cp311-cp311-macosx_12_0_arm64.whl#sha256=34716e281f181a02341ddeaad584205bd2fd3c242063bd3423d61ac259ca7eba ; platform_system == 'Darwin' and platform_machine == 'arm64' and python_version == '3.11'
+scipy @ https://files.pythonhosted.org/packages/96/ab/5cc9f80f28f6a7dff646c5756e559823614a42b1939d86dd0ed550470210/scipy-1.15.3-cp311-cp311-macosx_10_13_x86_64.whl#sha256=993439ce220d25e3696d1b23b233dd010169b62f6456488567e830654ee37a6b ; platform_system == 'Darwin' and platform_machine == 'x86_64' and python_version == '3.11'
 
 matplotlib==3.10.9
 pyqtgraph==0.13.7

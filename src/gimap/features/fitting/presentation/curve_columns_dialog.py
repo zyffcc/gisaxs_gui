@@ -38,14 +38,17 @@ class CurveColumnsDialog(QDialog, CurveColumnsView):
         self.columns_file_label.setText(str(preview.path))
         self.columns_note.setText(tr(COLUMNS_TO_CHOOSE))
         for index, name in enumerate(names):
+            if index in preview.resolution_columns:
+                continue
             for combo in (self.q_column_combo, self.intensity_column_combo, self.sigma_column_combo):
                 combo.addItem(name, index)
         self.sigma_column_combo.insertItem(0, tr(NO_SIGMA), None)
-        self.q_column_combo.setCurrentIndex(0)
+        q_column = preview.q_columns[0] if preview.q_columns else 0
+        self.q_column_combo.setCurrentIndex(max(0, self.q_column_combo.findData(q_column)))
         intensity = preview.intensity_columns[0] if preview.intensity_columns else min(1, len(names) - 1)
-        self.intensity_column_combo.setCurrentIndex(intensity)
+        self.intensity_column_combo.setCurrentIndex(max(0, self.intensity_column_combo.findData(intensity)))
         sigma = preview.uncertainty_columns[0] if preview.uncertainty_columns else None
-        self.sigma_column_combo.setCurrentIndex(0 if sigma is None else sigma + 1)
+        self.sigma_column_combo.setCurrentIndex(max(0, self.sigma_column_combo.findData(sigma)))
         self.columns_unit_combo.setCurrentIndex(max(0, self.columns_unit_combo.findData(unit)))
         self._fill_preview(names)
         for combo in (self.q_column_combo, self.intensity_column_combo, self.sigma_column_combo):
@@ -70,8 +73,11 @@ class CurveColumnsDialog(QDialog, CurveColumnsView):
         q, intensity = self.q_column_combo.currentData(), self.intensity_column_combo.currentData()
         sigma = self.sigma_column_combo.currentData()
         try:
+            dq = self.preview.resolution_columns
+            if len(dq) > 1:
+                raise ValueError("Each curve must have one resolution column.")
             mapping = ColumnMapping(q, intensity, sigma, self.preview.column_names if self.preview.has_header else (),
-                                    self.preview.column_count)
+                                    self.preview.column_count, dq[0] if dq else None)
             validate_columns(self.preview, mapping)
         except ValueError as exc:
             self.columns_problem.setText(tr(SAME_COLUMN) if len({q, intensity, sigma} - {None}) <

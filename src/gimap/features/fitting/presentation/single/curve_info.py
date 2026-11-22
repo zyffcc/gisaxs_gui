@@ -10,10 +10,11 @@ from __future__ import annotations
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application.curve_intake import SIGMA_ESTIMATED, intake_notes, sigma_level
+from ...application.curve_intake import IntakeNote, SIGMA_ESTIMATED, intake_notes, sigma_level
 from ...application.single_fit import NM_PER_A, prepare_points
 from ..intake_texts import note_text, warning_lines
 from ..views.step_widgets import show_line
+from .model_editor import WEIGHT_CHOICES
 
 CURVE_LINE = "{points} points, |q| {low}–{high} nm⁻¹; {fitted} in the fitting range"
 CURVE_TIP = "|q| {low_a}–{high_a} Å⁻¹"
@@ -35,7 +36,11 @@ class CurveInfoMixin:
     """Needs the page's ``session``, ``_data()``, ``_unit_line()`` and the widgets of the Curve and Fit steps."""
 
     def _fill_curve_card(self) -> None:
-        curve, data = self.session.curve, self._data()
+        curve, problem = self.session.curve, ""
+        try:
+            data = self.session.data()
+        except ValueError as exc:
+            data, problem = None, tr(str(exc))
         full = None if curve is None else self.session.all_points()
         if curve is None or full is None or not full.q.size:  # the plot says how to open a curve
             self.curve_card.hide()
@@ -55,46 +60,69 @@ class CurveInfoMixin:
         for spin in (self.range_min_spin, self.range_max_spin):
             spin.blockSignals(False)
         fitted = 0 if data is None else data.q.size
-        # as the fit weights them: σ of the file only when the fitted points have one (``FitData.prepare``)
-        weighted = curve.sigma is not None if data is None else data.sigma is not None
+        mode = self.session.model.weighting
+        file_notes = self.curve_notes(predict=True)
+        missing = any(n.kind == "sigma_estimated" for n in file_notes) or curve.sigma is None
         lines = [trf(CURVE_LINE, points=full.q.size, low=f"{low:.4g}", high=f"{high:.4g}", fitted=fitted)]
-        lines += [tr(SIGMA_FROM_FILE)] if weighted else []
-        notes = self.curve_notes()
+        if not missing:
+            lines.append(tr(SIGMA_FROM_FILE))
+        if curve.dq is not None:
+            lines.append(tr("dQ from the file"))
+        notes = file_notes if mode == "file" else self.curve_notes()
         kept = [note for note in notes if note.kind == "nonpositive" and not note.values.get("left_out")]
         lines += [note_text(note) for note in kept]  # with σ they are fitted like any point: said, not a warning
         lines += [line for line in [self._unit_line()] if line]  # where its unit of q came from (the last line)
         self.curve_info.setText("\n".join(lines))
         self.curve_card.setToolTip(trf(CURVE_TIP, low_a=f"{low / NM_PER_A:.4g}", high_a=f"{high / NM_PER_A:.4g}"))
         self.curve_card.show()
-        why = "" if weighted else "\n".join(tr(text) for text in NO_SIGMA_WHY)
-        level = next((note.values["percent"] for note in notes if note.kind == "sigma_estimated"), "–")
+        why = "\n".join(tr(text) for text in NO_SIGMA_WHY) if missing and mode == "file" else ""
+        level = next((note.values["percent"] for note in file_notes if note.kind == "sigma_estimated"), "–")
         other = warning_lines(n for n in notes if n.kind != "sigma_estimated" and n not in kept)  # the unit, I ≤ 0
         predict = getattr(self, "method", lambda: "")() == "predict"
-        card = [] if weighted else [trf(NO_SIGMA_CARD, percent=level)]
-        step = [] if weighted else ["⚠ " + trf(SIGMA_ESTIMATED, percent=level) if predict else tr(NO_SIGMA_FIT)]
+        if mode == "file":
+            card = [trf(NO_SIGMA_CARD, percent=level)] if missing else []
+            step = [tr(NO_SIGMA_FIT)] if missing else []
+        else:
+            card = [trf("Refine and Search use {weights}.", weights=tr(WEIGHT_CHOICES[mode]))]
+            step = list(card)
+        if problem:
+            card.append("⚠ " + problem)
+            step.append("⚠ " + problem)
+        step += other
+        if predict:
+            step = ["⚠ " + trf(SIGMA_ESTIMATED, percent=level)] if missing else []
+            step += warning_lines(n for n in file_notes if n.kind != "sigma_estimated" and
+                                  (n.kind != "nonpositive" or n.values.get("left_out")))
         show_line(self.sigma_warning, "\n".join(card + other))
-        show_line(self.weighting_note, "\n".join(step + other))  # the Fit step: what its method does
+        show_line(self.weighting_note, "\n".join(step))
         # Results: next to the values, whatever was assumed of the curve they are of
         show_line(self.curve_notes_label, "\n".join(other + card))
         for label in (self.sigma_warning, self.weighting_note):
             label.setToolTip(why)
 
-    def curve_notes(self) -> list:
+    def curve_notes(self, *, predict=False) -> list:
         """What is to be said of the curve as it is fitted (``application.curve_intake.IntakeNote``; ``kind``:
         ``q_unit``, ``sigma_estimated``, ``nonpositive``; the counts and numbers in ``values``)."""
         curve, session = self.session.curve, self.session
         if curve is None:
             return []
         try:
-            made = prepare_points(curve, session.side, session.q_range, session.excluded)
+            mode = "file" if predict else session.model.weighting
+            made = prepare_points(curve, session.side, session.q_range, session.excluded, weighting=mode)
         except ValueError:
             return []
         data = made.data
-        estimated = data.sigma is None
-        return intake_notes(curve.q, unit=curve.source_unit, unit_from=curve.unit_from,
+        estimated = mode == "file" and data.sigma is None
+        count = made.negative + made.zero
+        notes = intake_notes(curve.q, unit=curve.source_unit, unit_from=curve.unit_from,
                             level=sigma_level(data.q, data.intensity) if estimated else None,
-                            negative=made.negative, zero=made.zero, points=int(data.q.size), left_out=estimated,
+                            negative=made.negative if mode == "file" else 0, zero=made.zero if mode == "file" else 0,
+                            points=int(data.q.size), left_out=estimated,
                             invalid_sigma=made.invalid_sigma, unreadable=getattr(curve, "rows_left_out", 0))
+        if mode != "file" and count:
+            notes.append(IntakeNote("nonpositive", "{count} points with I ≤ 0 were left out for the selected weights.",
+                                    {"count": count, "left_out": True}))
+        return notes
 
     def _opened_status(self, name: str, note=None) -> None:
         """The status line after a curve opened: ``note`` (its unit differs from the saved one) or “Opened …”, and
@@ -104,10 +132,12 @@ class CurveInfoMixin:
         first = note or (lambda: trf(OPENED, name=name))
         self._status(lambda: " ".join([first(), *(note_text(n) for n in said)]), "warning" if warn else "ok")
 
-    @staticmethod
-    def _residuals_tip(weighted: bool) -> str:
+    def _residuals_tip(self, weighted: bool) -> str:
         """The residual plot's tooltip: its formula and, with σ, how the points are weighted."""
         if weighted:
+            if self.session.model.weighting in ("relative", "poisson"):
+                return trf("Residuals: {formula}", formula="Δ/σ = (I − model)/σ") + " · " + tr(
+                    WEIGHT_CHOICES[self.session.model.weighting])
             return trf(WEIGHTED_TIP, formula="Δ/σ = (I − model)/σ")
         return tr("Residuals: {formula}").format(formula="Δ ln I = ln(I / model)")
 

@@ -3,6 +3,10 @@
 Auto-exports return their native row from the same reduction. Without exporting, an existing map uses
 its ordinary series-row use case on a worker. The map's cut, settings and subset remain fixed; no raw
 frame is kept, and batch/watch completions share one deduplicated native-row store.
+
+A map that the watch begins (none was built) starts with the frame that was on screen when watching began:
+its row is taken from that frame's reduction at once (``_watch_series_origin``), so the map holds it and every
+frame written after it.
 """
 from __future__ import annotations
 
@@ -29,6 +33,7 @@ class WatchSeriesMixin(WatchOnlineMixin):
         self._watch_series_jobs = set()
         self._watch_series_rereading = False
         self._watch_series_correction_warned = None
+        self._watch_series_origin = None
         self._watch_online_stopped()
         self.series_watch_follow_check.hide()
         timer = getattr(self, "_watch_series_timer", None)
@@ -38,6 +43,8 @@ class WatchSeriesMixin(WatchOnlineMixin):
 
     def _watch_series_start(self) -> None:
         self._stop_watch_series()
+        if self._series_map is None:
+            self._watch_series_origin = self._watch_series_shown()
         if not hasattr(self, "_watch_series_timer"):
             self._watch_series_timer = QTimer(self)
             self._watch_series_timer.setSingleShot(True)
@@ -51,6 +58,19 @@ class WatchSeriesMixin(WatchOnlineMixin):
         with QSignalBlocker(self.series_watch_follow_check):
             self.series_watch_follow_check.setChecked(self.batch_panel.follow_check.isChecked())
         self.series_watch_follow_check.show()
+
+    def _watch_series_shown(self):
+        """``(key, row)`` of the frame on screen as the map's curve would stack it (a frame of one, with its
+        reduction), or ``None``: the first row of a map the watch begins."""
+        analysis = self.view_model.state.analysis
+        if analysis is None or analysis.reduction is None or len(analysis.summed_frames) > 0:
+            return None
+        key = self.series_curve_combo.currentData() or ("horizontal" if analysis.kind == "gisaxs" else "radial")
+        try:
+            self.view_model.begin_series_spool(replace_existing=False)
+            return key, self.view_model.series_row_of(analysis, key)
+        except (ValueError, AttributeError):
+            return None
 
     def _watch_series_ready(self, _analysis) -> None:
         if self.view_model.watch.active and self._watch_series_waiting:
@@ -129,13 +149,24 @@ class WatchSeriesMixin(WatchOnlineMixin):
         key = stored_key if has_map else self.series_curve_combo.currentData()
         if live and not has_map:
             key = key or ("horizontal" if analysis.kind == "gisaxs" else "radial")
+            self.view_model.begin_series_spool(replace_existing=False)  # includes the row captured at watch start
             self._series_keep_curve(key)
             self._series_run = None
             self._series_built["every"] = max(1, self.series_step_spin.value())
-            if requests:
-                earliest = min(model.frame_numbers().get((str(request.path).casefold(), int(request.frame_index)), 1)
-                               for request in requests)
+            numbers = model.frame_numbers()
+            origin, self._watch_series_origin = self._watch_series_origin, None
+            shown = origin[1] if origin is not None and origin[0] == key and int(self._series_built.get("group") or 1) <= 1 \
+                else None
+            at = None if shown is None else numbers.get((str(shown[4][0]).casefold(), int(shown[4][1])))
+            if requests or at is not None:
+                earliest = min([numbers.get((str(request.path).casefold(), int(request.frame_index)), 1)
+                                for request in requests] + ([at] if at is not None else []))
                 self._series_built["first"] = max(self._series_built["first"], earliest)
+            if at is not None and not any((str(row[4][0]).casefold(), int(row[4][1])) == (str(shown[4][0]).casefold(),
+                                                                                           int(shown[4][1]))
+                                          for row in self._series_rows):
+                self._series_rows.append(shown)  # the frame on screen when watching began: the map's first row
+                self._watch_series_timer.start()
             self._watch_series_followed = self._series_row
         built = self._series_built if live else None
         self._watch_series_built = built

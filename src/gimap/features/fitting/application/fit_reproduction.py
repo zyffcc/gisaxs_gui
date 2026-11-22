@@ -11,7 +11,8 @@ from ..domain.fit_model import model_from_dict, model_to_dict
 
 def input_points(data):
     return {"q": data.q.tolist(), "intensity": data.intensity.tolist(),
-            "sigma": None if data.sigma is None else data.sigma.tolist()}
+            "sigma": None if data.sigma is None else data.sigma.tolist(),
+            "dq": None if data.dq is None else data.dq.tolist(), "weight_mode": data.weight_mode}
 
 
 def model_tables(model, data, result=None, curve_table=None):
@@ -33,7 +34,7 @@ def solver_inputs(result):
     return {"start_model": model_to_dict(result.start_model), "method": result.method,
             "seed": result.seed, "max_evaluations": result.evaluation_budget,
             "population_seeds": [model_to_dict(model) for model in result.population_seeds],
-            "stopped_after": result.stopped_after}
+            "stopped_after": result.stopped_after, "restarts": result.restarts, "restart_budget": result.restart_budget}
 
 
 def fit_recipe(model, data, result, source=None, curve_table=None):
@@ -53,7 +54,7 @@ def fit_recipe(model, data, result, source=None, curve_table=None):
     return recipe
 
 
-def predict_tables(encoded, data, display_q=None, sign=1):
+def predict_tables(encoded, data, display_q=None, sign=1, *, report_version=2):
     from ..domain.fit_model import evaluate
 
     tables = {}
@@ -62,8 +63,20 @@ def predict_tables(encoded, data, display_q=None, sign=1):
         for name, columns in model_tables(model, data).items():
             tables[f"solution_{i}_{name}"] = columns
         summary = tables[f"solution_{i}_parameters"]
-        for name in ("probability", "chi2", "log_rmse", "log_evidence", "ess", "samples", "composition"):
+        weight = "bic_weight" if "bic_weight" in row else "probability"
+        summary[weight if report_version >= 2 else "probability"] = [np.nan if row[weight] is None else row[weight]]
+        for name in ("chi2", "log_rmse", "log_evidence", "ess", "samples", "composition"):
             summary[name] = [np.nan if row[name] is None else row[name]]
+        if report_version >= 2:
+            for name, quantiles in row["posterior_summary"].items():
+                for metric, value in quantiles.items():
+                    summary[f"{name}_posterior_{metric}"] = [value]
+            for name, value in row["diagnostics"].items():
+                if isinstance(value, (int, float)):
+                    summary[name] = [value]
+            limits = row["diagnostics"].get("composition_probability_mc68")
+            if limits is not None:
+                summary["composition_mc_low68"], summary["composition_mc_high68"] = [limits[0]], [limits[1]]
         for name, interval in row["values"].items():
             for metric, value in zip(("best", "median", "low68", "high68", "low95", "high95", "error"), interval):
                 summary[f"{name}_{metric}"] = [np.nan if value is None else value]
@@ -77,15 +90,17 @@ def points_from_record(points):
     from ..domain.fit_engine import FitData
 
     # Already prepared in exactly this order, including tied |q| from opposite halves.
-    sigma = points["sigma"]
+    sigma, dq = points["sigma"], points.get("dq")
     return FitData(np.asarray(points["q"], float), np.asarray(points["intensity"], float),
-                   None if sigma is None else np.asarray(sigma, float))
+                   None if sigma is None else np.asarray(sigma, float), None if dq is None else np.asarray(dq, float),
+                   points.get("weight_mode", "file"))
 
 
 def prediction_record(plan, encoded):
     data = points_from_record(plan["points"])
     display = plan.get("display_q")
-    tables = predict_tables(encoded, data, None if display is None else np.asarray(display), plan.get("sign", 1))
+    tables = predict_tables(encoded, data, None if display is None else np.asarray(display), plan.get("sign", 1),
+                            report_version=plan.get("report_version", 1))
     return {**replay_header("fit", tables), **plan}
 
 

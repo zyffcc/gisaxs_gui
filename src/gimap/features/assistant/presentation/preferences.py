@@ -35,6 +35,7 @@ DEFAULTS: dict[str, Any] = {
     "provider": "deepseek",
     "provider_models": {},
     "provider_urls": {},
+    "approved_services": [],
 }
 
 

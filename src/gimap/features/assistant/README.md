@@ -16,7 +16,7 @@
   来回翻译。预设在 `application/providers.py`（OpenAI、DeepSeek、通义千问、Kimi、智谱 GLM、Gemini 兼容
   端点、OpenRouter、硅基流动、Azure OpenAI、Ollama、LM Studio、自定义），只给地址、key 的环境变量和几个
   模型建议；设置页可“Get List”向提供方要模型列表，“Test Connection”发一次带工具的小请求。key 按提供方
-  存在用户数据目录 `assistant_provider_keys.json`（`ProviderKeyStore`，也认各家的环境变量）。设置页的
+  保存在操作系统凭据存储或用户数据目录中（见下文约定；也可使用各家的环境变量）。设置页的
   这一节在 `presentation/provider_section.py`。
 
 在 Analyze 打开并分析一帧后，点命令栏的 **Ask AI…**（或 Tools ▸ Process with AI…）：选择要得到的结果
@@ -139,10 +139,12 @@ Tools 菜单和 Settings ▸ Assistant。Analyze 只暴露 `AnalyzePage.automati
 - 报告里的数值表只来自工具结果（`RunResults`），不是模型转述的文字。
 - 写文件或改校正（`export_results`、`set_valid_intensity_range`）在“确认”模式下先弹窗询问；
   拒绝后模型收到 `declined` 结果，不重试。“全自动”模式不询问，但每一步都记录在面板里。
-- 发送给 API 的只有状态和约化曲线（数字）；只有勾选“允许看图”时才发送一张小的 q 图。
+- 首次向某个服务发送请求前，界面列出服务名并询问是否允许。分析时会发送指令、帧信息和分析结果；勾选“允许看图”后也可以发送 q 图。
 - 每次运行的完整记录（步骤、结果、对话）写入用户数据目录的 `assistant_runs/`；
   模型标记的缺失能力追加到 `assistant_feature_requests.jsonl`，供以后补工具。
-- API key 可存在用户数据目录（`claude_api_key.txt`），也可用环境变量 `ANTHROPIC_API_KEY`；
+- 助手的运行记录、报告和导出结果记录服务商和模型。保存 API 密钥时优先使用系统凭据存储；没有可用后端时，
+  Claude 密钥和其他服务的密钥分别以明文保存在用户数据目录下的 `claude_api_key.txt` 和 `assistant_provider_keys.json`。
+  旧密钥仍可读取；再次保存后删除对应的明文项。也可用服务的环境变量，如 `ANTHROPIC_API_KEY`；
   需要安装 `anthropic` SDK（`python -m pip install anthropic`）。
 - Claude Code 大脑需要 Claude Code 已安装（Claude 桌面版自带一份）并登录一次：
   Settings ▸ Assistant ▸ Sign In…（运行 `claude auth login --claudeai`）。面板显示

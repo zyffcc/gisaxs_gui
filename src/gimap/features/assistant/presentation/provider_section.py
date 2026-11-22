@@ -22,15 +22,16 @@ from PyQt5.QtWidgets import (
 )
 
 from ..application import PROVIDERS, provider
+from ..application.providers import provider_service
 from src.gimap.app.presentation.i18n import tr
 
 from . import preferences
 from .code_section import ROW_SPACING
 from .services import ProviderServices
+from .service_notice import allow_requests
 
 
-PLAIN_TEXT_KEYS = "Saved keys are kept in plain text in the user data folder (readable by your account only)."
-"""The line under both key sections (Claude API and the other providers): both files are plain text (``storage.py``)."""
+KEY_STORAGE = "GIMaP saves keys in the operating system’s credential store when available. Otherwise it saves them in plain text in the user data folder."
 TOOL_CALLING_NOTE = "The model must support tool calling (function calling): the test sends one tiny request with a tool."
 
 
@@ -107,7 +108,7 @@ class ProviderSection(QGroupBox):
         form.addRow("", test_row)
         self.notes_label = _muted("", self)
         form.addRow(self.notes_label)
-        form.addRow(_muted(tr(PLAIN_TEXT_KEYS), self))
+        form.addRow(_muted(tr(KEY_STORAGE), self))
 
         current = str(preferences.read(settings, "provider"))
         self.provider_combo.setCurrentIndex(max(0, self.provider_combo.findData(current)))
@@ -206,13 +207,19 @@ class ProviderSection(QGroupBox):
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
-            self.providers.delete_key(self.key())
+            try:
+                self.providers.delete_key(self.key())
+            except OSError as exc:
+                QMessageBox.warning(self, tr("API key"), str(exc))
+                return
             self._sync_source()
             self.test_label.setText(tr("Key removed."))
 
     def _fetch(self) -> None:
         self._remember_url()
         key, model, url = self.key(), self.model(), self.url()
+        if not allow_requests(self, self.settings, provider_service(key, url)):
+            return
         self.fetch_button.setEnabled(False)
         self.test_label.setText(tr("Asking the provider for its models…"))
         self.tasks.submit(
@@ -239,6 +246,8 @@ class ProviderSection(QGroupBox):
         self._remember_url()
         self._remember_model()
         key, model, url = self.key(), self.model(), self.url()
+        if not allow_requests(self, self.settings, provider_service(key, url)):
+            return
         self.test_button.setEnabled(False)
         self.test_label.setText(tr("Connecting…"))
         self.tasks.submit(
@@ -280,4 +289,4 @@ def describe_provider(settings, providers: ProviderServices | None) -> tuple[boo
     return True, tr("{label} · credentials: {source}.").format(label=label, source=source or tr("none needed")), label
 
 
-__all__ = ["PLAIN_TEXT_KEYS", "ProviderSection", "chosen_provider", "describe_provider"]
+__all__ = ["KEY_STORAGE", "ProviderSection", "chosen_provider", "describe_provider"]

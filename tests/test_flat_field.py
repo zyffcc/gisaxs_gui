@@ -2,7 +2,7 @@
 
 - ``F_ff`` is the flat field divided by its mean over the pixels it keeps (``F_ff > 0.05``, finite, not masked by
   its reader); the corrected value is ``I / F_ff``; pixels it does not keep are left out and counted;
-- photon counts divided by it keep their Poisson variance, scaled: ``Var(I / F) = I / F²`` (``scaled_poisson``), in
+- photon counts divided by it have ``Var(I / F) = I/F² + I² Var(F)/F⁴`` (``scaled_poisson``), in
   GISAXS cuts and GIWAXS bins, and composed with the GIWAXS intensity corrections (``F = F_Ω F_P F_A F_ff``);
 - a floating-point frame keeps the pixel-scatter σ; a flat field of another shape is refused, never resampled;
 - the record's ``corrections`` block names its file, SHA-256, normalisation mean and the pixels it leaves out;
@@ -125,7 +125,7 @@ def test_gisaxs_counts_divided_by_the_flat_field_are_flat_with_scaled_poisson_er
     assert np.std(measured.intensity) / np.mean(measured.intensity) > 0.15  # the detector's response, measured
     residual = (curve.intensity - LEVEL) / curve.sigma
     assert abs(float(np.mean(curve.intensity)) - LEVEL) < 3.0 and 0.8 < float(np.std(residual)) < 1.2
-    # σ of every column is Var(I/F) = I/F² summed over its pixels: √(Σ I'/F) / n.
+    # The normalisation mean is fixed. For an uncorrected Poisson flat, Var(F) = F / mean(D_ff).
     start, stop = curve.region["rows"]
     data, valid = corrected.data[start:stop], corrected.valid[start:stop]
     columns = [column for column in range(GISAXS_SHAPE[1]) if valid[:, column].any()]
@@ -134,7 +134,9 @@ def test_gisaxs_counts_divided_by_the_flat_field_are_flat_with_scaled_poisson_er
         inside = valid[:, column]
         values, f = data[inside, column].astype(float), factor[start:stop][inside, column].astype(float)
         n = int(inside.sum())
-        expected.append(math.sqrt(max(float(np.sum(values / f)), (float(np.sum(1.0 / f)) / n) ** 2)) / n)
+        shot = max(np.sum(values / f), np.mean(1.0 / f)**2)
+        reference = np.sum(values**2 / (f * corrected.flat_field.mean))
+        expected.append(math.sqrt(shot + reference) / n)
     np.testing.assert_allclose(curve.sigma, expected, rtol=1e-5)
 
 

@@ -4,6 +4,7 @@ import csv
 import json
 
 import numpy as np
+import pytest
 
 from src.gimap.app.reproduce import reproduce_record
 from src.gimap.features.analyze.application import BatchChoices, CutRegion
@@ -69,3 +70,44 @@ def test_built_series_replays_map_and_selected_profile(batch_page, tmp_path):
             assert columns == ["x", "intensity"]
         assert measured.shape == reproduced.shape
         assert measured.tobytes() == reproduced.tobytes()
+
+
+@pytest.mark.parametrize("auto_export", [False, True])
+def test_watched_map_replays_after_project_restore(tmp_path, auto_export, monkeypatch):
+    from src.gimap.features.analyze.presentation.bindings import project
+    from tests.insitu_frames import write_frame
+    from tests.test_analyze_workspace import _done
+    from tests.test_insitu_online import _look, _watching
+    from tests.test_live_following import _close
+
+    page, folder = _watching(tmp_path)
+    try:
+        page.auto_export_check.setChecked(auto_export)
+        write_frame(folder, 1)
+        write_frame(folder, 2)
+        _look(page)
+        page.stop_watch()
+        assert page._series_map.rows == 3
+        assert bool(list((folder / "gimap_analysis").glob("*_analysis.json"))) == auto_export
+        state = json.loads(json.dumps(page.project_state()))
+        assert all(row.get("reduction_record") for row in state["series_map"]["rows"])
+        # End the old session's storage before reopening the project.
+        page.clear_files()
+        _done(page)
+        page.view_model.release_series_spool()
+        assert page.apply_project_state(state) == []
+        _done(page)
+        path = page.export_series_csv(tmp_path / "reopened.csv")
+        assert reproduce_record(path.with_suffix(".json"))["status"] == "identical"
+
+        values = sum(row[0].size + row[1].size for row in page._series_rows)
+        monkeypatch.setattr(project, "MOST_KEPT", values)
+        compact = page.project_state()
+        assert compact["series_map"]["reduction_records_too_large"]
+        assert all("reduction_record" not in row for row in compact["series_map"]["rows"])
+        assert page.apply_project_state(compact) == [project.RECIPES_NOT_KEPT]
+        _done(page)
+        assert page._series_map.rows == 3
+    finally:
+        page.stop_watch()
+        _close(page)

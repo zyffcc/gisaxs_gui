@@ -6,8 +6,8 @@ The intensity is GIMaP's one forward model of a cut, ``cut_model`` (Physics and 
 
 * T_i: a particle family — sphere, random cylinder, vertical cylinder — averaged over its size distribution, each
   normalised to T(0) = 1, so Int_i is the forward intensity of component i whatever its family. The sizes follow the
-  component's ``law``: a Gaussian by number (the default now), a log-normal by number, or a Gaussian by
-  intensity (earlier Fitting); the spreads are relative (σR/R, σh/h);
+  component's ``law`` (Gaussian by number by default). New log-normal populations use medians and log widths;
+  the Schulz law uses means and relative widths. Saved models retain their parameter conventions;
 * with ``structure``, the interference function of ``interference``: the 1D paracrystal of mean distance D and
   σnn/D, the relative standard deviation of the neighbour distance (Hosemann; the default), or, for manual fits only
   (``model_library``), the 2D hexagonal paracrystal (D, σnn/D) or Percus–Yevick hard spheres (R_HS, φ); in the LMA
@@ -40,9 +40,10 @@ import numpy as np
 from .candidates import CandidateComponentParameters, CandidateParameterMapping
 from .cut_model import Geometry, size_averages
 from .cut_model import conventions, sizes
+from .cut_model import manual_sizes
 from .cut_model.geometry import from_angles
 from .cut_model.model import tail
-from .cut_model.resolution import table_grid, tabulated
+from . import fit_resolution
 from .cut_model.shapes import RADIUS_POWER
 from .cut_model.structure import paracrystal
 from . import model_library
@@ -81,10 +82,9 @@ GLOBALS = BASE_GLOBALS + RESOLUTION + GRAZING
 LINEAR = frozenset({"Int", "background", "res_amplitude"})
 """Scales: with the others fixed, the intensity is linear in them (solved exactly while fitting)."""
 INF = math.inf
-SIZE_LAWS = {"number_gauss": "Gaussian, by number", "lognormal": "Log-normal, by number",
-             "intensity_gauss": "Gaussian, by intensity"}
+SIZE_LAWS = manual_sizes.LABELS
 """The size laws of a component (``cut_model.sizes``) and their labels; the first is the default."""
-DEFAULT_LAW = "number_gauss"
+DEFAULT_LAW = "gaussian"
 LEGACY_LAWS = {"sphere": "intensity_gauss", "cylinder": "intensity_gauss", "vertical_cylinder": "number_gauss"}
 """The sizes of earlier Fitting, per family (what a ``gimap_fit_model_v1`` file means)."""
 SCHEMA, LEGACY_SCHEMA = "gimap_fit_model_v2", "gimap_fit_model_v1"
@@ -154,6 +154,14 @@ class Parameter:
         return cls(info.value if value is None else float(value), info.free, info.lower, info.upper)
 
 
+def parameter_info(component, key: str) -> ParameterInfo:
+    info = INFO[key]
+    if component is not None and component.law == "lognormal_median" and key in manual_sizes.LOGNORMAL_PARAMETERS:
+        label, tip = manual_sizes.LOGNORMAL_PARAMETERS[key]
+        return replace(info, label=label, tip=tip)
+    return info
+
+
 @dataclass(frozen=True)
 class Component:
     family: str
@@ -192,6 +200,14 @@ class FitModel:
     """A known substrate: with αi and αf, spheres in the four-term DWBA on it (``grazing``)."""
     cut: Optional[VerticalCut] = None
     """A vertical cut (fits of several curves): the curve is I(q_z) at the cut's in-plane q."""
+    resolution_mode: str = "constant"
+    weighting: str = "file"
+
+    def __post_init__(self):
+        if self.resolution_mode not in ("constant", "file"):
+            raise ValueError(f"Unknown resolution mode {self.resolution_mode!r}")
+        if self.weighting not in ("file", "relative", "poisson", "none"):
+            raise ValueError(f"Unknown fit weighting {self.weighting!r}")
 
     # -- addressing: ("globals", key) or (component index, key) ----------------------
 
@@ -199,7 +215,8 @@ class FitModel:
         """Every parameter in use, components first."""
         items = [((index, key), component.params[key])
                  for index, component in enumerate(self.components) for key in component.keys()]
-        return items + [(("globals", key), self.globals[key]) for key in GLOBALS]
+        return items + [(("globals", key), self.globals[key]) for key in GLOBALS
+                        if key != "q_resolution" or self.resolution_mode == "constant"]
 
     def get(self, path: tuple) -> Parameter:
         owner, key = path
@@ -353,26 +370,37 @@ def resolution_shape(model: FitModel, q: np.ndarray) -> np.ndarray:
     return np.asarray(tail(q, model.globals["res_width"].value, model.globals["res_exponent"].value), float)
 
 
-def _smeared_forms(model: FitModel, q: np.ndarray, sigma: float, cache: Optional[dict], geometry) -> list[np.ndarray]:
-    """Each component's T convolved with a Gaussian of 1σ ``sigma`` in q (``cut_model.resolution``: tabulated on the
-    points and a logarithmic grid, ``table_grid``, then convolved where σ exceeds the grid's spacing); the beam tail
-    and the background are not smeared: the first describes the resolution near q = 0 itself."""
-    if not model.components:
-        return []
-    grid = table_grid(q, sigma)
-    fine = None if cache is None else cache.setdefault(("smearing grid", grid.size, float(grid[0]), float(grid[-1])), {})
-    forms = [component_form(component, grid, fine, geometry) for component in model.components]
-    return list(tabulated(q, grid, np.array(forms), sigma))
+def measured_form(model, component, q, dq, cache, geometry):
+    """A scale column on the measured points, including their individual resolution when selected."""
+    if model.resolution_mode != "file" or model.cut is not None:
+        return component_form(component, q, cache, geometry)
+    key = ("file resolution", q.tobytes(), None if dq is None else np.asarray(dq).tobytes(),
+           component.family, component.law, component.interference, component.coupling, component.structure,
+           tuple(component.value(k) for k in component.keys() if k != "Int"), geometry)
+    return _cached(cache, key, lambda: fit_resolution.pointwise_form(component, q, dq, geometry, component_form))
 
 
-def evaluate(model: FitModel, q: np.ndarray, *, parts: bool = False, cache: Optional[dict] = None):
+def particle_forms(model, q, dq, cache=None, *, scale_columns=False):
+    """Particle terms for evaluation or variable projection, with the selected q resolution.
+
+    Predict and earlier models used unsmeared columns for their scalar-resolution scale solve. Preserve that
+    calculation for their original size laws and weighting. Manual laws and new weights profile the smeared forms.
+    """
+    geometry = grazing(model)
+    sigma = model.globals["q_resolution"].value
+    if model.resolution_mode == "constant" and sigma > 0 and q.size and model.cut is None:
+        legacy = scale_columns and model.weighting == "file" and all(c.law not in manual_sizes.LAWS for c in model.components)
+        if not legacy:
+            return fit_resolution.constant_forms(model, q, sigma, cache, geometry, component_form)
+    return [measured_form(model, c, q, dq, cache, geometry) for c in model.components]
+
+
+def evaluate(model: FitModel, q: np.ndarray, *, parts: bool = False, cache: Optional[dict] = None, dq=None):
     """The model on ``q`` (nm⁻¹); with ``parts``, also each term: ``(total, {name: curve})``."""
     q = np.abs(np.asarray(q, dtype=float))
     g = {key: float(parameter.value) for key, parameter in model.globals.items()}
-    terms, geometry = {}, grazing(model)
-    sigma = g.get("q_resolution", 0.0)
-    forms = (_smeared_forms(model, q, sigma, cache, geometry) if sigma > 0 and q.size and model.cut is None
-             else [component_form(component, q, cache, geometry) for component in model.components])
+    terms = {}
+    forms = particle_forms(model, q, dq, cache)
     for index, (component, form) in enumerate(zip(model.components, forms)):
         terms[f"{index + 1}: {FAMILIES[component.family][0]}"] = g["k"] * component.value("Int") * form
     if g["res_amplitude"] != 0:
@@ -467,107 +495,14 @@ def _widened(parameter: Parameter) -> Parameter:
     return replace(parameter, lower=lower, upper=upper)
 
 
-# -- JSON -----------------------------------------------------------------------------
-
-
 def model_to_dict(model: FitModel) -> dict:
-    """The model as JSON. Links (``tie``), another interference function, contact off and inequality constraints
-    are written only when used, so a model without them reads as in earlier versions."""
-    def parameter(p: Parameter) -> dict:
-        out = {"value": p.value, "free": p.free, "lower": p.lower if math.isfinite(p.lower) else None,
-               "upper": p.upper if math.isfinite(p.upper) else None}
-        if p.tie:
-            out["tie"] = p.tie
-        return out
-
-    def component(c: Component) -> dict:
-        out = {"family": c.family, "structure": c.structure, "coupling": c.coupling, "sizes": c.law,
-               "params": {key: parameter(c.params[key]) for key in c.keys()}}
-        if c.interference != DEFAULT_INTERFERENCE:
-            out["interference"] = c.interference
-        if c.heights:
-            out["heights"] = True
-        return out
-
-    out = {
-        "schema": SCHEMA, "q_unit": "nm^-1", "spreads": "relative", "spacing_disorder": "sigma_nn/D (Hosemann)",
-        "components": [component(c) for c in model.components],
-        "globals": {key: parameter(model.globals[key]) for key in GLOBALS},
-    }
-    if not model.contact:
-        out["contact"] = False
-    if model.inequalities:
-        out["constraints"] = [inequality.to_dict() for inequality in model.inequalities]
-    if model.substrate is not None:
-        out["substrate"] = model.substrate.to_dict()
-    if model.cut is not None:
-        out["vertical_cut"] = vars(model.cut).copy()
-    return out
-
-
-def _legacy_params(family: str, raw: Mapping) -> dict:
-    """A component's parameters of a ``gimap_fit_model_v1`` file in this model's conventions: σD/D → σnn/D
-    (× √(2π)); a vertical cylinder's Int × 10⁻⁶⟨R⁴⟩/4."""
-    params = {key: dict(value) for key, value in raw.items() if key != "sigma_D"}
-    if "sigma_D" in raw:
-        params["sigma_nn"] = {name: (None if raw["sigma_D"].get(name) is None else
-                                     float(conventions.sigma_nn_from_sigma_d(raw["sigma_D"][name])))
-                              if name in ("value", "lower", "upper") else value
-                              for name, value in raw["sigma_D"].items()}
-    if family == "vertical_cylinder" and "Int" in params:
-        radius = float((raw.get("R") or {}).get("value", INFO["R"].value))
-        spread = float((raw.get("sigma_R") or {}).get("value", INFO["sigma_R"].value))
-        scale = _legacy_scale(family, radius, spread)
-        params["Int"] = {name: (value * scale if name in ("value", "lower", "upper") and value is not None else value)
-                         for name, value in params["Int"].items()}
-    return params
+    from . import fit_model_json
+    return fit_model_json.model_to_dict(model)
 
 
 def model_from_dict(data: Mapping) -> FitModel:
-    schema = data.get("schema")
-    if schema not in (SCHEMA, LEGACY_SCHEMA):
-        raise ValueError("Not a GIMaP fit model (schema gimap_fit_model_v2 or v1)")
-
-    def parameter(key: str, raw: Mapping) -> Parameter:
-        info = INFO[key]
-        lower, upper = raw.get("lower"), raw.get("upper")
-        tie = raw.get("tie")
-        return Parameter(float(raw.get("value", info.value)), bool(raw.get("free", info.free)) and not tie,
-                         info.lower if lower is None else float(lower), INF if upper is None else float(upper),
-                         str(tie) if tie else None)
-
-    components = []
-    for raw in data.get("components") or ():
-        family = str(raw["family"])
-        legacy = schema == LEGACY_SCHEMA
-        law = LEGACY_LAWS.get(family, DEFAULT_LAW) if legacy else str(raw.get("sizes") or DEFAULT_LAW)
-        component = new_component(family, structure=bool(raw.get("structure", True)),
-                                  law=law if law in SIZE_LAWS else DEFAULT_LAW, heights=bool(raw.get("heights")))
-        coupling = str(raw.get("coupling") or "lma")
-        component = replace(component, coupling=coupling if coupling in COUPLINGS else "lma")
-        interference = str(raw.get("interference") or DEFAULT_INTERFERENCE)
-        if interference not in INTERFERENCES:
-            raise ValueError(f"Unknown interference function {interference!r}")
-        component = with_interference(component, interference)
-        params = dict(component.params)
-        source = _legacy_params(family, raw.get("params") or {}) if legacy else (raw.get("params") or {})
-        for key, value in source.items():
-            if key in params:
-                params[key] = parameter(key, value)
-        components.append(replace(component, params=params))
-    globals_ = {key: Parameter.default(key) for key in GLOBALS}
-    for key, value in (data.get("globals") or {}).items():
-        if key in globals_:
-            globals_[key] = parameter(key, value)
-    from . import fit_links  # links read the model; the model does not need them otherwise
-
-    constraints = tuple(fit_links.Inequality(str(item["parameter"]), str(item["relation"]), str(item["expression"]))
-                        for item in data.get("constraints") or ())
-    model = FitModel(tuple(components), globals_, contact=bool(data.get("contact", True)), inequalities=constraints,
-                     substrate=Substrate.from_dict(data.get("substrate")),
-                     cut=VerticalCut(**data["vertical_cut"]) if data.get("vertical_cut") else None)
-    return fit_links.apply_links(fit_links.with_inequalities(model, constraints)) if constraints or any(
-        p.tie for _path, p in model.parameters()) else model
+    from . import fit_model_json
+    return fit_model_json.model_from_dict(data)
 
 
 __all__ = [
@@ -575,5 +510,5 @@ __all__ = [
     "RESOLUTION", "GLOBALS", "GRAZING", "INFO", "LEGACY_LAWS",
     "LINEAR", "SIZE_LAWS", "Component", "FitModel", "Parameter", "ParameterInfo", "component_form", "evaluate",
     "grazing", "intensity_size", "number_size", "qz_plus_r", "sigma_nn_over_d", "from_manual", "model_from_dict",
-    "model_to_dict", "new_component", "resolution_shape", "to_manual", "with_interference",
+    "model_to_dict", "new_component", "parameter_info", "resolution_shape", "to_manual", "with_interference",
 ]

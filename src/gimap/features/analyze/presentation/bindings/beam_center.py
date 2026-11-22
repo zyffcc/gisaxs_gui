@@ -20,6 +20,7 @@ from src.gimap.app.presentation.theme import set_state
 from ..center_dialog import CenterDialog
 from ..texts import message_text
 from ..view_model import CENTER_HEADER, CENTER_SESSION
+from .roll_check import RollCheckMixin
 
 CENTER_TEXT = {
     "profile": "Beam {x}, {y} px · profile",
@@ -29,10 +30,11 @@ CENTER_TEXT = {
 """The beam-centre button, one template per source (whole sentences translate better than pieces)."""
 
 
-class BeamCenterMixin:
+class BeamCenterMixin(RollCheckMixin):
     """Own the beam-centre chip, its menu and the draggable target on the image."""
 
     def _connect_center(self) -> None:
+        self._connect_roll_check()
         self._center_refinement = None
         self._center_analysis_pending = False
         self._geometry_dialog = None
@@ -167,6 +169,7 @@ class BeamCenterMixin:
         self.run_analysis()
 
     def _update_center_control(self) -> None:
+        self._refresh_roll_check()
         state = self.view_model.center_state()
         center, source = state["center"], state["source"]
         button = self.center_button

@@ -157,7 +157,9 @@ def test_posterior_check_of_a_refine_fit(tmp_path):
         assert "Refine or Search" in page.check_what.text()
         page.check_steps.setValue(400)
         page.run_check()
-        _settle(page)
+        # The independent ensembles can still be sampling after the usual GUI wait.
+        _settle(page, limit=600)
+        assert not page.tasks.is_busy(), page.check_verdict.text()
         assert page.check_table.rowCount() == 2
         assert {page.check_table.item(i, 0).text() for i in range(2)} == {"R_1", "sigma_R_1"}
         assert "R̂" in page.check_verdict.text() and "check only" in page.check_verdict.text()
@@ -165,6 +167,12 @@ def test_posterior_check_of_a_refine_fit(tmp_path):
         assert page.save_check_dialog(tmp_path / "check.json")
         record = json.loads((tmp_path / "check.json").read_text(encoding="utf-8"))
         assert record["checked"] == "fit" and record["steps"] == 400 and len(record["values"]) == 2
+        assert "split R̂" in page._report_text("text")
+        page.session.set_range((0.2, 1.0))
+        page.render_check()
+        assert not page.check_run.isEnabled() and "data selection changed" in page.check_verdict.text()
+        assert page.check_report_blocks() == []
+        page.session.set_range(None)
         page.set_model(page.session.model.with_values({(0, "R"): 4.2}))
         page.render_check()
         assert "model changed" in page.check_verdict.text()
@@ -222,8 +230,35 @@ def test_both_cuts_of_a_public_frame_reach_the_joint_fit(tmp_path):
         loaded = LocalCurveRepository().load(LoadCurveRequest(vertical, "angstrom"))
         found = hints(loaded.observation)
         assert found["kind"] == "vertical" and found["alpha_i"] == geometry["alpha_i_deg"] == 0.463
-        assert found["wavelength"] == 0.134 and found["q_parallel"] >= 0  # the automatic cut: at the beam centre
+        assert found["wavelength"] == 0.134 and found["q_parallel"] > 0
+        assert found["band_crosses_specular"] is False
         assert np.all(np.asarray(loaded.q) > 0)
     finally:
         page.dispose()
         page.close()
+
+
+def test_joint_fit_warns_for_a_band_that_covers_the_rod_even_with_its_centre_off_rod(tmp_path):
+    from src.gimap.features.fitting.presentation.single.joint_fit_dialog import JointFitDialog
+
+    page = _page()
+    try:
+        path = _vertical_file(tmp_path, _cylinders())
+        path.write_text(path.read_text(encoding="utf-8").replace('"cut": "vertical"',
+                        '"cut": "vertical", "band_crosses_specular": true'), encoding="utf-8")
+        dialog = JointFitDialog(page, page.view_model, page)
+        assert dialog.add_file(path)
+        assert dialog.specs[0].q_parallel == 0.3
+        assert "crosses the specular rod" in dialog.joint_status.text()
+        dialog.remove_selected()
+        assert not dialog.joint_status.text()
+        # A curve without band metadata still warns on the centre, including a manually typed position.
+        arrays = np.ones(5)
+        dialog.add_spec(CurveSpec("No band", arrays, arrays, kind="vertical", q_parallel=0.0))
+        assert "on or near the specular rod" in dialog.joint_status.text()
+        dialog.joint_q_parallel.setValue(0.3)
+        assert not dialog.joint_status.text()
+        dialog.dispose()
+    finally:
+        page.dispose()
+        page.deleteLater()

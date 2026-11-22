@@ -1,7 +1,7 @@
 """Behaviour of the Phases window: edit the phases, show their reflections, fit the pole figure of a ring.
 
 The phases are the page's ``IndexingModel``; every change draws the overlay again (``page.indexing_changed``).
-The pole figure is fitted on the task runner and drawn here: the folded, Lorentz-corrected I(χ) of the ring in
+The pole figure is fitted on the task runner and drawn here: the folded (I(χ) − b) sin χ of the ring in
 Analyze's I(χ) window (points, unmeasured bins left out) and the fitted distribution (line)."""
 
 from __future__ import annotations
@@ -17,11 +17,20 @@ from PyQt5.QtWidgets import QCheckBox, QDialog, QFileDialog, QTableWidgetItem, Q
 
 from src.gimap.app.presentation.components.toast import show_toast
 from src.gimap.app.presentation.i18n import language_changed, tr, trf
+from src.gimap.app.presentation.theme import theme_color, theme_manager
 
 from ..application.export_record import analysis_metadata, export_stem
 from ..application.indexing import POWDER, PhaseSpec, table_rows
 from ..application.pole_figure import pole_figure, pole_figure_csv
-from .indexing_texts import MODEL_NAMES, orientation_text, phase_cell_text, pole_result_text, ring_text, symmetry_text
+from .indexing_texts import (
+    MODEL_NAMES,
+    orientation_text,
+    phase_cell_text,
+    phase_notes,
+    pole_result_text,
+    ring_text,
+    symmetry_text,
+)
 from .views.indexing_view import IndexingView
 
 POLE_POINTS, POLE_LEFT_OUT, POLE_MODEL = "#2563eb", "#9ca3af", "#f97316"
@@ -66,8 +75,18 @@ class IndexingPanel(QDialog, IndexingView):
         self.background_check.toggled.connect(lambda on: self.background_spin.setEnabled(not on))
         self.direction_combo.currentIndexChanged.connect(self._direction_chosen)
         self._direction_chosen()
-        language_changed().connect(lambda _language: self.refresh())
+        self._displayed_pole = None
+        language_changed().connect(self._refresh_language)
+        theme_manager().changed.connect(self._theme_changed)  # the warning colour of a phase
         self._fill_settings()
+
+    def _refresh_language(self, *_args) -> None:
+        self.refresh()
+        if self._displayed_pole is not None:
+            self._show_pole(self._displayed_pole)
+
+    def _theme_changed(self, *_args) -> None:
+        self.refresh()
 
     @property
     def model(self):
@@ -85,9 +104,9 @@ class IndexingPanel(QDialog, IndexingView):
             self.status_label.setText(trf("Could not read the CIF: {error}", error=str(error)))
             return
         self._changed(select=index)
-        warnings = self.model.phases[index].warnings
-        self.status_label.setText(" ".join(tr(text) for text in warnings) if warnings else trf(
-            "Read {name} from {file}.", name=self.model.phases[index].name, file=Path(path).name))
+        spec = self.model.phases[index]
+        read = trf("Read {name} from {file}.", name=spec.name, file=Path(path).name)
+        self.status_label.setText(read + (" ⚠ " + tr("See the Symmetry column.") if spec.warnings else ""))
 
     def _add_cell(self) -> None:
         index = self.model.add(PhaseSpec(trf("Phase {n}", n=len(self.model.phases) + 1),
@@ -121,12 +140,13 @@ class IndexingPanel(QDialog, IndexingView):
             for spin, value in zip((*self.cell_spins, *self.angle_spins), spec.cell):
                 spin.setValue(float(value))
             self.centring_combo.setCurrentText(spec.centring)
-            self.centring_combo.setEnabled(not spec.operations)
+            self.centring_combo.setEnabled(not spec.operations and not spec.symmetry)  # a typed cell only
             self.orientation_combo.setCurrentIndex(max(0, self.orientation_combo.findData(spec.orientation)))
             for spin, value in zip(self.index_spins, spec.indices):
                 spin.setValue(int(value))
                 spin.setEnabled(spec.orientation != POWDER)
-            self.symmetry_label.setText(symmetry_text(spec))
+            notes = phase_notes(spec)
+            self.symmetry_label.setText(symmetry_text(spec) + ("\n" + notes if notes else ""))
         finally:
             self._filling = False
 
@@ -200,10 +220,15 @@ class IndexingPanel(QDialog, IndexingView):
                 self.phase_table.setCellWidget(row, 0, check)
                 name = _item(spec.name)
                 name.setForeground(_color(spec.color))
+                if spec.formula:
+                    name.setToolTip(trf("Formula: {formula}", formula=spec.formula))
                 self.phase_table.setItem(row, 1, name)
                 self.phase_table.setItem(row, 2, _item(phase_cell_text(spec)))
                 symmetry = _item(symmetry_text(spec))
-                symmetry.setToolTip(symmetry.text())
+                notes = phase_notes(spec)
+                symmetry.setToolTip(symmetry.text() + ("\n" + notes if notes else ""))
+                if spec.warnings:  # kept while the phase is listed, not a status line the next action replaces
+                    symmetry.setForeground(_color(theme_color("warning")))
                 self.phase_table.setItem(row, 3, symmetry)
                 self.phase_table.setItem(row, 4, _item(orientation_text(spec)))
         if selected is not None and selected < len(self.model.phases):
@@ -274,24 +299,30 @@ class IndexingPanel(QDialog, IndexingView):
 
     def _pole_ready(self, result) -> None:
         self.model.last_pole = result
+        self._displayed_pole = result
+        self._show_pole(result)
+
+    def _show_pole(self, result) -> None:
+        self.pole_plot.set_labels("χ (°)", tr("N(χ) ∝ crystallites per degree"))
         fit, profile = result.fit, result.fit.profile
         curves, colors, markers = [], [], []
         if profile is not None:
             shown = profile.measured & np.isfinite(profile.value)
             fitted = shown & (profile.chi <= result.chi_max)
-            curves.append(("I(χ) of the ring", profile.chi[fitted], profile.value[fitted]))
+            curves.append((tr("Measured N(χ)"), profile.chi[fitted], profile.value[fitted]))
             colors.append(POLE_POINTS)
             markers.append(True)
             if (shown & ~fitted).any():
-                curves.append(("not fitted", profile.chi[shown & ~fitted], profile.value[shown & ~fitted]))
+                curves.append((tr("not fitted"), profile.chi[shown & ~fitted], profile.value[shown & ~fitted]))
                 colors.append(POLE_LEFT_OUT)
                 markers.append(True)
         if fit.ok and fit.curve_chi.size:
-            curves.append((MODEL_NAMES.get(fit.model, fit.model), fit.curve_chi, fit.curve_value))
+            curves.append((tr(MODEL_NAMES.get(fit.model, fit.model)), fit.curve_chi, fit.curve_value))
             colors.append(POLE_MODEL)
             markers.append(False)
         self.pole_plot.set_curves(curves, colors, markers=markers)
-        self.pole_plot.set_title(ring_text(self._page.view_model.state.analysis, short=True))
+        low, high = result.window
+        self.pole_plot.set_title(trf("Pole figure, q = {low}–{high} Å⁻¹", low=f"{low:.3f}", high=f"{high:.3f}"))
         self.result_label.setText(pole_result_text(result))
         if not result.fit.ok:
             return

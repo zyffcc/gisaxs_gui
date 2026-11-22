@@ -467,8 +467,7 @@ def _through_the_dialog(monkeypatch, act=lambda dialog: None, answer: str = "rep
 def _pressing_enter(monkeypatch, act=lambda dialog: None) -> list:
     """Every answer left as it comes: Batch Export / Send Series with its Export button (after ``act(dialog)``),
     a question with the button Enter presses. Returns ``(question, that button)`` of every question asked."""
-    from PyQt5.QtWidgets import QMessageBox
-
+    from src.gimap.app.presentation.question_box import QuestionBox
     from src.gimap.features.analyze.presentation.batch_dialog import BatchExportDialog
 
     asked = []
@@ -483,7 +482,7 @@ def _pressing_enter(monkeypatch, act=lambda dialog: None) -> list:
         dialog.export_button.click()
         return dialog.result()
 
-    monkeypatch.setattr(QMessageBox, "exec_", press)
+    monkeypatch.setattr(QuestionBox, "exec_", press)
     monkeypatch.setattr(BatchExportDialog, "exec_", export)
     return asked
 

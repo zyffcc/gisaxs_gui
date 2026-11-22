@@ -9,14 +9,12 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QMessageBox
-
+from src.gimap.app.presentation.question_box import QuestionBox
 from src.gimap.integrations.state import InMemoryUserPreferencesRepository
 from tests.sputter_client_fixtures import FakeClientRunner, entry, window, write_result
 from tests.sputter_fixtures import scan_folder
@@ -256,7 +254,7 @@ def test_an_unusual_rate_at_the_sample_asks_whether_its_unit_is_right(tmp_path, 
         wanted.click()
         return 0
 
-    monkeypatch.setattr(QMessageBox, "exec_", exec_)
+    monkeypatch.setattr(QuestionBox, "exec_", exec_)  # a QuestionBox: a QMessageBox dies offscreen
     runner = FakeClientRunner()
     page = _page(tmp_path, client=runner)
     _fill(page, scan_folder(tmp_path), rate=rate, unit=unit)
@@ -267,8 +265,7 @@ def test_an_unusual_rate_at_the_sample_asks_whether_its_unit_is_right(tmp_path, 
         assert said == [] and len(runner.requests) == 1
         _close(page)
         return
-    # Qt on macOS ignores a message box's window title (Apple's guidelines), so the title reads empty there
-    title = "" if sys.platform == "darwin" else "Check the Deposition Rate"
+    title = "Check the Deposition Rate"
     assert len(said) == 1 and said[0][0] == title and runner.requests == []  # cancelled
     if (rate, unit, qcm) == ("2.2", "nm/s", False):
         assert said[0][1] == ("This rate is unusual for sputtering (2.2 nm/s = 22 Å/s at the sample). Is the unit "

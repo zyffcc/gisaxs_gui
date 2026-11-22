@@ -57,30 +57,49 @@ def fit_solutions_csv(fit: dict, provenance: str = "") -> str:
     fitted) and the units; then the column names."""
     rows = fit.get("solutions") or []
     index, _solution = chosen(fit)
+    weight_key = fit_names.weight_key(_solution or {})
+    by_bic = weight_key == "bic_weight"
     keys = sorted({key for row in rows for component in row["components"] for key in component if key != "type"})
     ranges = any(row.get("intervals") for row in rows)
     limits = [f"{key}_{end}68" for key in INTERVAL_KEYS for end in ("low", "high")] if ranges else []
+    posterior = any(row.get("posterior_summary") for row in rows)
+    sampled_columns = [f"{key}_posterior_{stat}" for key in keys for stat in ("median", "low68", "high68")] if posterior else []
+    diagnostics = any(row.get("diagnostics") for row in rows)
+    diag_keys = (["ess", "compared_by", "posterior_kind", "interval_kind", "log_evidence", "log_evidence_mc_error",
+                  "point_count", "points_per_decade"] if diagnostics else [])
+    if diagnostics and not by_bic:
+        diag_keys += ["composition_probability", "composition_probability_mc_low68", "composition_probability_mc_high68"]
     lines = [f"# {line}" for line in provenance.splitlines()] + [
         f"# GISAXS fit solutions [{' '.join(str(fit.get('curve')).split())}]: one line per component of each solution",
         "# units: R, h, D in nm; sigma_R, sigma_h, sigma_D are relative widths (sigma/value, no unit); "
         "chi2 (the reduced chi^2 = sum((I - model)^2 / sigma^2) / (N - number of free values) over the fitted "
-        "points, with the curve's sigma), probability (posterior probability of the solution, relative to the "
-        "compositions that were tried), log_rmse, amplitude and weight have no unit; "
-        + ("R_low68 ... D_high68: the 68 % posterior interval in nm; " if ranges else "")
+        "points, with the curve's sigma), "
+        + ("bic_weight (normalised BIC weight)" if by_bic else "probability (relative to the compositions tried)")
+        + ", log_rmse, amplitude and weight have no unit; "
+        + (("R_low68 ... D_high68: the 68 % least-squares interval in nm; " if by_bic else
+            "R_low68 ... D_high68: the reported 68 % interval in nm; ") if ranges else "")
         + "at_bounds: values that ended on a bound of their range (not determined by the curve); chosen: the solution "
         "reported",
         *([f"# fitted points: {fit_names.points_text(fit.get('fitted_points'))}"] if fit.get("fitted_points") else []),
-        "rank,model,chi2,probability,log_rmse,converged,component," + ",".join(keys + limits) + ",at_bounds,chosen",
+        f"rank,model,chi2,{weight_key},log_rmse,converged,component," + ",".join(keys + limits + sampled_columns + diag_keys)
+        + ",at_bounds,chosen",
     ]
     for number, row in enumerate(rows):
         many = len(row["components"] or ()) > 1
         ended = " ".join(
             f"{item.get('parameter')}{'' if not many or item.get('component') is None else int(item['component']) + 1}"
             f":{item.get('bound')}" for item in row.get("at_bounds") or ())
-        chance = "" if row.get("probability") is None else str(row["probability"])
+        weight = row.get(weight_key, row.get("probability"))
+        chance = "" if weight is None else str(weight)
+        diag = {**(row.get("diagnostics") or {}), "ess": row.get("ess")}
+        if diag.get("composition_probability_mc68"):
+            diag["composition_probability_mc_low68"], diag["composition_probability_mc_high68"] = diag["composition_probability_mc68"]
         for place, component in enumerate(row["components"] or [{"type": ""}]):
+            sampled = [(row.get("posterior_summary") or {}).get(f"{key}_{place+1}", {}).get(stat)
+                       for key in keys for stat in ("median", "low68", "high68")] if posterior else []
             values = ",".join(["" if component.get(key) is None else str(component[key]) for key in keys]
-                              + (_intervals(row, place) if ranges else []))
+                              + (_intervals(row, place) if ranges else [])
+                              + ["" if v is None else str(v) for v in sampled + [diag.get(k) for k in diag_keys]])
             lines.append(
                 f"{row['rank']},{row['model']},{row['chi2']},{chance},{row['log_rmse']},{row.get('converged', True)},"
                 f"{component['type']},{values},{ended},{number == index}"

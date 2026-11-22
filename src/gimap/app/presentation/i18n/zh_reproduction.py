@@ -19,6 +19,9 @@ REPLAY_ERROR_TEMPLATES = {
 
 REPRODUCTION_ZH = {
     **REPLAY_ERROR_TEMPLATES,
+    ("The Series map was restored. Its reduction records exceeded the project size limit. "
+     "Build Map again to reproduce it."):
+        "已恢复序列热图。其归约记录超出了项目的大小限制。若要复现，请再点“生成热图”。",
     "Tools": "工具",
     "Tools for working with analysis records": "处理分析记录的工具",
     "&Reproduce from Record…": "从记录复现(&R)…",

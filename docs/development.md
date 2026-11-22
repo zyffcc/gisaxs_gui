@@ -3,8 +3,9 @@
 - **Last verified**: 2026-10-06 (Windows 11, Python 3.10.18, pytest 9.1, ruff 0.16); the macOS section
   2026-10-14 (macOS 14.6, Python 3.10.20, PyQt 5.15.11)
 
-GIMaP currently supports Python 3.10 and 3.11. Python 3.10 is the safest common
-choice for TensorFlow 2.15 and BornAgain 24.1 compatibility.
+GIMaP requires Python >=3.10. Desktop CI tests Python 3.10 and 3.11 on Windows, macOS
+(Apple Silicon and Intel), and Linux. CI installs the SasView data loader from
+`requirements-ci.txt` to check NXcanSAS interoperability and prints the reason for each skipped test.
 
 ## Install the development dependencies
 

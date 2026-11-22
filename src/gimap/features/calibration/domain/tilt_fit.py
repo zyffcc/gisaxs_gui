@@ -1,24 +1,8 @@
-"""Detector tilt (pyFAI's rot1, rot2) from the ring points of a calibration standard.
+"""Joint ring-point fit of the direct beam and sample distance with fixed or fitted detector tilt.
 
-The centre-and-distance fit of ``optimizer`` takes the rings as circles about the direct beam. A detector that is
-not perpendicular to the beam turns the rings into ellipses (conic sections); this stage frees pyFAI's two tilt
-angles as well and fits five parameters — beam centre x, y (the direct beam, as everywhere in GIMaP), the distance
-from the sample to the direct beam, rot1 and rot2 — by least squares on the same kind of ring points. rot3 (a turn
-about the beam) moves no pixel's scattering angle, so the rings cannot tell it: it stays at the value given (0, or
-the one a ``.poni`` read before states).
-
-Each ring point is a bright pixel close to a matched ring of the standard. Its scattering angle comes from GIMaP's
-one pixel→q path (``shared.geometry.q_mapping.lab_rays``, which places every pixel where pyFAI places it), so the
-calibrated geometry and the q of Analyze agree by construction. The residual of a point is the radial distance, in
-pixels, between where it lies and where the ring of its q lies:
-
-    r = D (tan 2θ_point − tan 2θ_ring) / pixel,
-
-which for an untilted detector is exactly the residual of the circle fit (``optimizer._ring_residual``). The points
-are taken again around the tilted rings after each fit (an ellipse leaves the band a circle drew), three times at
-most. The fit uses the same robust loss (soft L1, scale 2 px) as the circle fit.
-
-Pure numpy/scipy: no Qt.
+The radial residual in pixels is L (tan 2θ_point − tan 2θ_ring) / mean_pixel_size. Pixel directions
+come from the same geometry as Analyze. Each pass finds subpixel centroids in azimuthal sectors around
+the current rings. The last pass supplies one set of points for the fit, all RMS values and uncertainties.
 """
 
 from __future__ import annotations
@@ -64,14 +48,14 @@ def tangent_two_theta(geometry: DetectorGeometry, xs, ys, cx: float, cy: float) 
     return np.hypot(right, up) / along
 
 
-def tilt_residual(xs, ys, qs, wavelength: float, px: float, py: float, rot3: float = 0.0):
+def tilt_residual(xs, ys, qs, wavelength: float, px: float, py: float, rot3: float = 0.0, *, fixed_tilt=None):
     """Residual (pixels) of ring points for the parameters ``(cx, cy, distance_mm, rot1_rad, rot2_rad)``."""
     xs, ys = np.asarray(xs, float), np.asarray(ys, float)
     ring_tangent = np.tan(q_to_two_theta(np.asarray(qs, float), wavelength))
     mean_pixel = 0.5 * (px + py)
 
     def residual(params) -> np.ndarray:
-        geometry = _geometry(params, wavelength, px, py, rot3)
+        geometry = _geometry(params if fixed_tilt is None else np.r_[params, fixed_tilt], wavelength, px, py, rot3)
         tangent = tangent_two_theta(geometry, xs, ys, float(params[0]), float(params[1]))
         return float(params[2]) * 1e-3 * (tangent - ring_tangent) / mean_pixel
 
@@ -151,11 +135,11 @@ def tilted_ring_points(
 
 
 def fit_tilted_geometry(
-    xs, ys, qs, wavelength: float, px: float, py: float, initial, *, rot3: float = 0.0,
+    xs, ys, qs, wavelength: float, px: float, py: float, initial, *, rot3: float = 0.0, fixed_tilt=None,
     distance_range_mm: Optional[tuple[float, float]] = None, center_window_px: float = 60.0,
 ) -> np.ndarray:
-    """Least-squares ``(cx, cy, distance_mm, rot1_rad, rot2_rad)`` of ring points, from ``initial`` (five values;
-    the centre within ``center_window_px`` of it, the distance within ±25 % and the user's range)."""
+    """Fit centre and distance, and both tilt angles unless supplied in radians as fixed_tilt.
+    The initial and returned vectors contain the free parameters only."""
     start = np.asarray(initial, dtype=float).copy()
     limit = math.radians(TILT_LIMIT_DEG)
     low_mm, high_mm = distance_range_mm or (1.0, np.inf)
@@ -165,10 +149,11 @@ def fit_tilted_geometry(
                       min(high_mm, 1.25 * start[2]), limit, limit])
     if not lower[2] < upper[2]:
         lower[2], upper[2] = start[2] - 1e-6, start[2] + 1e-6
+    lower, upper = lower[:start.size], upper[:start.size]
     start = np.clip(start, lower + 1e-9, upper - 1e-9)
-    residual = tilt_residual(xs, ys, qs, wavelength, px, py, rot3)
+    residual = tilt_residual(xs, ys, qs, wavelength, px, py, rot3, fixed_tilt=fixed_tilt)
     fit = least_squares(residual, start, bounds=(lower, upper), loss="soft_l1", f_scale=2.0, max_nfev=200,
-                        x_scale=np.array([1.0, 1.0, max(1.0, 1e-3 * start[2]), 1e-3, 1e-3]))
+                        x_scale=np.array([1.0, 1.0, max(1.0, 1e-3 * start[2]), 1e-3, 1e-3])[:start.size])
     return fit.x
 
 
@@ -180,46 +165,52 @@ def point_rms_px(xs, ys, qs, params, wavelength: float, px: float, py: float, ro
     return float(np.sqrt(np.mean(residual**2))) if residual.size else float("nan")
 
 
-def refine_tilt(
+def refine_ring_geometry(
     analysis: AnalysisImage, candidate: CalibrationCandidate, wavelength: float, px: float, py: float, *,
-    rot3_rad: float = 0.0, distance_range_mm: Optional[tuple[float, float]] = None, force: bool = False,
-) -> CalibrationCandidate:
-    """Free rot1 and rot2 with the centre and the distance (``candidate`` is changed and returned). With fewer than
-    ``TILT_MIN_RINGS`` matched rings nothing is refined unless ``force`` (two rings at least); the reason is a
-    warning of the candidate."""
-    if candidate.matched_ring_count < (2 if force else TILT_MIN_RINGS):
-        if NOT_REFINED_FEW_RINGS not in candidate.warnings:
-            candidate.warnings.append(NOT_REFINED_FEW_RINGS)
-        return candidate
-    params = np.array([candidate.center_x_px, candidate.center_y_px, candidate.distance_mm, 0.0, 0.0])
+    tilt: str, distance_range_mm: Optional[tuple[float, float]] = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Refine the candidate in place and return the ring points that determined it."""
+    free_tilt = tilt != "off" and candidate.matched_ring_count >= (2 if tilt == "on" else TILT_MIN_RINGS)
+    if tilt != "off" and not free_tilt:
+        candidate.warnings.append(NOT_REFINED_FEW_RINGS)
+    if candidate.matched_ring_count < 2:
+        return None
+
+    rot3 = math.radians(candidate.rot3_deg)
+    rotations = np.radians([candidate.rot1_deg, candidate.rot2_deg])
+    initial = np.r_[candidate.center_x_px, candidate.center_y_px, candidate.distance_mm, rotations]
+    params = initial.copy()
+    fixed_tilt = None if free_tilt else rotations
     window = max(12.0, min(60.0, 0.04 * max(analysis.signal.shape)))
-    before = None
-    xs = ys = qs = np.array([])
+    options = dict(rot3=rot3, distance_range_mm=distance_range_mm, center_window_px=window)
     for passed in range(POINT_PASSES):
-        widen = 2.0 if passed == 0 else 1.0  # an ellipse may leave the band of the circle fit
-        xs, ys, qs = tilted_ring_points(analysis, candidate, params, wavelength, px, py, rot3_rad, widen=widen)
+        points = tilted_ring_points(analysis, candidate, params, wavelength, px, py, rot3,
+                                    widen=2.0 if passed == 0 else 1.0)
+        xs, ys, qs = points
         if xs.size < 30 or np.unique(qs).size < 2:
-            if NOT_REFINED_POINTS not in candidate.warnings:
-                candidate.warnings.append(NOT_REFINED_POINTS)
-            return candidate
-        if before is None:
-            before = point_rms_px(xs, ys, qs, params, wavelength, px, py, rot3_rad)
-        fitted = fit_tilted_geometry(xs, ys, qs, wavelength, px, py, params, rot3=rot3_rad,
-                                     distance_range_mm=distance_range_mm, center_window_px=window)
-        moved = np.abs(fitted - params)
-        params = fitted
+            candidate.warnings.append(NOT_REFINED_POINTS if free_tilt else
+                                      "Too few experimental ring points were available for joint refinement.")
+            return None
+        free = params if free_tilt else params[:3]
+        fit = fit_tilted_geometry(*points, wavelength, px, py, free, fixed_tilt=fixed_tilt, **options)
+        updated = fit if free_tilt else np.r_[fit, rotations]
+        moved = np.abs(updated - params)
+        params = updated
         if moved[0] < 0.01 and moved[1] < 0.01 and moved[3] < 1e-6 and moved[4] < 1e-6:
             break
     candidate.center_x_px, candidate.center_y_px, candidate.distance_mm = map(float, params[:3])
-    candidate.rot1_deg, candidate.rot2_deg = math.degrees(params[3]), math.degrees(params[4])
-    candidate.rot3_deg = math.degrees(rot3_rad)
-    candidate.tilt_refined = True
-    candidate.untilted_point_rms_px = before
-    candidate.point_rms_px = point_rms_px(xs, ys, qs, params, wavelength, px, py, rot3_rad)
-    return candidate
+    candidate.rot1_deg, candidate.rot2_deg = np.degrees(params[3:])
+    candidate.tilt_refined = free_tilt
+    candidate.initial_point_rms_px = point_rms_px(*points, initial, wavelength, px, py, rot3)
+    candidate.point_rms_px = point_rms_px(*points, params, wavelength, px, py, rot3)
+    if free_tilt:
+        # Isolate the effect of tilt: centre and distance may adjust in both models on these exact points.
+        flat = fit_tilted_geometry(*points, wavelength, px, py, params[:3], fixed_tilt=(0.0, 0.0), **options)
+        candidate.untilted_point_rms_px = point_rms_px(*points, flat, wavelength, px, py, rot3)
+    return points
 
 
 __all__ = [
     "NOT_REFINED_FEW_RINGS", "NOT_REFINED_POINTS", "TILT_MIN_RINGS", "fit_tilted_geometry", "point_rms_px",
-    "refine_tilt", "tangent_two_theta", "tilt_residual", "tilted_ring_points",
+    "refine_ring_geometry", "tangent_two_theta", "tilt_residual", "tilted_ring_points",
 ]

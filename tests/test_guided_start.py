@@ -61,12 +61,14 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     assert page.step_rail.state("results") == "busy"
     _wait(lambda: guided.report is not None, 120)
     report = guided.report
-    assert report["ok"] and report["needs_attention"] == [] and report["procedure"] == "giwaxs"
+    assert report["ok"] and report["procedure"] == "giwaxs"
+    assert {item["item"] for item in report["needs_attention"]} == {"pole figure"}
     assert page.step_rail.state("results") == "ok" and page.current_right() == "results"
     # The status during the run says what is done in words, never "find_peaks: …".
     assert progress and all("_" not in line.split(" — ")[0] for line in progress), progress
     assert any(line.startswith("Finding the peaks of I(q) — ") for line in progress), progress
-    assert guided.status_label.text() == "Done — see the Results tab."
+    points = len(report["needs_attention"])
+    assert guided.status_label.text() == f"Done — see the Results tab. {points} point(s) to check there."
     results = guided.results
     badge = results.findChildren(QLabel)[0]
     assert badge.text().startswith("GIWAXS — ") and badge.property("gimapRole") == "success" and not badge.styleSheet()
@@ -149,7 +151,7 @@ def test_the_check_step_says_once_where_the_rings_are_shadowed_or_unmeasured() -
     (shadow, shadow_detail), (wedge, _detail) = coverage_notes(rings)
     assert shadow.startswith("Shadow (orange on the map): |χ| 72–90° at q 1.4, 64–90° at q 2.11 Å⁻¹.")
     assert shadow_detail == "|χ| 72–90° is shadowed: …"
-    assert wedge.startswith("Missing wedge (red dashed next to qz): |χ| < 8° at q 1.4, < 10° at q 2.11 Å⁻¹")
+    assert wedge.startswith("The measured f excludes the missing wedge (red dashed near qz), |χ| < 8° at q 1.4, < 10° at q 2.11 Å⁻¹")
     assert coverage_notes([{"q": 1.0, "missing": [], "shadowed": []}]) == []
 
 
@@ -168,13 +170,13 @@ def test_a_ring_says_in_one_line_why_its_orientation_is_not_determined() -> None
     assert detail.startswith(reason) and "shadowed" in detail
     text, detail = ring_summary({"q": 0.36, "herman": 0.52, "herman_isotropic": -0.03,
                                  "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
-    assert text == ("Ring q ≈ 0.36 Å⁻¹: f = 0.52 (random ring: −0.03) — oriented along the surface "
+    assert text == ("Ring q ≈ 0.36 Å⁻¹: f = 0.520 — oriented along the surface "
                     "normal (out-of-plane, χ ≈ 0°)")  # the Unicode minus; two decimals while σ_f is not known
-    assert detail.startswith("A random ring would give f = −0.03 here.")  # what the short note means
+    assert detail.startswith("oriented along the surface normal")  # what the short note means
     # With σ_f, f and f_iso have the decimals that show it (0.0027: four), and f_iso is given unless it is 0 there.
     text, _detail = ring_summary({"q": 0.9972, "herman": 0.13921, "herman_err": 0.002696, "herman_isotropic": -0.001357,
                                   "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
-    assert text.startswith("Ring q ≈ 0.9972 Å⁻¹: f = 0.1392 ± 0.0027 (random ring: −0.0014) — ")
+    assert text.startswith("Ring q ≈ 0.9972 Å⁻¹: f = 0.139 ± 0.00270 (stat) — ")
 
 
 def test_a_peak_at_the_end_of_the_data_is_not_called_reliable() -> None:

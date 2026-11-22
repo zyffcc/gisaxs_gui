@@ -161,13 +161,12 @@ def create_curve_fit():
         chosen = (batch_compositions(list(components)) if components else
                   {"allowed": encoding.select(("sphere", "vertical_cylinder"), 2)})
         proposals = network.load()
-        solutions = refine.predict(proposals, item["q"], item["observed"], item["sigma"], cancelled=cancelled,
-                                   seed=CURVE_FIT_SEED, **chosen)
+        settings = predict_options(dict(seed=CURVE_FIT_SEED, measured_qz=cut_qz or None,
+                                        reflected_beam=True if cut_qz else None, **chosen))
+        solutions = refine.predict(proposals, item["q"], item["observed"], item["sigma"],
+                                   cancelled=cancelled, **settings)
         if not solutions:
             raise ValueError("Predict parameters found no solution for this curve")
-        if cut_qz:  # a flag only, added after the fit: no value, interval or probability changes
-            for solution in solutions:
-                solution.flags = tuple(solution.flags) + tuple(refine.interface_flags(solution.model, cut_qz))
         q = np.asarray(item["q"], float)
         rows = curve_rows(item, solutions[:5], np.linspace(q.min(), q.max(), options["render_points"]),
                           chosen_by="user_composition" if components else "network_choice")
@@ -177,7 +176,7 @@ def create_curve_fit():
         used = {"name": network.path().stem, "sha256": (getattr(proposals, "meta", None) or {}).get("sha256")}
         if used["sha256"]:
             plan = prediction_plan(dict(q=q.tolist(), intensity=item["observed"].tolist(), sigma=item["sigma"].tolist()),
-                                   predict_options(dict(seed=CURVE_FIT_SEED, **chosen)), network.path(), proposals.meta,
+                                   settings, network.path(), proposals.meta,
                                    display_q=np.linspace(q.min(), q.max(), options["render_points"]), limit=5)
             rows[0]["reproduction"] = prediction_record(plan, [encode(s) for s in solutions[:5]])
         for row in rows:

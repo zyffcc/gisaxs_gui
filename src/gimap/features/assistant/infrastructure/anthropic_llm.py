@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any, Callable, Optional, Sequence
 
 from ..application import DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS, LlmError, LlmTurn, LlmUsage, ToolCall
+from ..application.providers import anthropic_service
 
 MAX_TOKENS = 32000
 """Per turn, thinking included; streaming keeps long turns within the SDK's time limits."""
@@ -112,6 +113,7 @@ class AnthropicAssistantLlm:
         client: Any = None,
     ):
         self.model = (model or DEFAULT_MODEL).strip()
+        self.provider = anthropic_service()
         self.effort = effort if effort in EFFORTS else DEFAULT_EFFORT
         self.max_tokens = int(max_tokens)
         if client is None:

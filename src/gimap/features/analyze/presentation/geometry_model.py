@@ -11,10 +11,11 @@ its own centre.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from typing import Any, Optional
 
 from src.gimap.shared.geometry.instrument_profile import OTHER_SCALE_SETUP
+from src.gimap.shared.geometry.detector_response import DetectorResponse
 
 from ..application import (
     DetectorGeometry,
@@ -24,6 +25,7 @@ from ..application import (
     refine_center_by_symmetry,
 )
 from ..application.absolute_scale import CalibrateStandard
+from ..application.detector_response import effective_response
 
 SECTION = "analyze"
 HEADER_CENTER_KEY = "use_header_beam_center"
@@ -226,6 +228,28 @@ class GeometryModelMixin:
             return []
         return [profile.name for profile in self._profiles.load_all()]
 
+    def detector_response(self) -> DetectorResponse:
+        profile = None
+        if self.state.profile_name and self._profiles is not None:
+            profile = self._profiles.find(self.state.profile_name)
+            if self.state.analysis and self.state.analysis.resolution.refused_profile == self.state.profile_name:
+                profile = None
+        elif self.state.analysis is not None:
+            profile = self.state.analysis.resolution.profile
+            if profile and self._profiles and self.state.analysis.resolution.how != "file":
+                profile = self._profiles.find(profile.name)
+        return effective_response(self.state.corrections, profile)
+
+    def save_detector_response(self):
+        profile = self.absolute_scale_profile()
+        if self._profiles.find(profile.name) != profile:
+            raise ValueError("Save the instrument profile before saving detector settings.")
+        response = self.detector_response()
+        if response.error_model == "sigma" and not response.sigma_path:
+            raise ValueError("Choose a sigma frame for the supplied error model.")
+        self._profiles.save(replace(profile, detector_response=response))
+        self.state.corrections = replace(self.state.corrections, use_profile_response=True, **asdict(DetectorResponse()))
+
     def suggested_profile_name(self) -> str:
         analysis = self.state.analysis
         if analysis is None:
@@ -247,6 +271,8 @@ class GeometryModelMixin:
         centre set on another detector (another frame shape) stays: it is not used for this frame. ``dropped_tilt``:
         the tilt of the ``.poni`` the geometry was read from (``shared/geometry/detector_tilt.DetectorTilt``)."""
         analysis = self.state.analysis
+        preserve_response = (self.state.corrections.use_profile_response and self._profiles is not None
+                             and self._profiles.find(name) is not None)
         profile = self._save_profile(
             name,
             geometry,
@@ -254,6 +280,7 @@ class GeometryModelMixin:
             shape=analysis.shape if analysis else None,
             source=self._linked_source(source),
             dropped_tilt=dropped_tilt,
+            detector_response=None if preserve_response else self.detector_response(),
         )
         self.state.profile_name = None  # let the new profile match automatically
         held = self.state.beam_center_shape

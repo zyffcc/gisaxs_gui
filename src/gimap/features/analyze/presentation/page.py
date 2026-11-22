@@ -463,6 +463,7 @@ class AnalyzePage(
         Nothing is reduced again; a run or a batch goes on as it was."""
         analysis = self.view_model.state.analysis
         self.command_bar.retranslate()  # the short or full button texts of the state the bar is in
+        self._sync_reduction_errors()
         self._update_center_control()
         self._show_incidence_state()  # the αi field's tooltip names a value set by hand
         self.incidence_spin.updateGeometry()  # “αi from profile” is as wide as the new language writes it
@@ -569,8 +570,6 @@ class AnalyzePage(
         for task in ("analyze", "batch", "series", "cake", "mask_preview"):
             self.tasks.cancel(task)
         self.shape_layer.cancel_drawing()
-        if not self._batch_inflight and not self.tasks.is_busy():
-            self.view_model.release_series_spool()
         self.shutdown_batch()
         self._reset_series_fit()
         self._dispose_undo()

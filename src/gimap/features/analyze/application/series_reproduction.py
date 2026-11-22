@@ -29,12 +29,18 @@ def spool_row(folder, analysis, key, label, metadata=None):
     saved["reproduction"]["curve_keys"] = [key]
     saved["native_x_label"] = analysis.reduction.curve(key).x_label
     raw = json.dumps(saved, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return spool_recipe(folder, raw, label)
+
+
+def spool_recipe(folder, raw, label):
+    """Attach recipe bytes to a native row via a file owned by this map's session."""
     path = Path(folder) / (hashlib.sha256(raw).hexdigest() + ".json")
     if not path.exists():
         with NamedTemporaryFile(dir=folder, delete=False) as stream:
             stream.write(raw)
         os.replace(stream.name, path)
     label.recipe_path = str(path)
+    label.recipe_size = len(raw)
     return label
 
 

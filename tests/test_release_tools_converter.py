@@ -24,6 +24,7 @@ from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from src.gimap.app import AppContext
 from src.gimap.app.presentation.i18n import apply_language
+from src.gimap.app.presentation.question_box import QuestionBox
 from src.gimap.features.format_converter.presentation.bindings.workflow import review_text
 from src.gimap.features.format_converter.presentation.dialog import (
     ConversionProgressDialog,
@@ -122,7 +123,7 @@ def review(monkeypatch):
         seen.update(title=box.windowTitle(), text=box.text(), buttons=sorted(b.text() for b in box.buttons()))
         return 0
 
-    monkeypatch.setattr(QMessageBox, "exec_", exec_)
+    monkeypatch.setattr(QuestionBox, "exec_", exec_)  # the question is a QuestionBox (not a QMessageBox)
     return seen
 
 

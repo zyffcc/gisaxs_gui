@@ -6,11 +6,7 @@ step), Export Curves… asking for its folder, the Panels menu of the image and 
 NORMALISATION_ZH = {
     # -- the dark frame
     "No dark frame": "无暗场",
-    "Dark frame (detector without beam: dark current, offset), subtracted from every frame before the background. "
-    "σ then comes from the scatter of the pixels":
-        "暗场（无光束时的探测器读数：暗电流、偏置），在扣背景之前从每一帧中扣除。此后 σ 由像素的离散度给出",
     "Stop subtracting the dark frame": "不再扣除暗场",
-    "frame − scale × dark (e.g. the exposure-time ratio)": "帧 − 比例 × 暗场（例如曝光时间之比）",
     "Frame of a NeXus dark file": "NeXus 暗场文件中的帧",
     "Dark scale": "暗场比例",
     "Dark frame": "暗场",
@@ -19,18 +15,11 @@ NORMALISATION_ZH = {
     "Dark frame not found, left out: {path}": "找不到暗场文件，已略过：{path}",
     # -- the normalisation
     "Normalisation": "归一化",
-    "Off by default. After the other corrections every frame is multiplied by A / (t · M · T · d): exposure time t, "
-    "monitor M, transmission T, thickness d, absolute-scale factor A. σ is multiplied by the same factor; q and the "
-    "shape of the curves do not change.":
-        "默认关闭。在其他校正之后，每一帧乘以 A / (t · M · T · d)：曝光时间 t、监视器 M、透射率 T、厚度 d、绝对强度因子 A。"
-        "σ 乘以同一个因子；q 和曲线的形状不变。",
     "From the file header": "取自文件头",
     "Typed": "手动输入",
-    "Exposure t": "曝光时间 t",
     "Monitor M": "监视器 M",
     "Transmission T": "透射率 T",
     "Thickness d": "厚度 d",
-    "Absolute scale A": "绝对强度因子 A",
     "Divide by the exposure time: the one the file header states, or a typed one":
         "除以曝光时间：文件头给出的，或手动输入的",
     "Divide by a monitor (ion chamber, diode, flux or ring current): a value of the file header, or a typed one":
@@ -59,18 +48,7 @@ NORMALISATION_ZH = {
     "The thickness": "厚度",
     "The absolute-scale factor": "绝对强度因子",
     "The transmission must be above 0 and at most 1.": "透射率必须大于 0 且不大于 1。",
-    # -- the Lorentz factor
-    "Lorentz factor (fibre texture)": "Lorentz 因子（纤维织构）",
-    "Crystallites oriented at random about the surface normal: divide by L = 1/(cos αi cos αf |sin 2θf|) (GIXSGUI). "
-    "I(χ) then counts the crystallites per degree of χ; the Hermans factor of the automatic analysis is then not "
-    "weighted by sin χ again. Only for crystalline peaks: it also scales diffuse scattering and the I(q) of a ring":
-        "晶粒绕表面法线随机取向：除以 L = 1/(cos αi cos αf |sin 2θf|)（GIXSGUI）。此后 I(χ) 是每度 χ 内的晶粒数；"
-        "自动分析的 Hermans 取向因子不再乘 sin χ 权重。只适用于晶体衍射峰：它也会改变漫散射和整环的 I(q)",
     # -- Export Curves…, the panels, the αi of the Results
-    "The I(χ) is divided by the Lorentz factor of a fibre texture: Hermans f is not weighted by sin χ again.":
-        "I(χ) 已除以纤维织构的 Lorentz 因子：Hermans 取向因子 f 不再乘 sin χ 权重。",
-    "The radial background under the ring ({background} counts/pixel) was subtracted, scaled like an isotropic ring "
-    "(∝ sin χ).": "已扣除环下方的径向背景（{background} counts/pixel），并按各向同性环的形状（∝ sin χ）分配。",
     "Export Curves: choose a folder": "导出曲线：选择文件夹",
     "One CSV per curve (q, I, σ, pixels), a cut region's under its name, and a JSON record of the settings, to a "
     "folder you choose (it starts in the last one).":

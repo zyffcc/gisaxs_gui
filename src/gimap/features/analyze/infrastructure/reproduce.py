@@ -31,6 +31,8 @@ def replay_reduction(record, record_dir):
     corrections = settings.corrections
     overrides = {name: str(input_path(value)) for name in ("dark_path", "background_path", "flat_field_path", "mask_path")
                  if (value := getattr(corrections, name))}
+    if corrections.error_model == "sigma" and corrections.sigma_path:
+        overrides["sigma_path"] = str(input_path(corrections.sigma_path))
     edits = []
     for edit in corrections.mask_shapes:
         sources = tuple(str(input_path(path)) for path in edit.sources)

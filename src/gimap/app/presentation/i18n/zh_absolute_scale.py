@@ -11,7 +11,6 @@ ABSOLUTE_SCALE_ZH = {
     "Measured file": "测量文件",
     "Frame number": "帧号",
     "Measured q unit": "测量曲线 q 单位",
-    "Exposure t (s)": "曝光时间 t（s）",
     "Standard d (mm)": "标准样品厚度 d（mm）",
     "Required": "必填",
     "Reference and fit range": "参考值与拟合范围",
@@ -34,8 +33,6 @@ ABSOLUTE_SCALE_ZH = {
     "Set sample exposure, monitor and transmission in Mask & Corrections › Normalisation.":
         "在“掩膜与校正 › 归一化”中设置样品的曝光时间、监视器读数和透射率。",
     "Use Saved Scale": "使用已保存的比例因子",
-    "Saved A = {factor:.6g} ± {sigma:.2g} · {standard} · {date}":
-        "已保存 A = {factor:.6g} ± {sigma:.2g} · {standard} · {date}",
     "Fit Scale": "拟合比例因子",
     "Apply Scale": "应用比例因子",
     "Standard and reference": "标准样品与参考值",
@@ -43,8 +40,6 @@ ABSOLUTE_SCALE_ZH = {
     "Residual (scaled standard − reference)": "残差（标定后的标准样品强度 − 参考值）",
     "Residual": "残差",
     "Scaled standard": "标定后的标准样品",
-    "A = {factor:.6g} ± {sigma:.2g} (1σ)\n{points} points from {low:.6g} to {high:.6g} Å⁻¹":
-        "A = {factor:.6g} ± {sigma:.2g}（1σ）\n{points} 个点，范围 {low:.6g} 至 {high:.6g} Å⁻¹",
     "Choose the reference curve": "选择参考曲线",
     "Choose the standard measurement": "选择标准样品的测量文件",
     "Choose the standard measurement.": "请选择标准样品的测量文件。",

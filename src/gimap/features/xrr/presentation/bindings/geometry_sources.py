@@ -30,6 +30,8 @@ GEOMETRY_FIELDS = (
     ("pixel_y", "pixel_y_spin", "pixel_size_y_m", 1e6, "pixel_size_y_um"),
     ("center_x", "center_x_spin", "beam_center_x_px", 1.0, "beam_center_x_px"),
     ("center_y", "center_y_spin", "beam_center_y_px", 1.0, "beam_center_y_px"),
+    *((key, f"{key}_spin", f"{key}_rad", math.degrees(1.0), f"{key}_deg") for key in ("rot1", "rot2", "rot3")),
+    ("orientation", "orientation_spin", "pyfai_orientation", 1.0, "orientation"),
 )
 SPIN_OF = {key: spin_name for key, spin_name, *_rest in GEOMETRY_FIELDS}
 CENTER_KEYS = ("center_x", "center_y")
@@ -58,8 +60,15 @@ FIELD_NAMES = {
     "pixel_y": "pixel size Y",
     "center_x": "beam center X",
     "center_y": "beam center Y",
+    **{key: key for key in ("rot1", "rot2", "rot3")},
+    "orientation": "pyFAI orientation",
 }
 UNITS = {"distance": "mm", "energy": "keV", "pixel_x": "µm", "pixel_y": "µm", "center_x": "px", "center_y": "px"}
+UNITS.update({key: "°" for key in ("rot1", "rot2", "rot3")})
+UNITS["orientation"] = ""
+ROTATION_FIELDS = ("rot1", "rot2", "rot3", "orientation")
+INVALID_FILE = "Unsupported detector geometry in the file ({values}). Check the values shown before extraction."
+INVALID_CALIBRATION = "Unsupported detector geometry in the last calibration ({values}). Check the values shown before extraction."
 # Values of the loaded file that were not used, and the calibration values the file replaced.
 NOTE_LINES = (
     ("typed", "The file says: {values}"),
@@ -86,7 +95,7 @@ def frame_label(ref) -> str:
 def _number(value) -> float | None:
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if math.isfinite(number) else None
 
@@ -95,6 +104,23 @@ def _shown(key: str, value: float | None) -> float | None:
     """A value of the last calibration or of a file as its field shows it: a beam centre, which both give
     as a pixel-centre index, in the pixels of the window; every other value as it is."""
     return shown_coordinate(value) if key in CENTER_KEYS and value is not None else value
+
+
+def _field_value(key, raw, scale, spin):
+    """Read angles before Qt rounds or clamps them. Reduce full turns in the original units."""
+    value = _number(raw)
+    if value is None:
+        return None
+    if key == "rot3":
+        period = math.tau if scale != 1.0 else 360.0
+        value = math.remainder(value, period)
+    shown = _shown(key, value * scale)
+    if key in ROTATION_FIELDS and (
+        isinstance(raw, bool) or not spin.minimum() <= shown <= spin.maximum()
+        or (key == "orientation" and not shown.is_integer())
+    ):
+        return None
+    return shown
 
 
 def _when(timestamp: str) -> str:
@@ -118,12 +144,14 @@ class GeometrySourcesMixin:
         calibration = getter() if callable(getter) else None
         self._defaults: dict[str, float] = {}
         self._calibration_values: dict[str, float | None] = {}
+        self._invalid_calibration: list[str] = []
         for key, spin_name, _meta, _scale, attribute in GEOMETRY_FIELDS:
             spin = getattr(self, spin_name)
             self._defaults[key] = spin.value()
-            self._calibration_values[key] = _shown(
-                key, _number(getattr(calibration, attribute, None)) if calibration is not None else None
-            )
+            raw = getattr(calibration, attribute, None)
+            self._calibration_values[key] = _field_value(key, raw, 1.0, spin)
+            if key in ROTATION_FIELDS and raw is not None and self._calibration_values[key] is None:
+                self._invalid_calibration.append(f"{attribute}={raw}")
             base = self._base_for(key)
             self._base_geometry[key] = base
             self._set_geometry_value(key, *base)
@@ -189,16 +217,17 @@ class GeometrySourcesMixin:
         """While any value shows a tag, a hidden tag keeps its place and every tag is at least as wide as the
         widest word of those shown needs (a longer word would take room from its value alone): the value fields
         line up."""
-        labels = list(self.geometry_source_labels.values())
-        shown = [label for label in labels if not label.isHidden()]
-        tagged = bool(shown)
-        least = max((label.minimumSizeHint().width() for label in shown), default=0)
-        for label in labels:
-            policy = label.sizePolicy()
-            if policy.retainSizeWhenHidden() != tagged:
-                policy.setRetainSizeWhenHidden(tagged)
-                label.setSizePolicy(policy)
-            label.setMinimumWidth(least)
+        for rotations in (False, True):  # the rotations use a separate, collapsible form
+            labels = [label for key, label in self.geometry_source_labels.items() if (key in ROTATION_FIELDS) == rotations]
+            shown = [label for label in labels if not label.isHidden()]
+            tagged = bool(shown)
+            least = max((label.minimumSizeHint().width() for label in shown), default=0)
+            for label in labels:
+                policy = label.sizePolicy()
+                if policy.retainSizeWhenHidden() != tagged:
+                    policy.setRetainSizeWhenHidden(tagged)
+                    label.setSizePolicy(policy)
+                label.setMinimumWidth(least)
 
     def _source_tip(self, source: str) -> str:
         if source == "calibration" and self._calibration is not None:
@@ -209,7 +238,7 @@ class GeometrySourcesMixin:
             )
         return tr(SOURCE_TIPS.get(source, "")) if SOURCE_TIPS.get(source) else ""
 
-    def _apply_metadata(self, metadata: dict, shape) -> dict[str, list[tuple[str, float]]]:
+    def _apply_metadata(self, metadata: dict, shape) -> dict:
         """Fill the geometry from a loaded frame. Return the values that were not used, as
         ``(key, value)``: ``typed`` — values of the file a typed value kept out; ``calibration`` —
         values of the last calibration a different value of the file replaced. Every value is as its
@@ -217,12 +246,14 @@ class GeometrySourcesMixin:
         image_center = dict(zip(CENTER_KEYS, shown_image_center(shape)))
         fits = self._calibration_fits(shape)
         self._calibration_elsewhere = None if fits else tuple(self._calibration.image_shape)
-        notes: dict[str, list[tuple[str, float]]] = {"typed": [], "calibration": []}
+        notes = {"typed": [], "calibration": [], "invalid": []}
         for key, spin_name, meta_key, scale, _attribute in GEOMETRY_FIELDS:
             base = self._base_geometry[key] = self._base_for(key, shape)
-            raw = _number(metadata.get(meta_key))
-            from_file = None if raw is None else _shown(key, raw * scale)
             spin = getattr(self, spin_name)
+            raw = metadata.get(meta_key)
+            from_file = _field_value(key, raw, scale, spin)
+            if key in ROTATION_FIELDS and raw is not None and from_file is None:
+                notes["invalid"].append(f"{meta_key}={raw}")
             tolerance = 0.5 * 10.0 ** -spin.decimals()
             if self._geometry_sources.get(key) == "typed":
                 if from_file is not None and abs(spin.value() - from_file) > tolerance:
@@ -246,7 +277,7 @@ class GeometrySourcesMixin:
             parts.append(f"{tr(FIELD_NAMES[key])} {value:.{decimals}f} {UNITS[key]}")
         return ", ".join(parts)
 
-    def _source_lines(self, sources: dict[str, str], notes: dict[str, list[tuple[str, float]]]) -> list[str]:
+    def _source_lines(self, sources: dict[str, str], notes: dict) -> list[str]:
         named: dict[str, list[str]] = {}
         joined = {
             first: (second, pair_name)
@@ -255,6 +286,8 @@ class GeometrySourcesMixin:
         }
         skipped = {second for second, _name in joined.values()}
         for key, *_rest in GEOMETRY_FIELDS:  # in the order of the form
+            if key in ROTATION_FIELDS and sources.get(key) == "default":
+                continue  # each zero default is labelled in the rotations form
             if key in skipped:
                 continue
             name = joined[key][1] if key in joined else FIELD_NAMES[key]
@@ -265,6 +298,8 @@ class GeometrySourcesMixin:
             if named.get(source)
         ]
         lines = ["⚠ " + trf(GUESSED_LINE, fields=", ".join(guessed))] if guessed else []
+        if notes.get("invalid"):
+            lines.append("⚠ " + trf(INVALID_FILE, values=", ".join(notes["invalid"])))
         lines += [
             trf(template, fields=", ".join(tr(name) for name in named[source]))
             for source, template in SUMMARY_LINES
@@ -287,7 +322,7 @@ class GeometrySourcesMixin:
             )
         return lines
 
-    def _show_inspection_summary(self, inspection, notes: dict[str, list[tuple[str, float]]]) -> None:
+    def _show_inspection_summary(self, inspection, notes: dict) -> None:
         shape = inspection.first_frame.data.shape
         # Only what the text needs (not the frame), as it was when the frame was read: composed
         # again after a switch of the language.
@@ -320,15 +355,14 @@ class GeometrySourcesMixin:
     def _refresh_geometry_texts(self, *_args) -> None:
         for key, *_rest in GEOMETRY_FIELDS:
             self._show_geometry_source(key)
+        notes = []
         if self._calibration is not None:
-            self.geometry_note.setText(
-                trf(
-                    "Last calibration: {image} · {time}",
-                    image=Path(self._calibration.source_image).name or "?",
-                    time=_when(self._calibration.timestamp),
-                )
-            )
-        self.geometry_note.setVisible(self._calibration is not None)
+            notes.append(trf("Last calibration: {image} · {time}", image=Path(self._calibration.source_image).name or "?",
+                             time=_when(self._calibration.timestamp)))
+        if self._invalid_calibration:
+            notes.append("⚠ " + trf(INVALID_CALIBRATION, values=", ".join(self._invalid_calibration)))
+        self.geometry_note.setText("\n".join(notes))
+        self.geometry_note.setVisible(bool(notes))
         if self._inspection_summary is not None:
             self._compose_inspection_summary()
             self._show_first_frame_label()

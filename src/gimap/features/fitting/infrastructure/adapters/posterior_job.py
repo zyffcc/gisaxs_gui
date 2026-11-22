@@ -64,13 +64,24 @@ def fitted_points(q, intensity, sigma=None, qz: float = 0.0, qz_minus=None) -> d
 
 
 def encode(solution, points=None) -> dict:
+    extra = solution.extras or {}
+    diagnostics = dict(extra.get("diagnostics", {}))
+    diagnostics["reported_interval_kinds"] = {
+        name: fit_names.reported_interval_kind(solution.flags, v.error, diagnostics.get("posterior_kind"))
+        for name, v in solution.values.items()}
+    key = fit_names.weight_key({"compared_by": extra.get("compared_by"), "flags": solution.flags})
     return {
+        "diagnostics": diagnostics, "posterior_summary": extra.get("posterior_summary", {}),
+        "importance_starts": extra.get("importance_starts", []),
+        "least_squares_values": {**{name: _number(v.best) for name, v in solution.values.items()},
+                                 **{key: _number(solution.model.globals[key].value) for key in refine.REFLECTION_KEYS
+                                    if key in extra.get("posterior_summary", {})}},
         "points": None if points is None else dict(points),
         "compared_by": (solution.extras or {}).get("compared_by"),
-        "composition": int(solution.composition), "name": solution.name, "probability": _number(solution.probability),
+        "composition": int(solution.composition), "name": solution.name, key: _number(solution.probability),
         "model": fm.model_to_dict(solution.model), "chi2": _number(solution.chi2_reduced),
         "log_rmse": _number(solution.log_rmse), "method": solution.method, "flags": list(solution_flags(solution)),
-        "log_evidence": _number(solution.log_evidence), "ess": _number(solution.ess), "samples": solution.samples,
+        "log_evidence": _number(diagnostics.get("log_evidence", solution.log_evidence)), "ess": _number(solution.ess), "samples": solution.samples,
         "values": {name: [_number(v.best), _number(v.median), _number(v.low68), _number(v.high68), _number(v.low95),
                           _number(v.high95), _number(v.error)] for name, v in solution.values.items()},
     }
@@ -254,6 +265,8 @@ def solution_row(solution, item, render_q, points=None) -> dict:
     for c in components:
         c["weight"] = c["amplitude"] / total if total > 0 else 0.0
     g = model.globals
+    record = encode(solution)
+    key = fit_names.weight_key(record)
     return dict(
         workflow="native_v5", physics_backend="cut_model", law=model.components[0].law if components else None,
         best_source="posterior", side=item["side"], combination=" + ".join(c["type"] for c in components),
@@ -262,12 +275,13 @@ def solution_row(solution, item, render_q, points=None) -> dict:
                            sigma_Res=float(g["res_width"].value), nu_Res=float(g["res_exponent"].value),
                            q_resolution=float(g["q_resolution"].value),
                            **{key: float(g[key].value) for key in ("alpha_i", "alpha_f", "wavelength")}),
-        probability=_number(solution.probability), posterior={k: v for k, v in encode(solution)["values"].items()},
+        **{key: record[key]}, posterior=record["values"], posterior_summary=record["posterior_summary"],
+        least_squares_values=record["least_squares_values"], diagnostics=record["diagnostics"],
         best_log_rmse=float(np.sqrt(np.mean(np.log(fitted[positive] / y[positive]) ** 2))) if positive.any() else None,
         best_chi2_weighted=float(solution.chi2_reduced), chi2_reduced=float(solution.chi2_reduced),
         points={key: value for key, value in points.items() if key != "q_min"}, signed_weighted_rms=float(np.sqrt(np.mean(residual**2))),
         signed_huber_delta2=float(np.mean(np.where(abs(residual) <= 2, 0.5 * residual**2, 2 * (abs(residual) - 1)))),
-        probability_status="Posterior probability of the composition and mode (importance sampling)",
+        comparison_label=("BIC weight" if key == "bic_weight" else "Posterior probability of the composition and mode"),
         flags=list(flags), warnings=flag_sentences(first, many), more_warnings=flag_sentences(second, many),
         compared_by=(solution.extras or {}).get("compared_by"), ess=_number(solution.ess),
         native_q=(q * item["sign"]).tolist(), observed=y.tolist(), sigma=sigma.tolist(), native_fit=fitted.tolist(),
@@ -280,7 +294,8 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
 
     network = posterior_network.load()
     report(0, 1, f"{item['side']}: weighting the network's samples", {})
-    settings = predict_options(dict(qz=float(options.get("cut_qz") or 0.0), **batch_compositions(options["components"])))
+    settings = predict_options(dict(qz=options.get("cut_qz"), reflected_beam=options.get("reflected_beam"),
+                                    measured_qz=options.get("measured_qz"), **batch_compositions(options["components"])))
     solutions = refine.predict(network, item["q"], item["observed"], item["sigma"], **settings)
     if cancelled():
         raise RuntimeError("Prediction cancelled")

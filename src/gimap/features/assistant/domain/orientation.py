@@ -10,36 +10,27 @@ the sample plane (q∥).  Two views:
   factor f = (3⟨cos²χ⟩ − 1)/2 relative to the surface normal (sin χ weighted,
   i.e. assuming a fibre texture about the normal).  f = 1: along the normal,
   0: random, −0.5: in plane.  The texture sentence compares f with f_iso, the f
-  of a random ring over the same measured |χ| (``TEXTURE_SIGMAS``), and says when
-  f depends on the bins next to the sample horizon (``HORIZON_CHI``).
-
-The sin χ weight is the Lorentz factor of a fibre texture near the beam (Analyze's ``intensity.py``: 1/L =
-cos αi cos αf |sin 2θf| ≈ (q/k) sin χ). An I(χ) Analyze has already divided by that factor (``lorentz=True``) counts
-crystallites per degree of χ: its f is ⟨cos²χ⟩ without a second sin χ, and the radial background under it is
-scaled like an isotropic ring (∝ sin χ). f_iso and the weighted coverage do not change.
+  of a random ring over the same measured |χ| (``TEXTURE_SIGMAS``), as a separate coverage diagnostic.
 """
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional, Sequence
 
 import numpy as np
 
+from ....shared.ring_profile import SHADOW_FRACTION, fold_ring, measured_hermans
 from .profiles import Profile, estimate_background
 
 DOMINANCE_RATIO = 2.0
-SHADOW_FRACTION = 0.2
-"""Intensity below this fraction of the diffuse background at the same q cannot come from the
-sample: a shadow, an absorber or an insensitive detector area.  Such pixels count as unmeasured."""
 MIN_COVERAGE = 0.8
 """Fraction of the sin χ weight of |χ| 0–90° that must be measured for the Hermans f.
 
 f weights each |χ| by sin χ, so the part near the sample plane counts most: an isotropic
 ring measured only over |χ| < 60° already gives f ≈ 0.4, while a missing wedge below 10°
 hardly matters."""
-MONTE_CARLO_SAMPLES = 200
 SIMILAR_MAXIMUM = 0.85
 """A second maximum at least this high (relative to the first) and 30° away: no single orientation."""
 WEAK_HERMAN = 0.1
@@ -51,12 +42,6 @@ NORMAL_CHI, PLANE_CHI = 20.0, 70.0
 """The I(χ) maximum names "along the surface normal" below NORMAL_CHI and "in the sample plane" above PLANE_CHI (each
 only with the margin of the texture rule and an f − f_iso of the same sign); between them the ring is called tilted
 at its maximum, without that margin."""
-HORIZON_CHI = 85.0
-"""|χ| from here to 90° lies next to the sample horizon, where the exit angle αf is smallest: absorption in the film,
-the transmission function or a shadow can lower the intensity there, and the sin χ weight makes those bins count
-most in f.  f − f_iso is also computed without them; a change beyond ``HORIZON_SHIFT`` is said."""
-HORIZON_SHIFT = 0.01
-"""A change of f − f_iso without the bins next to the horizon is said when it exceeds both this and 3σ_f."""
 
 
 def _texture_margin(herman_err: Optional[float]) -> float:
@@ -227,29 +212,10 @@ class RingOrientation:
     texture_margin: Optional[float] = None
     """max(0.1, 3σ_f): |f − f_iso| below it names no orientation."""
     horizon_excess: Optional[float] = None
-    """f − f_iso with |χ| ≥ ``HORIZON_CHI`` left out (``None`` when none of those bins is measured)."""
+    """Legacy report field. Exit-angle sensitivity is recorded in the systematic range."""
 
-
-def _fold(chi: np.ndarray, net: np.ndarray, sigma: np.ndarray):
-    """Inverse-variance mean of ±χ into 1° bins of |χ| (0…90°)."""
-    bins = np.clip(np.floor(np.abs(chi)), 0, 89).astype(int)
-    weights = 1.0 / sigma ** 2
-    total = np.bincount(bins, weights=weights, minlength=90)
-    value = np.bincount(bins, weights=weights * net, minlength=90)
-    measured = total > 0
-    folded = np.where(measured, value / np.where(measured, total, 1.0), np.nan)
-    error = np.where(measured, 1.0 / np.sqrt(np.where(measured, total, 1.0)), np.nan)
-    return np.arange(90) + 0.5, folded, error, measured
-
-
-def _herman(chi_deg: np.ndarray, intensity: np.ndarray, weighted: bool = True) -> Optional[tuple[float, float]]:
-    """``(f, ⟨cos²χ⟩)``; ``weighted``: by sin χ (an I(χ) as measured), not for a Lorentz-corrected one."""
-    weight = np.clip(intensity, 0.0, None) * (np.sin(np.radians(chi_deg)) if weighted else 1.0)
-    total = float(weight.sum())
-    if total <= 0:
-        return None
-    cos2 = float((weight * np.cos(np.radians(chi_deg)) ** 2).sum() / total)
-    return 1.5 * cos2 - 0.5, cos2
+    orientation_settings: dict = field(default_factory=dict)
+    pole_figure: dict = field(default_factory=dict)
 
 
 def _runs(mask: np.ndarray, minimum: int = 2) -> tuple[tuple[float, float], ...]:
@@ -271,19 +237,16 @@ def ring_orientation(
     background: float = 0.0,
     min_snr: float = 3.0,
     seed: int = 0,
-    lorentz: bool = False,
+    horizon_chi_deg: Optional[float] = None,
 ) -> RingOrientation:
-    """Orientation of one ring from its I(χ) (x in degrees, −90…90); ``lorentz``: the I(χ) is already divided by
-    the Lorentz factor of a fibre texture (module docstring), so f gets no second sin χ weight."""
+    """Orientation from binned mean pixel intensities before the detector Lorentz correction."""
     from scipy.ndimage import gaussian_filter1d
     from scipy.signal import find_peaks
 
     data = profile.measured((-90.0, 90.0))
     notes = [
-        "Hermans f is sin χ weighted: it assumes the film is isotropic in its plane (fibre texture)." if not lorentz
-        else "The I(χ) is divided by the Lorentz factor of a fibre texture: Hermans f is not weighted by sin χ again.",
-        f"The radial background under the ring ({background:.4g} counts/pixel) was subtracted"
-        + (", scaled like an isotropic ring (∝ sin χ)." if lorentz else "."),
+        "Hermans f is sin χ weighted: it assumes the film is isotropic in its plane (fibre texture).",
+        f"The radial background under the ring ({background:.4g} counts/pixel) was subtracted.",
     ]
     if data.size < 10:
         # The coverage and the unmeasured |χ| of the few bins there are, not those of a ring with none.
@@ -293,31 +256,20 @@ def ring_orientation(
             tuple(q_window), background, float(seen.mean()), _runs(~seen), None, None, None, (), None, "",
             f"Only {data.size} measured χ bins in this ring.", tuple(notes),
         )
-    under = np.full(data.x.shape, float(background))
-    if lorentz and background:  # the ring's mean background, distributed as an isotropic ring after the factor
-        sine = np.abs(np.sin(np.radians(data.x)))
-        under = background * sine / max(float(sine.mean()), 1e-12)
-    chi, folded, error, measured = _fold(data.x, data.y - under, data.sigma)
-    shadowed: tuple[tuple[float, float], ...] = ()
-    if background > 0:
-        # Far below the diffuse background nothing comes from the sample: a shadow (with its edge bins).
-        level = _fold(data.x, under, data.sigma)[1] if lorentz else background
-        core = measured & (folded + level < SHADOW_FRACTION * level)
-        if core.any():
-            shadow = measured & (np.convolve(core.astype(int), [1, 1, 1], mode="same") > 0)
-            shadowed = _runs(shadow, minimum=1)
-            where = ", ".join(f"{a:.0f}–{b:.0f}°" for a, b in shadowed)
-            notes.append(
-                f"|χ| {where} is shadowed: the intensity there is below {SHADOW_FRACTION:.0%} of the diffuse "
-                "background at this q (a shadow, absorber or insensitive detector area), so it counts as unmeasured."
-            )
-            measured = measured & ~shadow
+    chi, folded, error, measured, shadow, _ = fold_ring(data.x, data.y, data.sigma, background,
+                                                        horizon_chi_deg=horizon_chi_deg)
+    shadowed = _runs(shadow, minimum=1)
+    if shadowed:
+        where = ", ".join(f"{a:.0f}–{b:.0f}°" for a, b in shadowed)
+        notes.append(
+            f"|χ| {where} is shadowed: the intensity there is below {SHADOW_FRACTION:.0%} of the diffuse "
+            "background at this q (a shadow, absorber or insensitive detector area), so it counts as unmeasured."
+        )
     coverage = float(measured.mean())
     missing = _runs(~measured)
     if missing and missing[0][0] == 0.0:
         notes.append(
-            f"|χ| < {missing[0][1]:.0f}° is not measured (missing wedge); f then leaves out the "
-            "orientations closest to the surface normal and is biased low."
+            f"The missing wedge covers |χ| < {missing[0][1]:.0f}°. The measured f excludes these orientations."
         )
     significance = folded[measured] / error[measured]
     if significance.size == 0 or float(np.nanmax(significance)) < min_snr:
@@ -342,20 +294,15 @@ def ring_orientation(
             f"plane. Within the measured part the ring is strongest at |χ| ≈ {top:.0f}°.",
             tuple(notes), weighted, shadowed=shadowed,
         )
-    isotropic = _herman(angles, np.ones_like(angles))
-    herman_isotropic = None if isotropic is None else float(isotropic[0])
-    weighted_f = not lorentz
-    result = _herman(angles, values, weighted_f)
-    herman, cos2 = (result if result is not None else (None, None))
-    herman_err = None
-    if result is not None:
-        rng = np.random.default_rng(seed)
-        samples = []
-        for _ in range(MONTE_CARLO_SAMPLES):
-            trial = _herman(angles, values + rng.normal(0.0, error[measured]), weighted_f)
-            if trial is not None:
-                samples.append(trial[0])
-        herman_err = float(np.std(samples)) if len(samples) > 10 else None
+    measure = sine[measured]
+    herman_isotropic = measured_hermans(angles, measure)[0]
+    herman, herman_err, cos2 = measured_hermans(angles, values * measure, error[measured] * measure, seed=seed)
+    if herman is None:
+        return RingOrientation(
+            tuple(q_window), background, coverage, missing, None, None, None, (), None, "",
+            "The total sin χ weighted intensity after background subtraction is nonpositive.",
+            tuple(notes), weighted, herman_isotropic, shadowed,
+        )
     if herman_isotropic is not None and weighted < 0.999:
         notes.append(  # with the decimals of f (those of σ_f), so that a small f_iso does not read as 0.00
             f"A random (isotropic) ring measured over the same |χ| would give f = "
@@ -363,19 +310,6 @@ def ring_orientation(
         )
     excess = None if herman is None else float(herman - (herman_isotropic or 0.0))
     margin = _texture_margin(herman_err)
-    horizon_excess = _without_horizon(chi, folded, measured, weighted_f) if herman is not None else None
-    flips = False  # the margin rule would decide otherwise without those bins (said once the texture is known)
-    if excess is not None and horizon_excess is not None and herman_err:
-        shift = horizon_excess - excess
-        if abs(shift) > max(HORIZON_SHIFT, TEXTURE_SIGMAS * herman_err):
-            notes.append(
-                f"Leaving out |χ| ≥ {HORIZON_CHI:.0f}°, next to the sample horizon, changes f − f_iso from "
-                f"{signed(excess, 3, plus=True)} to {signed(horizon_excess, 3, plus=True)} "
-                f"({abs(shift) / herman_err:.0f}σ_f): f depends on those "
-                "bins. There the exit angle αf is smallest, and absorption in the film, the transmission function "
-                "or a shadow can lower the intensity; GIMaP corrects none of them."
-            )
-            flips = (abs(excess) < margin) != (abs(horizon_excess) < margin)
     filled = np.interp(chi, angles, values)
     smooth = gaussian_filter1d(filled, 1.5, mode="nearest")
     typical_error = float(np.nanmedian(error[measured]))
@@ -438,27 +372,15 @@ def ring_orientation(
                 f"{rival['chi']:.0f}°"
             )
         elif excess is not None and abs(excess) < margin and (top < NORMAL_CHI or top > PLANE_CHI):
-            texture = (
-                f"no clear preferred orientation (f − f_iso = {signed(excess, 3, plus=True)}, within ±{margin:.2g}): "
-                f"the ring is strongest at |χ| ≈ {top:.0f}° but nearly as intense elsewhere"
-            )
+            texture = f"no clear preferred orientation; the strongest measured bin is at |χ| ≈ {top:.0f}°"
         elif excess is not None and ((top < NORMAL_CHI and excess < 0) or (top > PLANE_CHI and excess > 0)):
-            # The strongest |χ| and f disagree: most of the sin χ weighted intensity lies on the other side.
-            texture = (
-                f"no single preferred orientation: strongest at |χ| ≈ {top:.0f}°, but f − f_iso = "
-                f"{signed(excess, 3, plus=True)} puts most of the intensity nearer the "
-                f"{'sample plane' if excess < 0 else 'surface normal'}"
-            )
+            texture = f"no single preferred orientation: the maximum at |χ| ≈ {top:.0f}° and the measured moment disagree"
         elif top < NORMAL_CHI:
             texture = "oriented along the surface normal (out-of-plane, χ ≈ 0°)"
         elif top > PLANE_CHI:
             texture = "oriented in the sample plane (in-plane, χ ≈ ±90°)"
         else:  # named from the maximum: the margin of the texture rule does not apply here
             texture = f"tilted: maximum at χ ≈ ±{top:.0f}°"
-        if flips and rival is None and (top < NORMAL_CHI or top > PLANE_CHI):  # where the margin decides the sentence
-            notes.append(
-                f"Without those bins the texture rule (|f − f_iso| against {margin:.2g}) would give another verdict."
-            )
         if next_to_gap:
             texture += (
                 f" — but the strongest measured |χ| ({top:.0f}°) borders an unmeasured range, so the true "
@@ -468,19 +390,8 @@ def ring_orientation(
         tuple(float(value) for value in q_window), float(background), coverage, missing,
         None if herman is None else float(herman), herman_err, None if cos2 is None else float(cos2),
         tuple(maxima), anisotropy, texture, "", tuple(notes), weighted, herman_isotropic, shadowed,
-        excess, None if excess is None else margin, horizon_excess,
+        excess, None if excess is None else margin,
     )
-
-
-def _without_horizon(chi: np.ndarray, folded: np.ndarray, measured: np.ndarray, weighted: bool = True) -> Optional[float]:
-    """f − f_iso over the measured bins below ``HORIZON_CHI`` (``None`` when none at or above it is measured)."""
-    inner = measured & (chi < HORIZON_CHI)
-    if not inner.any() or int(inner.sum()) == int(measured.sum()):
-        return None
-    kept, isotropic = _herman(chi[inner], folded[inner], weighted), _herman(chi[inner], np.ones(int(inner.sum())))
-    if kept is None or isotropic is None:
-        return None
-    return float(kept[0] - isotropic[0])
 
 
 __all__ = [

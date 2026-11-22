@@ -31,20 +31,24 @@ STALE = ("changed", None, frozenset())
 
 
 def solution_to_dict(solution: Solution) -> dict:
+    key = "bic_weight" if "bic" in solution.flags else "probability"
     return {"model": model_to_dict(solution.model), "chi2": number(solution.chi2), "source": solution.source,
             "deviation": number(solution.deviation),
-            "probability": None if solution.probability is None else number(solution.probability),
+            key: number(solution.probability),
             "intervals": [[name, [number(value) if value is not None else None for value in values]]
                           for name, values in solution.intervals],
             "flags": list(solution.flags), "points": list(solution.points), "tried": solution.tried,
             "composition": solution.composition, "ess": number(solution.ess) if solution.ess is not None else None,
+            "diagnostics": solution.diagnostics, "posterior_summary": solution.posterior_summary,
             "incomplete": bool(solution.incomplete)}
 
 
 def solution_from_dict(data: dict) -> Solution:
+    weight = data.get("bic_weight", data.get("probability"))
     return Solution(model_from_dict(data["model"]), read_number(data.get("chi2")), str(data.get("source") or ""),
                     float(data.get("deviation") or 0.0),
-                    probability=None if data.get("probability") is None else float(data["probability"]),
+                    probability=None if weight is None else float(weight), diagnostics=data.get("diagnostics") or {},
+                    posterior_summary=data.get("posterior_summary") or {},
                     intervals=tuple((str(name), tuple(values)) for name, values in data.get("intervals") or ()),
                     flags=tuple(data.get("flags") or ()), points=tuple(int(v) for v in data.get("points") or ()),
                     tried=data.get("tried"), composition=str(data.get("composition") or ""), ess=data.get("ess"),
@@ -55,7 +59,9 @@ def _sha256(curve) -> str | None:
     from ...application.curve_sources import source_record
 
     try:
-        return source_record(curve.path).get("sha256") if curve is not None and curve.path else None
+        if curve is not None and curve.path:
+            return (curve.source or source_record(curve.path)).get("sha256")
+        return None
     except (OSError, ValueError):
         return None
 

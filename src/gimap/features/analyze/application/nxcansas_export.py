@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping, Optional, Sequence
 
+from src.gimap.shared.curve_error_description import curve_error_description
 from src.gimap.shared.export_text import export_text
 from src.gimap.shared.nxcansas import ARBITRARY, PER_ANGSTROM, Instrument, SasCurve
 from src.gimap.shared.version import SOFTWARE as RELEASE
@@ -33,11 +34,6 @@ Q_AXES = {
 }
 """What the Q of a curve is, by the axis Analyze gives it (the curves against an angle are not among them)."""
 SUFFIX = "_nxcansas.h5"
-ERRORS = {
-    "poisson": "Poisson: the square root of the counts summed in the bin over the number of pixels",
-    "pixel_scatter": "the scatter of the bin's pixels about their mean over the square root of their number",
-    "scaled_poisson": "Poisson carried through the intensity corrections",
-}
 
 
 def nxcansas_name(stem: str) -> str:
@@ -80,22 +76,25 @@ def sas_curves(curves: Sequence[Curve], metadata: Mapping[str, Any], *, run: str
                              else "the mean detector counts per pixel of the point (arbitrary units)")
     if relative:
         intensity_description = "relative intensity after reference-peak scaling"
-    error = ERRORS.get(str(metadata.get("error_model") or ""), "as the record's error_model says")
+    error = curve_error_description(metadata.get("error_model"), metadata.get("corrections") or {})
     out = []
     for curve in curves:
         if not against_q(curve):
             continue
         axis = Q_AXES[curve.x_label]
+        summed = bool(curve.region.get("aggregation"))
+        description = f"sum of Lorentz-weighted pixels per q bin ({curve.y_label})" if summed else intensity_description
         record = {**dict(metadata), "curve": {"key": curve.key, "title": curve.title, "x_label": curve.x_label,
-                                             "region": curve.region}}
+                                             "y_label": curve.y_label, "region": curve.region}}
         out.append(SasCurve(
             title=export_text(f"{run}: {curve.title}; Q is {axis}"),
-            q=curve.x, intensity=curve.intensity, sigma=curve.sigma, q_unit=PER_ANGSTROM, intensity_unit=unit,
+            q=curve.x, intensity=curve.intensity, sigma=curve.sigma, q_unit=PER_ANGSTROM,
+            intensity_unit=ARBITRARY if summed else unit,
             run=run, sample=run, instrument=known,
             process="GIMaP Analyze" if written_by == "Analyze" else f"GIMaP Analyze ({written_by})",
             description=export_text(
-                f"Reduced by {RELEASE}: {curve.title}. Q: {axis}, in 1/angstrom. I: {intensity_description}. "
-                f"Idev: the standard error of that mean ({error}). The record "
+                f"Reduced by {RELEASE}: {curve.title}. Q: {axis}, in 1/angstrom. I: {description}. "
+                f"Idev: the standard error of that {'sum' if summed else 'mean'} ({error}). The record "
                 "of the frame (settings, geometry, corrections, inputs with SHA-256) is the NXnote gimap_record."),
             record=json.dumps(record, ensure_ascii=True, sort_keys=True, default=str),
             date=str(metadata.get("created") or ""),

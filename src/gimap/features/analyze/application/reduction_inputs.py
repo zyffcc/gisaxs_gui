@@ -40,6 +40,8 @@ def image_stamp(path, frames):
 
 def correction_references(corrections, frames):
     images = [corrections.dark_path, corrections.background_path, corrections.flat_field_path, corrections.mask_path]
+    if corrections.error_model == "sigma":
+        images.append(corrections.sigma_path)
     paths = []
     for edit in corrections.mask_shapes:
         paths.extend(edit.sources)

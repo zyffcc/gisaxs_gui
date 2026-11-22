@@ -67,6 +67,35 @@ def test_poni_files_put_the_direct_beam_where_the_rings_are_centred() -> None:
     assert (pbte.beam_center_x_px, pbte.beam_center_y_px) == pytest.approx((8.3, 590.39), abs=2.0)  # the EDF header
 
 
+def test_the_agbh_poni_is_a_test_geometry_not_a_calibration_of_this_image() -> None:
+    """The rings of the image lie 3.3 % farther out than the .poni puts them: at the .poni's 1.0 Å they give
+    L = 1635 mm, not its 1583 mm (README of tests/data/external). GIMaP's calibration (1635 mm) is right."""
+    agbh = _poni("saxs_agbh_pyfai")
+    image = load_detector_image(DATA / MANIFEST["saxs_agbh_pyfai"]["frame"])
+    valid = image.data >= 0
+    rows, columns = np.indices(image.data.shape)
+    radius = np.hypot(columns + 0.5 - agbh.beam_center_x_px, rows + 0.5 - agbh.beam_center_y_px)
+    bins = np.floor(4 * radius).astype(int)  # quarter-pixel rings of the azimuthal average
+    sums, counts = np.bincount(bins[valid], image.data[valid]), np.bincount(bins[valid])
+    profile = np.where(counts > 10, sums / np.maximum(counts, 1), np.nan)
+    radii = (np.arange(len(profile)) + 0.5) / 4
+    ratios, distances = [], []
+    for order in range(1, 6):  # AgBh d001 = 58.38 Å
+        tangent = math.tan(2 * math.asin(order * 1.0 / (2 * 58.38)))
+        poni_radius = agbh.distance_mm * tangent / 0.172
+        near = np.flatnonzero((radii > 0.97 * poni_radius) & (radii < 1.10 * poni_radius) & np.isfinite(profile))
+        top = near[np.nanargmax(profile[near])]
+        window = slice(top - 12, top + 13)
+        weights = np.nan_to_num(profile[window] - np.nanmin(profile[near]))
+        measured = float((weights * radii[window]).sum() / weights.sum())
+        ratios.append(measured / poni_radius)
+        distances.append(measured * 0.172 / tangent)
+    assert agbh.distance_mm == pytest.approx(1583.3, abs=0.2)  # along the beam (the .poni: 1583.23 mm to the PONI)
+    assert np.mean(ratios) == pytest.approx(1.033, abs=0.003) and np.ptp(ratios) < 0.004  # every order alike
+    assert np.mean(distances[1:]) == pytest.approx(MANIFEST["saxs_agbh_pyfai"]["ring_distance_mm_at_stated_wavelength"],
+                                                   rel=0.002)
+
+
 def test_the_agbh_standard_calibrates_to_its_rings() -> None:
     from src.gimap.features.calibration.bootstrap import create_headless_calibration
 

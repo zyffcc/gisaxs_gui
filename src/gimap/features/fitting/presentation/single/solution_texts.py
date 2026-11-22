@@ -20,6 +20,8 @@ from ...application.solution_export import half_width, intervals_by_path
 SHORT_FLAGS = {
     "unconstrained": "not determined: {name}", "at_bound": "at bound: {name}", "correlated": "correlated: {name}",
     "low_ess": "few samples", "bic": "compared by BIC", "model_error": "model error", "large": "large: {name}",
+    "qzR_cov": "interval coverage: {name}", "qzR_fail": "level 2 fails: {name}",
+    "cyl_sphere": "possible sphere: {name}",
     "small": "small: {name}", "qzR": "q_z·R high: {name}", "absent": "population {name} unused",
 }
 """A flag in a few words (the selector of solutions; Fit details has the sentences)."""
@@ -29,11 +31,11 @@ REFINED_ENTRY = "Refined from solution {number} ({method}) · χ²ᵣ {chi2}"
 REFINED_FROM = ("Values from a new refinement ({method}) of solution {number}, {label}{edited}: not the values Predict "
                 "gave; those and their intervals stay with solution {number} below.")
 EDITED = ", edited in Model before the fit"
-PLUS_TIP = "± half the width of the 68 % posterior interval [{low}, {high}] of this Predict solution (not a least-squares error)."
+PLUS_TIP = "± half the width of the 68 % posterior interval [{low}, {high}], extended to include the least-squares value."
 PLUS_TIP_BIC = "± half the width of the 68 % interval [{low}, {high}] from the least-squares errors (this solution is compared by BIC)."
 NO_INTERVAL = "No interval: Predict parameters solves the scales and the background for every sample."
-PLUS_HEADER_TIP = ("±: after a fit, the least-squares error; for a solution of Predict parameters in Model, half the "
-                   "width of its 68 % posterior interval.")
+PLUS_HEADER_TIP = ("After Refine or Search, ± gives the least-squares error. For Predict parameters, "
+                   "± gives half the width of the reported 68 % interval.")
 METHODS = {"local": "Refine", "global": "Search the ranges", "predict": "Predict parameters"}
 
 
@@ -73,7 +75,8 @@ def selector_text(index: int, solution, label: str) -> str:
     chi2 = f"{solution.chi2:.3g}" if math.isfinite(solution.chi2) else "—"
     parts = [trf(SELECTOR, number=index + 1, label=label, chi2=chi2)]
     if solution.probability is not None:
-        parts.append(f"p {solution.probability:.2f}")
+        label = tr(fit_names.BIC_WEIGHT) if "bic" in solution.flags else "p"
+        parts.append(f"{label} {solution.probability:.2f}")
     if getattr(solution, "incomplete", False):
         parts.append(tr(INCOMPLETE))
     flags = short_flags(solution.flags, len(solution.model.components) > 1)
@@ -103,11 +106,18 @@ def predict_plus(solution, path) -> tuple[str, str]:
         return "", ""
     values = intervals_by_path(solution).get(path)
     if values is None:
+        if path[0] == "globals" and (sampled := solution.posterior_summary.get(path[1])):
+            low, high = sampled["low68"], sampled["high68"]
+            return f"± {0.5 * (high - low):.2g}", trf("Sampled central 68 % interval [{low}, {high}].",
+                                                    low=f"{low:.4g}", high=f"{high:.4g}")
         return "–", tr(NO_INTERVAL)
     half = half_width(values)
     if half is None:
         return "–", tr(NO_INTERVAL)
-    tip = PLUS_TIP_BIC if "bic" in tuple(solution.flags) else PLUS_TIP
+    kind = fit_names.reported_interval_kind(solution.flags, values[6], solution.diagnostics.get("posterior_kind"))
+    tip = PLUS_TIP_BIC if kind == "bic" else PLUS_TIP
+    if kind == "network_proposal":
+        tip = "± half the width of the reported 68 % interval [{low}, {high}] from the network proposals."
     return f"± {half:.2g}", trf(tip, low=f"{values[2]:.4g}", high=f"{values[3]:.4g}")
 
 

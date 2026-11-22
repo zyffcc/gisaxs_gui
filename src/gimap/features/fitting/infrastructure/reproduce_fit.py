@@ -13,6 +13,7 @@ import numpy as np
 from src.gimap.shared.reproduction import file_reference, verified_path
 
 from ..application.fit_reproduction import joint_tables, model_tables, points_from_record, predict_tables
+from ..application.single_fit import converged_again
 from ..domain.fit_engine import fit
 from ..domain.fit_model import model_from_dict
 from ..domain.posterior import refine
@@ -24,7 +25,8 @@ def predict_options(payload):
     defaults = dict(qz=0., qz_minus=None, compositions=None, allowed=None, seed=0, law="number_gauss",
                     coupling="lma", grazing=None, shortlist=refine.SHORTLIST, samples=refine.SAMPLES,
                     local_samples=refine.LOCAL_SAMPLES, refine_modes=refine.REFINED, explored=refine.EXPLORED,
-                    model_error_floor=refine.MODEL_ERROR_FLOOR, min_probability=0.01)
+                    model_error_floor=refine.MODEL_ERROR_FLOOR, min_probability=0.01,
+                    reflected_beam=None, known_heights=None, measured_qz=None)
     options = {key: payload.get(key, value) for key, value in defaults.items()}
     options["qz"] = float(options["qz"] or 0.)
     options["qz_minus"] = None if options["qz_minus"] is None else float(options["qz_minus"])
@@ -36,7 +38,7 @@ def prediction_plan(points, options, network_path, network_meta, *, display_q=No
     manifest = network_path.with_suffix(".json")
     if json.loads(manifest.read_text(encoding="utf-8")) != network_meta:
         raise ValueError(f"The network record changed after loading: {manifest}")
-    plan = {"operation": "predict", "points": points, "options": options,
+    plan = {"operation": "predict", "report_version": 2, "points": points, "options": options,
             "weights": {**file_reference(network_path), "sha256": network_meta["sha256"]},
             "network_record": file_reference(manifest)}
     if display_q is not None:
@@ -77,7 +79,8 @@ def _predict(plan, folder, should_cancel):
     solutions = solutions[:plan.get("limit")]
     grid = plan.get("display_q")
     encoded = [encode(s) for s in solutions]
-    tables = predict_tables(encoded, data, None if grid is None else np.asarray(grid), plan.get("sign", 1))
+    tables = predict_tables(encoded, data, None if grid is None else np.asarray(grid), plan.get("sign", 1),
+                            report_version=plan.get("report_version", 1))
     return solutions, tables
 
 
@@ -130,6 +133,8 @@ def replay_fit(record, record_dir, *, should_cancel=None):
         result = fit(start, data, method=recipe["method"], max_evaluations=recipe["max_evaluations"], seed=recipe["seed"],
                      stop=_stop_callback(recipe["stopped_after"], should_cancel),
                      seeds=tuple(model_from_dict(m) for m in recipe["population_seeds"]))
+        result = converged_again(result, data, restarts=recipe.get("restarts", 0),
+                                 max_evaluations=recipe.get("restart_budget"), stop=lambda: _check_cancel(should_cancel))
         if recipe.get("clear_start_errors") and result.start_kept:
             result = replace(result, errors={p: math.nan for p in result.errors}, correlated=())
         model = result.model

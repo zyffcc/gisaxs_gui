@@ -34,6 +34,12 @@ def q_of_positions(geometry: DetectorGeometry, x_px, y_px) -> tuple[np.ndarray, 
     return np.asarray(q.qy, dtype=np.float64), np.asarray(q.qz, dtype=np.float64)
 
 
+def qy_on_horizon(geometry: DetectorGeometry, columns) -> np.ndarray:
+    """q_y where each detector column meets α_f = 0 (NaN when it has no unique crossing)."""
+    columns = np.asarray(columns, dtype=np.float64)
+    return q_of_positions(geometry, columns, geometry.horizon_row(columns))[0]
+
+
 def exit_sine_of_qz(geometry: DetectorGeometry, qz) -> np.ndarray:
     """sin α_f of the rays with this q_z (NaN where none has it)."""
     k = geometry.wavevector_inv_angstrom
@@ -97,15 +103,18 @@ def positions_of_q(geometry: DetectorGeometry, qy, qz) -> tuple[np.ndarray, np.n
         along = np.sqrt(1.0 - across * across - normal * normal)  # NaN where no ray has these q
     cos_i, sin_i = math.cos(geometry.incidence_rad), math.sin(geometry.incidence_rad)
     ray = np.stack([along * cos_i - normal * sin_i, across, along * sin_i + normal * cos_i])  # (along beam, right, up)
-    if geometry.tilted:
-        columns, rows_up = (np.asarray(axis, dtype=np.float64) for axis in geometry.in_plane_axes())
-    else:
-        columns, rows_up = np.array([0.0, 1.0, 0.0]), np.array([0.0, 0.0, 1.0])
+    return positions_of_rays(geometry, ray)
+
+
+def positions_of_rays(geometry: DetectorGeometry, ray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Intersect laboratory rays (along beam, right, up) with the detector. NaN if the ray misses its plane."""
+    columns, rows_up = (np.asarray(axis, dtype=np.float64) for axis in geometry.in_plane_axes())
     normal_vector = np.cross(columns, rows_up)
     origin = np.array([geometry.distance_m, 0.0, 0.0])
     facing = np.tensordot(normal_vector, ray, axes=1)
     with np.errstate(invalid="ignore", divide="ignore"):
-        distance = np.where(facing > 0, float(origin @ normal_vector) / facing, np.nan)
+        distance = float(origin @ normal_vector) / facing
+        distance = np.where(np.isfinite(distance) & (distance > 0), distance, np.nan)
     point = ray * distance - origin.reshape((3,) + (1,) * (ray.ndim - 1))
     x = np.tensordot(columns, point, axes=1)
     y = np.tensordot(rows_up, point, axes=1)
@@ -119,6 +128,6 @@ def q_per_pixel(geometry: DetectorGeometry) -> float:
 
 
 __all__ = [
-    "alpha_f_of_qz", "exit_sine_of_qz", "horizon_qz", "positions_of_q", "q_of_positions", "q_per_pixel",
+    "alpha_f_of_qz", "exit_sine_of_qz", "horizon_qz", "positions_of_q", "positions_of_rays", "q_of_positions", "q_per_pixel", "qy_on_horizon",
     "qy_of_two_theta_f", "qz_of_alpha_f", "qz_of_exit_sine", "two_theta_f_of_qy",
 ]

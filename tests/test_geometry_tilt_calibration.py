@@ -21,7 +21,7 @@ from src.gimap.features.calibration.domain.instrument_profile import calibrated_
 from src.gimap.features.calibration.domain.models import CalibrationCandidate, CalibrationResult, DetectorImage
 from src.gimap.features.calibration.domain.standards import STANDARDS
 from src.gimap.features.calibration.domain.tilt_fit import fit_tilted_geometry, tilt_residual
-from src.gimap.shared.detector_io.radiation import energy_to_wavelength
+from src.gimap.shared.detector_io.radiation import HC_KEV_ANGSTROM, energy_to_wavelength
 from src.gimap.shared.geometry import DetectorGeometry, transmission_map
 from src.gimap.shared.geometry.poni import read_poni
 
@@ -57,6 +57,10 @@ def test_ring_points_of_the_xeuss_six_degree_geometry_give_its_tilt() -> None:
     assert math.degrees(fit[4]) == pytest.approx(math.degrees(truth.rot2_rad), abs=TILT_TOLERANCE_DEG)
     assert fit[0] == pytest.approx(cx, abs=0.2) and fit[1] == pytest.approx(cy, abs=0.2)
     assert fit[2] == pytest.approx(truth.distance_m * 1e3, rel=1e-3)
+    fixed = fit_tilted_geometry(xs, ys, qs, truth.wavelength_angstrom, truth.pixel_size_x_m, truth.pixel_size_y_m,
+                                start[:3], fixed_tilt=(truth.rot1_rad, truth.rot2_rad))
+    assert fixed[:2] == pytest.approx((cx, cy), abs=0.2)
+    assert fixed[2] == pytest.approx(truth.distance_m * 1e3, rel=1e-3)
 
 
 def test_the_residual_of_an_untilted_detector_is_the_circle_fit() -> None:
@@ -83,19 +87,21 @@ def _tilted_lab6(rot1_deg: float, rot2_deg: float):
     return data, geometry, energy
 
 
-def _calibrate(data, energy, *, tilt="auto"):
+def _calibrate(data, energy, *, tilt="auto", rot3_deg=0.0):
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder) / "lab6_synthetic.npy"
         path.write_bytes(b"synthetic standard")
         image = DetectorImage(data, np.zeros(data.shape, bool), path, pixel_size_x_m=172e-6, pixel_size_y_m=172e-6)
         return CalibrationEngine().calibrate(image, energy_kev=energy, standard_key="lab6", estimated_distance_mm=190,
-                                             distance_range_mm=(150, 600), tilt=tilt, energy_source="entered by user")
+                                             distance_range_mm=(150, 600), tilt=tilt, rot3_deg=rot3_deg,
+                                             energy_source="entered by user")
 
 
 def test_the_engine_finds_the_tilt_of_a_synthetic_lab6_frame_and_records_it() -> None:
     data, truth, energy = _tilted_lab6(2.0, -1.5)
-    result = _calibrate(data, energy)
+    result = _calibrate(data, energy, rot3_deg=7.0)
     best = result.selected_candidate
+    assert best.rot3_deg == pytest.approx(7.0)
     assert best.tilt_refined and best.matched_ring_count >= 3
     assert best.rot1_deg == pytest.approx(2.0, abs=TILT_TOLERANCE_DEG)
     assert best.rot2_deg == pytest.approx(-1.5, abs=TILT_TOLERANCE_DEG)
@@ -120,15 +126,22 @@ def test_the_engine_finds_the_tilt_of_a_synthetic_lab6_frame_and_records_it() ->
     assert poni.shape == (1200, 1200) and poni.wavelength_angstrom == pytest.approx(geometry.wavelength_angstrom)
 
 
+def test_fixed_rotation_survives_when_ring_tilt_is_disabled():
+    data, _, energy = _tilted_lab6(0.0, 0.0)
+    result = _calibrate(data, energy, tilt="off", rot3_deg=-3.5)
+    assert all(c.rot3_deg == -3.5 and not c.tilt_refined for c in result.candidates)
+    assert read_poni(calibration_poni_text(result)).geometry().rot3_rad == pytest.approx(math.radians(-3.5))
+
+
 def test_without_the_tilt_the_record_is_the_one_an_older_gimap_reads() -> None:
     candidate = CalibrationCandidate("agbh", 10.0, 12.0, 900.0, matched_ring_count=4)
     record = candidate.to_dict()
     assert "rot1_deg" not in record and "tilt_refined" not in record  # an older reader takes it key by key
     assert CalibrationCandidate.from_dict(record).rot1_deg == 0.0
-    few = CalibrationCandidate("agbh", 10.0, 12.0, 900.0, matched_ring_count=2)
-    from src.gimap.features.calibration.domain.tilt_fit import NOT_REFINED_FEW_RINGS, refine_tilt
+    few = CalibrationCandidate("agbh", 10.0, 12.0, 900.0, matched_ring_count=1)
+    from src.gimap.features.calibration.domain.tilt_fit import NOT_REFINED_FEW_RINGS, refine_ring_geometry
 
-    assert not refine_tilt(None, few, 1.0, 172e-6, 172e-6).tilt_refined  # type: ignore[arg-type]
+    assert refine_ring_geometry(None, few, 1.0, 172e-6, 172e-6, tilt="auto") is None  # type: ignore[arg-type]
     assert NOT_REFINED_FEW_RINGS in few.warnings
 
 
@@ -147,17 +160,79 @@ def test_an_untilted_calibration_keeps_the_q_of_every_pixel() -> None:
     assert np.max(np.abs(transmission_map(shape, back).q - reference)) <= 1e-12
 
 
+def test_rms_before_and_after_use_the_points_of_the_last_pass(monkeypatch):
+    from types import SimpleNamespace
+    from src.gimap.features.calibration.domain import tilt_fit
+
+    angles = np.linspace(0, 2 * np.pi, 90, endpoint=False)
+    qs = np.repeat([0.11, 0.22, 0.33], angles.size)
+    radii = np.tan(2 * np.arcsin(qs / (4 * np.pi))) / 172e-6
+    xs = 150 + radii * np.tile(np.cos(angles), 3)
+    ys = 110 + radii * np.tile(np.sin(angles), 3)
+    initial = (155, 110, 1000, 0, 0)
+    candidate = CalibrationCandidate("agbh", *initial[:3], matched_ring_count=3)
+
+    def sample(*args, widen):
+        # The wider first-pass band samples different centroids, just as it can on an image.
+        return xs + (2 if widen > 1 else 0), ys, qs
+
+    monkeypatch.setattr(tilt_fit, "tilted_ring_points", sample)
+    points = tilt_fit.refine_ring_geometry(SimpleNamespace(signal=np.empty((1, 1))), candidate,
+                                           1, 172e-6, 172e-6, tilt="auto")
+    assert np.array_equal(points[0], xs)
+    assert candidate.initial_point_rms_px == pytest.approx(tilt_fit.point_rms_px(*points, initial, 1, 172e-6, 172e-6))
+    assert candidate.point_rms_px < 1e-7 and candidate.untilted_point_rms_px < 1e-7
+
+
 @pytest.mark.skipif(not AGBH_FRAME.exists(), reason="public test data")
 def test_the_public_agbh_frame_is_fitted_better_with_the_tilt() -> None:
     import fabio
 
     data = fabio.open(str(AGBH_FRAME)).data.astype(np.float32)
     image = DetectorImage(data, data < 0, AGBH_FRAME, pixel_size_x_m=172e-6, pixel_size_y_m=172e-6)
-    best = CalibrationEngine().calibrate(image, energy_kev=12.0, standard_key="agbh").selected_candidate
+    options = dict(energy_kev=HC_KEV_ANGSTROM, standard_key="agbh")  # wavelength 1.0 angstrom
+    flat_result = CalibrationEngine().calibrate(image, **options, tilt="off")
+    flat = flat_result.selected_candidate
+    best = CalibrationEngine().calibrate(image, **options).selected_candidate
+    assert not flat.tilt_refined and (flat.rot1_deg, flat.rot2_deg) == (0, 0)
+    assert np.hypot(flat.center_x_px - best.center_x_px, flat.center_y_px - best.center_y_px) < 0.5
+    assert flat.initial_point_rms_px > 1.5 and flat.point_rms_px <= 0.5
+    assert flat.uncertainty_method == best.uncertainty_method == "ring jackknife"
+    assert 0 < flat.center_x_sigma_px < 0.5 and 0 < flat.distance_sigma_mm < 1
+    from src.gimap.features.calibration.application.headless import describe_calibration
+
+    record = flat_result.to_dict()
+    # A version 1 reader constructs candidates with strict keyword arguments and ignores new metadata.
+    for legacy_fields in (record["selected_candidate"], *record["candidates"]):
+        assert {"initial_point_rms_px", "point_rms_px", "rot1_deg"}.isdisjoint(legacy_fields)
+        CalibrationCandidate(**legacy_fields)
+    restored = CalibrationResult.from_dict(record).selected_candidate
+    assert (restored.initial_point_rms_px, restored.point_rms_px) == (flat.initial_point_rms_px, flat.point_rms_px)
+    report = describe_calibration(flat_result)
+    assert (report["initial_point_rms_px"], report["point_rms_px"]) == (flat.initial_point_rms_px, flat.point_rms_px)
     assert best.tilt_refined and best.matched_ring_count >= 3
-    assert best.point_rms_px < 0.5 * best.untilted_point_rms_px
+    assert best.point_rms_px <= best.untilted_point_rms_px <= 0.5
+    assert best.point_rms_px < 0.5 * best.initial_point_rms_px
     # the .poni's direct beam (179.98, 263.86) px; the engine counts pixel centres from 0
     assert best.center_x_px + 0.5 == pytest.approx(179.98, abs=0.5)
     assert best.center_y_px + 0.5 == pytest.approx(263.86, abs=0.5)
     assert abs(best.rot1_deg) < 1.0 and abs(best.rot2_deg) < 1.0  # a small tilt (the .poni: 0.37°, 0.43°)
     assert best.rot2_deg == pytest.approx(0.433, abs=3 * best.rot2_sigma_deg)
+
+
+def test_the_window_shows_one_rms_residual_and_says_which_it_is() -> None:
+    """A fitted geometry gives before and after on its ring points. Old files may only have ring radii."""
+    from src.gimap.features.calibration.domain.models import CalibrationCandidate
+    from src.gimap.features.calibration.presentation.residual_text import rms_text, rms_tip, rms_title
+
+    tilted = CalibrationCandidate("agbh", 179.3, 263.5, 1634.0, rms_residual_px=1.056, tilt_refined=True,
+                                  point_rms_px=0.45, untilted_point_rms_px=0.46, initial_point_rms_px=1.80)
+    assert (rms_title(tilted), rms_text(tilted), rms_text(tilted, 2)) == ("Ring-point RMS:", "0.450 px", "0.45 px")
+    assert "Before refinement" in rms_tip(tilted) and "1.800 px" in rms_tip(tilted)
+    assert "same points with zero tilt gives 0.460 px" in rms_tip(tilted)
+    current = CalibrationCandidate("agbh", 179.4, 263.6, 1634.5, point_rms_px=0.47, initial_point_rms_px=1.84)
+    assert (rms_title(current), rms_text(current)) == ("Ring-point RMS:", "0.470 px")
+    assert "1.840 px" in rms_tip(current) and "zero tilt" not in rms_tip(current)
+    flat = CalibrationCandidate("agbh", 179.3, 263.5, 1634.0, rms_residual_px=1.056)
+    assert (rms_title(flat), rms_text(flat)) == ("Ring-radius RMS:", "1.056 px")
+    assert "azimuthal average" in rms_tip(flat)

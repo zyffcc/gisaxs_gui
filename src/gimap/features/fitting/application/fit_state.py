@@ -16,6 +16,7 @@ from typing import Optional
 from ..domain.fit_engine import FitResult
 from ..domain.fit_model import model_from_dict, model_to_dict
 from .series_fit import FrameFit, SeriesSettings
+from .series_selection import DEFAULT_SCALE, PredictAttempt, SolutionChoice
 
 STATE_SCHEMA = "gimap_fit_state_v1"
 
@@ -61,6 +62,7 @@ def result_to_dict(result: Optional[FitResult]) -> Optional[dict]:
         "evaluation_budget": result.evaluation_budget, "seed": result.seed,
         "population_seeds": [model_to_dict(m) for m in result.population_seeds],
         "stopped_after": result.stopped_after,
+        **({"restarts": int(result.restarts), "restart_budget": result.restart_budget} if result.restarts else {}),
     }
 
 
@@ -81,7 +83,8 @@ def result_from_dict(data: Optional[dict]) -> Optional[FitResult]:
         start_model=model_from_dict(data["start_model"]) if data.get("start_model") else None,
         evaluation_budget=data.get("evaluation_budget"), seed=data.get("seed", 1729),
         population_seeds=tuple(model_from_dict(m) for m in data.get("population_seeds", ())),
-        stopped_after=data.get("stopped_after"))
+        stopped_after=data.get("stopped_after"), restarts=int(data.get("restarts") or 0),
+        restart_budget=data.get("restart_budget"))
 
 
 def selection_to_dict(selection) -> Optional[dict]:
@@ -102,15 +105,23 @@ def selection_from_dict(data: Optional[dict]):
 
 
 def frame_to_dict(frame: FrameFit) -> dict:
-    out = {item.name: getattr(frame, item.name) for item in fields(frame) if item.name != "result"}
+    out = {item.name: getattr(frame, item.name) for item in fields(frame)
+           if item.name not in ("result", "selection", "predict_attempts")}
+    if frame.selection is not None:
+        out["selection"] = frame.selection.to_dict()
+    if frame.predict_attempts:
+        out["predict_attempts"] = [attempt.to_dict() for attempt in frame.predict_attempts]
     out["resolved"] = list(frame.resolved)
     out["result"] = result_to_dict(frame.result)
     return out
 
 
 def frame_from_dict(data: dict) -> FrameFit:
-    known = {item.name for item in fields(FrameFit)} - {"result", "resolved"}
+    known = {item.name for item in fields(FrameFit)} - {"result", "resolved", "selection", "predict_attempts"}
     values = {key: value for key, value in data.items() if key in known}
+    if data.get("selection"):
+        values["selection"] = SolutionChoice.from_dict(data["selection"])
+    values["predict_attempts"] = tuple(PredictAttempt.from_dict(item) for item in data.get("predict_attempts") or ())
     return FrameFit(**values, result=result_from_dict(data.get("result")), resolved=tuple(data.get("resolved") or ()))
 
 
@@ -118,7 +129,8 @@ def settings_to_dict(settings: SeriesSettings) -> dict:
     return {"side": settings.side, "q_range": None if settings.q_range is None else [float(v) for v in settings.q_range],
             "excluded": sorted(float(v) for v in settings.excluded), "method": settings.method, "start": settings.start,
             "resolve_edges": bool(settings.resolve_edges), "follow": bool(settings.follow),
-            "backward": bool(settings.backward)}
+            "backward": bool(settings.backward), "smooth": bool(settings.smooth), "smooth_scale": settings.smooth_scale,
+            "selection_recorded": settings.selection_recorded}
 
 
 def settings_from_dict(data: dict) -> SeriesSettings:
@@ -128,7 +140,9 @@ def settings_from_dict(data: dict) -> SeriesSettings:
                           excluded=frozenset(float(v) for v in data.get("excluded") or ()),
                           method=str(data.get("method") or "local"), start=str(data.get("start") or "previous"),
                           resolve_edges=bool(data.get("resolve_edges", True)), follow=bool(data.get("follow", True)),
-                          backward=bool(data.get("backward", False)))
+                          backward=bool(data.get("backward", False)), smooth=bool(data.get("smooth", False)),
+                          smooth_scale=float(data.get("smooth_scale", DEFAULT_SCALE)),
+                          selection_recorded=bool(data.get("selection_recorded", False)))
 
 
 __all__ = ["STATE_SCHEMA", "frame_from_dict", "frame_to_dict", "number", "path_key", "path_of", "read_number",

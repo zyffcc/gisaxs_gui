@@ -158,6 +158,8 @@ class PipelineOptions:
     phases: tuple = ()
     """GIWAXS: phases to assign the rings to, CIF files or ``{"cell", "orientation", "indices"}`` (``--phase``); they
     replace those of Analyze's Phases window, whose phases are used otherwise."""
+    orientation_min_exit_deg: Optional[float] = None
+    """Override the minimum pixel exit angle for GIWAXS orientation. None keeps the Analyze setting."""
 
 
 @dataclass
@@ -438,6 +440,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         status = self.catalog.results.status or {}
         self._run.decisions.append(refraction_decision(status.get("geometry"), given=self._incidence is not None))
         self._phases_given()
+        if self.options.orientation_min_exit_deg is not None:
+            self.catalog.results.status = self.catalog.workbench.set_orientation_min_exit(self.options.orientation_min_exit_deg)
         flat = flat_field_decision(status)
         if flat is not None:
             self._run.decisions.append(flat)
@@ -451,7 +455,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             reason = search.reason if search is not None else "the radial curve could not be searched"
             self._decide("peaks", "none", reason)
             return
-        self._run.decisions.append(uncertainty_decision(status.get("error_model")))
+        self._run.decisions.append(uncertainty_decision(status.get("error_model"), corrections=status.get("corrections")))
         self._assign(search.peaks)
         self._call("compare_sectors")
         reliable = [peak for peak in search.peaks if is_reliable(peak)]  # no caveat, not cut off at the end of the data

@@ -187,14 +187,6 @@ class GeometryCalibrationDialogView(GeometryCalibrationSections, GeometryCalibra
         self._compact_combo(self.detector_combo)
         self.detector_combo.setObjectName("detector_combo")
         self.calibrationInputForm.setWidget(6, QtWidgets.QFormLayout.FieldRole, self.detector_combo)
-        self.tilt_check = QtWidgets.QCheckBox("Refine rot1, rot2", self.calibration_input_group)
-        self.tilt_check.setObjectName("tilt_check")
-        self.tilt_check.setChecked(True)
-        self.tilt_check.setToolTip(
-            "Fit the detector tilt (pyFAI's rot1 and rot2) with the centre and the distance when three or more rings "
-            "are matched; rot3 (a turn about the beam) does not change the rings and stays 0"
-        )
-        self.calibrationInputForm.addRow("Detector tilt:", self.tilt_check)
         self.energy_source_label = QtWidgets.QLabel(self.calibration_input_group)
         self.energy_source_label.setObjectName("energy_source_label")
         self.energy_source_label.setWordWrap(True)
@@ -301,6 +293,24 @@ class GeometryCalibrationDialogView(GeometryCalibrationSections, GeometryCalibra
         self.center_check.setChecked(True)
         self.center_check.setObjectName("center_check")
         self.advancedForm.setWidget(8, QtWidgets.QFormLayout.SpanningRole, self.center_check)
+        self.tilt_check = QtWidgets.QCheckBox("Refine rot1, rot2", self.advanced_group)
+        self.tilt_check.setObjectName("tilt_check")
+        self.tilt_check.setChecked(True)
+        self.tilt_check.setToolTip(
+            "Fit rot1 and rot2 with the centre and distance when three or more rings match. The fit holds rot3 fixed."
+        )
+        self.advancedForm.insertRow(0, "Detector tilt:", self.tilt_check)
+        self.rot3_spin = QtWidgets.QDoubleSpinBox(self.advanced_group)
+        self.rot3_spin.setObjectName("rot3_spin")
+        self.rot3_spin.setRange(-180.0, 180.0)
+        self.rot3_spin.setDecimals(5)
+        self.rot3_spin.setSingleStep(0.01)
+        self.rot3_spin.setSuffix("°")
+        self.rot3_spin.setKeyboardTracking(False)
+        self.rot3_spin.setToolTip(
+            "Rotation about the incident beam. Enter the angle measured from a GISAXS specular rod before calibration."
+        )
+        self.advancedForm.insertRow(1, "Fixed rot3", self.rot3_spin)
         self.calibrationAdvancedContentLayout.addWidget(self.advanced_group)
         self.calibrationAdvancedSectionLayout.addWidget(self.calibrationAdvancedContent)
         self.controlsLayout.addWidget(self.calibration_advanced_section)

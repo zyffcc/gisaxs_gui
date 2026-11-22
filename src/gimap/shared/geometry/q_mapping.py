@@ -124,7 +124,7 @@ def lab_rays(geometry: DetectorGeometry, x: np.ndarray, y: np.ndarray) -> tuple[
     directions of its columns and of its rows upward (``DetectorGeometry.in_plane_axes``). This is pyFAI's pixel
     position written relative to the direct beam."""
     x, y = np.asarray(x, dtype=np.float64), np.asarray(y, dtype=np.float64)
-    if not geometry.tilted:
+    if not geometry.requires_projection:
         return np.full(np.broadcast(x, y).shape, float(geometry.distance_m)), x, y
     (ax, rx, ux), (ay, ry, uy) = geometry.in_plane_axes()
     return geometry.distance_m + x * ax + y * ay, x * rx + y * ry, x * ux + y * uy

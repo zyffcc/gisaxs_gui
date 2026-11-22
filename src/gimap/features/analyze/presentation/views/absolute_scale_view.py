@@ -131,7 +131,7 @@ class AbsoluteScaleView:
         self.std_thickness = _number(group)
         self.std_thickness.setPlaceholderText("Required")
         for index, (label, edit) in enumerate((
-            ("Exposure t (s)", self.exposure), ("Monitor M", self.monitor),
+            ("Exposure t_exp (s)", self.exposure), ("Monitor M", self.monitor),
             ("Transmission T", self.transmission), ("Standard d (mm)", self.std_thickness),
         )):
             row, col = divmod(index, 2)

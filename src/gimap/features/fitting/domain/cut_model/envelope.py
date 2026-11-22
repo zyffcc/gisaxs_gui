@@ -45,7 +45,7 @@ def damping_scale(law: str, mean, rel, power: float) -> np.ndarray:
 def q_cut(law: str, mean, rel, power: float) -> np.ndarray:
     """The q above which a row's size average goes over to its envelope's (∞ for one size and for sizes by
     intensity)."""
-    if law == "intensity_gauss":
+    if law in ("intensity_gauss", "gaussian", "schulz", "lognormal_median"):
         return np.full(np.atleast_1d(np.asarray(mean, float)).shape, np.inf)
     scale = damping_scale(law, mean, rel, power)
     with np.errstate(divide="ignore"):

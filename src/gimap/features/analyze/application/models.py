@@ -125,9 +125,7 @@ class FrameAnalysis:
     filled_pixels: Optional[np.ndarray] = None
     """Pixels filled from the mirror side (``Corrections.mirror_fill``, GIWAXS)."""
     intensity_scale: Optional[np.ndarray] = None
-    """Photon counts divided by a flat field or (GIWAXS) by the intensity corrections: the factor each pixel's
-    counts were multiplied by (1 / F, F = solid angle × polarisation × absorption × flat field), so its Poisson
-    variance is that factor × its value."""
+    """Corrected intensity corresponding to one sample count, including flat, geometric and frame scaling."""
     flat_field: Optional[FlatFieldUse] = None
     """The flat field the frame was divided by (``Corrections.flat_field_path``): file, SHA-256, mean, pixels
     it leaves out; ``None`` without one."""
@@ -143,6 +141,13 @@ class FrameAnalysis:
     """The constant the frame was multiplied by and its terms (``Corrections.normalisation``); ``None``: none."""
     reference_peak_scale: Optional[float] = None
     """Factor subsequently applied to the reduced curves and q map of a series, after frame normalisation."""
+    error_model_used: Optional[str] = None
+    pixel_variance: Optional[np.ndarray] = None
+    """Sample shot variance or supplied variance, in squared corrected pixel units."""
+    extra_variance: Optional[np.ndarray] = None
+    """Variance from the measured reference frames, in the same units."""
+    reference_dark: Optional[dict] = None
+    """Dark scales used for the reference frames, with their sources."""
     request: Optional[AnalysisRequest] = None
     """Cut settings actually used, including any per-frame overrides in a series."""
     frame_files: dict = field(default_factory=dict)

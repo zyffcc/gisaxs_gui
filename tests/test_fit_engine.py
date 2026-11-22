@@ -437,7 +437,8 @@ def test_spheres_at_qz_zero_by_default_and_two_paths_with_the_angles_of_the_cut(
     q = np.linspace(0.02, 2.0, 200)
     sphere = fm.FitModel(components=(fm.new_component("sphere", radius=4.0, structure=False),))
     np.testing.assert_allclose(fm.evaluate(sphere, q),
-                               cut_model.population_terms("sphere", q, radius=4.0, radius_spread=0.2)[0], rtol=1e-12)
+                               cut_model.population_terms("sphere", q, radius=4.0, radius_spread=0.2,
+                                                          law=sphere.components[0].law)[0], rtol=1e-12)
     assert fm.grazing(sphere) is None and fm.qz_plus_r(sphere) == []
 
     angles = {"alpha_i": 0.4, "alpha_f": 0.15, "wavelength": 0.1045, "refl_amp": 0.8, "refl_phase": -0.3}

@@ -72,6 +72,9 @@ class GuiWorkbench:
     def set_incidence(self, degrees: Optional[float]) -> dict:
         return self._apply(lambda done: self._automation.set_incidence(degrees, done))
 
+    def set_orientation_min_exit(self, degrees: float) -> dict:
+        return self._apply(lambda done: self._automation.set_orientation_min_exit(degrees, done))
+
     def set_critical_angle(self, degrees: Optional[float]) -> dict:
         return self._apply(lambda done: self._automation.set_critical_angle(degrees, done))
 
@@ -106,8 +109,8 @@ class GuiWorkbench:
     def show(self, view: Optional[str] = None, lower_profile: Optional[str] = None) -> None:
         self._call(self._automation.show, view, lower_profile)
 
-    def export_curves(self) -> list[str]:
-        return list(self._call(self._automation.export_current))
+    def export_curves(self, extra_metadata: Optional[dict] = None) -> list[str]:
+        return list(self._call(self._automation.export_current, extra_metadata))
 
     def preview_png(self, max_size: int = 900) -> Optional[bytes]:
         return self._call(self._automation.preview_png, max_size)
@@ -128,7 +131,8 @@ class GuiWorkbench:
         return self._call(self._automation.assign_peaks, list(peaks))
 
     def pole_figure(self, background=None, model: str = "gaussian", chi0_deg=None) -> dict:
-        return self._call(self._automation.pole_figure, background, model, chi0_deg)
+        fit = self._call(self._automation.prepare_pole, background, model, chi0_deg)
+        return self._call(self._automation.store_pole, fit())
 
     def set_beam_center(self, x_px: float, y_px: float) -> dict:
         return self._apply(lambda done: self._automation.set_beam_center(x_px, y_px, done))
