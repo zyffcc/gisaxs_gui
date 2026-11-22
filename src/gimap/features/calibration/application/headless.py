@@ -35,11 +35,22 @@ def _tilt(result: CalibrationResult) -> Optional[dict]:
     return tilt_from_geometry(geometry).to_dict() if geometry.tilted else None
 
 
+def _spread(candidate) -> dict:
+    """A candidate's 1σ: it travels with the candidate when the line check chooses another one (``with_line_checks``)."""
+    return {
+        "uncertainty": {"beam_center_px": [candidate.center_x_sigma_px, candidate.center_y_sigma_px],
+                        "distance_mm": candidate.distance_sigma_mm, "method": candidate.uncertainty_method or None},
+        "tilt_refined": bool(candidate.tilt_refined),
+        "tilt_uncertainty_deg": [candidate.rot1_sigma_deg, candidate.rot2_sigma_deg],
+    }
+
+
 def describe_calibration(result: CalibrationResult) -> dict:
     """The selected geometry (canonical beam centre: first pixel's centre at 0.5) and its quality."""
     candidate = result.selected_candidate
     geometry = calibrated_geometry(result)
     shape = calibrated_shape(result)
+    spread = _spread(candidate)
     alternatives = []
     for other in result.candidates:
         if other is candidate:
@@ -54,6 +65,7 @@ def describe_calibration(result: CalibrationResult) -> dict:
             "confidence": other.confidence,
             "rotations_deg": [float(other.rot1_deg), float(other.rot2_deg), float(other.rot3_deg)],
             "detector_tilt": _tilt(replace(result, selected_candidate=other)),
+            **_spread(other),
         })
     return {
         "standard": candidate.standard_key,
@@ -67,15 +79,14 @@ def describe_calibration(result: CalibrationResult) -> dict:
         "shape": list(shape) if shape else None,
         "matched_rings": int(candidate.matched_ring_count),
         "rms_residual_px": float(candidate.rms_residual_px),
-        "uncertainty": {"beam_center_px": [candidate.center_x_sigma_px, candidate.center_y_sigma_px],
-                        "distance_mm": candidate.distance_sigma_mm, "method": candidate.uncertainty_method or None},
+        "uncertainty": spread["uncertainty"],
         "confidence": candidate.confidence,
         "score": float(candidate.score),
         "warnings": list(candidate.warnings),
         "rotation_deg": float(candidate.detector_rotation_deg),
         "rotations_deg": [float(candidate.rot1_deg), float(candidate.rot2_deg), float(candidate.rot3_deg)],
-        "tilt_refined": bool(candidate.tilt_refined),
-        "tilt_uncertainty_deg": [candidate.rot1_sigma_deg, candidate.rot2_sigma_deg],
+        "tilt_refined": spread["tilt_refined"],
+        "tilt_uncertainty_deg": spread["tilt_uncertainty_deg"],
         "energy_source": (result.metadata or {}).get("energy_source"),
         # pyFAI's description of the tilt (the key a .poni's tilt travels under), so it reaches the profile
         "detector_tilt": _tilt(result),
@@ -156,12 +167,14 @@ def with_line_checks(summary: dict, image) -> dict:
         summary["chosen_by"] = "ring fit" if best is None else "ring fit, confirmed by the line positions"
         return summary
     winner = candidates[best]
-    others = [candidate for index, candidate in enumerate(candidates) if index != best]
+    # copies taken before the summary (the first of them) is overwritten with the winner
+    others = [{key: value for key, value in candidate.items() if key != "alternatives"}
+              for index, candidate in enumerate(candidates) if index != best]
     for key in ("standard", "distance_mm", "beam_center_px", "matched_rings", "rms_residual_px", "confidence", "line_check",
-                "rotations_deg", "detector_tilt"):
+                "rotations_deg", "detector_tilt", "uncertainty", "tilt_refined", "tilt_uncertainty_deg"):
         summary[key] = winner[key]
     summary["standard_name"] = standard_display_name(winner["standard"])
-    summary["alternatives"] = [{key: value for key, value in item.items() if key != "alternatives"} for item in others]
+    summary["alternatives"] = others
     summary["chosen_by"] = "line positions (the engine's first choice put the standard's lines further from their q)"
     return summary
 
