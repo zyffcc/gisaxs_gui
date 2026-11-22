@@ -234,7 +234,14 @@ def extract_nexus_metadata(
     if stamp is None and "file_time" in handle.attrs:  # the Lambda server writes the time of the file only here
         stamp = str(_plain(np.asarray(handle.attrs["file_time"]).reshape(-1)[0]))
     monitor, monitor_source = _monitor(handle, entries, frame)
+    # Only an explicitly identified substrate of this sample (never the sample name or another NXentry).
+    base = entry.rstrip("/") + "/sample/substrate"
+    material = _text_value(handle, (base + "/material", base), frame)
+    delta, _ = _number(handle, (base + "/delta",), frame)
+    beta, _ = _number(handle, (base + "/beta",), frame)
+    substrate = {"material": "custom", "delta": delta, "beta": beta} if None not in (delta, beta) else material
     return {
+        **({"substrate": substrate} if substrate is not None else {}),
         "energy_kev": energy,
         "wavelength_angstrom": wavelength,
         "detector_name": _text_value(handle, _places(detector, ("description", "local_name", "type"))),

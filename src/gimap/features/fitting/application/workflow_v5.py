@@ -51,6 +51,11 @@ def default_options() -> dict:
 
 def validate_options(options: dict) -> dict:
     out = {**default_options(), **options}
+    if out.get("predict_cut"):
+        from .substrate_level import batch_geometry
+        batch_geometry(out["predict_cut"])
+    else:
+        out.pop("predict_cut", None)
     # Legacy recipes migrate this value into detector preprocessing at capture/runtime.
     out.pop("cbf_gap_margin", None)
     if "fit1d_qz" in out:  # the cut's q_z, saved under fit1d's name before 0.2.0

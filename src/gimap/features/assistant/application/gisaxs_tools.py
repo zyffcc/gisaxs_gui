@@ -167,7 +167,8 @@ def _native(row: dict) -> dict:
     record = {key: [float(value) for value in row.get(source, ())] for key, source in (
         ("q_inv_nm", "native_q"), ("fit", "native_fit"), ("observed", "observed"), ("sigma", "sigma"),
         ("display_q", "display_q"), ("display_fit", "display_fit"))}
-    return {**record, "units": dict(row.get("unit_contract") or {}), "source": row.get("best_source")}
+    return {**record, "units": dict(row.get("unit_contract") or {}), "source": row.get("best_source"),
+            **({"model": row["model"]} if isinstance(row.get("model"), dict) else {})}
 
 
 class GisaxsToolsMixin:
@@ -279,13 +280,22 @@ class GisaxsToolsMixin:
         return self._ok(data, f"{spacing.kind} of the cut at |qy| = {spacing.q:.4g} Å⁻¹ → 2π/q* = "
                               f"{spacing.distance_nm:.3g} nm (a length scale, not necessarily the particle spacing)")
 
-    def _tool_fit_horizontal_cut(self, side: Optional[str] = None, components=None) -> ToolOutcome:
+    def _tool_fit_horizontal_cut(self, side: Optional[str] = None, components=None, substrate=None) -> ToolOutcome:
         if self.fitter is None:
             raise ToolInputError("No curve fitter is available in this session: use Send to Fitting in the GUI.")
         side, x, y, sigma, note = self._fit_input(side)
-        cut = cut_qz(self.results.status)
+        status = self.results.status or {}
+        cut = cut_qz(status)
+        surface = {}
+        if cut is not None:
+            if substrate is None:
+                substrate = status.get("substrate") or (status.get("header") or {}).get("substrate")
+            if substrate is not None:
+                surface = dict(substrate={"material": substrate} if isinstance(substrate, str) else substrate,
+                               grazing=dict(wavelength=cut["wavelength_A"] / 10.0, alpha_i=cut["alpha_i_deg"],
+                                            alpha_f=cut["alpha_f_deg"]))
         rows = self.fitter(x, y, sigma, components=tuple(components or ()), cancelled=self.cancelled,
-                           cut_qz=None if cut is None else cut["q_z_inv_nm"])
+                           cut_qz=None if cut is None else cut["q_z_inv_nm"], **surface)
         if not rows:
             raise ToolInputError("Predict parameters found no solution.")
         solutions = [_solution(row) for row in rows]  # most probable first: the first is the one reported
@@ -293,8 +303,9 @@ class GisaxsToolsMixin:
             solutions[0]["alone"] = True
         self.results.gisaxs["fit"] = {
             "side": side, "curve": note, "points": int(x.size), "q_range_inv_angstrom": [float(x.min()), float(x.max())],
-            "substrate_level": 2 if cut is not None else 1,
-            "sphere_model": "Born term at the cut's q_z" if cut is not None else SPHERE_MODEL,
+            "substrate_level": 4 if surface else 2 if cut is not None else 1,
+            "sphere_model": rows[0]["scattering"] if surface else "Born term at the cut's q_z" if cut else SPHERE_MODEL,
+            **surface,
             "cut_qz": cut,
             # the points χ²ᵣ is of: fitted, given, below_window (below the network's q window), unusable
             "fitted_points": None if not rows[0].get("points") else dict(rows[0]["points"]),

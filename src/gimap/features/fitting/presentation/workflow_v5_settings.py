@@ -15,12 +15,14 @@ from PyQt5.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
-    QPushButton,
+    QLabel, QPushButton,
 )
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ..application.workflow_v5 import validate_options
+from ..application.substrate_level import Substrate
+from .predict_substrate import EDIT_CUT, ON_SUBSTRATE, PredictSubstrateDialog
 from .workflow_v5_units import UNIT_LABEL, UNIT_TIP
 
 Q_UNITS = (("Å⁻¹", "A^-1"), ("nm⁻¹", "nm^-1"))
@@ -88,6 +90,13 @@ class WorkflowV5SettingsMixin:
         self.side = _choices(Q_SIDES, self._options["side"])
         left.addRow(UNIT_LABEL, self.unit)
         left.addRow("q sides", self.side)
+        self.predict_cut = self._options.get("predict_cut", {})
+        self.substrate_button = QPushButton(EDIT_CUT)
+        self.substrate_button.clicked.connect(self._edit_substrate)
+        left.addRow(self.substrate_button)
+        self.substrate_note = QLabel()
+        self.substrate_note.setWordWrap(True)
+        left.addRow(self.substrate_note)
         self.use_qz = QCheckBox("Cut qz (nm⁻¹)")
         self.use_qz.setChecked(self._options["cut_qz"] is not None)
         self.cut_qz = _spin(0, 10, self._options["cut_qz"] or 0.0, 6)
@@ -100,11 +109,9 @@ class WorkflowV5SettingsMixin:
         self.measured_qz = _spin(0, 10, self._options["measured_qz"] or 0., 5)
         self.measured_qz.setSpecialValueText("Unknown")
         right.addRow("Measured q_z for level-1 flags (nm⁻¹)", self.measured_qz)
-        def enable_measured_qz():
-            self.measured_qz.setEnabled(self.reflected_beam.isChecked() and not self.use_qz.isChecked())
-        self.reflected_beam.toggled.connect(enable_measured_qz)
-        self.use_qz.toggled.connect(enable_measured_qz)
-        enable_measured_qz()
+        self.reflected_beam.toggled.connect(self._refresh_substrate)
+        self.use_qz.toggled.connect(self._refresh_substrate)
+        self._refresh_substrate()
         self.relative_noise = _spin(0, 10, self._options["relative_noise"], 4)
         self.noise_floor = _spin(0, 1e12, self._options["absolute_noise"], 6)
         self.noise_floor.setSpecialValueText("None")
@@ -119,11 +126,27 @@ class WorkflowV5SettingsMixin:
         outer.addLayout(right, 1)
         return box
 
+    def _edit_substrate(self):
+        dialog = PredictSubstrateDialog(self.predict_cut, self, batch=True)
+        if dialog.exec_():
+            self.predict_cut = dialog.cut()
+            self._refresh_substrate()
+        dialog.deleteLater()
+
+    def _refresh_substrate(self):
+        substrate = Substrate.from_dict(self.predict_cut.get("substrate"))
+        self.substrate_note.setVisible(substrate is not None)
+        self._say(self.substrate_note, lambda: trf(ON_SUBSTRATE, substrate=tr(substrate.label)) if substrate else "")
+        for field in (self.use_qz, self.cut_qz, self.reflected_beam):
+            field.setEnabled(substrate is None)
+        self.measured_qz.setEnabled(substrate is None and self.reflected_beam.isChecked() and not self.use_qz.isChecked())
+
     def options(self) -> dict:
         """The options as set in the panel (the values, never the text shown), validated."""
         return validate_options(
             {
                 **self._options,
+                "predict_cut": self.predict_cut,
                 "method": "posterior",
                 "components": [b.currentIndex() for b in self.component_boxes if b.currentIndex()],
                 "q_unit": self.unit.currentData(),

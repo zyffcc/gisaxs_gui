@@ -10,19 +10,22 @@ fourth point of their tables from 4.9 to 30 keV (and every point between the L e
 is interpolated linearly in ln E and f₂ linearly in ln f₂ against ln E (within 0.15 % of f₁ and 0.35 % of f₂ of the
 full tables; the tables themselves are good to a few per cent near an absorption edge). Outside 4.9–30 keV the table
 refuses: δ and β are then typed. Materials (``MATERIALS``): Si (2.33 g/cm³), SiO₂ (2.20 g/cm³, thermal oxide or fused
-silica), plate glass (NIST's composition, 2.40 g/cm³) and Au (19.32 g/cm³). A rough or oxidised surface, a polymer film
-on the wafer and the particle layer's own index are not part of it (Physics and Methods 9.10, 15.1).
+silica), plate glass (NIST's composition, 2.40 g/cm³) and Au (19.32 g/cm³). Optional films have an explicit
+thickness and optical constants. The horizontal DWBA uses the reflection amplitude of this smooth stack,
+with air surrounding the particles (Physics and Methods 9.17).
 """
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import lru_cache
 from typing import Mapping, Optional
 
 import numpy as np
 
+from .cut_model.geometry import Geometry
+from .cut_model.reflectivity import Layer
 R_E_NM = 2.8179403262e-6
 """Classical electron radius (nm)."""
 AVOGADRO = 6.02214076e23
@@ -145,15 +148,17 @@ def optical_constants(material: str, wavelength_nm: float) -> tuple[float, float
 
 @dataclass(frozen=True)
 class Substrate:
-    """The substrate under the particles: a material of the table, or δ and β typed (``CUSTOM``; at the cut's λ)."""
+    """Semi-infinite material or typed constants at the cut's λ, optionally with layers in top-to-bottom order."""
     material: str = CUSTOM
     delta: float = 0.0
     beta: float = 0.0
+    layers: tuple[Layer, ...] = ()
 
     def __post_init__(self):
         if self.material != CUSTOM and self.material not in MATERIALS:
             raise ValueError(f"Unknown substrate {self.material!r}")
-        if self.material == CUSTOM and not (self.delta > 0 and self.beta >= 0):
+        if self.material == CUSTOM and not (math.isfinite(self.delta) and self.delta > 0
+                                            and math.isfinite(self.beta) and self.beta >= 0):
             raise ValueError("A substrate needs δ > 0 and β ≥ 0")
 
     def optical(self, wavelength_nm: float) -> tuple[float, float]:
@@ -168,21 +173,33 @@ class Substrate:
 
     @property
     def label(self) -> str:
-        return MATERIALS[self.material].label if self.material != CUSTOM else f"δ = {self.delta:.4g}, β = {self.beta:.3g}"
+        label = MATERIALS[self.material].label if self.material != CUSTOM else f"δ = {self.delta:.4g}, β = {self.beta:.3g}"
+        return " / ".join([*(f"{layer.thickness_nm:g} nm (δ = {layer.delta:.4g}, β = {layer.beta:.3g})"
+                             for layer in self.layers), label])
+
+    def geometry(self, wavelength_nm: float, alpha_i_deg: float, alpha_f_deg: float) -> Geometry:
+        delta, beta = self.optical(wavelength_nm)
+        return Geometry("dwba", wavelength_nm, alpha_i_deg, alpha_f_deg, delta=delta, beta=beta,
+                        layers=self.layers, substrate_label=self.label)
 
     def to_dict(self) -> dict:
-        return {"material": self.material} if self.material != CUSTOM else {
+        result = {"material": self.material} if self.material != CUSTOM else {
             "material": CUSTOM, "delta": float(self.delta), "beta": float(self.beta)}
+        if self.layers:
+            result["layers"] = [asdict(layer) for layer in self.layers]
+        return result
 
     @classmethod
     def from_dict(cls, raw: Optional[Mapping]) -> Optional["Substrate"]:
         if not raw:
             return None
         material = str(raw.get("material") or CUSTOM)
+        layers = tuple(Layer(float(layer["thickness_nm"]), float(layer["delta"]), float(layer["beta"]))
+                       for layer in raw.get("layers", ()))
         if material == CUSTOM:
-            return cls(CUSTOM, float(raw.get("delta", 0.0)), float(raw.get("beta", 0.0)))
-        return cls(material)
+            return cls(CUSTOM, float(raw.get("delta", 0.0)), float(raw.get("beta", 0.0)), layers)
+        return cls(material, layers=layers)
 
 
-__all__ = ["CUSTOM", "ENERGY_RANGE_KEV", "MATERIALS", "Material", "Substrate", "optical_constants",
+__all__ = ["CUSTOM", "ENERGY_RANGE_KEV", "MATERIALS", "Layer", "Material", "Substrate", "optical_constants",
            "scattering_factors"]

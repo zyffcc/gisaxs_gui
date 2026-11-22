@@ -168,6 +168,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
 
     def _refresh_steps(self) -> None:
         session, data = self.session, self._data()
+        self.refresh_predict_cut()
         curve = session.curve
         # The rail says where each step stands; a step's own line only what it does not (the curve's name: the chip).
         if curve is None:

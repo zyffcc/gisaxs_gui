@@ -9,8 +9,8 @@ draw. By default each curve goes through the network, fit and choose stages. --s
   choose    compositions among spheres and upright cylinders with a paracrystal, one or two of them (fit1d's
             'auto:sphere,vc:2'): is the most probable one the true composition?
   auto      the automatic analysis's choice among one or two populations of spheres and upright cylinders, with
-            or without a paracrystal. The angles are known, so Predict evaluates the Born term at the cut's vacuum
-            q_z. --auto-level 1 reproduces the former fit at q_z = 0, with the cut's q_z supplied for flags.
+            or without a paracrystal. Level 2 evaluates the Born term at the cut's vacuum q_z (the default). Level 4
+            takes the angles, wavelength and known substrate. Level 1 fits at q_z = 0, with the cut's q_z for flags.
 For choose and auto the head's candidates are stored, and whether the true composition (its families) is among them.
 Reported as in fit1d_recovery.py (median and 90th percentile of the error, bias, |z| ≤ 1 with the least-squares
 error), and in addition the coverage of the posterior's 68 % and 95 % intervals, how often the most probable solution
@@ -27,12 +27,13 @@ yoneda_truth.py), on bare Si or with --substrate ps100 on 100 nm polystyrene on 
 same cases, counts and noise as the frozen sets (the Born term at the cut's q_z on Si), so the two pair curve by curve.
 --cut says what Predict is given of the cut: its q_z = k_i + k_f ('born', the default: the Born term, as the 1D Predict
 window's Cut qz), both angles ('two_path': k_i − k_f too, spheres with the exit-reflected path and a free effective
-reflection coefficient, as with the angles in Model), or nothing ('eia': the effective interface).
+reflection coefficient, as with the angles in Model), both angles and the known substrate ('dwba': all four
+paths), or nothing ('eia': the effective interface).
 usage: python tools/benchmarks/posterior_recovery.py --network PATH/NAME [--n 200] [--workers 8] [--seed0 20261116]
            [--samples N] [--local-samples N] [--shortlist N] [--refined 3] [--set fit1d|extended]
            [--truth independent|own] [--model-error-floor F] [--explored N] [--moves N] [--widths 1,2]
-           [--scattering born_qz|dwba] [--substrate si|ps100] [--cut born|two_path|eia] [--out NAME]
-           [--stages network,fit,choose,auto] [--auto] [--auto-level 1|2]
+           [--scattering born_qz|dwba] [--substrate si|ps100] [--cut born|two_path|dwba|eia] [--out NAME]
+           [--stages network,fit,choose,auto] [--auto] [--auto-level 1|2|4]
   (defaults: Predict parameters' own, refine.SAMPLES, LOCAL_SAMPLES, SHORTLIST, MODEL_ERROR_FLOOR, EXPLORED, MOVES,
   infer.PROPOSAL_WIDTHS)
 Writes the summary to tools/benchmarks/NAME_summary.json (default posterior_recovery) and every curve to results/.
@@ -40,6 +41,7 @@ Writes the summary to tools/benchmarks/NAME_summary.json (default posterior_reco
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -52,6 +54,7 @@ for _name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_name, "1")
 
 import numpy as np  # noqa: E402
+import scipy  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 GIMAP = HERE.parents[1]
@@ -130,7 +133,7 @@ def own_curve(case) -> tuple[np.ndarray, np.ndarray]:
     later ones at their share of the first one's peak, the background, Poisson counts as in recovery_cases.curve."""
     pops = sorted(case["populations"], key=lambda p: p["R"])
     qz, qz_minus = _cut()
-    data = infer.Cut.prepare(fr.Q, np.ones_like(fr.Q), np.ones_like(fr.Q), qz, qz_minus)
+    data = infer.Cut.prepare(fr.Q, np.ones_like(fr.Q), np.ones_like(fr.Q), qz, qz_minus, **_known_substrate())
     values = np.zeros(E.DIMS)
     for slot, p in enumerate(pops):
         j = slot * E.PER_SLOT
@@ -161,6 +164,19 @@ def _cut() -> tuple[float, float | None]:
     return float(fr.GEOM.qz_vacuum), (fr.qz_minus() if kind == "two_path" else None)
 
 
+def _known_substrate(kind=None) -> dict:
+    """Inputs a user could supply: the independent simulator's optical constants, wavelength and measured angles."""
+    if (kind or OPTIONS.get("cut")) != "dwba":
+        return {}
+    geom = fr.truth_geometry()
+    delta, beta = geom.index()
+    base = dict(material="custom", delta=float(delta), beta=float(beta))
+    if geom.film_thickness:
+        base["layers"] = [dict(thickness_nm=geom.film_thickness, delta=geom.film_delta, beta=geom.film_beta)]
+    return dict(substrate=base, grazing=dict(wavelength=geom.wavelength_nm, alpha_i=geom.alpha_i_deg,
+                                             alpha_f=float(geom.alpha_f)))
+
+
 def run(index: int, *, fit_only: bool = False) -> dict:
     """Evaluate one cut. The release regression needs only the fit with the given composition."""
     extended = OPTIONS.get("set") == "extended"
@@ -175,7 +191,7 @@ def run(index: int, *, fit_only: bool = False) -> dict:
     if "network" in selected:
         # network: samples of the true composition, their median
         tick = time.perf_counter()
-        data = infer.Cut.prepare(fr.Q, I, s, qz, qz_minus)
+        data = infer.Cut.prepare(fr.Q, I, s, qz, qz_minus, **_known_substrate())
         binned = E.bin_curve(data.q, data.intensity, data.sigma, data.q_max, data.ratio)
         h = NETWORK.summary(E.features(*(a[None] for a in binned)), infer.conditions(data))
         z, _ = NETWORK.sample(NETWORK.context(h, truth), truth, OPTIONS["samples"], np.random.default_rng(index))
@@ -188,9 +204,9 @@ def run(index: int, *, fit_only: bool = False) -> dict:
         out["network"] = dict(ok=True, populations=pops, seconds=time.perf_counter() - tick)
     stages = []
     if "fit" in selected:
-        stages.append(("fit", dict(compositions=[truth]), qz, qz_minus))
+        stages.append(("fit", dict(compositions=[truth], **_known_substrate()), qz, qz_minus))
     if "choose" in selected:
-        stages.append(("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=OPTIONS["shortlist"]),
+        stages.append(("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=OPTIONS["shortlist"], **_known_substrate()),
                        qz, qz_minus))
     if "auto" in selected:
         cut_qz = float(fr.GEOM.qz_vacuum)
@@ -199,13 +215,16 @@ def run(index: int, *, fit_only: bool = False) -> dict:
         if OPTIONS["auto_level"] == 1:
             auto_qz = 0.0
             auto_options["measured_qz"] = cut_qz
+        elif OPTIONS["auto_level"] == 4:
+            auto_options.update(_known_substrate("dwba"))
         stages.append(("auto", auto_options, auto_qz, None))
     truth_families = sorted(FAMILY[p["shape"]] for p in case["populations"])
     for name, kwargs, qz_stage, qz_minus_stage in stages:
         tick = time.perf_counter()
         candidates = None
         if "allowed" in kwargs:  # the head's candidates, as infer.infer chooses them
-            data_stage = infer.Cut.prepare(fr.Q, I, s, qz_stage, qz_minus_stage)
+            cut_options = {key: kwargs[key] for key in ("substrate", "grazing") if key in kwargs}
+            data_stage = infer.Cut.prepare(fr.Q, I, s, qz_stage, qz_minus_stage, **cut_options)
             binned_stage = E.bin_curve(data_stage.q, data_stage.intensity, data_stage.sigma, data_stage.q_max,
                                        data_stage.ratio)
             h_stage = NETWORK.summary(E.features(*(a[None] for a in binned_stage)), infer.conditions(data_stage))
@@ -233,6 +252,12 @@ def run(index: int, *, fit_only: bool = False) -> dict:
                                                 populations=_populations(x.values, len(E.COMPOSITIONS[x.composition]),
                                                                          "best", "error"))
                                            for x in solutions[1:] if x.probability >= 0.05])
+            if kwargs.get("substrate"):
+                # Level 4 fixes both coefficients. The free exit-reflection parameter is absent.
+                del out[name]["reflection"]
+                out[name]["substrate_level"] = best.extras["diagnostics"]["substrate_level"]
+                out[name]["substrate"] = kwargs["substrate"]
+                out[name]["grazing"] = kwargs["grazing"]
         except Exception as exc:  # noqa: BLE001 - one failing curve must not stop the study
             out[name] = dict(ok=False, error=f"{type(exc).__name__}: {exc}")
         out[name]["seconds"] = time.perf_counter() - tick
@@ -357,6 +382,26 @@ def _stages(value):
     return [stage for stage in STAGES if stage in names]
 
 
+def _checkpoint(folder, options, network_path):
+    """Keep finished draws across long runs. Reuse only identical inputs, truth, weights and fitting code."""
+    folder.mkdir(parents=True, exist_ok=True)
+    source = hashlib.sha256()
+    for path in sorted([*(GIMAP / "src/gimap/features/fitting/domain").rglob("*.py"),
+                        *(HERE / name for name in ("posterior_recovery.py", "yoneda_truth.py", "recovery_cases.py",
+                                                  "heldout_cases.py"))]):
+        source.update(path.relative_to(GIMAP).as_posix().encode())
+        source.update(path.read_bytes())
+    meta = dict(settings=options, network_sha256=Network.load(network_path).meta["sha256"],
+                source_sha256=source.hexdigest(), python=sys.version, numpy=np.__version__, scipy=scipy.__version__)
+    manifest = folder / "manifest.json"
+    if manifest.exists():
+        if json.loads(manifest.read_text()) != meta:
+            raise ValueError(f"The checkpoint inputs changed. Use a new --checkpoint folder: {folder}")
+    else:
+        manifest.write_text(json.dumps(meta, indent=1))
+    return {int(p.stem): json.loads(p.read_text()) for p in folder.glob("[0-9]*.json")}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--network", required=True)
@@ -365,6 +410,7 @@ def main():
     ap.add_argument("--seed0", type=int, default=20261116)
     ap.add_argument("--samples", type=int, default=refine.SAMPLES)
     ap.add_argument("--out", default="posterior_recovery")
+    ap.add_argument("--checkpoint", type=Path, help="save each completed draw here and resume identical runs")
     ap.add_argument("--set", default="fit1d", choices=("fit1d", "extended"))
     ap.add_argument("--local-samples", type=int, default=refine.LOCAL_SAMPLES)
     ap.add_argument("--shortlist", type=int, default=refine.SHORTLIST)
@@ -382,10 +428,10 @@ def main():
     ap.add_argument("--stages", type=_stages, default="network,fit,choose",
                     help="comma-separated list of network,fit,choose,auto (default: network,fit,choose)")
     ap.add_argument("--auto", action="store_true", help="add auto to the selected stages")
-    ap.add_argument("--auto-level", type=int, choices=(1, 2), default=2,
-                    help="auto fit level: 1 for q_z = 0, 2 for the cut's vacuum q_z (default)")
-    ap.add_argument("--cut", default="born", choices=("born", "two_path", "eia"),
-                    help="what Predict is given of the cut: q_z, both angles, or nothing")
+    ap.add_argument("--auto-level", type=int, choices=(1, 2, 4), default=2,
+                    help="auto fit level: 1 for q_z = 0, 2 for vacuum q_z (default), 4 for the known substrate")
+    ap.add_argument("--cut", default="born", choices=("born", "two_path", "dwba", "eia"),
+                    help="what Predict is given: vacuum q_z, both angles, both angles and substrate, or nothing")
     a = ap.parse_args()
     if a.auto and "auto" not in a.stages:
         a.stages.append("auto")
@@ -397,10 +443,18 @@ def main():
                    moved_solutions=a.moved_solutions, per_count=a.per_count, constants=a.constant,
                    scattering=a.scattering, substrate=a.substrate, cut=a.cut, stages=a.stages,
                    auto="auto" in a.stages, auto_level=a.auto_level)
+    prior = _checkpoint(a.checkpoint, options, a.network) if a.checkpoint else {}
+    results.extend(prior[i] for i in range(a.n) if i in prior)
+    remaining = [i for i in range(a.n) if i not in prior]
     with Pool(min(a.workers, a.n), initializer=_init, initargs=(a.network, options)) as pool:
-        for i, r in enumerate(pool.imap_unordered(run, range(a.n)), 1):
+        for i, r in enumerate(pool.imap_unordered(run, remaining), len(results) + 1):
             results.append(r)
             c = r["case"]
+            if a.checkpoint and all(r[stage]["ok"] for stage in a.stages):
+                path = a.checkpoint / f"{c['index']:04d}.json"
+                partial = path.with_suffix(".tmp")
+                partial.write_text(json.dumps(r, default=str))
+                partial.replace(path)
             print(f"[{i}/{a.n}] {c['composition']:13s} {c['level']:8s} "
                   + " ".join(f"{k}:{'ok' if r[k].get('ok') else 'ERR'} {r[k]['seconds']:.1f}s"
                              for k in a.stages)

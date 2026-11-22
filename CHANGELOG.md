@@ -12,6 +12,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Predict parameters** fits four-term DWBA when the substrate, both cut angles and the wavelength are known.
+  In Fitting or 1D Predict, select the material or enter δ and β. An optional film adds its thickness and optical
+  constants to the reflection calculation. Automatic GISAXS analysis takes the substrate from the session or the
+  sample metadata. Each level-4 solution retains the substrate and geometry.
 - The manuals document the precision of an applied beam centre in Analyze, Geometry Calibration and XRR,
   and the differences observed when reproducing archived Predict parameters fits on another platform.
 - **Predict parameters** flags upright cylinders that could represent spheres above q_z·R = 2 at levels 2 and 3,
@@ -25,7 +29,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   reduced χ² exceeds 3. The cylinder DA now averages coherent amplitudes over the height distribution. Heights and
   radii are assumed independent.
 
-- **Automatic GISAXS analysis** fits the Born term at the Yoneda cut's vacuum q_z when the incidence and exit
+- **Automatic GISAXS analysis** with an unknown substrate fits the Born term at the Yoneda cut's vacuum q_z when the incidence and exit
   angles are known (level 2), and uses the effective interface at q_z = 0 otherwise (level 1). The report and
   JSON record identify the level used. At level 2, Predict flags sphere and random-cylinder radii for uncertain
   interval coverage above q_z·R = 1.2 and strong model error above 2.
@@ -112,7 +116,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   pass, show a Flags column, draw the trend against time, and save the fits as NXcanSAS or into the results database.
   Compare ▸ Add Series ▸ **Results Database…** reads a recorded series without its frames. Manual sections 5.1, 5.6,
   6.5, 7.2, 12 and 13; *Physics and Methods* 11.12–11.14.
-- **Fitting: several curves fitted together, the four-term DWBA with a known substrate, and an MCMC check.** **Fitting ▸ Fit Several Curves Together…** fits a list of curves with one χ², values shared or each curve's own, every curve with its own scale and background; **Analyze ▸ Send Both Cuts to Fitting** writes a frame's horizontal cut and its vertical cut (`<stem>_fit_input_qz.dat`, with its geometry) and lists both there. The vertical cut is computed in the four-term DWBA of spheres or upright cylinders on the substrate, point by point along αf, and holds the cylinders' height that a horizontal cut cannot see. Model's card *Spheres in grazing incidence* has a **Substrate** (Si, SiO₂, plate glass, Au from Henke's tables at 4.9–30 keV, or δ and β typed): with αi and αf the spheres of a manual fit are then in the four-term DWBA, and the line below names the level in use. Results ▸ Uncertainty and Report… has a **Posterior check (MCMC)** tab: a short ensemble MCMC run on the posterior of the solution in Model (Predict's own, or the last Refine or Search) beside the intervals it checks, with τ, R̂ and a verdict; a check only, it changes no value. Predict parameters is unchanged (its results on the benchmark cases are identical). Checked against BornAgain 24.1 to 4 · 10⁻⁴ (horizontal cut) and 2 · 10⁻⁴ (vertical cut) with size distributions. Manual 6.2, 6.6, chapter 13; *Physics and Methods* 9.17–9.19.
+- **Fitting: several curves fitted together, the four-term DWBA with a known substrate, and an MCMC check.** **Fitting ▸ Fit Several Curves Together…** fits a list of curves with one χ², values shared or each curve's own, every curve with its own scale and background; **Analyze ▸ Send Both Cuts to Fitting** writes a frame's horizontal cut and its vertical cut (`<stem>_fit_input_qz.dat`, with its geometry) and lists both there. The vertical cut is computed in the four-term DWBA of spheres or upright cylinders on the substrate, point by point along αf, and holds the cylinders' height that a horizontal cut cannot see. Model's card *Spheres in grazing incidence* has a **Substrate** (Si, SiO₂, plate glass, Au from Henke's tables at 4.9–30 keV, or δ and β typed): with αi and αf the spheres of a manual fit are then in the four-term DWBA, and the line below names the level in use. Results ▸ Uncertainty and Report… has a **Posterior check (MCMC)** tab: a short ensemble MCMC run on the posterior of the solution in Model (Predict's own, or the last Refine or Search) beside the intervals it checks, with τ, R̂ and a verdict; a check only, it changes no value. The original three levels of Predict parameters retain their benchmark results. Checked against BornAgain 24.1 to 4 · 10⁻⁴ (horizontal cut) and 2 · 10⁻⁴ (vertical cut) with size distributions. Manual 6.2, 6.4, 6.6, chapter 13; *Physics and Methods* 9.17–9.19.
 - **Sputter ▸ Analyze: Au and Ag on TiO₂ at any energy from 8 to 15 keV.** The TiO₂ network was retrained on images
   simulated at 8–15 keV and αi 0.25–0.55°, with optical constants that follow the energy (the earlier ones exactly at
   12 keV) and with parts of the detector cut away, so a TiO₂ scan in that range is analysed as usual at its own energy,
@@ -1256,8 +1260,8 @@ hold.
   own preprocessing is all that runs. **The Ag and Cu distribution modules declare no axes**: their maps and
   curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale.
 
-- **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA, spheres at the Born term of
-  the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on
+- **Predict parameters knows Fitting's model only** (for example, a known substrate with four-term DWBA or
+  an unknown substrate with a fitted effective reflection coefficient). It was checked on simulated curves of an independent model and on
   BornAgain simulations, not on measured curves of known particles; physics outside the model can give a
   composition a probability it does not deserve. Judge every solution by its residuals.
 - **The model fit of the automatic analysis chooses the particles from the curve alone** (Predict parameters among

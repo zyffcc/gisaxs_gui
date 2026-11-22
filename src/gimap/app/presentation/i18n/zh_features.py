@@ -32,6 +32,7 @@ from .zh_pole_reference import POLE_REFERENCE_ZH
 from .zh_posterior_mcmc import POSTERIOR_MCMC_ZH
 from .zh_predict_report import PREDICT_REPORT_ZH
 from .zh_predict_sampling import PREDICT_SAMPLING_ZH
+from .zh_predict_substrate import PREDICT_SUBSTRATE_ZH
 from .zh_reduction_errors import REDUCTION_ERRORS_ZH
 from .zh_reproduction import REPRODUCTION_ZH
 from .zh_review_phases import REVIEW_PHASES_ZH
@@ -42,6 +43,7 @@ from .zh_series_selection import SERIES_SELECTION_ZH
 from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 
 FEATURES_ZH = {
+    **PREDICT_SUBSTRATE_ZH,
     **PREDICT_SAMPLING_ZH,
     **VERTICAL_CONSISTENCY_ZH,
     **GISAXS_FIT_LEVEL_ZH,

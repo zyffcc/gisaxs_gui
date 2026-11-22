@@ -1703,8 +1703,11 @@ the factors and limits for the analysed ring matching that curve.
 6. fits I(qy) with **Predict parameters**, Fitting's network method (section 6.4): GIMaP's network
    proposes one or two populations of spheres and upright cylinders, with or without a paracrystal
    distance D, and their values; each solution is refined by least squares and weighted by its posterior
-   probability. With the incidence angle αi and the exit angle αf of the Yoneda band, the fit uses the Born term
-   at the cut's vacuum q_z = (2π/λ)(sin αi + sin αf), the second level. If either angle is unknown, the fit uses
+   probability. With a known substrate, wavelength and both cut angles, the fit uses four-term DWBA (level 4).
+   Enter `substrate = Si` on a separate line in the session notes, or use `--substrate Si` on the command line.
+   Material keys are `Si`, `SiO2`, `glass` and `Au`. NeXus sample metadata can also supply the substrate material
+   or its δ and β. With an unknown substrate and both angles, the fit uses the Born term at the cut's vacuum
+   q_z = (2π/λ)(sin αi + sin αf), the second level. If either angle is unknown, the fit uses
    the effective interface at q_z = 0, the first level. The report states the level and the reason under *Decisions*.
    The length scale 2π/q\* is independent of the fit. Confirm the model in Fitting.
 
@@ -2424,9 +2427,10 @@ Analysis** to inspect its contributions here.
   height distribution. After a fit with the angles entered, the
   results show q₊R of every sphere. **Substrate** (under the values): *Unknown* (the default, the levels above), a
   material of the table (**Si**, **SiO₂**, **Glass (plate)**, **Au**: δ and β at the cut's λ, 4.9–30 keV) or **Typed δ,
-  β**. With a substrate and both angles the spheres are in the four-term DWBA with the substrate's Fresnel coefficients
+  β**. With a substrate and both angles the spheres use four-term DWBA, with Fresnel reflection for a bare interface
+  or Parratt reflection for a specified film
   (|r| and arg r are then not used); the line below says which level is in use (*Level: Four-term DWBA, substrate known
-  on Si (δ = …, β = …)*). Predict parameters does not use the substrate; its solutions come back without it
+  on Si (δ = …, β = …)*). Predict parameters uses the same substrate in the likelihood and keeps it in each solution
   ([Physics and Methods, section 9.17](Physics_Manual.md#917-the-four-term-dwba-with-a-known-substrate)). When to use which, with examples on Si and on a polymer film:
   [Physics and Methods, section 9.10](Physics_Manual.md#910-spheres-and-cylinders-in-a-horizontal-cut-the-effective-interface-approximation);
   how to read a fit with three populations: [section 9.11](Physics_Manual.md#911-the-three-population-model).
@@ -2445,7 +2449,7 @@ sizes for your sample, or let the Fit step find them.
   Every other curve keeps the method chosen before (a GIWAXS I(q) never gets a recommendation). After a prediction
   the method turns to **Refine the values in Model**. Should GIMaP's network be missing, the line under the method
   says so and names its file (section 14.3).
-- Under the method, only what it needs: **Particles** for Predict parameters (section 6.4).
+- For Predict parameters, **Particles** sets the composition search. **Cut geometry and substrate…** sets the scattering model (section 6.4).
 - Press **Fit** in the command bar (`Ctrl+Return`) or the button below, which carries the method's name (for
   example **Refine**). A progress bar and **Stop** appear while it runs. **Refine** and **Search** go on from their
   own result while χ²ᵣ falls by more than 0.1 % (at most 5 more runs; the Run Log and the report say how often), so a
@@ -2594,14 +2598,20 @@ benchmarks.
    - **Spheres and upright cylinders (1–2)** or **Any particles (1–3)**: the network proposes the four
      compositions it finds most probable among these, and its most probable of every number of populations; their
      probabilities decide.
-2. The cut's geometry comes from Model's angles (αi, αf and λ under *Grazing incidence*): with both, spheres have the
-   direct and the exit-reflected path, and Predict fits the effective reflection coefficient r with the rest (it is
-   then in Model, *Spheres in grazing incidence*); with the angles 0, q_z = 0 (the effective interface, Physics and
-   Methods, sections 9.10 and 9.13). Enter the angles for spheres of radius above about 3 nm (q₊R above 1.7):
-   without them the radius comes out 10–40 % off on a real substrate, with them about 6 % (median, on simulated
-   curves at the Yoneda angle). On a cut well above the critical angle the reflected wave is weak, and a solution
-   with a large |r| and a sphere about half the size can describe the curve as well: there fix |r| (`refl_amp`) to
-   the substrate's value, or to 0, and refine. With both angles Predict takes about 2.4 times as long.
+2. Open **Cut geometry and substrate…** to enter the incidence and exit angles in degrees and the wavelength in nm
+   or photon energy in keV. For a known substrate, select Si, SiO₂, plate glass or Au (4.9–30 keV), or select
+   **Typed δ, β** and enter both optical constants at the cut's wavelength. For a coated substrate, tick **Top layer**
+   and enter the film thickness in nm and its δ and β. The Fit panel and Fit details name the substrate. Refinement
+   and posterior weighting use four-term DWBA with Fresnel reflection for a bare substrate or Parratt reflection for
+   the film. Spheres sum the four paths. For upright cylinders of fixed height the common axial factor goes into the
+   scale. If Model supplies a height distribution, the decoupling approximation averages over it. Randomly oriented
+   cylinders use the orientation-averaged Born term at the cut's q_z. Model and the saved solutions retain the geometry.
+   With **Unknown**, both angles give the two-path model
+   with a fitted effective reflection coefficient. A single angle gives the Born term, and two zero angles give
+   the effective interface.
+
+   ![Cut geometry for a film on a Si substrate](manual_images/en/predict_substrate.png)
+
    Predict uses its Gaussian size model for the three manual number distributions, its own q resolution and the
    curve's measured σ. Earlier models retain their existing Predict size-law and coupling conventions.
 3. Without σ in the file, Predict takes a relative σ from the scatter of ln I about its trend (at least 1 %); the
@@ -2654,6 +2664,7 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
   (effective interface) and level 2 (Born at q_z) flag sphere and random-cylinder radii above q_z·R = 1.2
   (`qzR_cov`). In the simulated DWBA sphere benchmark, nominal 68 % coverage was only 18–33 % at 1.2–1.7.
   Level 2 adds `qzR_fail` above 2. Use both angles for level 3 or fit the four-term DWBA with a known substrate.
+  Level 4 evaluates the reflected paths directly and omits the Born-approximation flags.
   Level 3 flags interval coverage above 1.7. The level-1 `qzR` radius-bias flag also starts above 1.7.
   At levels 2 and 3 an upright cylinder with q_z·R > 2 may stand for a sphere of similar radius (`cyl_sphere`).
   At any level, a cylinder with a known height also receives this flag if 0.8 ≤ h/(2R) ≤ 1.25 and q_z·R > 1.2.
@@ -2704,6 +2715,8 @@ The window runs Predict parameters on every curve listed; it has no other method
      unit and how to change it; the candidate's tooltip and its *Parameters and units* text repeat it, and the
      records keep it (`curve_notes`).
    - **q sides**: *Each half separately*, *q > 0 half* or *q < 0 half*.
+   - **Cut geometry and substrate…** applies one measured geometry and substrate to every curve in this run.
+     With a substrate selected, both cut angles set q_z and level 4 replaces the **Cut qz** setting.
    - **Cut qz (nm⁻¹)**: the cut's q_z, at whose Born term spheres are evaluated; unticked (the default), q_z = 0,
      the effective interface. The exit-reflected path needs both angles: fit such a curve on the Fit page with the
      angles in Model.
@@ -4263,10 +4276,10 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Fitting is slower with sizes by intensity and with random cylinders.** With a sphere or vertical cylinder and sizes by number or log-normal, **Search the ranges** takes a few seconds as before; with *Gaussian, by intensity* (models of earlier versions) tens of seconds, and with a random cylinder (15–800 ms per evaluation) up to minutes. | Set **Sizes** to *Gaussian, by number*, narrow the ranges of R, h and σR/R before a search, or start **Refine** from values close to the curve. |
 | **A vertical cut is modelled for spheres and upright cylinders only**, at one in-plane q (q∥ of its columns), without a q resolution or the specular rod, and only in Fitting ▸ Fit Several Curves Together. Its scales are its own: with several populations their ratio is not tied to the horizontal cut's (section 6.6). | Take the vertical cut beside the specular rod; fit random cylinders and core–shell spheres on horizontal cuts. |
 | **Cylinder height in a joint fit.** The model assumes a dilute particle layer and independent heights and radii. | Check the vertical reduced χ² and the height difference between ranges. Both ranges can give a biased height when height and radius are correlated (section 6.6). |
-| **The substrate table holds bare Si, SiO₂, plate glass and Au from 4.9 to 30 keV.** An oxide, a polymer film, roughness and the particle layer's own index are not part of it (section 6.2). | Type δ and β of an effective substrate, or use the two paths with a free r. |
+| **The substrate table holds Si, SiO₂, plate glass and Au from 4.9 to 30 keV.** Level 4 assumes smooth interfaces and particles surrounded by air. | For a known oxide or polymer film, enter its thickness, δ and β under **Top layer** (section 6.4). For a substrate outside the table, enter its δ and β. |
 | **The posterior check (MCMC) is slow for random cylinders.** A random cylinder takes 15–200 ms per evaluation. A check takes hours. Independent ensembles can both miss a distant mode (section 6.2). | Compare other modes through Predict's other solutions. |
 | **Predict parameters can give slightly different fits across platforms.** For the same cut, solution probabilities, interval endpoints, standard errors and flags for parameters near a bound can differ between numerical library builds. | To reproduce an archived fit, record the operating system and Python, NumPy and SciPy versions along with the cut and settings. |
-| **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; spheres with two paths and a free reflection coefficient r when Model has both angles, else at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, other shapes) can give a composition a high probability that it does not deserve. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with both angles R is off by about 6 % (median; P90 19–40 %) and the composition right in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
+| **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; four-term DWBA with a known substrate and both angles; spheres with two paths and a free reflection coefficient r when the substrate is unknown and Model has both angles, else at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, other shapes) can give a composition a high probability that it does not deserve. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with an unknown substrate and both angles R is off by about 6 % (median; P90 19–40 %) and the composition right in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7 and select level 4 when the substrate is known; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
 | **Older reduction or fit records may lack a reproduction recipe.** | Export a fresh record from the original inputs and settings. Section 12 describes replay for records with a `reproduction` block. |
 | Without a supported credential-store adapter, saved API keys are kept in plain text in the user data folder (section 10.1). Anyone with read access to those files can read the keys. | On a shared computer, use the provider's environment variable or **Remove** the saved key after use. |
 | **Sputter ▸ Analyze reads Cu with networks trained for Cu on two polymer films (a homopolymer and a block copolymer)**. | For Cu on another substrate, choose **Polymer** for a polymer film and compare the model image with the measured one before using the values. |

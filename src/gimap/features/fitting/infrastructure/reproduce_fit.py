@@ -28,6 +28,10 @@ def predict_options(payload):
                     model_error_floor=refine.MODEL_ERROR_FLOOR, min_probability=0.01,
                     reflected_beam=None, known_heights=None, measured_qz=None)
     options = {key: payload.get(key, value) for key, value in defaults.items()}
+    if payload.get("substrate") is not None:
+        options["substrate"] = payload["substrate"]
+        if payload.get("upright_heights"):
+            options["upright_heights"] = payload["upright_heights"]
     options["qz"] = float(options["qz"] or 0.)
     options["qz_minus"] = None if options["qz_minus"] is None else float(options["qz_minus"])
     options["seed"] = int(options["seed"])

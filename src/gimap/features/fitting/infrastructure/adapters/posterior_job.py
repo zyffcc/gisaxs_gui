@@ -2,9 +2,10 @@
 compositions asked for, each mode refined by least squares (``domain.posterior.refine.predict``).
 
 Payload: q (nm⁻¹), intensity, sigma (or None), qz (k_i + k_f, nm⁻¹; 0: the effective interface), qz_minus (k_i − k_f
-when both angles are known: spheres with the exit-reflected path; None otherwise), compositions (indices of
+when both angles are known; None otherwise), compositions (indices of
 ``encoding.COMPOSITIONS``) or allowed (the head chooses among them), method, samples, seed, law, coupling, grazing
-(the person's angles and λ to keep; the reflection too when qz_minus is None). The result is JSON: every solution's
+(the person's angles and λ), and optionally substrate (material or optical constants, with any layers).
+The substrate fixes the reflection coefficients of the four-term DWBA. The result is JSON: every solution's
 model (``model_to_dict``), χ²ᵣ (over the fitted points, with the curve's σ: ``refine``'s, the one number every text
 shows), probability, values with their posterior intervals, flags (``shared/fit_names.clean_flags``: none for a term
 that is absent), ``points`` (``fitted_points``: how many were fitted, how many lay below the network's q window);
@@ -271,6 +272,8 @@ def solution_row(solution, item, render_q, points=None) -> dict:
         workflow="native_v5", physics_backend="cut_model", law=model.components[0].law if components else None,
         best_source="posterior", side=item["side"], combination=" + ".join(c["type"] for c in components),
         composition=solution.name, components=components,
+        **({"model": record["model"], "substrate": model.substrate.to_dict(),
+            "scattering": f"four-term DWBA on {model.substrate.label}"} if model.substrate is not None else {}),
         global_params=dict(background=float(g["background"].value), resolution_amplitude=float(g["res_amplitude"].value),
                            sigma_Res=float(g["res_width"].value), nu_Res=float(g["res_exponent"].value),
                            q_resolution=float(g["q_resolution"].value),
@@ -291,11 +294,13 @@ def solution_row(solution, item, render_q, points=None) -> dict:
 def fit_and_write(output, item, options, report, cancelled) -> list:
     """Predict parameters for one half of a curve of the 1D Predict window; its files as the other methods write."""
     import json
+    from ...application.substrate_level import batch_geometry
 
     network = posterior_network.load()
     report(0, 1, f"{item['side']}: weighting the network's samples", {})
-    settings = predict_options(dict(qz=options.get("cut_qz"), reflected_beam=options.get("reflected_beam"),
-                                    measured_qz=options.get("measured_qz"), **batch_compositions(options["components"])))
+    cut = batch_geometry(options.get("predict_cut", {})) or dict(
+        qz=options.get("cut_qz"), reflected_beam=options.get("reflected_beam"), measured_qz=options.get("measured_qz"))
+    settings = predict_options({**cut, **batch_compositions(options["components"])})
     solutions = refine.predict(network, item["q"], item["observed"], item["sigma"], **settings)
     if cancelled():
         raise RuntimeError("Prediction cancelled")

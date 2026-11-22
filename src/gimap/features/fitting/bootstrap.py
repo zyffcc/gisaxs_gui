@@ -94,7 +94,7 @@ def create_curve_fit():
     Analysis, Batch Export's particle model, Process with AI and the command line).
 
     ``curve_fit(q_inv_angstrom, intensity, sigma, *, components=(), distance_nm=None, report=None, cancelled=None,
-    evaluated=None, halves=None, cut_qz=None)`` finds the particles of one cut on |q|: the given composition
+    evaluated=None, halves=None, cut_qz=None, substrate=None, grazing=None)`` finds the particles of one cut on |q|: the given composition
     (1 = sphere, 2 = random cylinder, 3 = vertical cylinder, each with a paracrystal) or, with none given, the
     network's choice among one or two populations of spheres and upright cylinders, with or without a paracrystal
     (random cylinders cost far more time: give them as the composition). It returns the distinct solutions, most probable first, as the rows of
@@ -105,7 +105,8 @@ def create_curve_fit():
     callers of the former quick fit and not used (the network needs no start); ``report`` hears the steps.
     When the angles of the Yoneda cut are known, ``cut_qz`` is its vacuum q_z = k(sin α_i + sin α_f) in nm⁻¹.
     Predict fits the Born term there (level 2) and reports its reflected-beam cut flags. With no cut q_z it
-    fits the effective interface at q_z = 0 (level 1).
+    fits the effective interface at q_z = 0 (level 1). With a substrate record and measured grazing geometry
+    (wavelength in nm and angles in degrees), the fit uses the four-term DWBA (level 4).
 
     The curve is prepared first (``shared/signed_cut``), so a cut with both halves and of any length can be given.
     ``halves`` says what to fit of a cut through the beam: ``mean`` / ``positive`` / ``negative`` (``both`` and
@@ -144,7 +145,7 @@ def create_curve_fit():
         return PreparedCut(x, y, s, note, "", 0, int(order.size), group)
 
     def curve_fit(q_inv_angstrom, intensity, sigma, *, components=(), distance_nm=None, report=None, cancelled=None,
-                  evaluated=None, halves=None, cut_qz=None):
+                  evaluated=None, halves=None, cut_qz=None, substrate=None, grazing=None):
         options = {**default_options(), "q_unit": "A^-1", "side": "positive", "components": list(components)}
         cut = prepared(np.asarray(q_inv_angstrom, dtype=float).reshape(-1), np.asarray(intensity, float).reshape(-1),
                        None if sigma is None else np.asarray(sigma, float).reshape(-1), halves)
@@ -161,6 +162,8 @@ def create_curve_fit():
         chosen = (batch_compositions(list(components)) if components else
                   {"allowed": encoding.select(("sphere", "vertical_cylinder"), 2)})
         proposals = network.load()
+        if substrate is not None:
+            chosen.update(substrate=substrate, grazing=grazing)
         settings = predict_options(dict(seed=CURVE_FIT_SEED, qz=cut_qz,
                                         reflected_beam=True if cut_qz else None, **chosen))
         solutions = refine.predict(proposals, item["q"], item["observed"], item["sigma"],

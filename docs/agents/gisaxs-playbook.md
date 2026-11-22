@@ -48,7 +48,8 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    转述时**不要**把它叫作间距。记录里的键仍是 `spacing`、`distance_nm`。
 6. **拟合**（`fit_horizontal_cut`，用 Fitting 的 Predict parameters，即 `create_curve_fit()`，约 15 秒）：GIMaP 的网络给出组成
    和数值，每个解用最小二乘精修并按后验概率加权。没有给组成（`components`）时，网络在一种或两种球和竖直圆柱、带或不带次晶
-   的组成中选；随机取向圆柱只在给定组成时才用。已知入射角和 Yoneda 带出射角时，用切线真空 q_z 处的 Born 项（第二层）；任一角未知时用有效界面（第一层，q_z = 0）。第 5 步的 2π/q* 不作起点。最多给出 5 个
+   的组成中选；随机取向圆柱只在给定组成时才用。已知波长、入射角和 Yoneda 带出射角，并且会话或元数据给出基底时，使用第四层的四项 DWBA。
+   可用 `--substrate Si` 或在笔记中单独写一行 `基底 = Si`。基底未知、两个角度已知时，用切线真空 q_z 处的 Born 项（第二层）；任一角未知时用有效界面（第一层，q_z = 0）。第 5 步的 2π/q* 不作起点。最多给出 5 个
    互不相同的解，最可能的在前：report.md 和 fit_solutions.csv 全部列出，而在 MCP 或 call 里直接调用 `fit_horizontal_cut`
    只返回前 3 个，外加 `chosen`。报告的解（`chosen`）就是最可能的那个，带它的概率和 R、h、D 的 68 % 后验区间（决策
    `fit intervals`；区间不含几何和模型选择）。另一个解的概率 ≥ 0.2（`ASK_PROBABILITY`）时，Needs attention 里有一条 “model”：
@@ -60,7 +61,8 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    q_z = k(sin αi + sin αf) 及角度、波长记在 `gisaxs.fit.cut_qz`；未知时该项为 `null`。`gisaxs.fit.substrate_level` 和 Decisions 均写明拟合层级。
    在第二层，球或随机取向圆柱的 q_z·R > 1.2 时，`qzR_cov` 提示区间可能低估不确定度；q_z·R > 2 时，`qzR_fail` 提示模型误差较大。
    第二层的竖直圆柱在 q_z·R > 2 时还会标记 `cyl_sphere`，即使没有高度，也要考虑半径相近的球。转述 R 时要说明这些标记。
-   若要对球计入出射反射路径，在 Fitting 的模型里填入 αi、αf、λ 后运行 Predict parameters。第三层在 q_z·R > 1.7 时也会给出覆盖率提示。
+   基底未知时，可在 Fitting 的预测参数中填入 αi、αf、λ，以第三层拟合有效反射系数。第三层在 q_z·R > 1.7 时也会给出覆盖率提示。
+   第四层按裸界面的菲涅耳系数或分层基底的 Parratt 系数计算反射项，不产生 Born 近似标记。
    网络只凭曲线选组成，所以要用用户知道的形状在 Fitting 里确认（手册第 13 章）。`--no-fit` 只准备切线，不拟合。
 
 输出：`report.md/json`、`horizontal.csv`、`vertical.csv`、`fit_curve.csv`（q、I、σ、I_fit：报告的那个解）、`fit_solutions.csv`

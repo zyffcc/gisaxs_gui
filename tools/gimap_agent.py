@@ -136,7 +136,7 @@ def command_auto(arguments) -> int:
         sum_frames=arguments.sum,
         rings=arguments.rings, max_peaks=arguments.max_peaks, recalibrate=arguments.recalibrate, notes=notes,
         technique=arguments.technique, follow_detection=arguments.technique is None, fit=not arguments.no_fit,
-        phases=tuple(arguments.phase or ()),
+        phases=tuple(arguments.phase or ()), substrate=getattr(arguments, "substrate", None),
     )
     out = Path(arguments.out) if arguments.out else default_output_folder()
     progress = (lambda _text: None) if arguments.quiet else (lambda text: print(text, file=sys.stderr, flush=True))
@@ -317,6 +317,8 @@ def parser() -> argparse.ArgumentParser:
     )
     auto.add_argument("--energy-kev", type=float, help="X-ray energy in keV (beats the header and the notes)")
     auto.add_argument("--incidence-deg", type=float, help="incidence angle αi in degrees, above 0 and below 90 (beats the notes and the profile)")
+    auto.add_argument("--substrate", choices=("Si", "SiO2", "glass", "Au"),
+                      help="known GISAXS substrate for the four-term DWBA fit at the Yoneda band")
     auto.add_argument("--orientation-min-exit-deg", type=float,
                       help="Minimum pixel exit angle for GIWAXS ring orientation (default: twice αc or twice αi).")
     auto.add_argument("--critical-angle-deg", type=float,

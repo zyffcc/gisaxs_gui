@@ -25,6 +25,7 @@ from scipy.special import j1
 
 from . import envelope as env
 from . import sizes
+from . import dwba_sphere
 
 CHUNK = 1_000_000
 """Elements of the largest temporary (B × nodes × q) evaluated at once."""
@@ -119,6 +120,8 @@ def sphere(q, radii, weights, terms, coherent=False, envelope=False):
     """(P̂, C or None) of spheres with the paths ``terms`` = ((c_k, Q_k), …); with ``envelope``, P̂ of the envelopes
     and C = 0 (``envelope``: for q beyond the size distribution's q_cut)."""
     q = np.asarray(q, float)
+    if len(terms) == 4:
+        return dwba_sphere.average(q, radii, weights, terms, coherent, envelope, sphere_amplitude)
     if envelope:
         return _sphere_envelope(q, radii, weights, terms), (np.zeros((radii.shape[0], q.size)) if coherent else None)
     p_out = np.empty((radii.shape[0], q.size))

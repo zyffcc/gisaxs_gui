@@ -160,6 +160,8 @@ class PipelineOptions:
     replace those of Analyze's Phases window, whose phases are used otherwise."""
     orientation_min_exit_deg: Optional[float] = None
     """Override the minimum pixel exit angle for GIWAXS orientation. None keeps the Analyze setting."""
+    substrate: Optional[dict | str] = None
+    """Substrate of this GISAXS sample, as a material key or an optical-constants record at the cut's wavelength."""
 
 
 @dataclass

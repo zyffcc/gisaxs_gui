@@ -59,6 +59,13 @@ def energy_from_notes(text: str) -> Optional[float]:
     return _unique([value for value in values if 1.0 <= value <= 200.0], 1e-3)
 
 
+def substrate_from_notes(text: str) -> Optional[str]:
+    """An explicit 'substrate = Si' field on its own line. Sample names and descriptions are ambiguous."""
+    fields = re.findall(r"^\s*(?:substrate|基底|衬底)\s*[:=：]\s*(.*?)\s*$", text or "", re.I | re.M)
+    named = {field.casefold().replace("₂", "2") for field in fields}
+    return {"si": "Si", "sio2": "SiO2", "au": "Au", "glass": "glass"}.get(named.pop()) if len(named) == 1 else None
+
+
 def pixel_size_from_notes(text: str) -> Optional[float]:
     """The detector pixel size (µm) the notes give, when they give exactly one (10–1000 µm)."""
     values = [float(match.group(1) or match.group(2)) for match in _PIXEL.finditer(text or "")]

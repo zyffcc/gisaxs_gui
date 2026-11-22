@@ -1,7 +1,7 @@
 """The windows of the joint fit, the substrate level and the posterior check (offscreen):
 
 * Model's grazing card: the substrate combo sets the model's substrate, the level line says the four-term DWBA once
-  the angles are there; Predict's payload is the same with and without a substrate;
+  the angles are there; Predict uses the substrate from Model;
 * Fit Several Curves Together: a horizontal and a vertical cut (the vertical one read from a file with Analyze's
   geometry in its observation line), the substrate, the parameters' Shared boxes, Fit Together in the background,
   the plot, Use in Model and Save Record…;
@@ -44,7 +44,7 @@ def _cylinders() -> FitModel:
     return model.with_parameter(("globals", "res_amplitude"), value=0.0, free=False)
 
 
-def test_substrate_combo_sets_the_level_and_leaves_predicts_payload_alone():
+def test_substrate_combo_sets_the_level_and_predicts_substrate():
     page = _page()
     try:
         editor = page.model_editor
@@ -63,7 +63,10 @@ def test_substrate_combo_sets_the_level_and_leaves_predicts_payload_alone():
         data = type("Data", (), {"q": q, "intensity": np.ones_like(q), "sigma": None})()
         with_substrate = predict_request(data, page.session.model, "model").payload
         without = predict_request(data, replace(page.session.model, substrate=None), "model").payload
+        assert with_substrate.pop("substrate") == {"material": "Si"}
         assert with_substrate == without
+        assert "four-term DWBA on Si" in page.predict_substrate_note.text()
+        assert page.reflected_beam.isHidden()
         combo.setCurrentIndex(combo.findData(""))
         QApplication.processEvents()
         assert page.session.model.substrate is None

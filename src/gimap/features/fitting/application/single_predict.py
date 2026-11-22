@@ -85,8 +85,8 @@ def cut_geometry(model: fm.FitModel) -> tuple[float, dict]:
 
 
 def cut_qz_minus(model: fm.FitModel) -> Optional[float]:
-    """k_i − k_f of the cut (nm⁻¹) when Model has both angles (spheres then get the exit-reflected path with a free
-    effective reflection coefficient), else None (the Born term at q_z, or the effective interface)."""
+    """k_i − k_f of the cut in nm⁻¹. When both angles are available, a known substrate selects four fixed paths
+    and an unknown substrate gives spheres a free effective reflection coefficient."""
     geometry = fm.grazing(model)
     if geometry is None or geometry.qz_born <= 0:
         return None
@@ -100,11 +100,19 @@ def predict_request(data, model: fm.FitModel, particles: str, *, seed: int = 0) 
     if law not in ("number_gauss", "lognormal", "intensity_gauss"):
         law = "number_gauss"
     coupling = model.components[0].coupling if model.components else "lma"
-    heights = {str(slot): c.value("h") for slot, c in enumerate(sorted(model.components, key=lambda c: c.value("R")), 1)
-               if particles == "model" and c.family == "vertical_cylinder" and "h" in c.keys()}
-    return JobRequest(handler=HANDLER, payload=dict(known_heights=heights,
+    ordered = sorted(model.components, key=lambda c: c.value("R"))
+    upright = {str(slot): c for slot, c in enumerate(ordered, 1)
+               if particles == "model" and c.family == "vertical_cylinder" and c.heights}
+    heights = {slot: c.value("h") for slot, c in upright.items()}
+    minus = cut_qz_minus(model)
+    support = {}
+    if model.substrate is not None and grazing and min(grazing["alpha_i"], grazing["alpha_f"]) > 0:
+        support["substrate"] = model.substrate.to_dict()
+        if heights:
+            support["upright_heights"] = {slot: [c.value("h"), c.value("sigma_h")] for slot, c in upright.items()}
+    return JobRequest(handler=HANDLER, payload=dict(known_heights=heights, **support,
         q=data.q.tolist(), intensity=data.intensity.tolist(), sigma=None if data.sigma is None else data.sigma.tolist(),
-        qz=qz, qz_minus=cut_qz_minus(model), grazing=grazing or None, seed=int(seed), law=law,
+        qz=qz, qz_minus=minus, grazing=grazing or None, seed=int(seed), law=law,
         coupling=coupling, **compositions(model, particles)), timeout_seconds=None)
 
 

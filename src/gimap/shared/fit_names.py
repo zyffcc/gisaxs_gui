@@ -75,6 +75,8 @@ def diagnostic_lines(diagnostics, ess=None):
     """English templates and substitutions for the report and translated Fit details."""
     d = diagnostics
     lines = []
+    if d.get("substrate_level") == 4 and d.get("substrate_label"):
+        lines.append(("four-term DWBA on {substrate}", {"substrate": d["substrate_label"]}))
     if ess is not None:
         source = "Network-proposal effective sample size {ess}." if d.get("ess_source") == "network proposals" else ESS_TEXT
         lines.append((source, {"ess": f"{ess:.3g}"}))

@@ -57,11 +57,16 @@ def target_for(model: FitModel, data: Optional[FitData], solutions=(), result=No
         centre = model_values(model, composition)
         if centre is None:
             raise ValueError(NOTHING)
-        qz, _grazing = cut_geometry(model)
+        qz, grazing = cut_geometry(model)
         diagnostics = getattr(solution, "diagnostics", None) or {}
+        substrate = model.substrate if diagnostics.get("substrate_level") == 4 else None
+        heights = {str(i): [c.value("h"), c.value("sigma_h")]
+                   for i, c in enumerate(sorted(model.components, key=lambda c: c.value("R")), 1)
+                   if c.family == "vertical_cylinder" and c.heights}
         law = model.components[0].law
         coupling = model.components[0].coupling
         target = PredictTarget(data.q, data.intensity, data.sigma, composition=composition, centre=centre,
+                               substrate=substrate, grazing=grazing, upright_heights=heights,
                                qz=diagnostics.get("cut_qz", qz),
                                qz_minus=diagnostics.get("cut_qz_minus", cut_qz_minus(model)), law=law, coupling=coupling,
                                model_error_floor=diagnostics.get("model_error_floor", MODEL_ERROR_FLOOR),

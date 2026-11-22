@@ -64,6 +64,7 @@ def header_values(metadata: dict) -> dict:
         "beam_center_px_as_written": center,
         "exposure_s": _number(metadata, "exposure_time_s"),
         "timestamp": metadata.get("timestamp"),
+        "substrate": metadata.get("substrate"),
     }
     return {key: value for key, value in values.items() if value not in (None, [None, None])}
 

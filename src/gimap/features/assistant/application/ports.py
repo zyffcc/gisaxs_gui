@@ -187,10 +187,11 @@ class CurveFitter(Protocol):
     Fitting's ``create_curve_fit`` supplies probability or BIC weight, parameter summaries, diagnostics and curves."""
 
     def __call__(self, q_inv_angstrom, intensity, sigma, *, components=(), report=None, cancelled=None,
-                 cut_qz=None) -> list[dict]:
+                 cut_qz=None, substrate=None, grazing=None) -> list[dict]:
         """``components``: the composition to fit (1 sphere, 2 random cylinder, 3 vertical cylinder; empty: the
         network chooses). With ``cut_qz`` (the vacuum q_z in nm⁻¹), fit the Born term at that q_z. With
-        ``None``, fit the effective interface at q_z = 0."""
+        ``None``, fit the effective interface at q_z = 0. A substrate record together with λ (nm), αi and
+        αf (degrees) in ``grazing`` selects the four-term DWBA."""
         ...
 
 

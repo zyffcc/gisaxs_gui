@@ -208,10 +208,12 @@ def from_z(z, ratio, index) -> np.ndarray:
     return from_unit(0.5 * (1.0 + np.tanh(0.5 * np.asarray(z, float))), ratio, index)
 
 
-def log_prior(z, index) -> np.ndarray:
+def log_prior(z, index, dims=None) -> np.ndarray:
     """log p(z) of each row under the prior (uniform in v), over the active values of compositions ``index``."""
     z = np.asarray(z, float)
     terms = -np.logaddexp(0.0, -z) - np.logaddexp(0.0, z)
+    if dims is not None:
+        return np.sum(terms[:, dims], axis=1)
     return np.sum(np.where(active(np.broadcast_to(index, (z.shape[0],))), terms, 0.0), axis=1)
 
 
