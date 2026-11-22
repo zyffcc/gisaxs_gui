@@ -74,6 +74,17 @@ class CurveTablePreview:
     intensity_columns: tuple[int, ...] = ()
     curve_titles: tuple[str, ...] = ()
     """An NXcanSAS file: the title of each of its curves (one SASdata group each); the rows are of the first."""
+    curve_roles: tuple[str, ...] = ()
+    """An NXcanSAS file: what each curve is, ``data`` or ``model`` (empty: not said; a file of GIMaP's fits says it)."""
+
+    @property
+    def measured_curves(self) -> tuple[int, ...]:
+        """The places of the measured curves of an NXcanSAS file: all of them, unless the file says which are models
+        (then those are left out: a file of fits holds the points fitted and the model of each)."""
+        roles = self.curve_roles if len(self.curve_roles) == len(self.curve_titles) else ()
+        if "model" not in roles:
+            return tuple(range(len(self.curve_titles)))
+        return tuple(index for index, role in enumerate(roles) if role != "model")
 
     @property
     def allow_shared_q(self) -> bool:
@@ -86,14 +97,14 @@ def sources_from_table(preview: CurveTablePreview, layout: TableLayout):
 
     An ambiguous table is never interpreted as multiple curves without this explicit layout choice.
     Analyze's pixel-count/error columns are protected even when the user requests a shared-q layout.
-    An NXcanSAS file gives each of its curves (``CurveTablePreview.curve_titles``), whatever the layout.
+    An NXcanSAS file gives each of its measured curves (``CurveTablePreview.measured_curves``), whatever the layout.
     """
     from .models import InSituSourceFrame
 
     if layout not in ("single", "shared_q"):
         raise ValueError("Unknown curve table layout.")
-    if preview.curve_titles:  # NXcanSAS: every curve of the file, by its place in it (no columns to choose)
-        return tuple(InSituSourceFrame(preview.path, frame_index=index) for index in range(len(preview.curve_titles)))
+    if preview.curve_titles:  # NXcanSAS: every measured curve of the file, by its place in it (no columns to choose)
+        return tuple(InSituSourceFrame(preview.path, frame_index=index) for index in preview.measured_curves)
     if preview.column_count < 2:
         raise ValueError("A curve table needs at least two columns.")
     if layout == "shared_q" and not preview.allow_shared_q:

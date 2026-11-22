@@ -12,6 +12,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **In-situ series after a user test.** The chained fit no longer breaks where a value reaches a bound of its range (the beam tail, the background or any other), at an undetermined value or at a poor fit — those are flagged; it breaks only at a failed or unconverged fit, a new stage or a jump of χ²ᵣ, and there Predict parameters (unchanged) restarts from its solution closest to the frame before among those at least a tenth as probable as the most probable one. A smooth series no longer gets steps from restarts (a linked two-sphere model jumped by a factor 2 in R₁ where only the beam tail's exponent had reached its bound). The table's new **Started from** column says “continued from frame n” or “restarted from Predict (why)”, with the rule that chose Predict's solution on hover; the saved table and record add `start_frame` and `predict_choice`. **Refine** and **Search** go on from their own result while χ²ᵣ falls by more than 0.1 % (at most 5 more runs, counted in the Run Log, the record and the report). **Fit New Frames in Fitting…** ticks **Watch for new curves** and starts once the model is set up; a map the watch begins includes the frame on screen when watching began; the Series map comes back with a project and after a crash; NXcanSAS files of fits mark their entries as data or model, and opened again offer the measured curves. Manual 3.9, 5.1, 6.1, 6.2, 6.5; *Physics and Methods* 9.8, 11.13, 14.2.
 - **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
   sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture
   ((hkl) parallel to the substrate or [uvw] along the normal): their reflections are drawn with hkl labels on the
@@ -30,7 +31,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   the exports to In-situ series. The plot under the Series map has a timeline — the χ² of every frame to the one
   before and to a reference frame, with stage boundaries, jumps and odd frames — and a click on it shows that frame.
   Fitting ▸ In-situ series can start every frame from the previous result and ask Predict parameters only where that
-  chain breaks (a failed or flagged fit, a jump of χ²ᵣ, a new stage; Predict's method is unchanged), add a backward
+  chain breaks (a failed or unconverged fit, a jump of χ²ᵣ, a new stage; Predict's method is unchanged), add a backward
   pass, show a Flags column, draw the trend against time, and save the fits as NXcanSAS or into the results database.
   Compare ▸ Add Series ▸ **Results Database…** reads a recorded series without its frames. Manual sections 5.1, 5.6,
   6.5, 7.2, 12 and 13; *Physics and Methods* 11.12–11.14.

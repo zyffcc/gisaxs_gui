@@ -19,6 +19,8 @@ from .views.curve_import_view import CurveImportView
 
 NXCANSAS_NOTE = ("NXcanSAS file: every curve in it (each SASdata group: Q, I and Idev as σ) is imported; the rows "
                  "shown are those of the first.")
+NXCANSAS_FITS_NOTE = ("NXcanSAS file of fits: its {count} measured curves are imported, not the models beside them "
+                      "(Q, I and Idev as σ); the rows shown are those of the first curve in the file.")
 
 
 @dataclass(frozen=True)
@@ -198,6 +200,8 @@ class CurveImportDialog(QDialog, CurveImportView):
             note = trf("Could not import this table: {error}", error=tr(self._errors[index]))
         elif index in self._layout_notices:
             note = trf("Layout not changed: {error}", error=tr(self._layout_notices[index]))
+        elif preview.curve_titles and len(preview.measured_curves) < len(preview.curve_titles):
+            note = trf(NXCANSAS_FITS_NOTE, count=len(preview.measured_curves))
         elif preview.curve_titles:
             note = NXCANSAS_NOTE
         elif preview.analyze_export:

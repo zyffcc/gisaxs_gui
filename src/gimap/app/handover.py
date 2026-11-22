@@ -114,11 +114,14 @@ class HandoverMixin:
         if self.current_page_key() == "fitting":
             self.fitting_workspace.show_solution(row)
 
-    def _send_series_to_fitting(self, folder) -> bool:
+    def _send_series_to_fitting(self, folder, watch: bool = False) -> bool:
         """Open Fitting ▸ In-situ series on the folder Analyze wrote; a refused hand-over leaves the
-        exported files available, also when the person chose to keep unsaved results."""
+        exported files available, also when the person chose to keep unsaved results. ``watch`` (Fit New Frames in
+        Fitting…): Watch for new curves on, and Start once the curves are listed."""
         self._fitting_runtime().navigate("fitting")
         if self.fitting_workspace.open_series(folder, "*_fit_input.dat"):
+            if watch:
+                self.fitting_workspace.series_page.watch_and_start()
             return True
         folder = Path(folder)
         show_toast(self.ui, trf(SERIES_NOT_OPENED, folder=short_folder(folder)), level="warning",

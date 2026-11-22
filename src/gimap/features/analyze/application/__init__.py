@@ -165,7 +165,7 @@ from .ports import (
 from .series import CorrectSeriesFrame
 from . import gisaxs_cuts as gisaxs_cut_tools  # the person's GISAXS cuts: units, outlines, the set-up they were made on
 from .settings_file import SETTINGS_FORMAT, AnalyzeSettings, settings_from_record, settings_record
-from .series_map import SERIES_TITLE, build_series_map, export_series_map, export_series_track, row_label, series_row
+from .series_map import SERIES_TITLE, RowLabel, build_series_map, export_series_map, export_series_track, row_label, series_row
 from .series_results import (
     TIMELINE_METHOD,
     export_series_timeline,
@@ -353,7 +353,7 @@ __all__ = [
     "stages_record",
     "export_series_map",
     "export_series_track",
-    "row_label",
+    "RowLabel", "row_label",
     "series_row",
     "TIMELINE_METHOD",
     "export_series_timeline",

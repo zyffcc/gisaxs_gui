@@ -24,13 +24,22 @@ from PyQt5.QtCore import QObject, Qt, pyqtSignal
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application.single_fit import BOTH_USES_MEAN, ONE_CURVE_METHODS, PROGRESS_LINE, fit_resolving, stopped_result
+from ...application.single_fit import (
+    BOTH_USES_MEAN,
+    ONE_CURVE_METHODS,
+    PROGRESS_LINE,
+    RESTART_TOLERANCE,
+    fit_resolving,
+    stopped_result,
+)
 from .method_hint import fit_error_text
 from .predict_progress import stage_line
 from .predict_texts import count_solutions, points_text
 from .solution_texts import numbered_labels
 
 METHOD_NAMES = {"local": "Refine", "global": "Search the ranges", "predict": "Predict parameters"}
+RESTARTED = "The least squares went on from its own result {count} times (each time χ²ᵣ fell by more than {share} %)."
+"""The Run Log after a manual fit that ran again (``single_fit.converged_again``)."""
 _ENGINE_LINE = re.compile("".join(
     re.escape(part) if index % 2 == 0 else f"(?P<{part}>.+?)"
     for index, part in enumerate(re.split(r"\{(\w+)\}", PROGRESS_LINE))), re.DOTALL)
@@ -262,6 +271,8 @@ class FitRunMixin:
         self.session.set_model(result.model, label=("the fit ({method})", {"method": METHOD_NAMES[result.method]
                                                                              if result.method in METHOD_NAMES else "Refine"}))
         self._model_changed(editor=True)
+        if getattr(result, "restarts", 0):
+            self._log(trf(RESTARTED, count=result.restarts, share=f"{100 * RESTART_TOLERANCE:g}"))
         if result.stopped:
             self._status(lambda: tr("Stopped: the best values so far are kept ({quality}).").format(
                 quality=self._quality_text(result)), "warning")

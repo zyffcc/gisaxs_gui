@@ -112,6 +112,9 @@ class FitResult:
     """The covariance matrix of the free parameters (rows of ``covariance_paths``; NaN in the rows of a direction
     the curve does not see); empty when it could not be computed."""
     covariance_paths: tuple = ()
+    restarts: int = 0
+    """How many times the least squares was run again from its own result and improved it (a manual fit,
+    ``single_fit.fit_resolving``); 0 for a fit made once."""
 
 
 def stopped_result(result: FitResult) -> FitResult:

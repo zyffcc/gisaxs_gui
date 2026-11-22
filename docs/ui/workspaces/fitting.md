@@ -284,6 +284,15 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   previous frame**（默认勾选；起点为 Single 的模型、或新阶段的第一帧时不跟随）：在概率至少为最可能解的 `CLOSE_ENOUGH` = 0.2 倍的解里，
   取尺寸和间距（ln R、ln D 之差，按半径对应各群）与上一帧最接近的一个（`closest`）；明显更可能的解仍被采用。记录
   `settings.method` = `predict`、`settings.follow`。
+- **链式拟合**（`application/series_chain.py`，页面 `single/series_chain.py`）：链只在拟合失败或未收敛、新阶段、χ²ᵣ 跳变处断开
+  （`chain_break`）；参数在边界（光束拖尾、背景或其他）、未确定的值和拟合差只标记。断开处 `chained_fit(solutions=…)` 取页面的
+  `predict_solutions()`（Predict 的全部解，方法不变），`restart_solution` 在概率不低于最可能解 1/`PREDICT_FACTOR`（10）的解中取
+  `solution_distance`（共有自由值在上一帧范围中位置之差的 RMS）最小的一个，规则写进 `FrameFit.predict_choice`；`start_frame` 是接续的帧。
+  表格的 **Started from** 列（`single/start_texts.py`）写 “continued from frame n” / “restarted from Predict (why)”，悬停给出规则；
+  Flags 列不再重复 chain broke 和 backward（保存的 `flags` 里仍有）。
+- **Fit New Frames in Fitting…**（Analyze）经 `HandoverMixin._send_series_to_fitting(folder, watch=True)` 调用
+  `series_page.watch_and_start()`：勾选 Watch for new curves，列出完毕后（`start_watched`）Start；模型还是没人设置过的初始猜测时
+  不开始，状态栏说 `WATCHING_NOT_SET_UP`。
 - **运行**：曲线在界面线程读入，拟合在后台一帧一帧做；Pause / Stop；选中最后一帧时图跟着运行走，
   选了别的帧就停在那里。Start 之前点列表中的帧就能看到它的曲线和 Single 的模型（预览）；开始后各帧都按这次运行的设置画。
   运行期间不能打开项目（先 Stop）。

@@ -2,8 +2,8 @@
 
 The table gets one row when a frame is done (filling the whole table again at every frame, with columns
 that measured themselves at every cell, froze the window for minutes) and keeps its columns as wide as
-their text: the frame, χ²ᵣ, every fitted value ± 1σ, then the points the frame was fitted on and what they
-are. A frame without a fit says why across its row; a frame not to be trusted as it is (not converged, a
+their text: the frame, χ²ᵣ, every fitted value ± 1σ, where the frame's fit started (``start_texts.py``), its
+flags, then the points the frame was fitted on and what they are. A frame without a fit says why across its row; a frame not to be trusted as it is (not converged, a
 poor fit, stopped) is in the warning colour, with the reason on hover. The card above says how many frames
 are in each state and what they were fitted on. Saving writes the table with a JSON record of the run, or a
 plot with a title that says what it shows; results that were not saved are asked about before they go.
@@ -41,6 +41,7 @@ from .results import folder_action, start_folder, write_pair, write_plot
 from .series_stages import CHI2
 from .series_text import HALF_TEXT, STATE_COLOR, STATE_MARK
 from .session import path_name
+from .start_texts import START, START_TIP, start_text, start_tip
 
 FLAGGED_LINE = "Flagged (a value not determined, or the beam tail at an edge of its range): frames {frames}"
 FLAGGED_FRAME = "Flagged: {values}"
@@ -48,8 +49,7 @@ STALE = "Changed after the fit: Start again"
 """The halves, the fitting range or the left-out points are no longer those of the run."""
 UNTOUCHED = "The model was the starting guess of Single analysis: it was never set up or fitted there."
 FLAGS_TIP = ("What to know before trusting the row: failed, not converged, a poor fit, values at a bound of their range, "
-             "the beam tail at an edge, a value the curve does not determine, where the chain broke (Predict parameters "
-             "fitted the frame again), a fit kept from the backward pass")
+             "the beam tail at an edge, a value the curve does not determine (none of them breaks the chain)")
 PLOTS_MIN_WIDTH = 460
 """The plots keep at least this width when the steps panel widens for the table."""
 NAMED_FRAMES = 8
@@ -113,14 +113,15 @@ class FitSeriesResultsMixin:
             self._table_frames = []
             if model is not None:
                 columns = parameter_columns(model)
-                table.setColumnCount(len(columns) + 5)
+                table.setColumnCount(len(columns) + 6)
                 table.setHorizontalHeaderLabels(["#", "χ²ᵣ"] + [path_name(model, path, unit=True) for path, _name in columns]
-                                                + [tr("Flags"), tr("Points"), tr("Halves")])
+                                                + [tr(START), tr("Flags"), tr("Points"), tr("Halves")])
                 for column, (path, _name) in enumerate(columns, start=2):  # the whole name (“1·Sphere R (nm)”) on hover
                     table.horizontalHeaderItem(column).setToolTip(path_name(model, path, unit=True, full=True))
-                table.horizontalHeaderItem(len(columns) + 2).setToolTip(tr(FLAGS_TIP))
-                table.horizontalHeaderItem(len(columns) + 3).setToolTip(tr("The points the frame was fitted on"))
-                table.horizontalHeaderItem(len(columns) + 4).setToolTip(
+                table.horizontalHeaderItem(len(columns) + 2).setToolTip(tr(START_TIP))
+                table.horizontalHeaderItem(len(columns) + 3).setToolTip(tr(FLAGS_TIP))
+                table.horizontalHeaderItem(len(columns) + 4).setToolTip(tr("The points the frame was fitted on"))
+                table.horizontalHeaderItem(len(columns) + 5).setToolTip(
                     tr("What those points are: the mean of both halves of the cut, or one half"))
                 header = table.horizontalHeader()
                 for column in range(table.columnCount()):
@@ -165,13 +166,15 @@ class FitSeriesResultsMixin:
                 value, error = result.model.get(path).value, result.errors.get(path, np.nan)
                 cells.append("—" if not np.isfinite(value) else
                              f"{value:.4g}" + ("" if not np.isfinite(error) else f" ± {error:.2g}"))
-            cells += [self.flags_cell(frame), str(frame.points), tr(HALF_TEXT.get(frame.halves_used, frame.halves_used))]
+            cells += [start_text(frame), self.flags_cell(frame), str(frame.points),
+                      tr(HALF_TEXT.get(frame.halves_used, frame.halves_used))]
         token = STATE_COLOR.get(self._frame_state(frame.index)[0])
         brush = None if token is None else QBrush(theme_manager().color(token))
         tip = self._frame_tip(frame)
+        started = len(columns) + 2  # the Start cell: the rule that chose Predict's solution, on hover
         for column in range(last + 1):
             item = QTableWidgetItem(cells[column] if column < len(cells) else "")
-            item.setToolTip(tip)
+            item.setToolTip(tip + "\n" + start_tip(frame) if column == started and frame.ok else tip)
             if brush is not None:
                 item.setForeground(brush)
             table.setItem(row, column, item)

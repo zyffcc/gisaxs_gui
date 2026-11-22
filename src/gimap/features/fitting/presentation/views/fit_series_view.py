@@ -336,8 +336,8 @@ class FitSeriesView:
         self.start_chain.setObjectName("fitSeriesStartChain")
         self.start_chain.setToolTip(
             "Each frame from the result of the frame before; where that chain breaks — a failed or unconverged fit, a "
-            "new stage, a flagged or poor fit, χ²ᵣ more than 3× the frame before's — Predict parameters fits the frame "
-            "again and the better fit is kept")
+            "new stage, χ²ᵣ more than 3× the frame before's (a value at a bound does not break it) — Predict parameters "
+            "fits the frame again from its solution closest to the frame before, and the better fit is kept")
         for index, button in enumerate((self.start_previous, self.start_same, self.start_stages, self.start_chain)):
             self.start_group.addButton(button, index)
             layout.addWidget(button)

@@ -2631,8 +2631,15 @@ The starting curve competes too, by the reported objective. When it beats every 
 fraction 10⁻⁶ of its Σr² — without σ the scales are solved with relative weights while the objective is ln I, so a
 start whose scales suit ln I can stay ahead — the start values are returned unchanged and the result says so
 (`start_kept`, *did not improve on the start values*): it is not called converged, and Refine and Search give no
-errors for it, since no minimum was found. Refine and Search refuse a curve with no more points than free values
-and one without an intensity above zero. With σ in the file, points whose σ is zero, negative or not a number are
+errors for it, since no minimum was found. A manual fit (Refine, Search, a frame of an In-situ series refined)
+then **goes on from its own result**: the same least squares is run again from the values it returned, while each run
+lowers χ²ᵣ by more than a share 10⁻³ of itself, at most 5 times (`REFINE_RESTARTS`, `RESTART_TOLERANCE`); the
+result says how often it improved (`restarts` in the record and the report, a line in the Run Log). A run in a long,
+narrow valley of χ² (values correlated near ±1) ends on `ftol` while its trust region is small; a new run starts with
+the first steps of `x_scale` again. A fit already at its minimum is returned as it was. The least squares that gives
+a solution of Predict parameters its errors and χ² (Predict each frame, the chain's restart) is not run again, and
+Predict's own refinement (9.13) calls the engine directly: its numbers are unchanged. Refine and Search refuse a curve
+with no more points than free values and one without an intensity above zero. With σ in the file, points whose σ is zero, negative or not a number are
 left out and counted (`sigma_invalid` among the curve's notes); σ is dropped only when no point has one.
 
 **Search** (`method = global`). Differential evolution (Storn & Price, 1997; `scipy.optimize.differential_evolution`)
@@ -4058,13 +4065,19 @@ The sum runs over the `n` columns where both rows have a value (the x range show
 
 ### 11.13 Chained fit of an In-situ series
 
-Fitting ▸ In-situ series ▸ *The previous result; Predict parameters where the chain breaks* refines every frame from the converged result of the frame before (as *The previous frame's result*). The chain **breaks** at a frame whose fit failed or did not converge, at the first frame of a new stage, at a flagged fit (beam tail at an edge, a value without a finite error; section 9.16), at a poor fit (`χ²ᵣ > 10`), or where χ²ᵣ jumps:
+Fitting ▸ In-situ series ▸ *The previous result; Predict parameters where the chain breaks* refines every frame from the converged result of the frame before (as *The previous frame's result*). The chain **breaks** at a frame whose fit failed or did not converge, at the first frame of a new stage, or where χ²ᵣ jumps:
 
 ```text
 χ²ᵣ(i) > 3 · χ²ᵣ(i − 1)   and   χ²ᵣ(i) > 2                                                          (11.65)
 ```
 
-There the frame is fitted again by Predict parameters with the particles of the start model (section 9.13; its method is unchanged), and of the two fits the one that converged is kept, else the one with the lower χ²ᵣ (the refined one on equal terms). With *Then a backward pass*, after the frames in order every frame from the last but one to the first is refined from the kept result of the frame after it, and the better of its two fits is kept by the same rule. Every frame records where its kept fit started (`start_from`: previous, next, single, predict), why the chain broke (`chain_break`), the pass (`fit_pass`) and its **flags**: failed, not converged, stopped, poor fit, values at a bound of their range, the beam tail at an edge, undetermined values, chain broke, backward. The thresholds 3 and 2 are working choices, not derived from a noise model. Implementation: `src/gimap/features/fitting/application/series_chain.py`
+A value at a bound of its range — a nuisance term (beam tail, background, resolution) or any other —, a value without a finite error (section 9.16) and a poor fit (`χ²ᵣ > 10`) are flagged but do not break the chain: the next frame still starts from this one, since a restart there put steps into series whose data change smoothly (with two linked spheres, R₁ jumped by a factor 2 where only the beam tail's exponent had reached its bound). There the frame is fitted again by Predict parameters with the particles of the start model (section 9.13; its method is unchanged). Of Predict's solutions whose probability is at least 1/10 of the most probable one's (`PREDICT_FACTOR`), the one closest to the previous frame's result is refined:
+
+```text
+d = sqrt( mean_k ( t_k(solution) − t_k(previous) )² )                                              (11.66)
+```
+
+over the values both share that are free and not linked in the previous result and have a finite range there (the particles paired in order of their radius, of the same family), with t_k the place of the value in the previous result's range by (9.18)–(9.19); without a previous result the most probable solution. The rule that chose it is recorded (`predict_choice`). Of the two fits the one that converged is kept, else the one with the lower χ²ᵣ (the refined one on equal terms). With *Then a backward pass*, after the frames in order every frame from the last but one to the first is refined from the kept result of the frame after it, and the better of its two fits is kept by the same rule. Every frame records where its kept fit started (`start_from`: previous, next, single, predict; `start_frame`: the frame whose result it continued), why the chain broke (`chain_break`), how Predict's solution was chosen (`predict_choice`), the pass (`fit_pass`) and its **flags**: failed, not converged, stopped, poor fit, values at a bound of their range, the beam tail at an edge, undetermined values, chain broke, backward. The thresholds 3, 2 and 10 are working choices, not derived from a noise model. Implementation: `src/gimap/features/fitting/application/series_chain.py`
 
 ### 11.14 The results database
 
@@ -4639,7 +4652,11 @@ curve against q: `Q` in 1/angstrom exactly as reduced (a horizontal cut keeps it
 says which q), `I` in `arbitrary` units, `Idev` = σ of this section's error model, and `mask` (1 where Q or I is not
 finite); SASinstrument holds the wavelength (`incident_wavelength`, angstrom), the sample–detector distance (`SDD`,
 m) and the pixel size, and SASsample `pitch` (degree) is αi, the rotation about the horizontal axis normal to the
-beam in NeXus axes. Curves against χ or 2θ are not written there: Q of NXcanSAS is a momentum transfer.
+beam in NeXus axes. Curves against χ or 2θ are not written there: Q of NXcanSAS is a momentum transfer. Fitting's
+fits (Save ▸ Data and Fit, an In-situ series' Fits as NXcanSAS) write the points fitted and the model at their Q as two
+entries each, the SASentry attribute `gimap_role` saying `data` or `model` (an attribute NeXus allows beside the
+definition's; other readers ignore it); opened again, such a file offers its measured curves only (files written
+before say it by the ends of their titles, ": the points fitted" and ": the model").
 
 Implementation: `src/gimap/features/analyze/application/export_record.py`, `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`;
 NXcanSAS: `src/gimap/shared/nxcansas.py`, `src/gimap/features/analyze/application/nxcansas_export.py`.

@@ -1,7 +1,8 @@
 """Save Data and Fit as NXcanSAS (``shared.nxcansas``): the points fitted and the model, two SASentry groups.
 
 Q is |q| in 1/nm as Fitting fits it (Fitting's own unit; the file says it on Q). The first entry holds the points
-fitted with their σ as Idev (none when the curve has no σ), the second the model at the same q, without Idev. The
+fitted with their σ as Idev (none when the curve has no σ; role ``data``), the second the model at the same q, without
+Idev (role ``model``): opened again, the file offers its measured curves. The
 record that Save Data and Fit writes beside the file (``fit_record``: the model, the fit and how it was made) is
 also in each entry, as the JSON ``data`` of an NXnote in SASprocess.
 """
@@ -31,9 +32,10 @@ def fit_curves(model: FitModel, data: FitData, record: dict, name: str, date: Op
     return [
         SasCurve(title=export_text(f"{name}: the points fitted"), q=q, intensity=np.asarray(data.intensity, dtype=float),
                  sigma=None if data.sigma is None else np.asarray(data.sigma, dtype=float),
-                 description=described + " I: the points fitted; Idev: their sigma.", **common),
+                 description=described + " I: the points fitted; Idev: their sigma.", role="data", **common),
         SasCurve(title=export_text(f"{name}: the model"), q=q, intensity=np.asarray(evaluate(model, q), dtype=float),
-                 description=described + " I: the model fitted (the record names it and its parameters).", **common),
+                 description=described + " I: the model fitted (the record names it and its parameters).",
+                 role="model", **common),
     ]
 
 
