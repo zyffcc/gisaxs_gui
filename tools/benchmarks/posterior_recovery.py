@@ -8,6 +8,10 @@ draw. For every curve, GIMaP's posterior path (src/gimap/features/fitting/domain
             probable solution is scored
   choose    compositions among spheres and upright cylinders with a paracrystal, one or two of them (fit1d's
             'auto:sphere,vc:2'): is the most probable one the true composition?
+  auto      (with --auto) the automatic analysis's own call (bootstrap.curve_fit): spheres and upright cylinders,
+            one or two populations, with or without a paracrystal, the first level (q_z = 0), the q_z·R flags added
+            after the fit; is its most probable solution the true composition?
+For choose and auto the head's candidates are stored, and whether the true composition (its families) is among them.
 Reported as in fit1d_recovery.py (median and 90th percentile of the error, bias, |z| ≤ 1 with the least-squares
 error), and in addition the coverage of the posterior's 68 % and 95 % intervals, how often the most probable solution
 of the true composition is in the truth's mode and how often that mode is listed at all (``truth_mode``), the
@@ -174,17 +178,32 @@ def run(index: int) -> dict:
         j = slot * E.PER_SLOT
         pops.append(dict(R=median[j], sR=median[j + 1], D=median[j + 4], s_nn=median[j + 5]))
     out["network"] = dict(ok=True, populations=pops, seconds=time.perf_counter() - tick)
-    for name, kwargs in (("fit", dict(compositions=[truth])),
-                         ("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=OPTIONS["shortlist"]))):
+    stages = [("fit", dict(compositions=[truth]), qz, qz_minus),
+              ("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=OPTIONS["shortlist"]), qz, qz_minus)]
+    if OPTIONS.get("auto"):
+        stages.append(("auto", dict(allowed=E.select(("sphere", "vertical_cylinder"), 2)), 0.0, None))
+    truth_families = sorted(FAMILY[p["shape"]] for p in case["populations"])
+    for name, kwargs, qz_stage, qz_minus_stage in stages:
         tick = time.perf_counter()
+        candidates = None
+        if "allowed" in kwargs:  # the head's candidates, as infer.infer chooses them
+            data_stage = infer.Cut.prepare(fr.Q, I, s, qz_stage, qz_minus_stage)
+            binned_stage = E.bin_curve(data_stage.q, data_stage.intensity, data_stage.sigma, data_stage.q_max,
+                                       data_stage.ratio)
+            h_stage = NETWORK.summary(E.features(*(a[None] for a in binned_stage)), infer.conditions(data_stage))
+            candidates = [int(c) for c, _p in infer.candidates(NETWORK, h_stage, kwargs["allowed"],
+                                                               kwargs.get("shortlist", refine.SHORTLIST))]
         try:
-            solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz, qz_minus=qz_minus, samples=OPTIONS["samples"],
+            solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz_stage, qz_minus=qz_minus_stage,
+                                       samples=OPTIONS["samples"],
                                        seed=index,
                                        coupling=coupling, local_samples=OPTIONS["local_samples"],
                                        refine_modes=OPTIONS["refined"],
                                        explored=OPTIONS.get("explored", refine.EXPLORED),
                                        model_error_floor=OPTIONS.get("floor", refine.MODEL_ERROR_FLOOR), **kwargs)
             best = solutions[0]
+            if name == "auto":  # as bootstrap.curve_fit: a flag only, added after the fit
+                best.flags = tuple(best.flags) + tuple(refine.interface_flags(best.model, float(fr.GEOM.qz_vacuum)))
             k_best = len(E.COMPOSITIONS[best.composition])
             out[name] = dict(ok=True, composition=best.name, composition_index=best.composition,
                              families=_families(best.composition), chi2=best.chi2_reduced, flags=list(best.flags),
@@ -201,7 +220,10 @@ def run(index: int) -> dict:
         except Exception as exc:  # noqa: BLE001 - one failing curve must not stop the study
             out[name] = dict(ok=False, error=f"{type(exc).__name__}: {exc}")
         out[name]["seconds"] = time.perf_counter() - tick
-    out["truth_families"] = sorted(FAMILY[p["shape"]] for p in case["populations"])
+        if candidates is not None:
+            out[name]["candidates"] = candidates
+            out[name]["truth_in_candidates"] = any(_families(c) == truth_families for c in candidates)
+    out["truth_families"] = truth_families
     return out
 
 
@@ -268,19 +290,26 @@ def summary(results):
             table[f"{stage}/{level}"] = _errors(results, stage, level)
     for level in ("model", "measured", "all"):
         table[f"posterior_median/{level}"] = _errors(results, "fit", level, field="posterior")
-    choose = {}
+    choose, auto = {}, {}
+    for stage, target in (("choose", choose), ("auto", auto)):
+        for level in ("model", "measured", "all"):
+            rows = [r for r in results if (level == "all" or r["case"]["level"] == level) and r.get(stage, {}).get("ok")]
+            if not rows:
+                continue
+            exact = [r[stage]["families"] == r["truth_families"] for r in rows]
+            in_set = [r["truth_families"] in r[stage]["in_set"] for r in rows]
+            in_candidates = [r[stage]["truth_in_candidates"] for r in rows if "truth_in_candidates" in r[stage]]
+            target[level] = dict(n=len(rows), exact=float(np.mean(exact)),
+                                 true_in_equivalent_set=float(np.mean(in_set)),
+                                 true_in_candidates=float(np.mean(in_candidates)) if in_candidates else None)
     for level in ("model", "measured", "all"):
-        rows = [r for r in results if (level == "all" or r["case"]["level"] == level) and r.get("choose", {}).get("ok")]
-        exact = [r["choose"]["families"] == r["truth_families"] for r in rows]
-        in_set = [r["truth_families"] in r["choose"]["in_set"] for r in rows]
-        choose[level] = dict(n=len(rows), exact=float(np.mean(exact)) if rows else None,
-                             true_in_equivalent_set=float(np.mean(in_set)) if rows else None)
+        table[f"auto/{level}"] = _errors(results, "auto", level)
     seconds = {stage: float(np.median([r[stage]["seconds"] for r in results if stage in r]))
-               for stage in ("network", "fit", "choose")}
+               for stage in ("network", "fit", "choose", "auto") if any(stage in r for r in results)}
     ess = [r["fit"]["ess"] for r in results if r.get("fit", {}).get("ok")]
     failed = {stage: int(sum(not r.get(stage, {}).get("ok") for r in results)) for stage in ("fit", "choose")}
     mode = {level: _listed(results, level) for level in ("model", "measured", "all")}
-    return dict(parameters=table, composition=choose, truth_mode=mode, median_seconds=seconds, n=len(results),
+    return dict(parameters=table, composition=choose, composition_auto=auto or None, truth_mode=mode, median_seconds=seconds, n=len(results),
                 fit_ess=dict(median=float(np.median(ess)) if ess else None,
                              below_50=float(np.mean(np.asarray(ess) < 50)) if ess else None),
                 failed=failed)
@@ -324,6 +353,8 @@ def main():
     ap.add_argument("--widths", default=",".join(str(w) for w in infer.PROPOSAL_WIDTHS))
     ap.add_argument("--scattering", default="born_qz", choices=("born_qz", "dwba"))
     ap.add_argument("--substrate", default="si", choices=tuple(fr.SUBSTRATES))
+    ap.add_argument("--auto", action="store_true",
+                    help="also run the automatic analysis's own call (first level, spheres and upright cylinders)")
     ap.add_argument("--cut", default="born", choices=("born", "two_path", "eia"),
                     help="what Predict is given of the cut: q_z, both angles, or nothing")
     a = ap.parse_args()
@@ -333,14 +364,14 @@ def main():
                    refined=a.refined, truth=a.truth, floor=a.model_error_floor,
                    explored=a.explored, moves=a.moves, widths=[float(w) for w in a.widths.split(",")],
                    moved_solutions=a.moved_solutions, per_count=a.per_count, constants=a.constant,
-                   scattering=a.scattering, substrate=a.substrate, cut=a.cut)
+                   scattering=a.scattering, substrate=a.substrate, cut=a.cut, auto=a.auto)
     with Pool(min(a.workers, a.n), initializer=_init, initargs=(a.network, options)) as pool:
         for i, r in enumerate(pool.imap_unordered(run, range(a.n)), 1):
             results.append(r)
             c = r["case"]
             print(f"[{i}/{a.n}] {c['composition']:13s} {c['level']:8s} "
                   + " ".join(f"{k}:{'ok' if r[k].get('ok') else 'ERR'} {r[k]['seconds']:.1f}s"
-                             for k in ("network", "fit", "choose"))
+                             for k in ("network", "fit", "choose", "auto") if k in r)
                   + f" chose {r['choose'].get('composition')}", flush=True)
     s = summary(results)
     s["network"] = Path(a.network).name
