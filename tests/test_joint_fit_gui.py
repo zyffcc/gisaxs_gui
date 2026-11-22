@@ -138,6 +138,8 @@ def test_joint_window_fits_a_horizontal_and_a_vertical_cut(tmp_path):
         assert dialog.save_report_dialog(tmp_path / "joint.md")
         report = (tmp_path / "joint.md").read_text(encoding="utf-8")
         assert "2 αc" in report and "correlations between height and radius" in report
+        assert "dilute particle layer" in report and "at a cutoff of 0 αc" in report
+        assert record["height_range_check"]["heights"][0]["height"] == "h_1"
         dialog.result = replace(dialog.result, curve_chi2=(0.1, 10.0))
         dialog._summary()
         assert "Needs attention" in dialog.joint_summary.text() and "likely underestimated" in dialog.joint_summary.text()

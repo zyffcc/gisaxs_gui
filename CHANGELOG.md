@@ -12,6 +12,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Predict parameters** flags upright cylinders that could represent spheres above q_z·R = 2 at levels 2 and 3,
+  and uncertain radius intervals above 1.7 at level 3. Fit details compare the point spacing at the intensity
+  maximum with the linear validation grid and flag cuts with fewer than 80 or more than 400 points.
+  Joint vertical fits compare heights from two exit-angle ranges and report the dilute-layer and independent-height assumptions.
+
 - **Fit Several Curves Together** starts vertical cuts at twice the substrate critical angle. Set the limit to zero
   to use the full cut. The report flags likely height underestimation in dense or high-Z layers when the vertical
   reduced χ² exceeds 3. The cylinder DA now averages coherent amplitudes over the height distribution. Heights and

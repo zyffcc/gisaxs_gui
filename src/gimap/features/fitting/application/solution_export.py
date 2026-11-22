@@ -27,7 +27,8 @@ from .fit_state import number, path_key
 
 DIAGNOSTIC_COLUMNS = ("compared_by", "interval_kind", "posterior_kind", "ess", "ess_source", "log_evidence", "log_evidence_source",
                       "log_evidence_mc_error", "composition_log_evidence", "composition_log_evidence_mc_error",
-                      "point_count", "points_per_decade")
+                      "point_count", "points_per_decade", "peak_q_nm_inv", "peak_spacing_nm_inv",
+                      "validation_spacing_nm_inv")
 POSTERIOR_COLUMNS = ("least_squares_value", "posterior_median", "posterior_low68", "posterior_high68",
                      "posterior_low95", "posterior_high95", "reported_interval_kind")
 INTERVAL_FIELDS = ("median", "low68", "high68", "low95", "high95", "error")

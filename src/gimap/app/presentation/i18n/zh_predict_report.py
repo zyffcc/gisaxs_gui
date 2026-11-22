@@ -43,10 +43,6 @@ PREDICT_REPORT_ZH = {
     "least-squares value": "最小二乘值",
     "Posterior median [central 68 % interval]": "后验中位数 [中央 68 % 区间]",
     "Posterior median [central 68 % interval] — {values}.": "后验中位数 [中央 68 % 区间]：{values}。",
-    "The 5 % model-error floor was calibrated at 198.5 points per decade of q. This cut has "
-    "{density} points per decade. For independent points, interval widths scale approximately as "
-    "√(198.5 / density).": "5 % 模型误差下限的校准密度为 q 每个十倍区间 198.5 个点。此切线为每个十倍区间 "
-    "{density} 个点。各点独立时，区间宽度近似按 √(198.5 / 密度) 缩放。",
     "Composition BIC weight {weight}.": "组成的 BIC 权重为 {weight}。",
     "Composition log evidence {z} ± {error} (bootstrap Monte Carlo error).": "组成的对数证据 {z} ± {error}（自助法蒙特卡罗误差）。",
     "Mode log evidence {z} ± {error} (bootstrap Monte Carlo error).": "局部模式的对数证据 {z} ± {error}（自助法估计的蒙特卡罗误差）。",

@@ -70,3 +70,39 @@ def test_shared_radius_costs_one_degree_of_freedom_across_both_curves():
     result = joint.run_joint_fit([joint.CurveSpec("a", q, y, np.ones_like(q)),
                                   joint.CurveSpec("b", q, y, 2 * np.ones_like(q))], base, None, {(0, "R")})
     assert result.curve_dof == pytest.approx((40 - 0.8, 40 - 0.2))
+
+
+def test_changed_height_below_cutoff_warns_even_with_small_vertical_chi2():
+    # Deliberately give the low-angle part a different height, with the same high-angle curve in both fits.
+    base = FitModel((new_component("vertical_cylinder", heights=True, structure=False),))
+    base = base.with_values({(0, "h"): 6., (0, "Int"): 1e3})
+    for path, _ in base.parameters():
+        base = base.with_parameter(path, free=path == (0, "h"))
+    substrate = joint.substrate_of("custom", np.radians(0.2)**2 / 2, 1e-8)
+    angles = np.linspace(.05, 1.2, 96)
+    q = (2 * np.pi / .1) * (np.sin(np.radians(.4)) + np.sin(np.radians(angles)))
+    spec = joint.CurveSpec("vertical", q, np.ones(q.size), np.ones(q.size), "vertical", alpha_i=.4, q_parallel=.3)
+    made = joint.curve_model(spec, base, substrate, True)
+    y = np.where(angles < .4, evaluate(made.with_values({(0, "h"): 5.}), q), evaluate(made, q))
+    spec = replace(spec, intensity=y)
+    primary = joint.run_joint_fit([spec], base, substrate, set())
+    full = joint.run_joint_fit([spec], base, substrate, set(), min_exit_angle_ac=0.)
+    row, = joint.height_range_rows(primary)
+    assert primary.reduced_chi2_for(0) < 3 and row["warn"]
+    assert row["selected_nm"] == pytest.approx(6.)
+    assert row["alternate_nm"] == pytest.approx(full.models[0].get((0, "h")).value)
+    assert joint.height_range_rows(full)[0]["alternate_nm"] == pytest.approx(row["selected_nm"])
+    record = joint.joint_record(primary, [spec], substrate)
+    assert record["height_range_check"]["alternate_points_per_curve"] == [q.size]
+    assert "h_1 depends on the vertical fit range" in record["needs_attention"][0]
+
+    # The 2% test is still available with a missing covariance; a shift below 2% can exceed 2σ.
+    for change, sigma, warn in ((0.11, np.nan, False), (0.13, np.nan, True), (0.06, .01, True), (0.06, .1, False)):
+        check = replace(primary.height_range_check, estimates={(0, "h"): (6. - change, sigma)})
+        trial = replace(primary, errors={(joint.SHARED, (0, "h")): sigma}, height_range_check=check)
+        assert joint.height_range_rows(trial)[0]["warn"] is warn
+
+    above = angles >= .4
+    cropped = replace(spec, q=q[above], intensity=y[above], sigma=np.ones(above.sum()))
+    same = joint.run_joint_fit([cropped], base, substrate, set())
+    assert same.height_range_check.unavailable == joint.SAME_POINTS

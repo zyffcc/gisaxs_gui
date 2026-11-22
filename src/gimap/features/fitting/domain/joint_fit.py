@@ -37,6 +37,15 @@ class JointCurve:
 
 
 @dataclass(frozen=True)
+class HeightRangeCheck:
+    """Heights (nm, 1σ) from repeating the joint fit with a different vertical range."""
+    min_exit_angle_ac: float
+    points: tuple = ()
+    estimates: Mapping[tuple, tuple[float, float]] = field(default_factory=dict)
+    unavailable: str = ""
+
+
+@dataclass(frozen=True)
 class JointResult:
     models: tuple
     """The fitted model of every curve (shared values equal in all)."""
@@ -65,6 +74,7 @@ class JointResult:
     seed: int = 1729
     curve_dof: tuple = ()
     """Residual degrees of freedom per curve, N_c minus its share of the fitted Jacobian's leverage."""
+    height_range_check: Optional[HeightRangeCheck] = None
 
     def reduced_chi2_for(self, index: int) -> float:
         """The cut's reduced χ² with supplied or Poisson σ. Relative and log residuals have no calibrated σ."""
@@ -310,5 +320,5 @@ def curve_errors(result: JointResult, number: int) -> dict:
     return out
 
 
-__all__ = ["JointCurve", "JointResult", "SHARED", "curve_errors", "default_shared", "fit_curves", "joint_residuals",
-           "shared_curves"]
+__all__ = ["HeightRangeCheck", "JointCurve", "JointResult", "SHARED", "curve_errors", "default_shared", "fit_curves",
+           "joint_residuals", "shared_curves"]

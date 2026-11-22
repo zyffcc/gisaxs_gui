@@ -306,8 +306,7 @@ before relying on the numbers: they say which default decisions may not fit your
 
 ### Worked example · GALAXI GISAXS
 
-Run this command from the source folder to reproduce the Yoneda cut in Fig. 4 and fit it at the second level.
-The figure shows the earlier fit at the first level.
+Run this command from the source folder to reproduce the Yoneda cut and level-2 fit in Fig. 4.
 It uses the public GALAXI frame, its calibration and the reported incidence angle of 0.463°.
 
 ```sh
@@ -315,6 +314,10 @@ python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.t
 ```
 
 Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
+At q_z = 0.5226 nm⁻¹ the 5.99 nm upright cylinder has q_z·R = 3.13. The report flags it as a possible
+sphere (`cyl_sphere:R_2`). BornAgain's reference model uses spheres of radius 5.75 nm.
+The fit uses 596 points. At the measured intensity maximum their spacing is 0.00466 nm⁻¹,
+or 0.93 times the validation spacing. This run compared the solutions by evidence.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
 gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
 the candidate solutions and their probabilities. Exit code 2 means that an item needs attention in the report.

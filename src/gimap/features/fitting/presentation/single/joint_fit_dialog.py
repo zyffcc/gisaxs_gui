@@ -28,10 +28,12 @@ from ...application.joint_fit import (
     DEFAULT_MIN_EXIT_ANGLE_AC,
     FEW_ABOVE_CUTOFF,
     HEIGHT_ASSUMPTION,
+    HEIGHT_RANGE_LINE,
     KINDS,
     CurveSpec,
     curve_errors,
     default_shared,
+    height_range_rows,
     hints,
     joint_record,
     model_for_page,
@@ -392,6 +394,10 @@ class JointFitDialog:
                 chi2 = result.reduced_chi2_for(i)
                 if math.isfinite(chi2):
                     lines.append(trf("Vertical reduced χ² = {value}", value=f"{chi2:.4g}"))
+        for row in height_range_rows(result):
+            lines.append(trf(HEIGHT_RANGE_LINE, height=row["height"], selected=f"{row['selected_nm']:.5g}",
+                             alternate=f"{row['alternate_nm']:.5g}",
+                             multiple=f"{result.height_range_check.min_exit_angle_ac:g}"))
         lines.append(tr(HEIGHT_ASSUMPTION))
         attention = [trf(template, **values) for template, values in needs_attention(result, self.result_specs)]
         if len(set(result.weightings)) > 1:

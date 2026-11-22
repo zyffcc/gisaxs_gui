@@ -20,7 +20,10 @@ def test_grazing_limits_depend_on_data_level_and_shape():
     assert flags(sphere, 1.3, 1, True) == ["qzR_cov:R_1"]
     assert flags(sphere, 2, 2, True) == ["qzR_cov:R_1"]
     assert flags(sphere, 2.01, 2, True) == ["qzR_cov:R_1", "qzR_fail:R_1"]
-    assert flags(sphere, 2.01, 3, True) == []
+    for family in ("sphere", "cylinder"):
+        model = fm.FitModel((fm.new_component(family, radius=1, heights=False),))
+        assert flags(model, 1.7, 3) == []
+        assert flags(model, 1.71, 3) == ["qzR_cov:R_1"]
     assert flags(sphere, 1.3, 2, False) == []
     assert refine.interface_flags(sphere, 1.71) == ["qzR:R_1"]
     for qz in (None, 0, np.nan):
@@ -45,6 +48,16 @@ def test_shape_warning_and_numbering(family):
     assert reporting.grazing_flags(upright, 1, 2, known_heights={"1": 4}) == ["cyl_sphere:R_1"]
 
 
+@pytest.mark.parametrize("level", [2, 3])
+def test_high_qz_upright_shape_warning_is_independent_of_height(level):
+    model = fm.FitModel((fm.new_component("vertical_cylinder", radius=3),
+                         fm.new_component("vertical_cylinder", radius=2)))
+    assert reporting.grazing_flags(model, 1, level) == ["cyl_sphere:R_2"]
+    for heights in (None, {"1": 4, "2": 20}):
+        assert reporting.grazing_flags(model, 1.01, level, known_heights=heights) == ["cyl_sphere:R_1", "cyl_sphere:R_2"]
+    assert reporting.grazing_flags(model, 1.01, 1) == []
+
+
 def test_reflection_phase_summary_respects_the_branch_of_the_fit():
     from src.gimap.features.fitting.domain.posterior import encoding as E
 
@@ -59,12 +72,31 @@ def test_reflection_phase_summary_respects_the_branch_of_the_fit():
     assert quantiles["refl_phase"]["high68"] - quantiles["refl_phase"]["low68"] < .08
 
 
-def test_density_uses_fitted_range_and_strict_ratio():
-    for n, warn in [(397, False), (150, True), (595, False), (596, True)]:
-        d = reporting.density_record(np.linspace(0.02, 2, n))
-        assert d["point_count"] == n and d["points_per_decade"] == n / 2
-        assert d["validation_points_per_decade"] == 198.5 and d["density_notice"] == warn
-        assert bool(fit_names.diagnostic_lines(d)) == warn
+@pytest.mark.parametrize("n,warning", [(79, fit_names.SPARSE_SAMPLING), (80, None), (397, None),
+                                       (400, None), (401, fit_names.DENSE_SAMPLING)])
+def test_sampling_notice_uses_the_fitted_count_and_local_peak_spacing(n, warning):
+    q = np.geomspace(.02, 2, n)
+    peak = n // 2
+    d = reporting.density_record(q, -(q - q[peak])**2)
+    spacing = (q[peak + 1] - q[peak - 1]) / 2
+    assert d["point_count"] == n and d["points_per_decade"] == n / 2
+    assert d["validation_points_per_decade"] == 198.5
+    assert d["peak_q_nm_inv"] == q[peak] and d["peak_spacing_nm_inv"] == pytest.approx(spacing)
+    assert d["density_notice"] == (warning is not None)
+    lines = fit_names.diagnostic_lines(d)
+    assert lines[:2] == [(fit_names.DENSITY_NOTICE, {"count": n}), (fit_names.PEAK_SPACING, {
+        "peak": f"{q[peak]:.4g}", "spacing": f"{spacing:.4g}", "ratio": f"{spacing / .005:.3g}"})]
+    assert lines[2:] == ([(warning, {})] if warning else [])
+
+
+def test_spacing_at_window_edges_and_legacy_record():
+    q = np.linspace(.02, 2., 397)
+    for y in (q, -q):
+        assert reporting.density_record(q, y)["peak_spacing_nm_inv"] == pytest.approx(.005)
+    d = reporting.density_record(np.array([.1, .2, .2, .3]), [1, 2, 3, 1])
+    assert d["point_count"] == 4 and d["peak_spacing_nm_inv"] == pytest.approx(.1)
+    assert fit_names.diagnostic_lines({"point_count": 150, "points_per_decade": 75, "density_notice": True}) == [
+        (fit_names.DENSITY_NOTICE, {"count": 150})]
 
 
 def test_bootstrap_normalizes_all_modes_with_independent_replicates():
@@ -98,7 +130,7 @@ def test_bic_record_csv_project_and_report_preserve_separate_estimates(tmp_path)
         solution = Solution(model, 1.2, "Predict parameters · sphere", probability=.7, ess=25,
                             flags=("bic", "qzR_cov:R_1"), intervals=(("R_1", (4, 4, 3, 5, 2, 6, 1)),),
                             posterior_summary={"R_1": raw}, diagnostics={"compared_by": "bic", "interval_kind": "bic",
-                                "posterior_kind": "tempered", **reporting.density_record(np.linspace(.1, 1, 20))})
+                                "posterior_kind": "tempered", **reporting.density_record(np.linspace(.1, 1, 20), np.arange(20))})
         page.session.solutions = [solution]
         page.session.solutions_selection = page.session.selection()
         page.set_model(model)
@@ -130,6 +162,7 @@ def test_bic_record_csv_project_and_report_preserve_separate_estimates(tmp_path)
         assert project.solution_from_dict(project.solution_to_dict(solution)) == solution
         for fmt in fit_report.FORMATS:
             report = page._report_text(fmt)
-            assert "BIC weight 0.7" in report and "Posterior median" in report and "198.5" in report
+            assert "BIC weight 0.7" in report and "Posterior median" in report
+            assert "20 fitted points" in report and "0.005 nm⁻¹" in report and "9.47 times" in report
     finally:
         page.dispose()

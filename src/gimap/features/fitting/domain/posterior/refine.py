@@ -399,6 +399,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
     # The network's samples, their modes and the least-squares fits use the counts' σ (``counts``, ``fit_data``); the
     # posterior of each solution, the probabilities and the errors the model error added to σ (``data``, ``weighed``).
     counts = Cut.prepare(q, intensity, sigma, qz, qz_minus)
+    sampling = reporting.density_record(counts.q, counts.intensity)
     fit_data = fit_engine.FitData.prepare(counts.q, counts.intensity, counts.sigma)
     data = counts
     if model_error_floor > 0:
@@ -503,7 +504,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
                 lsq_of[place] = (lsq_errors, lsq_chi2)
             solution = _solution(result, (mode, model, refined, local), data, fit_data, lo, hi, "lm", float(w),
                                  {"head_log_prob": result.head_log_prob, "mode_weight": share,
-                                  "diagnostics": {**diagnostics[place], **reporting.density_record(counts.q),
+                                  "diagnostics": {**diagnostics[place], **sampling,
                                                   "cut_qz": counts.qz, "cut_qz_minus": counts.qz_minus,
                                                   "model_error_floor": model_error_floor, "substrate_level": level,
                                                   "reflected_beam": reflected_beam, "measured_qz": warning_qz,
