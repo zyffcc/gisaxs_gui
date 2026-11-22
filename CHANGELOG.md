@@ -18,7 +18,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   sample metadata. Each level-4 solution retains the substrate and geometry.
 - The manuals document the precision of an applied beam centre in Analyze, Geometry Calibration and XRR,
   and the differences observed when reproducing archived Predict parameters fits on another platform.
-- **Predict parameters** flags upright cylinders that could represent spheres above q_z·R = 2 at levels 2 and 3,
+- **Predict parameters** flags upright cylinders that could represent spheres above fitted q₊R = 2 at levels 2–4,
   and uncertain radius intervals above 1.7 at level 3. Fit details compare the point spacing at the intensity
   maximum with the linear validation grid and flag cuts with fewer than 80 or more than 400 points.
   Joint vertical fits compare heights from two exit-angle ranges and report the dilute-layer and independent-height assumptions.

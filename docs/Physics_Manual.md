@@ -3099,15 +3099,17 @@ its Guinier region lies at or below the lowest q, and the decay the curve shows 
 q produce — on the *measured* benchmark curves the solution chosen has such an extra population, which takes up the
 roughness, on 10 of 100 and 20 of 300 curves; q_max·R < 1: it acts as a smooth background, as fit1d named such a population);
 and *qzR* for a sphere or random cylinder fitted at q_z = 0 whose q₊R at the cut is above 1.7 (below). The most
-probable goes into Model, the others to **Other solutions**. Model's fixed values and
-ranges are not used; **Refine the values in Model** afterwards keeps them. Time per curve on one core: about 6 s
+probable goes into Model, the others to **Other solutions**. Predict searches its prior range for each proposed
+parameter and keeps supplied level-4 upright-cylinder heights and widths fixed. **Refine the values in Model**
+afterwards uses Model's fixed values and ranges. Time per curve on one core: about 6 s
 with the composition given and about 26 s choosing among one or two populations (24 held-out cuts, one worker,
 Intel Core i9-13900HX; `tools/benchmarks/posterior_timing_summary.json`); on development curves with earlier
 versions, 30–70 s among one to three of spheres and upright cylinders, a few minutes when random cylinders are
 among the choice, and with both angles (two paths) about 2.4 times as long.
 
 Model's coupling (DA) and legacy size law (mean-parameterized log-normal) are used in steps 2–4. For the new
-manual number distributions, Predict uses its original Gaussian. The network, trained on the LMA and Gaussian
+manual number distributions, Predict uses its original Gaussian except for upright cylinders supplied with a
+height distribution at level 4. The network, trained on the LMA and Gaussian
 sizes, is then only a proposal, which the weights correct.
 
 **Substrate levels and the flag *qzR*.** The information available about the cut determines its scattering model.
@@ -3156,8 +3158,10 @@ no such approximation, so GIMaP says when it matters:
   `qzR_fail:R_n` above 2, the approximate onset of strong model error in that comparison. Use level 3 or a
   four-term DWBA fit. Level 3 also raises `qzR_cov:R_n` above q₊R = 1.7. These sphere coverage thresholds
   also apply to random cylinders as a precaution.
-- At levels 2 and 3, an upright cylinder with q₊R > 2 receives `cyl_sphere:R_n`. Its radial profile can fit
-  scattering from spheres of a similar radius. The horizontal cut alone leaves its height undetermined.
+- At levels 2–4, an upright cylinder with fitted q₊R > 2 receives `cyl_sphere:R_n`. Its radial profile can fit
+  scattering from spheres of a similar radius. This substitution also occurred on simulated Si cuts fitted with
+  the known substrate at level 4 (see the [paired benchmark results](../tools/benchmarks/README.md)).
+  The horizontal cut alone leaves the cylinder height undetermined.
   At any level, a random or upright cylinder with a known height also receives this flag when
   q₊R > 1.2 and 0.8 ≤ h/(2R) ≤ 1.25.
 - The Born-approximation flags apply to levels 1–3. Level 4 already includes the reflected sphere amplitudes.

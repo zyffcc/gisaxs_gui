@@ -1734,8 +1734,9 @@ at 0, the non-negativity limit*). A reported solution with χ²ᵣ above 10 — 
 compositions tried describes the cut and that its R and D are not measurements (the Bragg rings of a powder or a
 calibrant give such a misfit). At the second level, Predict parameters flags a sphere or random cylinder when
 q_z·R > 1.2 because its reported interval can underestimate the uncertainty (`qzR_cov`). Above 2 it also flags
-strong model error (`qzR_fail`). An upright cylinder above 2 is flagged as a possible sphere of similar radius
-(`cyl_sphere`), even when its height is unknown. To include the exit-reflected path for spheres, use **Send to Fitting**, enter
+strong model error (`qzR_fail`). At levels 2 and 4, an upright cylinder above 2 is flagged as a possible sphere of similar radius
+(`cyl_sphere`), even when its height is unknown. For a level-2 cut, use **Send to Fitting** to include the
+exit-reflected path for spheres. Enter
 αi, αf and λ under Model ▸ **Spheres in grazing incidence** and run Predict parameters again. When another solution has a probability of 0.2 or more, the curve alone does not
 decide the model: a line under the table says so, and the Results tab asks which one you expect and names the
 solutions whose D is within 15 % of 2π/q\*. The report gives the refined R, h and D of the reported
@@ -2571,8 +2572,8 @@ and two least-squares methods that work on Model as it is:
 Search, including population scales and global terms: they never widen them or fix a free value automatically, and
 there is no option to do so. A value that stopped at an edge of its range is named under **Fit details…** (*…
 stopped at a bound of its range: widen the range or fix it.*): change its range in Model (**Range…**) or fix it,
-then **Fit Again**. Predict parameters does not use Model's fixed values and ranges: its network looks at the whole
-range it knows, and a value at a bound of that range is flagged (section 6.4).
+then **Fit Again**. Predict parameters searches the network's full range for each proposed value and flags values
+at its bounds. Level 4 keeps supplied upright-cylinder heights and widths fixed (section 6.4).
 
 ### 6.4 Predict parameters and 1D Predict
 
@@ -2620,8 +2621,9 @@ benchmarks.
 
    ![Cut geometry for a film on a Si substrate](manual_images/en/predict_substrate.png)
 
-   Predict uses its Gaussian size model for the three manual number distributions, its own q resolution and the
-   curve's measured σ. Earlier models retain their existing Predict size-law and coupling conventions.
+   Predict uses its Gaussian size model for the three manual number distributions except for level-4 upright
+   cylinders with supplied heights. It uses its own q resolution and the curve's measured σ.
+   Earlier models retain their existing Predict size-law and coupling conventions.
 3. Without σ in the file, Predict takes a relative σ from the scatter of ln I about its trend (at least 1 %); the
    Curve card names its value, and the 1D Predict window uses the same estimate.
 4. Press **Fit**. It runs in a separate process. The line under the bar says the step — *Step 1 of 3 · Network
@@ -2639,8 +2641,8 @@ against the curve; the most probable values of each composition are refined by l
 refines below χ²ᵣ 2, the ranges are searched for the two best compositions; then the posterior is sampled around
 the solutions within a BIC of 20 of the best (at most four), which gives their probabilities and intervals.
 
-Model's fixed values and ranges are not used by Predict: the network looks at the whole range of every value. The
-solution that comes into Model keeps Model's geometry; **Refine** afterwards keeps the values you fix.
+The network searches the whole range of each value it proposes. The solution retains the geometry and any
+upright-cylinder height distributions supplied for level 4. **Refine** afterwards keeps the values you fix.
 
 **Reading the result**
 
@@ -2674,7 +2676,8 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
   Level 2 adds `qzR_fail` above 2. Use both angles for level 3 or fit the four-term DWBA with a known substrate.
   Level 4 evaluates the reflected paths directly and omits the Born-approximation flags.
   Level 3 flags interval coverage above 1.7. The level-1 `qzR` radius-bias flag also starts above 1.7.
-  At levels 2 and 3 an upright cylinder with q_z·R > 2 may stand for a sphere of similar radius (`cyl_sphere`).
+  At levels 2–4, an upright cylinder with fitted q₊R > 2 may stand for a sphere of similar radius (`cyl_sphere`).
+  This shape ambiguity also occurred in the level-4 benchmark with a known Si substrate.
   At any level, a cylinder with a known height also receives this flag if 0.8 ≤ h/(2R) ≤ 1.25 and q_z·R > 1.2.
   See Physics and Methods §9.13 for the coverage table.
 - **Fit details…** also shows the reported 68 % intervals, extended to include the least-squares value. It gives the refined value first, then its
