@@ -35,15 +35,11 @@ The fitting code is the git tree `7e68831a52cf841a56fe05f8cc4e36ee62b41cb7` of `
 for every run. The two runs written at 2eb0243 predate the `code` field of the summaries, so their commit and tree
 are stated here and not added to the result files. The network is `flow_v1` (its SHA-256 is in every summary).
 
-`calibration_check_frames.json.gz` holds every simulated frame of `../calibration_check.py` (`calibration_coverage.py`):
-`main` and `three_ring_set`, each with `meta` (command, frames, first seed, seconds) and `frames` (the truth, the
-set-up, and for the engine as shipped and with polished beam-centre proposals the fit, the reported 1σ, s²(JᵀJ)⁻¹ on
-the same ring points and whether the geometry was found). `--part summarize` makes the summaries of
-`../calibration_check.json` from it.
 `evidence_integration_check.json.gz` is not a Predict run: it is everything `../evidence_integration_check.py` computed
 (every parameter point of the 24 solutions, with the scales at the least-squares and at the joint optimum, both runs
 of the joint integral and the parts of the difference), written at 958aa9b with the fitting code of tree `d139e6f5`;
 `../evidence_integration_check.json` holds the same results with the posterior draws as rows.
+`calibration_check_frames.json.gz` holds every simulated frame of `../calibration_check.py` (`calibration_coverage.py`).
 `main` and `three_ring_set` each contain `meta` (command, frame count, first seed and seconds) and `frames`.
 Each frame records the simulated geometry and the result from the shipped engine, including whether it found the
 geometry. Successful fits include the reported 1σ and the covariance standard errors on the final fit's points.

@@ -191,13 +191,19 @@ centre several pixels off, spreading a narrow ring over several radii in the pro
 tests refined copies of these votes alongside the original proposals. In the separate 150 frames with
 only orders 1–3 drawn, it recovered 114/150 geometries. Of these, 112 matched exactly three rings.
 
-**The engine as shipped finds the geometry of 111 of the 300 frames** (20, 40 and 51 of the frames with about 3, 4–6 and
-7–9 rings), and of 58 of the 150 three-ring frames. The arc voting of `center_estimator` gives the beam centre in cells
-of about 12 px; about such a centre the rings, 1.5–3 px σ wide, vanish from the azimuthal profile, and the engine
-matches one ring or wrong orders. `center_polish.polished_centers` cures this, but the engine calls it for
-grazing-incidence images only. Applied to every image (`polished_proposals`, patched in the benchmark only), the
-geometry is found for 213 of 300 and 114 of 150. On the public frame the polish gives 5 matched rings instead of 4 and
-moves the result within its 1σ (JSON: `gimap_polished_for_reference`).
+Among recovered frames, each cell gives the fraction within 1σ, fraction within 2σ and median |error|/σ.
+The three-ring row uses the separate set. The other rows use the 300-frame set.
+
+| Matched rings | Frames | beam x | beam y | L | rot1 | rot2 |
+|---|---:|---|---|---|---|---|
+| 3 | 112 | 0.74 / 0.92 / 0.54 | 0.55 / 0.82 / 0.86 | 0.75 / 0.96 / 0.58 | 0.53 / 0.83 / 0.95 | 0.52 / 0.78 / 0.95 |
+| 4–6 | 81 | 0.78 / 0.97 / 0.54 | 0.74 / 0.90 / 0.59 | 0.79 / 0.97 / 0.47 | 0.72 / 0.99 / 0.75 | 0.81 / 0.95 / 0.55 |
+| ≥7 | 125 | 0.52 / 0.94 / 0.97 | 0.67 / 0.95 / 0.72 | 0.79 / 0.99 / 0.51 | 0.57 / 0.91 / 0.84 | 0.70 / 0.98 / 0.71 |
+
+The main set also yielded 7 three-ring recoveries, reported separately in the JSON. With seven or more
+rings, a Student t reference for ring scatter gives 65.1% within 1σ. The measured rates were 52.0% for beam x
+and 56.8% for rot1. Taking the larger of the jackknife and covariance standard errors on the same
+points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife for these fits.
 
 ## The third set
 
