@@ -85,7 +85,7 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     assert "q, FWHM in Å⁻¹ · d in Å · L in nm (Scherrer, a lower bound)" in labels  # the units, one line
     assert not any(text.startswith(("Sizes are Scherrer", "The analysed rings")) for text in labels)
     peaks_title = next(item for item in results.findChildren(QLabel) if item.text() == "Peaks")
-    assert peaks_title.toolTip().startswith("Phases are not assigned automatically")
+    assert peaks_title.toolTip().startswith("To index the measured peaks, add candidate phases in Phases")
     assert "GIWAXS" in results.report_view.toPlainText()
     # Each peak can be seen on the map, and every column says how it was obtained.
     assert "2π / q" in peaks.horizontalHeaderItem(1).toolTip() and "Scherrer" in peaks.horizontalHeaderItem(4).toolTip()
@@ -226,7 +226,8 @@ def test_only_questions_with_a_field_are_called_questions() -> None:
     assert guided.status_label.text() == "Done — see the Results tab. 1 question(s) below."
     texts = [item.text() for item in guided.results.findChildren(QLabel)]
     assert texts[0].startswith("GIWAXS — 0 peaks (0 reliable), 0 rings analysed. 1 question(s) in the Results step.")
-    assert "1 point(s) to check — see below" in texts and "Beam centre: The axis is 25 px off." in texts
+    assert "Result summary" in texts and "Checks" in texts
+    assert "Beam centre: The axis is 25 px off." in texts
     # Advice alone (no field to fill in) is a point to check, not a question.
     advice = dict(report, needs_attention=report["needs_attention"][1:])
     assert automatic_outcome(advice) == ("ok", "GIWAXS — 0 peaks (0 reliable), 0 rings analysed; 1 point(s) to check.")

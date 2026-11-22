@@ -129,9 +129,12 @@ class SessionMemoryMixin:
             last = replace(last, pin_series_cuts=current.pin_series_cuts)
         if settings_record(last) == settings_record(current):
             return  # nothing would change
-        summary = _setup_summary(last)
+
+        def notice():
+            return trf("Use the set-up of your last session? {summary}", summary=_setup_summary(last))
+
         self._setup_offer = show_toast(
-            self.window(), tr("Use the set-up of your last session? {summary}").format(summary=summary), level="info",
+            self.window(), notice(), refresh=notice, level="info",
             action=(tr("Use It"), lambda: self._read_settings(path)), timeout_ms=15000,
         )
 

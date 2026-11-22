@@ -13,7 +13,6 @@ the search: the stages are found on the others, and that frame says why in the l
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 from typing import Optional
 
@@ -22,7 +21,6 @@ from PyQt5.QtCore import QRectF, Qt, QTimer
 from PyQt5.QtGui import QBrush, QColor, QIcon, QPainter, QPen, QPixmap
 
 from src.gimap.app.presentation.components import stage_color
-from src.gimap.app.presentation.components.curve_plot import Marker
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.stage_text import change_text
 from src.gimap.app.presentation.task_runner import TaskRunner
@@ -34,11 +32,9 @@ from ...application.single_fit import Curve
 from ..views.fit_series_view import TREND_EMPTY
 from .series_text import STATE_COLOR
 from .session import path_name
+from .series_trend import CHI2, paired_choice, trend_series
 
-CHI2 = "chi2"
 ICON_SIZE = 10
-TREND_MARKER = Marker("o", 6.0)
-"""A frame's value in the trend: large enough to see on either theme."""
 LOOKING = "Looking for stages and odd frames …"
 NOT_FOR_THIS_RUN = "No stages for this run: it started before they were found."
 NO_STAGES_AT_START = "No stages are known: every frame starts from the previous frame's result."
@@ -377,50 +373,28 @@ class FitSeriesStagesMixin:
         name = tr("χ²ᵣ") if key == CHI2 else self.trend_combo.currentText()
         coordinates, axis = self.trend_x([frame.index for frame in frames])
         positions = {frame.index: x for frame, x in zip(frames, coordinates)}
-        intervals = {frame.index: frame.selection.interval(key) for frame in frames
-                     if key != CHI2 and frame.selection is not None}
-        posterior = {index: values for index, values in intervals.items()
-                     if len(values) >= 4 and all(v is not None and np.isfinite(v) for v in values[:4])}
-        self.least_squares_check.setVisible(bool(posterior))
-        curves, colors, markers, bars = [], [], [], []
-        for stage, members in groups.items():
-            staged = stage is not None and len(groups) > 1
-            color = stage_color(stage) if staged else "#2563eb"
-            label = tr("stage {n}").format(n=stage) if staged else name  # the value: in the list and on the axis
-            prefix = label + " · " if staged else ""
-            predicted = [frame for frame in members if frame.index in posterior]
-            if predicted:
-                x = np.array([positions[frame.index] for frame in predicted])
-                median, low, high = np.array([posterior[frame.index][1:4] for frame in predicted]).T
-                curves.append((prefix + tr("Posterior median (68%)"), x, median))
-                colors.append(color)
-                markers.append(TREND_MARKER)
-                bars.append((x, median, low, high, color))
-            other = [frame for frame in members if frame.index not in posterior]
-            if other:
-                x = np.array([positions[frame.index] for frame in other])
-                if key == CHI2:
-                    y = np.array([frame.result.chi2_reduced for frame in other])
-                else:
-                    y = np.array([frame.result.model.get(key).value for frame in other])
-                    error = np.array([frame.result.errors.get(key, math.nan) for frame in other])
-                    bars.append((x, y, y - error, y + error, color))
-                curves.append((prefix + tr("Refined fit (±1σ)") if posterior else label, x, y))
-                colors.append(color)
-                markers.append(Marker("d", 6.0) if posterior else TREND_MARKER)
-        if posterior and self.least_squares_check.isChecked():
-            indices = sorted(posterior)
-            curves.append((tr("Predict least squares"), np.array([positions[i] for i in indices]),
-                           np.array([posterior[i][0] for i in indices])))
-            colors.append("#777777")
-            markers.append(Marker("s", 4.0, hollow=True))
-        # The stages' legend in the corner with the fewest points — the bottom right for a value that grows,
-        # off the late frames; one value needs no legend (the list above the plot and the axis name it).
-        legend = len(groups) > 1 or bool(posterior)
-        self.trend_plot.legend.setOffset(self._legend_corner(curves) if legend else (-10, 10))
+        pair = paired_choice(key)
+        keys = [(key[0], "R"), (key[0], "D")] if pair else [key]
+        entries, posterior = [], False
+        for parameter in keys:
+            lines, has_intervals = trend_series(
+                parameter, parameter[1] if pair else name, groups, positions, pair=pair,
+                show_least_squares=self.least_squares_check.isChecked())
+            entries.extend(lines)
+            posterior = posterior or has_intervals
+        self.least_squares_check.setVisible(posterior)
+        curves = [(label, x, y) for label, x, y, _color, _marker, _bounds in entries]
+        legend = len(groups) > 1 or posterior or pair
+        offset = self._legend_corner(curves, pair=pair) if legend else (-10, 10)
+        if offset[1] == 0:
+            self.trend_plot.legend.anchor((1, 0.5), (1, 0.5), offset=offset)
+        else:
+            self.trend_plot.legend.setOffset(offset)
         self.trend_plot.legend.setVisible(legend)
-        self.trend_plot.set_labels(axis, "χ²ᵣ" if key == CHI2 else path_name(self._start_model, key, unit=True, translate=False))
-        self.trend_plot.set_curves(curves, colors, markers=markers)
+        value_axis = "R, D (nm)" if pair else (
+            "χ²ᵣ" if key == CHI2 else path_name(self._start_model, key, unit=True, translate=False))
+        self.trend_plot.set_labels(axis, value_axis)
+        self.trend_plot.set_curves(curves, [line[3] for line in entries], markers=[line[4] for line in entries])
         if axis == "frame":
             first, last = frames[0].index + 1, frames[-1].index + 1
             self.trend_plot.plot.setXRange(first - 0.5, last + 0.5, padding=0)  # no point on the edge of the plot
@@ -430,7 +404,10 @@ class FitSeriesStagesMixin:
         else:  # seconds: as they fall
             self.trend_plot.plot.getAxis("bottom").setTickSpacing()
             self.trend_plot.plot.enableAutoRange(axis="x")
-        for x, y, low, high, color in bars:
+        for _label, x, y, color, _marker, bounds in entries:
+            if bounds is None:
+                continue
+            low, high = bounds
             keep = np.isfinite(low) & np.isfinite(high)
             if not keep.any():
                 continue
@@ -442,8 +419,8 @@ class FitSeriesStagesMixin:
             self.trend_plot._items.append(item)  # cleared with the curves
 
 
-    def _legend_corner(self, curves) -> tuple:
-        """Where the trend's legend covers the fewest points: its offset, the bottom right first."""
+    def _legend_corner(self, curves, *, pair=False) -> tuple:
+        """Place the legend away from the measurements, including between separated R and D trends."""
         x = np.concatenate([np.asarray(points, dtype=float) for _name, points, _values in curves])
         y = np.concatenate([np.asarray(values, dtype=float) for _name, _points, values in curves])
         if self.trend_plot.log_check.isChecked():
@@ -457,6 +434,8 @@ class FitSeriesStagesMixin:
         wide, high = 0.3, 0.45  # about what a legend of a few stages takes of the plot
         corners = (((-10, -10), (across > 1 - wide) & (up < high)), ((10, 10), (across < wide) & (up > 1 - high)),
                    ((10, -10), (across < wide) & (up < high)), ((-10, 10), (across > 1 - wide) & (up > 1 - high)))
+        if pair:
+            corners += (((-10, 0), (across > 1 - wide) & (np.abs(up - 0.5) < high / 2)),)
         return min(corners, key=lambda corner: int(np.count_nonzero(corner[1])))[0]
 
 

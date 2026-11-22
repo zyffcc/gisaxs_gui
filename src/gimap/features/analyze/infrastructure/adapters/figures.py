@@ -107,6 +107,8 @@ class MatplotlibFigureWriter:
         levels: Optional[tuple[float, float]] = None,
         title: str = "",
         y_ticks: Optional[Sequence[tuple[float, str]]] = None,
+        layers=None, width_cm=COLUMN_WIDTH_CM, height_cm=COLUMN_WIDTH_CM * 0.85,
+        font_pt=8, font_family=None, dpi=None,
     ) -> Path:
         """``image`` as shown (already log-scaled when ``log_scale``), with a colour bar.
 
@@ -117,7 +119,7 @@ class MatplotlibFigureWriter:
         shown = np.ma.masked_invalid(np.asarray(image, dtype=float))
         rows, columns = (max(int(size), 1) for size in shown.shape[:2])
         around_the_frame = extent is None and rows >= TALL_FRAME * columns  # see TALL_FRAME
-        figure = publication_figure(COLUMN_WIDTH_CM, COLUMN_WIDTH_CM * 0.85, fixed_aspect=around_the_frame)
+        figure = publication_figure(width_cm, height_cm, fixed_aspect=around_the_frame or layers is not None)
         axes = figure.add_subplot()
         vmin, vmax = levels if levels is not None else (None, None)
         artist = axes.imshow(
@@ -136,10 +138,11 @@ class MatplotlibFigureWriter:
         # one. Beyond BAR_WIDEST the bar gets thinner instead, and stays as tall as the frame.
         taller = rows / columns if around_the_frame and rows > columns else 1.0
         wider = min(taller, BAR_WIDEST)
-        colorbar = figure.colorbar(artist, ax=axes, fraction=BAR_FRACTION * wider, pad=BAR_PAD * wider,
-                                   aspect=BAR_ASPECT * taller / wider)
-        colorbar.set_label("log₁₀ I" if log_scale else "I", size=8)
-        colorbar.ax.tick_params(labelsize=7, width=0.6, length=2.5)
+        if layers is None or layers["colorbar"]:
+            colorbar = figure.colorbar(artist, ax=axes, fraction=BAR_FRACTION * wider, pad=BAR_PAD * wider,
+                                       aspect=BAR_ASPECT * taller / wider)
+            colorbar.set_label("log₁₀ I" if log_scale else "I", size=font_pt)
+            colorbar.ax.tick_params(labelsize=font_pt - 1, width=0.6, length=2.5)
         axes.set_xlabel(x_label)
         axes.set_ylabel(y_label)
         if title:
@@ -152,7 +155,19 @@ class MatplotlibFigureWriter:
             from matplotlib.ticker import MaxNLocator
 
             axes.yaxis.set_major_locator(MaxNLocator(integer=True))
-        return save_figure(figure, path)
+        if layers is not None:
+            from matplotlib.text import Text
+            from .qmap_layers import draw_layers
+
+            draw_layers(axes, layers, font_pt)
+            axes.xaxis.label.set_size(font_pt)
+            axes.yaxis.label.set_size(font_pt)
+            axes.title.set_size(font_pt)
+            axes.tick_params(labelsize=font_pt - 1)
+            if font_family:
+                for label in figure.findobj(Text):
+                    label.set_fontfamily([font_family, "DejaVu Sans"])
+        return save_figure(figure, path) if dpi is None else save_figure(figure, path, dpi=dpi)
 
     def write_frame(
         self,

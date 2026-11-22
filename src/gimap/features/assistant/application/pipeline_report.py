@@ -15,10 +15,11 @@ from src.gimap.shared.orientation_notes import coverage_warning, measured_f_text
 from ..domain import AT_EDGE
 from .calibration_report import calibration_quality, calibration_rms
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
+from .giwaxs_summary import result_lines
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
 from .pipeline_crystal import crystal_lines, compact_crystal
 from .report_numbers import _number, _fixed, _pm
-from .pipeline_phases import assignment_lines, pole_line
+from .pipeline_phases import assignment_lines, orientation_checks_only, pole_line
 from .report_language import ENGLISH, heading as section
 from .run_record import mask_lines, record_lines
 
@@ -231,19 +232,24 @@ def _hints_title(report: dict) -> str:
     return "Series hints (reliable peaks only)"
 
 
-def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: str = ENGLISH) -> str:
+def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: str = ENGLISH, summary_word=str) -> str:
     frame = report.get("frame") or ""
     name = title or Path(frame).name or "frame"
     attention = report.get("needs_attention") or []
     state = "OK" if report.get("ok") and not attention else ("NEEDS INPUT" if attention else "FAILED")
+    if orientation_checks_only(report):
+        state = "COMPLETED WITH CHECKS"
     if report.get("failed"):  # ended early (the frame changed, the file could not be read): its point says why
         state = "FAILED"
     gisaxs = report.get("procedure") == "gisaxs"
     undecided = _no_technique(report)
     heading = "GISAXS" if gisaxs else ("GIMaP" if undecided else "GIWAXS")
     lines = [f"# {heading} — {name}", "", f"Status: **{state}**  ", f"File: `{frame}`", ""]
+    if report.get("ok") and not gisaxs and report.get("procedure") != "geometry":
+        lines += [section("Result summary", language), "", *("- " + line for line in result_lines(report, summary_word)), ""]
     if attention:
-        lines += [section("Needs attention (answer, then run again)", language), ""]
+        heading = "Orientation checks" if orientation_checks_only(report) else "Needs attention (answer, then run again)"
+        lines += [section(heading, language), ""]
         for number, item in enumerate(attention, 1):
             option = OPTION_FLAGS.get(item.get("option") or "", "")
             fix = f" → `{option}`" if option else ""
@@ -348,6 +354,8 @@ def _state(report: dict) -> str:
         return f"error: {report['error']}"
     if report.get("failed"):
         return f"failed: {report['failed']}"
+    if orientation_checks_only(report):
+        return "completed with checks"
     return "OK" if report.get("ok") and not attention else ("needs input" if attention else "failed")
 
 

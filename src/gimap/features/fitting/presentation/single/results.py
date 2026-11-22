@@ -32,6 +32,7 @@ from ...application.single_fit import (
     derived_values,
     fit_record,
     model_to_dict,
+    parameter_info,
     parameter_text,
 )
 from ...application.fit_nxcansas import fit_curves, write_curves
@@ -232,9 +233,12 @@ class FitResultsMixin:
         return tr("{points} points fitted").format(points=count)
 
     def render_results(self) -> None:
+        self.compare_saved_fit_button.setVisible(self.session.saved_fit is not None)
         self._render_model_results()
         self.render_result_actions()  # next steps, what the fit did by itself, the folds (result_actions.py)
-        self.fit_notes_button.setVisible(bool(self.warnings_label.text() or not self.actions_label.isHidden()))
+        notes = self.warnings_label.text()
+        self.fit_notes_button.setVisible(bool(notes or not self.actions_label.isHidden()))
+        self.fit_notes_button.setText(tr("Review fit warnings…") if "⚠" in notes else tr("Fit details…"))
         self.refresh_equivalent_selector()
         self.refresh_uncertainty()  # the Uncertainty and Report window (uncertainty.py)
 
@@ -250,8 +254,7 @@ class FitResultsMixin:
         search_note = ["⚠ " + tr("The halves, the fitting range or the left-out points changed after the search: "
                                  "the χ² of the solutions is of the points before.")] if old_search else []
         if result is None and session.solutions:
-            self.quality_label.setText(trf("{solutions} below; the best is in Model. Fit (Refine) gives its quality "
-                                           "and the error of every value.",
+            self.quality_label.setText(trf("{solutions} below. Refine reports fit quality and uncertainties where estimable.",
                                            solutions=predict_texts.count_solutions(len(session.solutions)))
                                        + self._incomplete_note())
             current = next((s for s in session.solutions if s.model == session.model), None)
@@ -263,7 +266,15 @@ class FitResultsMixin:
             show_line(self.step_intro["results"], stale + trf(
                 "{solutions} to compare.", solutions=predict_texts.count_solutions(len(session.solutions))))
         elif result is None:
-            self.quality_label.setText(tr("No fit yet."))
+            saved = session.saved_fit
+            if saved is None:
+                self.quality_label.setText(tr("No fit yet."))
+            else:
+                text = trf("Saved model from {name} · {count} points", name=saved.path.name, count=saved.count)
+                if saved.quality is not None:
+                    metric = "χ²ᵣ" if saved.weighting == "sigma" else "var ln I"
+                    text += f" · {metric} {saved.quality:.4g}"
+                self.quality_label.setText(text)
             self.warnings_label.setText("")
             self.warnings_label.setToolTip("")
             show_line(self.step_intro["results"], "")  # the box below and the rail's “After a fit” say it
@@ -366,7 +377,9 @@ class FitResultsMixin:
             if self._unused(path, parameter):
                 continue  # an unused term (no resolution peak, no background, spheres at q_z = 0)
             error = None if result is None else result.errors.get(path)
-            full = path_name(self.session.model, path, full=True)  # “1·Sphere R”, also when shown as “R”
+            full = path_name(self.session.model, path, full=True)
+            component = None if path[0] == "globals" else self.session.model.components[path[0]]
+            full += "\n" + tr(parameter_info(component, path[1]).tip)
             value, plus = value_cells(path[1], parameter.value, error, parameter.free)
             why = ""
             if predicted is not None and parameter.free:
@@ -472,7 +485,7 @@ class FitResultsMixin:
         if data is None or not data.q.size:
             self._status(tr("Open a curve first."), "warning")
             return None
-        path = path or self._save_path("Save Data and Fit", f"{self._stem()}_fit.csv", SAVE_DATA_FILTER)
+        path = path or self._save_path("Save Curve and Parameters…", f"{self._stem()}_fit.csv", SAVE_DATA_FILTER)
         if not path:
             return None
         names, table = export_table(self.session.model, data)
@@ -481,6 +494,9 @@ class FitResultsMixin:
                             result=self.session.result if self.session.result_is_current() else None,
                             excluded=self.session.excluded, curve_table=(names, table))
         record.update(self.solutions_record(record))
+        saved = self.session.saved_fit
+        if saved is not None:
+            record["parent_fit_record"] = {"path": str(saved.path), "sha256": saved.sha256}
         if Path(path).suffix.lower() == ".h5":  # NXcanSAS: the points fitted and the model, q in 1/nm
             curves = fit_curves(self.session.model, data, record, self._stem())
             write = lambda target: write_curves(target, curves)  # noqa: E731

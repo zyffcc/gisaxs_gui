@@ -9,7 +9,7 @@ import re
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application.single_fit import TOO_FEW_FOR_FREE
+from ...application.single_fit import ONE_CURVE_METHODS, TOO_FEW_FOR_FREE
 from .predict import MISSING
 from ..views.step_widgets import show_line
 
@@ -85,6 +85,10 @@ class MethodHintMixin:
         elif method == "predict" and not self.predict_available():
             from ...application.single_predict import network_file
             hint = trf(MISSING, name=network_file())
+        curve = self.session.curve
+        if method in ONE_CURVE_METHODS and curve is not None and curve.signed and self.session.side == "both":
+            halves = tr("Predict uses the mean of both halves. To fit one side, choose it in Curve.")
+            hint = "\n".join(filter(None, (hint, halves)))
         show_line(self.method_hint, hint)
 
 

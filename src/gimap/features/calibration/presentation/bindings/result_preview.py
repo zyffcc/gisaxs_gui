@@ -84,7 +84,7 @@ class ResultPreviewMixin:
         if two_columns and (initial or changed or current < needed):
             solution = needed
         elif not two_columns and (initial or changed):
-            solution = min(max(int(total * 0.36), 260), 360)
+            solution = min(max(int(total * 0.40), 190), 360)
         else:
             return
         self.results_splitter.setSizes([solution, max(1, total - solution)])
@@ -98,8 +98,12 @@ class ResultPreviewMixin:
         """
         try:
             self._show_overlay_legend()
+            if self.image and self.image.pixel_size_x_m and self.image.pixel_size_y_m and not self.detector_combo.currentData():
+                self._show_file_pixel_size(self.image)
             if self.result is not None:
                 candidate = self.result.selected_candidate
+                if self.stage_label.text() == getattr(self, "_fit_status", None):
+                    self._show_fit_status()
                 self._show_uncertainty(candidate)
                 self._show_tilt(candidate)
                 self._show_rms(candidate)
@@ -112,6 +116,7 @@ class ResultPreviewMixin:
         except RuntimeError:  # the dialog is being destroyed
             return
         QTimer.singleShot(0, self._refit_results)
+        QTimer.singleShot(0, self._fit_candidate_columns)
 
     def _refit_results(self) -> None:
         self._arrange_result_form()
@@ -425,3 +430,20 @@ class ResultPreviewMixin:
         )
         for index, q in enumerate(self.view_model.standard_q_values(key)):
             self.theory_ring_combo.addItem(f"{index + 1}: q={q:.5f} Å⁻¹", q)
+
+    def _fit_candidate_columns(self):
+        """At narrow widths the selected solution alongside the table supplies its detailed values."""
+        table = self.candidate_table
+        metrics = table.fontMetrics()
+        available = table.viewport().width()
+        widths = []
+        for col in range(table.columnCount()):
+            texts = [table.horizontalHeaderItem(col).text()]
+            texts.extend(table.item(r, col).text() for r in range(table.rowCount()) if table.item(r, col))
+            widths.append(max(metrics.horizontalAdvance(t) for t in texts) + 16)
+        needed = sum(widths)
+        for column in (2, 4, 3, 5):
+            compact = needed > available
+            table.setColumnHidden(column, compact)
+            if compact:
+                needed -= widths[column]

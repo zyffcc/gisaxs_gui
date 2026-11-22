@@ -20,8 +20,9 @@ if str(ROOT) not in sys.path:
 from src.gimap.features.analyze.application.indexing import phase_from_cif
 from src.gimap.features.analyze.domain.crystal import fold_profile, reflections
 
-CIF = ROOT / "tests" / "data" / "crystal"
 EXTERNAL = ROOT / "tests" / "data" / "external"
+CIF = EXTERNAL / "giwaxs_p08_mapi"
+CIF_FILES = {"MAPbI3_tetragonal": "MAPbI3_reference.cif", "PbI2": "PbI2_reference.cif"}
 # A non-basal fibre in MAPbI3, a basal fibre in PbI2. Each ring has an independent scale.
 TEXTURES = {
     "MAPbI3_tetragonal": ((1, 1, 0), 16., 0.38, ((0.980, 1.015), (1.398, 1.426), (2.202, 2.252))),
@@ -55,7 +56,7 @@ def expected_rings(name, axis=None, family_reweight=(), width_deg=None):
     default_axis, width, phi, windows = TEXTURES[name]
     if width_deg is not None:
         width = width_deg
-    phase = phase_from_cif(CIF / (name + ".cif")).phase()
+    phase = phase_from_cif(CIF / CIF_FILES[name]).phase()
     director = phase.cell.plane_normal(default_axis if axis is None else axis)
     found = reflections(phase, max(high for _, high in windows))
     chi = np.arange(90) + 0.5
@@ -255,7 +256,7 @@ def public_frame(*, with_phases=True, diagnostics=False, incidence_deg=None, sam
     from src.gimap.features.assistant.application.pipeline import PipelineOptions
 
     info = json.loads((EXTERNAL / "manifest.json").read_text(encoding="utf-8"))["giwaxs_p08_mapi"]
-    cifs = tuple(str(CIF / (name + ".cif")) for name in TEXTURES) if with_phases else ()
+    cifs = tuple(str(CIF / CIF_FILES[name]) for name in TEXTURES) if with_phases else ()
     options = PipelineOptions(technique="giwaxs", calibration=str(EXTERNAL / info["poni"]),
                               incidence_deg=info["incidence_deg"] if incidence_deg is None else incidence_deg,
                               sample_roll_deg=sample_roll_deg, phases=cifs)

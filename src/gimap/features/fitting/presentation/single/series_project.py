@@ -55,13 +55,15 @@ class FitSeriesProjectMixin:
         except (ValueError, KeyError, TypeError) as exc:
             self._status(lambda reason=str(exc): trf(NOT_READ, reason=reason), "warning")
             return
-        kept = {frame.index: frame for frame in frames
+        kept = {frame.index: self.with_curve_time(frame) for frame in frames
                 if 0 <= frame.index < len(self.paths) and _same_file(str(self.paths[frame.index]), str(frame.path))}
         if not kept:
             return
         self._start_model, self._settings = start, settings
         self._unit = str(data.get("unit") or self._unit)
         self.fits, self._curves = kept, {}
+        if any(frame.acquisition for frame in kept.values()):
+            self.trend_axis_combo.show()
         self._fill_trend_choices()
         self._rebuild_results()
         self._draw_trend()

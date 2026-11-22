@@ -154,7 +154,8 @@ def smoothed_fits(frames, candidates, curves, settings, boundaries, stop):
                 frame = fit_frame(i, frame.path, curves[i], selected.model, settings, stop,
                                   lambda _data, _start: predicted_start(selected))
             choice = mode_choice(ordered, index, "HMM", marginals=weights)
-            updates[i] = replace(frame, start_from="predict", fit_pass="forward", selection=choice, predict_choice="HMM")
+            updates[i] = replace(frame, start_from="predict", fit_pass="forward", selection=choice, predict_choice="HMM",
+                                 acquisition=frames[i].acquisition)
         segment.clear()
 
     for i in sorted(frames):

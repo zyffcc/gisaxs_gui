@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -31,12 +32,13 @@ from ...application.series_chain import (
     BACKWARD,
     CHAIN,
     FORWARD,
+    acquisition_fields,
     backward_order,
     better,
     chained_fit,
+    elapsed_times,
     frame_flags,
     keep_pass_attempts,
-    observation_time,
 )
 from ...application.series_fit import file_name, parameter_columns
 from ...application.single_predict import MAX_PARTICLES
@@ -139,29 +141,38 @@ class FitSeriesChainMixin:
 
     def forget_times(self) -> None:
         """Other curves are listed: no time is known of them yet (the axis box hides until one says it)."""
-        self.__dict__["_frame_times"] = {}
+        self._curve_clocks = {}
         self.trend_axis_combo.hide()
 
     def note_time(self, index: int, observation) -> None:
         """A listed curve was read: when its frame was measured (``observation_time``); the trend's axis box appears
         once a curve says it."""
-        times = self.__dict__.setdefault("_frame_times", {})
-        moment = observation_time(observation)
-        if moment is None:
-            times.pop(index, None)
+        clock = acquisition_fields(observation)
+        if not clock:
+            self._curve_clocks.pop(index, None)
             return
-        times[index] = moment
+        self._curve_clocks[index] = clock
+        frame = self.fits.get(index)
+        if frame is not None:
+            self.fits[index] = self.with_curve_time(frame)
         if self.trend_axis_combo.isHidden():
             self.trend_axis_combo.show()
+
+    def with_curve_time(self, frame):
+        """Older projects omitted acquisition time. Recover it when the matching curve has been read."""
+        clock = self._curve_clocks.get(frame.index)
+        if frame.acquisition is None and clock and self.paths[frame.index] == frame.path:
+            return replace(frame, acquisition=clock)
+        return frame
 
     def trend_x(self, indices) -> tuple:
         """``(x of each frame, axis label)`` of the trend: the frame numbers, or — Time chosen and every frame drawn
         with a time — the seconds since the earliest of them."""
-        times = getattr(self, "_frame_times", {})
         indices = list(indices)
-        if self.trend_axis_combo.currentData() == "time" and indices and all(index in times for index in indices):
-            first = min(times[index] for index in indices)
-            return [times[index] - first for index in indices], "time (s)"
+        if self.trend_axis_combo.currentData() == "time" and indices:
+            elapsed = elapsed_times(self.fits.values())
+            if all(index in elapsed for index in indices):
+                return [elapsed[index] for index in indices], "time (s)"
         return [index + 1 for index in indices], "frame"
 
     def flags_cell(self, frame) -> str:

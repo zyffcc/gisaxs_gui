@@ -12,6 +12,12 @@ They are not GIMaP's data: keep the licences and the attribution below when you 
 | `giwaxs_xeuss_pbte/` | `PbTe_3010_r1_PT_1_10_0_00028.edf`, `mask_PbTe_3010.edf`, `AgBe_250403_XENOCS.poni` | same Zenodo record | CC BY 4.0 | GIWAXS of PbTe nanoplatelets, Xeuss 2.0 lab source, Pilatus 300K, αi = 0.235° |
 
 `galaxi_bornagain.poni`, `manifest.json` and `reference_values.json` are GIMaP's own files (see below).
+`MAPbI3_reference.cif` and `PbI2_reference.cif` are GIMaP's comparison models from the indexing validation
+in *Physics and Methods*, chapter 7. The tetragonal MAPbI₃ model includes only the Pb and I sites.
+`PbTe_bulk_reference.cif` describes ideal rock salt with the bulk lattice parameter quoted below.
+These three example files are distributed under GIMaP's licence. The original measurements come from the
+sources in the table. A candidate CIF supplies expected reflections for comparison with the measured peaks.
+
 `reference_values.json` holds what pyFAI 2026.9.0 and pygid 0.2.20 give at fixed pixels of these frames
 (`tools/benchmarks/make_external_reference.py`); `tests/test_external_reference.py` checks GIMaP against it.
 

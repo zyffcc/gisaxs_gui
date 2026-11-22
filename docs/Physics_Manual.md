@@ -503,6 +503,10 @@ Geometry Calibration (Tools menu) finds the beam centre, the distance and the de
 
 ### 3.1 Calibrants
 
+Geometry Calibration accepts the measured beam energy in keV or wavelength in Å.
+For a wavelength entry it uses equation (1.1) to fill the energy field. The ring fit uses
+the displayed energy in keV (five decimal places). For example, 1.0 Å gives 12.39842 keV.
+
 | Key | Standard | Values in the code | Lines used |
 |---|---|---|---|
 | `agbh` | silver behenate | lamellar `d_001` = 58.38 Å | orders n = 1 … 20 |
@@ -4218,6 +4222,12 @@ The sum runs over the `n` columns where both rows have a value (the x range show
 
 ### 11.13 Chained fit of an In-situ series
 
+For the fitted-parameter trend, elapsed time is the detector time of the frame minus the earliest
+detector time among the fitted frames with times. The plot and the exported `elapsed_time_s` column
+use the same origin. A missing acquisition time stays blank. Numeric frame times and calendar
+timestamps are kept separately in the JSON. Refine error bars show the recorded local standard
+errors (§9.8). For Predict, the trend shows the median and central 68% interval when available (§9.13).
+
 When the network and the manual fit use different size laws, weights or resolution, the network supplies a
 starting point for a local fit under the manual settings. The two candidate fits are ranked on the same objective.
 
@@ -4931,6 +4941,11 @@ Implementation: `src/gimap/features/xrr/application/export_record.py`, `src/gima
 `src/gimap/features/format_converter/infrastructure/adapters/local_files.py`.
 
 ### 14.7 Checksums
+
+Refitting from an exported single-curve record adds `parent_fit_record` to the new fit JSON.
+It names the original record and the SHA-256 of its bytes at opening. If replay uses a copy of a
+missing input beside the record, `comparison.json` lists its actual path and verified digest in
+`relocated_inputs`.
 
 SHA-256 digests identify files whose content matters:
 

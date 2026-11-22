@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from PyQt5.QtCore import QSignalBlocker
 
-from src.gimap.app.presentation.i18n import language_changed, tr
+from src.gimap.app.presentation.i18n import language_changed, tr, trf
 from src.gimap.app.presentation.theme import set_role
+from src.gimap.shared.detector_io.radiation import HC_KEV_ANGSTROM
 
 FROM_HEADER, FROM_NXS, FROM_USER, FROM_IMPORT, MISSING, KEPT = (
     "file header", "companion NXS", "entered by user", "imported calibration", "", "kept")
@@ -22,7 +23,7 @@ SOURCE_TEXT = {
     FROM_NXS: "From the companion NXS file.",
     FROM_USER: "Entered by you.",
     FROM_IMPORT: "From the imported calibration.",
-    MISSING: "Not in the file: enter the X-ray energy (it sets the wavelength of the calibration).",
+    MISSING: "Not in the file. Enter the energy in keV or the wavelength in Å.",
     KEPT: "Not in this file: the energy entered for the image before is used — check it.",
 }
 
@@ -33,27 +34,35 @@ class EnergySourceMixin:
     _energy_source = MISSING
 
     def _bind_energy_source(self) -> None:
+        self.wavelength_spin.setMaximum(HC_KEV_ANGSTROM * 10 ** self.energy_spin.decimals())
         self.energy_spin.valueChanged.connect(self._energy_edited)
+        self.wavelength_spin.valueChanged.connect(self._wavelength_edited)
         language_changed().connect(self._show_energy_source)
         self._show_energy_source()
 
-    def _energy_edited(self, _value: float) -> None:
-        if getattr(self, "_setting_energy", False):
-            return
-        self._energy_source = FROM_USER if self.energy_spin.value() > 0 else MISSING
+    def _energy_edited(self, value: float) -> None:
+        self._set_energy(value, FROM_USER if value else MISSING)
+        self._update_input_status()
+
+    def _wavelength_edited(self, wavelength: float) -> None:
+        energy = HC_KEV_ANGSTROM / wavelength if wavelength else 0.0
+        with QSignalBlocker(self.energy_spin):
+            self.energy_spin.setValue(energy if energy <= self.energy_spin.maximum() else 0.0)
+        self._energy_source = FROM_USER if self.energy_spin.value() else MISSING
         self._show_energy_source()
+        self._update_input_status()
+
+    def _update_input_status(self) -> None:
+        if self.image is not None and self.result is None and not self._running:
+            self._show_loaded_status()
 
     def _set_energy(self, value, source: str) -> None:
         """Show ``value`` (keV; ``None``/0: none known) as coming from ``source``."""
-        self._setting_energy = True
-        try:
-            with QSignalBlocker(self.energy_spin):
-                if value:
-                    self.energy_spin.setValue(float(value))
-                elif source == MISSING:
-                    self.energy_spin.setValue(0.0)
-        finally:
-            self._setting_energy = False
+        if value or source == MISSING:
+            with QSignalBlocker(self.energy_spin), QSignalBlocker(self.wavelength_spin):
+                self.energy_spin.setValue(float(value or 0.0))
+                energy = self.energy_spin.value()
+                self.wavelength_spin.setValue(HC_KEV_ANGSTROM / energy if energy else 0.0)
         self._energy_source = source
         self._show_energy_source()
 
@@ -73,9 +82,14 @@ class EnergySourceMixin:
             return
         known = self.energy_spin.value() > 0
         source = self._energy_source if known else MISSING
-        label.setText(tr(SOURCE_TEXT.get(source, SOURCE_TEXT[MISSING])))
+        text = tr(SOURCE_TEXT.get(source, SOURCE_TEXT[MISSING]))
+        if not known and self.wavelength_spin.value() > 0:
+            text = trf("The energy exceeds {maximum} keV. Check the wavelength in Å.",
+                       maximum=f"{self.energy_spin.maximum():g}")
+        label.setText(text)
         set_role(label, None if known and source not in (KEPT,) else "warning")
         set_role(self.energy_spin, None if known else "error")
+        set_role(self.wavelength_spin, None if known else "error")
         if hasattr(self, "calibrate_button") and not getattr(self, "_running", False):
             self.calibrate_button.setEnabled(self.image is not None and known)
 

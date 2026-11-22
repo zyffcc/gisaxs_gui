@@ -12,13 +12,13 @@ from src.gimap.shared.geometry import DetectorGeometry
 from src.gimap.shared.geometry.q_mapping import refracted_qz
 
 
-CIFS = Path(__file__).parent / "data" / "crystal"
+CIFS = Path(__file__).parent / "data" / "external" / "giwaxs_p08_mapi"
 
 
 @pytest.mark.parametrize("name,populations,rho,delta,beta", [
-    ("MAPbI3_tetragonal", {"Pb": 4, "I": 12, "C": 4, "N": 4, "H": 24},
+    ("MAPbI3_reference", {"Pb": 4, "I": 12, "C": 4, "N": 4, "H": 24},
      1040/(8.874**2*12.671), 2.18e-6, 1.27e-7),
-    ("PbI2", {"Pb": 1, "I": 2}, 188/(4.557**2*6.979*np.sin(np.pi/3)), 3.13e-6, 2.23e-7),
+    ("PbI2_reference", {"Pb": 1, "I": 2}, 188/(4.557**2*6.979*np.sin(np.pi/3)), 3.13e-6, 2.23e-7),
 ])
 def test_cif_compositions_and_optical_constants_at_18_kev(name, populations, rho, delta, beta):
     phase = phase_from_cif(CIFS / (name + ".cif")).phase()
@@ -31,7 +31,7 @@ def test_cif_compositions_and_optical_constants_at_18_kev(name, populations, rho
 
 
 def test_unsupported_sum_formula_uses_expanded_sites_including_occupancy():
-    phase = phase_from_cif(CIFS / "MAPbI3_tetragonal.cif").phase()
+    phase = phase_from_cif(CIFS / "MAPbI3_reference.cif").phase()
     molecule = film_optics(phase, .688801)
     assert molecule["composition_source"] == "CIF sum formula × Z"
     assert molecule["site_atoms_per_cell"] == {"Pb": 4., "I": 12.}
@@ -45,7 +45,7 @@ def test_unsupported_sum_formula_uses_expanded_sites_including_occupancy():
 
 
 def test_unavailable_optics_distinguish_unknown_absorption_from_zero_absorption():
-    phase = phase_from_cif(CIFS / "PbI2.cif").phase()
+    phase = phase_from_cif(CIFS / "PbI2_reference.cif").phase()
     empty = film_optics(replace(phase, atoms=()), 1.)
     assert not empty["available"] and empty["delta"] is None and empty["beta"] is None
     for missing in (film_optics(phase, 5.), film_optics(replace(phase, atoms=(replace(phase.atoms[0], element="Xe"),)), 1.)):

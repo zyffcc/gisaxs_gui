@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
 from importlib.metadata import version
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import numpy as np
 
@@ -26,9 +26,10 @@ _verification = ContextVar("gimap_reproduction_verification", default=None)
 @contextmanager
 def verify_run(should_cancel=None):
     """Share verified identities across frames of one batch, never across reproduction requests."""
-    token = _verification.set(({}, should_cancel))
+    relocated = {}
+    token = _verification.set(({}, should_cancel, relocated))
     try:
-        yield
+        yield relocated
     finally:
         _verification.reset(token)
 
@@ -38,13 +39,19 @@ def file_reference(path: str | Path) -> dict:
 
 
 def verified_path(reference: dict, record_dir: Path) -> Path:
-    """Resolve relative paths beside the record and hash today's bytes, even in the exporting process."""
+    """Verify the recorded file, or its same-named copy beside the record when the original is absent."""
     path = record_dir / reference["path"]
+    original = path
     if not path.is_file():
-        raise ValueError(f"Missing referenced file: {path}")
+        # The exporting and receiving machines need not use the same path separator.
+        name = PureWindowsPath(reference["path"]).name
+        copy = record_dir / name
+        if not name or not copy.is_file():
+            raise ValueError(f"Missing referenced file: {path}")
+        path = copy
     if not reference.get("sha256"):
         raise ValueError(f"The record has no SHA-256 for {path}")
-    cache, cancelled = _verification.get() or ({}, None)
+    cache, cancelled, relocated = _verification.get() or ({}, None, {})
     stat = path.stat()
     key = (path.resolve(), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino)
     if key not in cache:
@@ -57,6 +64,8 @@ def verified_path(reference: dict, record_dir: Path) -> Path:
         cache[key] = digest.hexdigest()
     if cache[key] != reference["sha256"]:
         raise ValueError(f"SHA-256 mismatch for {path}: expected {reference['sha256']}, got {cache[key]}")
+    if path != original:
+        relocated[str(reference["path"])] = {"path": str(path.resolve()), "sha256": cache[key]}
     return path
 
 

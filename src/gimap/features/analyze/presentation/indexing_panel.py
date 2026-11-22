@@ -47,6 +47,13 @@ def _number(value, digits: int) -> str:
     return "" if value is None or not np.isfinite(value) else f"{value:.{digits}f}"
 
 
+class _VisibilityCheck(QCheckBox):
+    """The Show column contains one control. Its whole cell toggles the phase."""
+
+    def hitButton(self, position):  # noqa: N802 - Qt API
+        return self.rect().contains(position)
+
+
 class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
     def __init__(self, page: QWidget):
         super().__init__(page)
@@ -54,6 +61,7 @@ class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
         self._page = page
         self._filling = False
         self._rows: list[dict] = []
+        self._read_messages = []
         self.setup_ui(self)
         self.buttons.rejected.connect(self.close)
         self.add_cif_button.clicked.connect(self._add_cif)
@@ -82,7 +90,10 @@ class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
         self._fill_settings()
 
     def _refresh_language(self, *_args) -> None:
+        last_read = self.status_label.text() == getattr(self, "_last_read_text", None)
         self.refresh()
+        if last_read:
+            self._show_read_messages()
         if self._crystal_mode():
             self._show_crystal_ring()
         elif self._displayed_pole is not None:
@@ -98,18 +109,36 @@ class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
     # -- phases ---------------------------------------------------------------------------
 
     def _add_cif(self) -> None:
-        path, _filter = QFileDialog.getOpenFileName(self, tr("Add Phase from CIF"), "", tr("CIF files (*.cif);;All files (*)"))
-        if not path:
-            return
-        try:
-            index = self.model.add_cif(path)
-        except (OSError, ValueError) as error:
-            self.status_label.setText(trf("Could not read the CIF: {error}", error=str(error)))
-            return
-        self._changed(select=index)
-        spec = self.model.phases[index]
-        read = trf("Read {name} from {file}.", name=spec.name, file=Path(path).name)
-        self.status_label.setText(read + (" ⚠ " + tr("See the Symmetry column.") if spec.warnings else ""))
+        frame = self._page.view_model.current_path
+        paths, _filter = QFileDialog.getOpenFileNames(
+            self, tr("Add Phase from CIF"), str(Path(frame).parent) if frame else "",
+            tr("CIF files (*.cif);;All files (*)"))
+        messages = []
+        selected = None
+        for path in paths:
+            try:
+                selected = self.model.add_cif(path)
+            except (OSError, ValueError) as error:
+                messages.append((Path(path).name, None, str(error), False))
+                continue
+            spec = self.model.phases[selected]
+            messages.append((Path(path).name, spec.name, None, bool(spec.warnings)))
+        if selected is not None:
+            self._changed(select=selected)
+        if messages:
+            self._read_messages = messages
+            self._show_read_messages()
+
+    def _show_read_messages(self):
+        lines = []
+        for file, name, error, warning in self._read_messages:
+            if error is not None:
+                lines.append(f"{file} — " + trf("Could not read the CIF: {error}", error=tr(error)))
+            else:
+                read = trf("Read {name} from {file}.", name=name, file=file)
+                lines.append(read + (" ⚠ " + tr("See the Symmetry column.") if warning else ""))
+        self._last_read_text = "\n".join(lines)
+        self.status_label.setText(self._last_read_text)
 
     def _add_cell(self) -> None:
         index = self.model.add(PhaseSpec(trf("Phase {n}", n=len(self.model.phases) + 1),
@@ -135,6 +164,7 @@ class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
             widget.setEnabled(enabled)
         if index is None:
             self.symmetry_label.setText("")
+            self.symmetry_label.setToolTip("")
             return
         spec = self.model.phases[index]
         self._filling = True
@@ -149,7 +179,10 @@ class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
                 spin.setValue(int(value))
                 spin.setEnabled(spec.orientation != POWDER)
             notes = phase_notes(spec)
-            self.symmetry_label.setText(symmetry_text(spec) + ("\n" + notes if notes else ""))
+            summary = symmetry_text(spec)
+            detail = summary + ("\n" + notes if notes else "")
+            self.symmetry_label.setText(detail if spec.warnings else summary)
+            self.symmetry_label.setToolTip(detail)
         finally:
             self._filling = False
 
@@ -217,7 +250,7 @@ class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
         with QSignalBlocker(self.phase_table):
             self.phase_table.setRowCount(len(self.model.phases))
             for row, spec in enumerate(self.model.phases):
-                check = QCheckBox(self.phase_table)
+                check = _VisibilityCheck(self.phase_table)
                 check.setChecked(spec.visible)
                 check.toggled.connect(lambda on, index=row: self._visibility(index, on))
                 self.phase_table.setCellWidget(row, 0, check)

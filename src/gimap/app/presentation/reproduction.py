@@ -16,7 +16,7 @@ from .i18n.zh_reproduction import REPLAY_ERROR_TEMPLATES
 from .task_runner import TaskRunner
 
 
-def _error_text(message):
+def reproduction_error_text(message):
     for template in REPLAY_ERROR_TEMPLATES:
         parts = [re.escape(literal) + (f"(?P<{field}>.+?)" if field else "")
                  for literal, field, _, _ in Formatter().parse(template)]
@@ -25,13 +25,20 @@ def _error_text(message):
             values = match.groupdict()
             if "error" in values:
                 values["error"] = tr(values["error"])
-            return trf(template, **values)
+            text = trf(template, **values)
+            if template == "Missing referenced file: {path}":
+                text += "\n" + tr("Place a copy with its original filename beside the record and try again.")
+            return text
     return tr(message)
 
 
+_error_text = reproduction_error_text
+
+
 class ReproductionProgress(QDialog):
-    def __init__(self, parent, record):
+    def __init__(self, parent, record, *, title="Reproduce from Record", operation="Reproducing {name}"):
         super().__init__(parent)
+        self._title, self._operation = title, operation
         self.record_name = Path(record).name
         self.cancelled = Event()
         self.result = None
@@ -48,9 +55,9 @@ class ReproductionProgress(QDialog):
         self.refresh_language()
 
     def refresh_language(self):
-        self.setWindowTitle(tr("Reproduce from Record"))
+        self.setWindowTitle(tr(self._title))
         message = (tr("Stopping after the current step…") if self.cancelled.is_set()
-                   else trf("Reproducing {name}", name=self.record_name))
+                   else trf(self._operation, name=self.record_name))
         self.status.set_state("running", message)
         self.status.cancel_button.setEnabled(not self.cancelled.is_set())
 

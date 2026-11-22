@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
 )
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 
 from ...application import (
@@ -88,11 +88,7 @@ class CalibrationRunMixin:
     def _calibration_finished(self, result: CalibrationResult) -> None:
         self.result = result
         self._remember_fitted_geometry()
-        self.job_status.set_state(
-            "succeeded",
-            "Calibration complete. Review the selected candidate, then Apply.",
-            progress=1.0,
-        )
+        self._show_fit_status()
         candidate_blocker = QSignalBlocker(self.candidate_table)
         self._populate_candidates()
         self.candidate_table.selectRow(0)
@@ -101,6 +97,14 @@ class CalibrationRunMixin:
         self.manual_group.setChecked(False)
         self._show_candidate(result.selected_candidate)
         self._set_running(False)
+
+    def _show_fit_status(self) -> None:
+        candidate = self.result.selected_candidate
+        summary = trf("Matched rings: {n}. Confidence: {level}.", n=candidate.matched_ring_count,
+                      level=tr(candidate.confidence))
+        note = "⚠ " + tr(candidate.warnings[0]) if candidate.warnings else tr("Check the ring overlay before Apply.")
+        self._fit_status = f"{summary} {note}"
+        self.job_status.set_state("succeeded", self._fit_status, progress=1.0)
 
     def _calibration_failed(self, exc: Exception) -> None:
         if isinstance(exc, CalibrationCancelledError):
@@ -139,9 +143,11 @@ class CalibrationRunMixin:
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
+                item.setToolTip(value)
                 if column == 4:  # the residual of the geometry shown: which one, on hover
                     item.setToolTip(rms_title(candidate) + " " + rms_tip(candidate))
                 self.candidate_table.setItem(row, column, item)
+        self._fit_candidate_columns()
 
     def _candidate_selected(self) -> None:
         if self.result is None:
@@ -153,3 +159,4 @@ class CalibrationRunMixin:
         self._restore_fitted_geometry()
         self.view_model.select_candidate(rows[0].row())
         self._refresh_manual_result()
+        self._show_fit_status()

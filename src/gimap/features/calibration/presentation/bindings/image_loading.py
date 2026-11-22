@@ -130,13 +130,7 @@ class ImageLoadingMixin:
             self.pixel_y_spin.setValue(image.pixel_size_y_m * 1e6)
         self._prefill_estimated_distance(image)
         if image.pixel_size_x_m and image.pixel_size_y_m:
-            self.pixel_label.setText(
-                trf(
-                    "{x} × {y} µm (metadata)",
-                    x=f"{image.pixel_size_x_m * 1e6:.3f}",
-                    y=f"{image.pixel_size_y_m * 1e6:.3f}",
-                )
-            )
+            self._show_file_pixel_size(image)
         else:
             self.pixel_label.setText(tr("Not detected — enter it under Advanced configuration"))
             self.calibration_advanced_section.set_expanded(True)
@@ -151,7 +145,9 @@ class ImageLoadingMixin:
                     break
         self.detector_combo.setCurrentIndex(detector_index)
         if not image.detector_name:
-            self.detector_label.setText(tr("Not identified — choose a detector model"))
+            hint = ("Model unknown. Check the pixel size above." if image.pixel_size_x_m and image.pixel_size_y_m
+                    else "Not identified — choose a detector model")
+            self.detector_label.setText(tr(hint))
         detected_standards = self.view_model.detected_standard_keys(image.source_path)
         if len(detected_standards) == 1:
             standard_index = self.standard_combo.findData(detected_standards[0])
@@ -170,19 +166,27 @@ class ImageLoadingMixin:
         if len(detected_standards) > 1:
             notes += " | " + tr("multiple standard names found; comparing patterns automatically")
         # The file and its size are the line above the preview (``_show_image_caption``).
-        stage = ("Image loaded{notes}. Click Auto Calibration." if self.energy_spin.value() > 0 else
-                 "Image loaded{notes}. Enter the X-ray energy, then click Auto Calibration.")
-        self.stage_label.setText(trf(stage, notes=notes))
-        self.job_status.set_state(
-            "succeeded",
-            self.stage_label.text(),
-            progress=1.0,
-        )
+        self._loaded_notes = notes
+        self._show_loaded_status()
         self._show_image_caption()
         self.candidate_table.setRowCount(0)
         self._clear_result_labels()
         self.redraw_preview()
         self._set_running(False)
+        if self.energy_spin.value() == 0:
+            self.energy_spin.setFocus()
+            self.calibrationControlsScroll.ensureWidgetVisible(self.energy_spin)
+
+    def _show_loaded_status(self) -> None:
+        stage = ("Image loaded{notes}. Click Auto Calibration." if self.energy_spin.value() > 0 else
+                 "Image loaded{notes}. Enter the energy or wavelength to calibrate.")
+        self.job_status.set_state("succeeded", trf(stage, notes=self._loaded_notes), progress=1.0)
+
+    def _show_file_pixel_size(self, image) -> None:
+        template = ("{x} × {y} µm (from frame size; check)" if image.metadata.get("pixel_size_source") == "frame shape"
+                    else "{x} × {y} µm (metadata)")
+        self.pixel_label.setText(trf(template, x=f"{image.pixel_size_x_m * 1e6:.3f}",
+                                     y=f"{image.pixel_size_y_m * 1e6:.3f}"))
 
     def _show_image_caption(self) -> None:
         """The line above the preview: ``file · W × H px`` (and its frames) of the image shown, whatever the result."""

@@ -48,10 +48,10 @@ class PersistenceMixin:
         self._sync_main_window_geometry()
         self.calibrationApplied.emit(self.result)
         # One confirmation: a toast that never blocks (no message box after the overwrite question).
-        show_toast(self._toast_host(), self._applied_text(), level="ok")
+        candidate, profile = self.result.selected_candidate, self.view_model.last_profile
+        show_toast(self._toast_host(), lambda: self._applied_text(candidate, profile), level="ok")
 
-    def _applied_text(self) -> str:
-        candidate = self.result.selected_candidate
+    def _applied_text(self, candidate, profile) -> str:
         # The centre as the saved instrument profile holds it and as Analyze shows it.
         center_x, center_y = shown_center(candidate)
         text = trf(
@@ -60,7 +60,6 @@ class PersistenceMixin:
             y=f"{center_y:.2f}",
             distance=f"{candidate.distance_mm:.2f}",
         )
-        profile = self.view_model.last_profile
         if profile is not None:
             text += " " + trf(
                 "Saved as instrument profile \u201c{name}\u201d; Analyze uses it automatically "
@@ -69,15 +68,19 @@ class PersistenceMixin:
             )
         return text
 
-    def export_result(self) -> None:
+    def export_result(self, *, poni: bool = False) -> None:
         if self.result is None:
             return
         self._commit_manual_values()
         default = self.view_model.default_export_path(self.result.source_image)
+        poni_filter = tr("pyFAI geometry (*.poni)")
+        filters = poni_filter if poni else f"{tr('JSON Files (*.json)')};;{poni_filter}"
+        if poni:
+            default = str(Path(default).with_suffix(".poni"))
         path, chosen = QFileDialog.getSaveFileName(
-            self, tr("Export Calibration"), default, f"{tr('JSON Files (*.json)')};;{tr('pyFAI geometry (*.poni)')}"
+            self, tr("Export .poni") if poni else tr("Export Calibration"), default, filters
         )
-        if path and chosen == tr("pyFAI geometry (*.poni)") and not path.lower().endswith(".poni"):
+        if path and (poni or chosen == poni_filter) and not path.lower().endswith(".poni"):
             path = str(Path(path).with_suffix(".poni"))
         if path:
             try:

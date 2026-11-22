@@ -38,14 +38,30 @@ from .zh_reproduction import REPRODUCTION_ZH
 from .zh_review_phases import REVIEW_PHASES_ZH
 from .zh_ring_assignment import RING_ASSIGNMENT_ZH
 from .zh_roll_check import ROLL_CHECK_ZH
+from .zh_round2_analyze import ROUND2_ANALYZE_ZH
+from .zh_round2_joint import ROUND2_JOINT_ZH
+from .zh_round2_resume import ROUND2_RESUME_ZH
+from .zh_round2_series import ROUND2_SERIES_ZH
 from .zh_sample_roll import SAMPLE_ROLL_ZH
 from .zh_series_chain import SERIES_CHAIN_ZH
 from .zh_series_selection import SERIES_SELECTION_ZH
 from .zh_texture_populations import TEXTURE_POPULATIONS_ZH
+from .zh_usability_analyze import USABILITY_ANALYZE_ZH
+from .zh_usability_calibration import USABILITY_CALIBRATION_ZH
+from .zh_usability_gisaxs import USABILITY_GISAXS_ZH
+from .zh_usability_giwaxs import USABILITY_GIWAXS_ZH
 from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 
 FEATURES_ZH = {
     **SAMPLE_ROLL_ZH,
+    **ROUND2_ANALYZE_ZH,
+    **ROUND2_JOINT_ZH,
+    **ROUND2_RESUME_ZH,
+    **ROUND2_SERIES_ZH,
+    **USABILITY_ANALYZE_ZH,
+    **USABILITY_CALIBRATION_ZH,
+    **USABILITY_GISAXS_ZH,
+    **USABILITY_GIWAXS_ZH,
     **PREDICT_SAMPLING_ZH,
     **VERTICAL_CONSISTENCY_ZH,
     **GISAXS_FIT_LEVEL_ZH,

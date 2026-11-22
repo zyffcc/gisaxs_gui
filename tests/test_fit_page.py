@@ -195,6 +195,7 @@ def test_refine_finds_the_values_with_errors_and_undo_brings_the_start_back(tmp_
     page.undo()  # the fit is one step of the history
     assert page.session.model == start and page.session.result is not None and not page.session.result_is_current()
     assert "changed after this fit" in page.warnings_label.text()
+    assert page.fit_notes_button.text() == "Review fit warnings…"
     page.redo()
     assert page.session.model == fitted
     page.dispose()
@@ -203,6 +204,7 @@ def test_refine_finds_the_values_with_errors_and_undo_brings_the_start_back(tmp_
 def test_each_thing_is_said_once_and_a_missing_sigma_or_a_bound_is_a_warning(tmp_path) -> None:
     """The small-text review: the rail has the points and the quality, the Results box all of it, the status line
     only confirms; a file without σ and a value at a bound are warnings where they are seen, never folded away."""
+    from dataclasses import replace
     from src.gimap.app.presentation.i18n import apply_language
 
     page = _page()
@@ -248,6 +250,11 @@ def test_each_thing_is_said_once_and_a_missing_sigma_or_a_bound_is_a_warning(tmp
         row.refresh({}, ((0, "R"),))  # as after a fit that stopped R at a bound of its range
         assert row.error.text() == "⚠ at a bound" and row.error.property("gimapRole") == "warning"
         assert row.error.toolTip().startswith("The fit stopped at a bound")
+        page.session.result = replace(result, at_bounds=((0, "R"),), errors={})
+        page.render_results()
+        radius_error = page.parameters_table.item(page._row_paths.index((0, "R")), 2)
+        assert radius_error.text() == "⚠ at a bound"
+        assert "bound" in radius_error.toolTip()
         row.refresh({(0, "R"): 0.1}, ())
         assert row.error.text().startswith("± ") and row.error.property("gimapRole") == "muted"
     finally:

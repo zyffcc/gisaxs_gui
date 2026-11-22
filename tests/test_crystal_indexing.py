@@ -57,9 +57,9 @@ from src.gimap.shared.geometry.q_inverse import q_of_positions
 DATA = Path(__file__).parent / "data" / "external"
 MANIFEST = json.loads((DATA / "manifest.json").read_text(encoding="utf-8")) if (DATA / "manifest.json").exists() else {}
 
-CRYSTAL_DATA = Path(__file__).parent / "data" / "crystal"
-MAPI_CIF = (CRYSTAL_DATA / "MAPbI3_tetragonal.cif").read_text(encoding="utf-8")
-PBI2_CIF = (CRYSTAL_DATA / "PbI2.cif").read_text(encoding="utf-8")
+CRYSTAL_DATA = DATA / "giwaxs_p08_mapi"
+MAPI_CIF = (CRYSTAL_DATA / "MAPbI3_reference.cif").read_text(encoding="utf-8")
+PBI2_CIF = (CRYSTAL_DATA / "PbI2_reference.cif").read_text(encoding="utf-8")
 LAB6_CIF = "\n".join([
     "data_LaB6", "_cell_length_a 4.1569", "_cell_length_b 4.1569", "_cell_length_c 4.1569",
     "_symmetry_space_group_name_H-M 'P 1'",
@@ -247,8 +247,15 @@ def test_report_names_the_radial_axis_and_every_unassigned_peak():
         assert "Δd/d = " in report and "Δq = " in report and "1.3200 Å⁻¹ unassigned" in report
 
 
+def test_xeuss_example_cif_predicts_the_bulk_rock_salt_reference_rings() -> None:
+    spec = phase_from_cif(DATA / "giwaxs_xeuss_pbte/PbTe_bulk_reference.cif")
+    rings = phase_overlay(spec, IndexingSettings(q_max=3.0), None).rings
+    assert [ring.label for ring in rings[:3]] == ["111", "200", "220"]
+    assert [ring.q for ring in rings[:3]] == pytest.approx([1.68, 1.95, 2.75], abs=0.01)
+
+
 @pytest.mark.skipif(not MANIFEST, reason="public test data not downloaded (tests/data/external)")
-def test_the_rings_of_the_public_p08_frame_are_mapbi3_and_pbi2(tmp_path: Path) -> None:
+def test_the_rings_of_the_public_p08_frame_are_mapbi3_and_pbi2() -> None:
     from src.gimap.features.analyze.domain import GiwaxsSettings
     from src.gimap.features.analyze.domain.giwaxs import reduce_giwaxs
     from src.gimap.features.assistant.domain import Profile, find_peaks, parse_poni, reliable
@@ -264,9 +271,8 @@ def test_the_rings_of_the_public_p08_frame_are_mapbi3_and_pbi2(tmp_path: Path) -
                               GiwaxsSettings(chi_q_window=(0.982, 1.012)))
     radial = reduction.curve("radial")
     search = find_peaks(Profile.of(radial.x, radial.intensity, radial.sigma, radial.pixels))
-    (tmp_path / "mapi.cif").write_text(MAPI_CIF, encoding="utf-8")
-    (tmp_path / "pbi2.cif").write_text(PBI2_CIF, encoding="utf-8")
-    phases = [phase_from_cif(tmp_path / "mapi.cif"), phase_from_cif(tmp_path / "pbi2.cif")]
+    example = (DATA / info["frame"]).parent
+    phases = [phase_from_cif(example / name) for name in ("MAPbI3_reference.cif", "PbI2_reference.cif")]
     peaks = [{"q": peak.q, "q_err": peak.q_err, "fwhm": peak.fwhm} for peak in search.peaks]
     found = {round(item["q"], 3): item for item in assign_peaks(peaks, phases)["assignments"]}
     strongest = sorted((peak for peak in search.peaks if reliable(peak)), key=lambda peak: -peak.area)[:3]
