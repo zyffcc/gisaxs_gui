@@ -98,8 +98,12 @@ class ResultPreviewMixin:
         """
         try:
             self._show_overlay_legend()
+            if self.image and self.image.pixel_size_x_m and self.image.pixel_size_y_m and not self.detector_combo.currentData():
+                self._show_file_pixel_size(self.image)
             if self.result is not None:
                 candidate = self.result.selected_candidate
+                if self.stage_label.text() == getattr(self, "_fit_status", None):
+                    self._show_fit_status()
                 self._show_uncertainty(candidate)
                 self._show_tilt(candidate)
                 self._show_rms(candidate)

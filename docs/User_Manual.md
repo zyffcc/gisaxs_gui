@@ -64,7 +64,7 @@ folder `tests/data/external/` of the program folder:
 
 1. Start GIMaP (chapter 2). The **Start** page opens.
 2. **Help ▸ Example Data ▸ GIWAXS — MAPbI₃ Film (DESY P08)…** copies the GIWAXS example (the frame
-   and its `.poni`) to a folder of your choice, by default `Documents\GIMaP examples\giwaxs_p08_mapi`,
+   with its `.poni` and example CIFs) to a folder of your choice, by default `Documents\GIMaP examples\giwaxs_p08_mapi`,
    and opens the frame in Analyze: step 1 of section 1.2 is then done. GIMaP writes its results next
    to the data, in a folder `gimap_analysis/`; working on a copy keeps the program folder clean.
    (You can also copy the folder yourself and open the frame from the Start page, as section 1.2 says.)
@@ -90,30 +90,17 @@ Open Folder… and Open Files… links), or ask the AI. Files opened before are 
 - the command bar names the file, and the step **Data** its size, `2048×2048 px`;
 - the step **Data** is ✓ and **Mask & corrections** says how many pixels are left out
   (`0.0058 % of the pixels left out`: isolated hot and dead pixels);
-- **Geometry** shows **!** *No geometry yet*;
-- a yellow banner says *No instrument profile for this detector (2048×2048)* and offers
-  **Find Calibration Automatically**, **Enter Geometry…** and **Calibrate…**.
+- **Geometry** shows the distance and wavelength, and **Cuts** shows *Ring and bands*.
 
-The detector image is shown in pixels. Without a geometry there are no q curves yet.
+**2. Check the geometry.** Open **Geometry** and check that its source is
+`LaB6_2021_12_DESY_P08.poni`, with a distance of 811.8 mm and a wavelength of 0.6888 Å.
+Analyze reads the matching PONI beside the frame when it opens. If the file is elsewhere,
+choose **Load .poni…** and select it. Enter `0.075` in the **αi** field in the command bar
+and press Enter. The incidence angle comes from the experiment (section 1.1).
 
-**2. Give it a geometry.** Press **Find Calibration Automatically** in the banner. GIMaP searches
-the folders around the frame and finds `LaB6_2021_12_DESY_P08.poni`. Check:
-
-- **Geometry** is ✓ with `811.8 mm · λ 0.6888 Å · αi 0°`;
-- **Cuts** is ✓ (*Ring and bands*), and the curves appear;
-- the **Results** step says where the geometry came from: *a saved calibration file (not re-checked
-  against a standard image); found by the search: LaB6_2021_12_DESY_P08.poni*, and *1 question(s)*.
-
-The geometry is now saved as the instrument profile *Detector 2048×2048*. Analyze uses it for every
-frame of this size from now on (section 4.1). With your own data, make sure the file found is the
-calibration of your measurement.
-
-**3. Run the automatic analysis.** Press **Run Automatic Analysis** in the command bar. It takes a
-few seconds; the **Results** tab shows each step as it is done. When it ends, the Results step
-asks one question: the incidence angle. Type `0.075` in **Incidence angle αi (°)** and press
-**Run Again with These Answers**. **Geometry** now shows `αi 0.075°`, and the αi field in the command
-bar shows `αi 0.075 °` in orange: a value you set, used for every frame you show, also the next one you
-open, until you go back to the profile's αi (section 4.1).
+**3. Run the automatic analysis.** Press **Run Automatic Analysis**. The **Results** tab
+shows the peaks and ring orientations. The run uses the angle in the command bar.
+This angle also applies to subsequent frames until you change it or choose **Back to Profile αi**.
 
 **4. Read the results.** The Results tab begins with a line such as
 *GIWAXS — 12 peaks (12 reliable), 3 rings analysed*. Below it:
@@ -122,13 +109,14 @@ open, until you go back to the profile's αi (section 4.1).
   is out-of-plane (OOP) or in-plane (IP). Here you find peaks near q = 0.90, 1.00, 1.41, 1.99 and
   2.22 Å⁻¹. The data's README names 0.899 Å⁻¹ as PbI₂ (001) and 0.999 Å⁻¹ as MAPbI₃ (110).
   To compare candidate reflections, give the phases in **Phases** (section 5.9).
-- For the three rings with the largest peak area and no warning, compare the measured Hermans f with f_iso, the
+- The orientation summaries label the strongest reliable ring by fitted area. For each analysed ring, compare the measured Hermans f with f_iso, the
   value for an isotropic ring over the same angles. Each ring gives the statistical error, systematic range, pole fit and position of the intensity maximum.
 - **Checks** identifies shadows and angular gaps, including the missing wedge next to qz.
 - **Geometry**: the profile, distance, beam centre, wavelength and αi used.
 
 Select a peak and open **Fit details** to see the points it was fitted to, the Gaussian and its
-background, and the errors. **Save Report…** keeps everything as a web page or Markdown. Switch the
+background, and the errors. A peak selected for ring analysis can still have a poor Gaussian fit.
+The warnings row lists this and any overlap, edge or bin-width flags recorded for the peak. **Save Report…** keeps everything as a web page or Markdown. Switch the
 image to **q map** or **Cake** to see the rings in q; **Sources** shows which pixels each curve uses.
 
 ![GIWAXS results](manual_images/en/07_giwaxs_results.png)
@@ -157,33 +145,18 @@ distance 53.6 nm (BornAgain's example *experiment_at_galaxi*).
 would not ask for αi. Then take the GISAXS example (**Help ▸ Example Data ▸ GISAXS — Ag Nanoparticles
 (GALAXI)…**, section 1.1), or **File ▸ Open Data…** (`Ctrl+O`) and choose `galaxi_data.tif`. Analyze
 shows `1043×981 px` (rows × columns). **Mask & corrections** leaves out `1.4 %` of the pixels: the gaps
-between the Pilatus modules. The banner asks for a geometry, as before.
+between the Pilatus modules and excluded bad pixels.
 
-**2. Give it a geometry.** Press **Find Calibration Automatically**. The search finds
-`galaxi_bornagain.poni` in the frame's folder and takes it before the GIWAXS calibration of section 1.2
-in the folder beside it: a calibration file in the frame's own folder comes first (section 4.2). Check:
+**2. Check the geometry and the cut.** Open **Geometry**. With the supplied files together,
+Analyze uses `galaxi_bornagain.poni` when it opens the frame. Check 1730.0 mm and λ = 1.34 Å.
+If you copied the frame alone, use **Load .poni…** to choose its calibration. In the command bar,
+enter the documented `0.463` in **αi** and press Enter. **Cuts** shows *Yoneda cut*.
+Check the horizontal band on the image. The incidence angle changes the exit angle assigned
+to this band from 0.639° at zero incidence to 0.176°.
 
-- **Geometry** is ✓ with `1730.0 mm · λ 1.34 Å · αi 0°`;
-- **Cuts** shows *Yoneda cut*. The mode stays **Auto**: frames whose largest scattering angle is at
-  most 20° are treated as GISAXS;
-- the Results step says *a saved calibration file (not re-checked against a standard image); found
-  by the search: galaxi_bornagain.poni*, and *1 question(s)*.
-
-You can also name the calibration before you press the button: type `galaxi_bornagain.poni` in
-**Beamtime notes** of the step **Results** (the file lies in the frame's folder, so its name is
-enough). A calibration named there is tried before the instrument profile and the search, in every
-run.
-
-**3. Run the automatic analysis.** Press **Run Automatic Analysis**. This takes from half a minute to a
-few minutes (the model fit is the slow part). The Results step then asks for αi. Type `0.463` in
-**Incidence angle αi (°)** and press **Run Again with These Answers**.
-
-The answer matters: with αi = 0° the Yoneda band was quoted at αf = 0.639°, with the right αi at
-αf = 0.176°. **Geometry** now shows `1730.0 mm · λ 1.34 Å · αi 0.463°`, and the αi field shows
-`αi 0.463 °` in orange, as in section 1.2: the run kept the instrument profile saved in step 2 and
-used your αi with it. Had you named the calibration in the notes, the run would have applied that file
-again and saved your αi with it in the instrument profile of this detector, and the field would not be
-orange (section 4.1).
+**3. Run the automatic analysis.** Press **Run Automatic Analysis**. Allow half a minute to a few
+minutes for the model fit. If you only want to fit the existing horizontal cut yourself, go
+straight to **Send to Fitting** (step 5).
 
 **4. Read the results.**
 
@@ -210,19 +183,19 @@ here by two populations. For this sample you know the particles are spheres: fit
 **5. Send to Fitting.** Press **Send to Fitting**. GIMaP writes
 `gimap_analysis/galaxi_data_fit_input.dat` (the halves as chosen in the Cuts step, here the mean;
 q in Å⁻¹) and opens it in **Fitting ▸ Single analysis**: **Curve** ✓ `598 points fitted`, **Model**
-`Sphere · 9 free`, **Fit** *Choose a method, then Fit*. Fitting shows q in nm⁻¹.
+`Sphere · 9 free`, **Fit** *Ready to fit*. Fitting shows q in nm⁻¹.
 
-The Fit step has chosen **Predict parameters** for this curve, and the line under **Method** says why:
-*Recommended for this curve: a GISAXS cut not fitted yet.* Model holds a sphere, the particle you know this sample
-has: under **Method**, set **Particles** to **The particles in Model**, then press **Predict parameters**. When it
-ends, Model holds the solution and the status line reads *1 solution; the best, Sphere (χ²ᵣ 1.82 over 596 of 598
-points; 2 below the network's q window), is in Model.* **Results ▸ Other solutions** lists it (R 4.31 nm, D 39.2 nm;
-p shows —, since only this composition was tried), and **Fit details…** gives each value in Model with its 68 %
-interval (*R 4.31 [4.31, 6.71] nm*) and what to keep in mind: here R and D lie at the edge of their intervals and
-σR/R stopped at a bound, so one Gaussian population of spheres describes this cut only roughly. Press **Refine
-These Values** to refine it with least squares and get its errors (χ²ᵣ 1.85 on all 598 points; Fit details says
-that the two χ²ᵣ are not of the same points); judge the residuals (section 6.2). The same curve opens with
-**Refine in Fitting** in Analyze's Results tab.
+For this unfitted cut the Fit step recommends **Predict parameters**. For the public example,
+check that **Model** contains a sphere and **Particles** shows **The particles in Model**.
+Press **Predict parameters**. With both signed halves selected, Predict uses their mean.
+To fit only one side, select it in **Curve** first. Read the fit's point count in the status
+line and inspect its intervals and warnings. Press **Refine These Values** and inspect the
+residuals. Predict and Refine can use different point counts because the network has a q window.
+A spacing D at its bound or marked unconstrained does not establish a particle distance.
+
+In **Results**, hover over a parameter name to see its meaning. Use **Review fit warnings…**
+when shown. **Save Curve and Parameters…** writes the curve to CSV and the full-precision fit
+parameters to the adjacent JSON. **Save Plot…** offers PDF, SVG and PNG.
 
 Sizes depend on the model and on its size distribution. BornAgain's model uses a log-normal
 distribution of radii; Fitting's default and the automatic analysis use a Gaussian by number (choose *Log-normal, by
@@ -539,7 +512,7 @@ spreadsheet.
 | Edit | Undo (`Ctrl+Z`), Redo (`Ctrl+Y`; `Ctrl+Shift+Z` also works): the set-up in Analyze, the model in Fitting's Single analysis |
 | View | *Workspaces* and *Labs*: the pages (`Ctrl+1`…`Ctrl+6`), Collapse Sidebar (`Ctrl+B`), Full Screen (`F11`), Theme ▸ Light / Dark, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`), Language ▸ English / 中文 |
 | Analyze | Run Automatic Analysis, Stop Automatic Analysis, Repeat Analysis (`F5`), Absolute Scale from a Standard…, Export Curves… (`Ctrl+E`), Batch Export… (`Ctrl+Shift+E`), Batch Export a Folder…, Send to Fitting, Send Both Cuts to Fitting, Send Series to Fitting…, Send Series to Compare, Set-up Files ▸ Save Settings… / Load Settings… / Save Cuts… / Load Cuts… / Save Masks… / Load Masks…, Figures ▸ Save Image… / Save q-Map Data… / Save View Data…, Tools ▸ Reproduce from Record…, Clear Frame List |
-| Fitting | Open Curve…, Import Curves…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Fit Several Curves Together…, Load Model…, Save Model…, Save Data and Fit…, Save Plot…, Batch / In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
+| Fitting | Open Curve…, Import Curves…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Fit Several Curves Together…, Load Model…, Save Model…, Save Curve and Parameters…, Save Plot…, Batch / In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
 | Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), SEM Particle Analysis…, 1D Predict — Fit Many Curves…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
 | Help | User Manual (`F1`), Physics and Methods, Keyboard Shortcuts…, Example Data ▸ GISAXS — Ag Nanoparticles (GALAXI)… / SAXS — AgBh Calibrant (pyFAI)… / GIWAXS — MAPbI₃ Film (DESY P08)… / GIWAXS — PbTe, Tilted Detector (Xeuss)…, Report a Problem…, Open Log Folder, Open User Data Folder, GitHub Repository, Check for Updates…, How to Cite GIMaP…, Third-party Notices, About GIMaP |
 
@@ -794,9 +767,9 @@ bar is never written into an instrument profile, so **Back to Profile αi** alwa
 profile's own value.
 
 - An αi answered in the Results step (**Run Again with These Answers**) is set the same way, in orange,
-  when the run keeps the profile the detector has (section 1.2).
+  when the run keeps the profile the detector has.
 - When the run applies a calibration instead — one named in the beamtime notes, or one it found for a
-  detector without a profile — the answered αi is saved with it in the instrument profile (section 1.3).
+  detector without a profile — the answered αi is saved with it in the instrument profile.
 
 How a profile is chosen and what each override replaces is in
 [Physics and Methods, section 1.4](Physics_Manual.md#14-where-the-geometry-of-a-frame-comes-from).
@@ -921,16 +894,14 @@ Start page (*Calibrate the detector*).
    stitched, the same orientation; section 5.1). For a file of several frames, a row **Frames:** chooses
    **A single frame** (its number, counted from 1) or **Sum of all frames** (summed while you wait, with
    progress; it can be cancelled). A file with several equally likely image datasets asks which one.
-2. Confirm the detected energy and pixel size. For a CBF with matching scan NXS metadata, the energy
-   is filled in automatically. The line under **Energy** says where it came from (*From the file header.*,
-   *From the companion NXS file.*, *Entered by you.*). When the file states none, the field reads
-   *Required*, the line says *Not in the file: enter the X-ray energy* in orange, and **Auto Calibration**
-   waits until you type it — no energy is assumed (an earlier version silently used 12 keV). For the next
-   image without an energy, the value you typed is kept and the line asks you to check it. The calibration
-   record and the instrument profile say where the energy came from.
-3. Confirm the detector model. If it cannot be identified, choose a known detector from
-   **Detector model**, or select **Custom pixel size** and enter the values in
-   **Advanced configuration**. *Auto detected* keeps the pixel size of the file.
+2. Check the incident beam setting. **Energy** gives keV and **Wavelength** gives Å. Enter
+   whichever your experiment records. For the public AgBh example, enter `1.0` Å. The other field
+   updates using Physics and Methods, equation (1.1). The source line identifies a file header,
+   a companion scan NXS, or a value entered by you. **Auto Calibration** requires a value.
+   If an entry is carried over to the next image, check it against that experiment.
+3. Check the pixel size. A CBF or EDF can say *from frame size; check* when the dimensions match a
+   known detector format. If the pitch is right, leave **Detector model** on **Auto detected**.
+   Otherwise select the known model or enter **Custom pixel size** in **Advanced configuration**.
 4. Choose the standard. When the path of the image — its file name or a folder above it — names one
    standard (for example `AgBh`, `LaB6` or `CeO2`), it is selected for you; when it names more than
    one, the field is set to **Auto Detect**; when it names none, the field is left as it was
@@ -956,7 +927,8 @@ Start page (*Calibrate the detector*).
    With the option cleared, the centre and distance are still refined on the ring points when at least two rings are matched.
    Click **Auto Calibration**. The calculation runs in the background. **Cancel** stops it after the
    current step.
-7. Review the result: beam centre, distance, **Detector tilt** (rot1 and rot2, *0.372°, 0.433°*, or *not
+7. Check the matched-ring count, confidence and first warning in **Run**. Toggle **Clean image** to
+   compare the rings with the frame. Review the result: beam centre, distance, **Detector tilt** (rot1 and rot2, *0.372°, 0.433°*, or *not
    refined*; its tooltip gives the 1σ), matched rings, **Ring-point RMS** and its tooltip. The tooltip gives the RMS before refinement on the same points. For a fitted tilt, it also gives the RMS with centre and distance refitted at zero tilt. **Ring-radius RMS** appears when there is no point fit. Review the confidence and warning of the **Selected solution** (a warning is marked ⚠; its tooltip says why it matters), and the
    **Candidate solutions** below. The line above the preview names only the image and its size. Selecting a candidate draws its
    rings. **Clean image** temporarily hides all overlays, **Reset view** restores the complete
@@ -972,6 +944,10 @@ Start page (*Calibrate the detector*).
    was applied and which profile Analyze will use. When the result moves the beam centre of a saved
    profile by more than 10 px or its distance by more than 5 %, the window asks before it overwrites
    that profile.
+
+**Export .poni…** proposes `<image>.gimap-calibration.poni`. In Analyze, open the target
+frame and select this file with **Geometry ▸ Load .poni…**. For a transmission calibrant,
+check the **SAXS** mode and read I(q) and I(χ) in **Curves**. The latter names its q interval.
 
 **Export Calibration…** writes the result as a `.json` file, or as a pyFAI `.poni` (choose *pyFAI geometry
 (*.poni)* in the file dialog; the tilt is written as Rot1, Rot2, Rot3). It proposes
@@ -1532,7 +1508,8 @@ Three views above the image:
 - **Cake** — unwrapped onto χ against q: a ring is a vertical line, a region a rectangle.
 
 **Save ▾** above the image: **View as Figure…** (the view with its colour bar) or **View Data as
-CSV…** (the q map or the cake as a table with its axes).
+CSV…** (the q map or the cake as a table with its axes). Phase arcs and their legend appear only
+in the interactive view. Use **Phases ▸ Reflections** to look up the expected q values.
 
 **Regions.** A region is a q range × a χ range, optionally on both sides (±χ, folded onto |χ|).
 Each region gives two curves in its own colour: I(q) (upper plot) and I(χ) (lower plot). The list
@@ -1771,6 +1748,13 @@ time, and ticks off the phases. **Stop** (in the panel and the command bar) ends
 its next step. A step already running finishes first, and the panel says what it waits for (a
 geometry fit or model fit can take a minute). What was found is kept: **Save Report…** or
 **Discard**.
+
+**Save Peak Table…** beside **Peaks** writes one CSV row per fitted peak, with uncertainties,
+indexing alternatives and flags. An empty phase and hkl identify an unassigned peak. The comment lines record the source,
+geometry, corrections and phase information. For the ring marked **Strongest reliable ring by
+fitted area**, read the measured orientation factor together with its isotropic reference and
+systematic range. A completed run with only orientation caveats lists them under **Orientation
+checks**. If an input such as αi is missing, the report still asks for it.
 
 **Whose results.** The results belong to the frame they were run on. While a run lasts, the file
 list is locked. When you show another frame, the Results step says which frame the results are
@@ -2087,7 +2071,14 @@ series** (chapter 6).
 
 **Phases** in the image toolbar opens the **Phases and Indexing** window (GIWAXS frames). It has three tabs.
 
-**Phases.** **Add from CIF…** reads a CIF: the cell, the symmetry operations and the atom sites (intensities |F|²
+For the public P08 example, use **Add from CIF…** to load `MAPbI3_reference.cif` and
+`PbI2_reference.cif` from the frame's folder. These are the comparison structures used in the
+indexing example. The MAPbI₃ model includes only the Pb and I sites. For Xeuss, load
+`PbTe_bulk_reference.cif` from its folder. With the supplied geometry the peaks near 1.57,
+1.82 and 2.58 Å⁻¹ lie below the bulk PbTe (111), (200) and (220) reflections. Leave a peak unassigned when
+its separation from a reference exceeds the reported tolerance.
+
+**Phases.** **Add from CIF…** opens in the current frame’s folder. Select one or more CIFs in the same dialog. Each file supplies the cell, the symmetry operations and the atom sites (intensities |F|²
 from the atoms). A CIF copied from a paper often names its space group (`_symmetry_space_group_name_H-M`, the Hall
 symbol or the number) without listing the operations: GIMaP then generates them from the symbol — every space group
 in the setting of *International Tables*, the common alternative settings (`P 21/n`, `Pbnm`, `R-3m` on rhombohedral
@@ -2100,7 +2091,7 @@ is named after `_chemical_name_common`, `_chemical_name_mineral` or the data blo
 of the name. **Add Cell** adds a cell you type in, with its lattice **Centring** (P, A, B, C, I, F, R): its
 allowed reflections all get intensity 1. Under **Selected Phase** you change the name, the cell and the
 **Orientation**: **Powder (random orientation)**, **Plane (hkl) parallel to the substrate** or **Axis [uvw] along the
-surface normal**, with the three indices. **Show** hides or shows a phase. Each phase has its colour; the names are
+surface normal**, with the three indices. Click the **Show** cell to hide or show a phase. When switching samples, check the visible phases before running the analysis. Each phase has its colour; the names are
 written in the corner of the image. **Overlay** sets **q max** (3 Å⁻¹), the **hkl labels**, and **Shift the fibre spots
 for refraction in the film**, with **αc of the film** (0: the αc of the refraction correction, section 5.2) and
 **Also the reflected channel (DWBA)**.
@@ -2221,7 +2212,7 @@ Fitting reads `.dat`, `.txt` and `.csv` text curves and NXcanSAS files (`.h5`):
 A `.csv` file is read by the names of its header, not by the place of its columns: q is the column named q (`q`,
 `qy (A^-1)`, `q_nm^-1` …), I the one named I or intensity, σ the one named sigma, σ, err or dI, and the Gaussian q width the one named dQ or sigma_q. Other
 columns (a model, residuals, terms, pixel counts) are not read. So the cuts of the command line (`horizontal.csv`,
-the names in its last `#` line), Analyze's curve tables and Fitting's own **Save ▸ Data and Fit…** table — which has
+the names in its last `#` line), Analyze's curve tables and Fitting's own **Save ▸ Save Curve and Parameters…** table — which has
 q twice, in nm⁻¹ and then in Å⁻¹: the first is taken, in nm⁻¹ — open as they are. q is read in the unit the name of
 its column states. A CSV without a header of two or three columns is read as `q I [σ]`, like a `.dat` file. When the
 header does not decide (two intensities, q of two axes, or no header and more columns), **Choose Columns** shows the
@@ -2317,7 +2308,7 @@ The page is laid out like Analyze: the steps on the left, each saying where it s
 - **The residual plot** below uses (I − model)/σ for the selected intensity weights or ln(I/model) for a log fit.
 - **The command bar**: **Open Curve…** (its menu: **Load Model…**), **Undo / Redo** (`Ctrl+Z` /
   `Ctrl+Shift+Z`: every change of the model, the fitting range or the left-out points is one step, and so is every
-  fit, solution used and model loaded), **Fit** (`Ctrl+Return`), **Stop** and **Save** (**Data and Fit…**,
+  fit, solution used and model loaded), the selected fit method (`Ctrl+Return`), **Stop** and **Save** (**Save Curve and Parameters…**,
   **Plot…**, **Model…**, **Solutions…**). After Undo or Redo the status line names the step (*Undone: the fit
   (Refine).*), and the buttons' tooltips name the step they would take (*Undo: solution 2 in Model (Ctrl+Z)*).
 
@@ -2326,7 +2317,7 @@ limits and **Reset** use only the data and total model; small component tails ca
 To inspect those tails, select **Include components in auto range** in the component menu. Changing this option
 resets the view immediately, and subsequent **Reset** uses the same choice. On log axes, zero or negative values
 cannot be drawn; they are not shifted, clipped to a positive floor or normalised. These choices only affect the
-display: fits, residuals and **Save ▸ Data and Fit…** retain the complete model and all contributions. Contributions
+display: fits, residuals and **Save ▸ Save Curve and Parameters…** retain the complete model and all contributions. Contributions
 are intensities that add to the model, not particle fractions. For a batch result, choose **Open Frame in Single
 Analysis** to inspect its contributions here.
 
@@ -2392,7 +2383,7 @@ Analysis** to inspect its contributions here.
   nonnegative at each fitted point. A width of zero evaluates that point directly.
 - Under **Weights**, **σ from the file** uses residual (I − model)/σ, **Relative (σ = I)** uses (I − model)/I
   and **Poisson (σ = √I)** uses (I − model)/√I. **None (fit ln I)** uses ln I − ln model, as does the default
-  when no usable file σ is available. Relative, Poisson and log fits use positive intensities. **Save Data and Fit**
+  when no usable file σ is available. Relative, Poisson and log fits use positive intensities. **Save Curve and Parameters**
   records these choices and the fit report lists them. [Physics and Methods, chapter 9](Physics_Manual.md#93-size-distributions)
 
 ![Size law, resolution and weights for a manual fit](manual_images/en/11b_manual_fit.png)
@@ -2466,7 +2457,7 @@ sizes for your sample, or let the Fit step find them.
 - What to do next: **Refine These Values** (after a prediction), **Fit Again** (the same
   method, with the values, fixed values and ranges now in Model) and **Fit Every Curve in This Folder…** (the
   In-situ series on this curve's folder, each curve starting from this model).
-- **Fit details…** opens a separate, nonmodal window for boundary diagnostics, correlations and assumptions;
+- **Fit details…** (labelled **Review fit warnings…** when a warning is flagged) opens a separate, nonmodal window for boundary diagnostics, correlations and assumptions;
   after Predict parameters it gives the posterior of the solution in Model (section 6.4). Routine diagnostic notes
   do not turn a completed prediction into a yellow warning.
 - **Uncertainty and Report…** (after Refine or Search): **Errors and correlations** lists every free and linked value
@@ -2516,10 +2507,10 @@ sizes for your sample, or let the Fit step find them.
   **Use This Solution** puts one into Model (Undo brings the previous model back). **Export Solutions…** (also
   **Save ▸ Solutions…**) writes every solution: `<curve>_solutions.csv` (a row per solution and parameter: the
   composition, probability, χ²ᵣ and its points, flags, whether it is incomplete, and the value, posterior median,
-  68 % and 95 % intervals and least-squares error), `<curve>_solutions.json` (the record of Save Data and Fit with
+  68 % and 95 % intervals and least-squares error), `<curve>_solutions.json` (the record of Save Curve and Parameters with
   every solution under `predict`) and `<curve>_solutions_curves.csv` (the points and every solution's model,
   residual and terms).
-- **Save Data and Fit…** writes a CSV with q (nm⁻¹ and Å⁻¹), I, the σ used in the objective, the model,
+- **Save Curve and Parameters…** writes a CSV with q (nm⁻¹ and Å⁻¹), I, the σ used in the objective, the model,
   the residuals, dQ in nm⁻¹ when file resolution was used, and each model term. It writes a
   JSON record next to it: the model, the fit (errors, values at a bound, correlations) and the
   points used; after Predict parameters also every solution (`predict`: composition, probability, χ²ᵣ, flags and
@@ -4129,12 +4120,13 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Analyze ▸ **Send Series to Fitting…** | `fit_input/<frame>_fit_input.dat`, `README.txt`, `<batch>_batch.json` | a folder of its own, `<name>_fitting/`, next to any Batch Export of the same data | `README.txt`, batch JSON |
 | Analyze ▸ **Export New Frames While Watching** | as Export, for each new frame | `gimap_analysis/` next to the frame; when it cannot be written, a folder you choose once (kept for the session); with none, the export is switched off and the status line says why | as Export |
 | Analyze ▸ **Save Settings…**; Mask step ▸ **Save…**; Regions ▸ **Add ▸ Save Cuts…** | `analyze_settings.json`; `masks.json` or a mask image (section 5.2); `cuts.json` | dialog in `gimap_analysis/` | JSON recipes are self-describing. Mask images have a companion `<filename>.json`. |
+| Run Automatic Analysis ▸ Peaks ▸ **Save Peak Table…** | `<stem>_peaks.csv` | the folder proposed by the save dialog | source, settings and phase assignment in the CSV header |
 | Run Automatic Analysis ▸ **Save Report…** | `<stem>_report.html` (with pictures) or `.md` | the folder you chose last in this session for frames of the same folder, else `gimap_analysis/` if it exists, else next to the frame | the report itself (no JSON) |
 | Process with AI ▸ **Save Report…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | as above | the JSON |
 | Process with AI (automatic) | a record of every run; missing analyses | user data folder: `assistant_runs/`, `assistant_feature_requests.jsonl` | — |
 | Process with AI, when the AI exports | the curves as Export, and `<stem>_assistant.json` | `gimap_analysis/` next to the data | `<stem>_analysis.json`, `<stem>_assistant.json` |
-| Fitting ▸ Single analysis ▸ **Save ▸ Data and Fit…** | `<curve>_fit.csv` (or NXcanSAS `<curve>_fit.h5`) + `<curve>_fit.json` (written as a pair) | the folder saved to last, else the folder a curve was last opened from, else the curve's folder | the JSON (model, method, range, left-out points; every solution of Predict parameters) |
-| Fitting ▸ Single analysis ▸ **Save ▸ Solutions…** (**Export Solutions…**) | `<curve>_solutions.csv` + `<curve>_solutions.json` (written as a pair) + `<curve>_solutions_curves.csv` | as Data and Fit | the JSON (the Data and Fit record with every solution, its values and intervals) |
+| Fitting ▸ Single analysis ▸ **Save ▸ Save Curve and Parameters…** | `<curve>_fit.csv` (or NXcanSAS `<curve>_fit.h5`) + `<curve>_fit.json` (written as a pair) | the folder saved to last, else the folder a curve was last opened from, else the curve's folder | the JSON (model, method, range, left-out points; every solution of Predict parameters) |
+| Fitting ▸ Single analysis ▸ **Save ▸ Solutions…** (**Export Solutions…**) | `<curve>_solutions.csv` + `<curve>_solutions.json` (written as a pair) + `<curve>_solutions_curves.csv` | as Save Curve and Parameters | the JSON (the fit record with every solution, its values and intervals) |
 | Fitting ▸ **Save ▸ Plot…**, **Save ▸ Model…** | `<curve>_fit.png` / `.svg`; `<curve>_model.json` | as above | none; the model file |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Series report…** | `series_fit.md` | series folder | frame decisions, probabilities and run settings |
@@ -4149,6 +4141,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | SEM Particle Analysis ▸ **Export SEM results…** | the files of section 9.3 | a new `SEM_analysis_<date>_<time>/` in the folder you choose; never overwrites | `sem_analysis.json`; `#` header line in the CSVs |
 | 2D Prediction ▸ **Export input...** / **Export result...** | `<input>_input.png` + `.json`; `<input>_prediction.png` + `.json` (+ `.txt` when the result has a curve or map) | the export folder used last, else the input's folder | the JSON |
 | 2D Prediction ▸ **Export result...** with several files | your choice of `prediction_results_<time>.jsonl`; `prediction_curves_<time>.txt` (or `prediction_parameters_<time>.txt`); images in `prediction_images_<time>/` | a folder you choose (starts at the export folder used last) | `#` header lines in the `.txt` |
+| Geometry Calibration ▸ **Export .poni…** | `<image>.gimap-calibration.poni` | beside the standard image by default | pyFAI geometry and wavelength |
 | Geometry Calibration ▸ **Export Calibration…** | `<image>.gimap-calibration.json` | next to the calibrant image | the file (beam centre counted from pixel centres at 0, 0.5 px lower than the windows show; `metadata.center_convention`) |
 | Geometry Calibration ▸ **Apply** | the instrument profile | user data folder: `instrument_profiles.json` | — |
 | **Tools ▸ Settings… ▸ Assistant** ▸ **API key** ▸ **Save** | API credential for the selected provider. **Remove** deletes it. | OS credential store when available, otherwise `claude_api_key.txt` or `assistant_provider_keys.json` in plain text in the user data folder | section 10.1 |
@@ -4236,6 +4229,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 
 | Limitation | What to do |
 |---|---|
+| **Saved q-map figures omit phase arcs and their legend.** | Keep the candidate CIFs and the indexed peak CSV with the figure. The **Reflections** tab in **Phases** lists the expected q values. |
 | **The rows of a Series map carry no σ.** The timeline's χ² takes the noise of each x column from the series itself, and a Series map recorded in the results database holds x and I only (section 5.6). | Read the timeline as a distance in units of the frame-to-frame noise, not as a goodness of fit; for σ of every point, use Batch Export ▸ Each frame: its curves, with error bars. |
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |

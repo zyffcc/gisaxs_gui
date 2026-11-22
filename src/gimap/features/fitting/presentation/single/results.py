@@ -32,6 +32,7 @@ from ...application.single_fit import (
     derived_values,
     fit_record,
     model_to_dict,
+    parameter_info,
     parameter_text,
 )
 from ...application.fit_nxcansas import fit_curves, write_curves
@@ -234,7 +235,9 @@ class FitResultsMixin:
     def render_results(self) -> None:
         self._render_model_results()
         self.render_result_actions()  # next steps, what the fit did by itself, the folds (result_actions.py)
-        self.fit_notes_button.setVisible(bool(self.warnings_label.text() or not self.actions_label.isHidden()))
+        notes = self.warnings_label.text()
+        self.fit_notes_button.setVisible(bool(notes or not self.actions_label.isHidden()))
+        self.fit_notes_button.setText(tr("Review fit warnings…") if "⚠" in notes else tr("Fit details…"))
         self.refresh_equivalent_selector()
         self.refresh_uncertainty()  # the Uncertainty and Report window (uncertainty.py)
 
@@ -366,7 +369,9 @@ class FitResultsMixin:
             if self._unused(path, parameter):
                 continue  # an unused term (no resolution peak, no background, spheres at q_z = 0)
             error = None if result is None else result.errors.get(path)
-            full = path_name(self.session.model, path, full=True)  # “1·Sphere R”, also when shown as “R”
+            full = path_name(self.session.model, path, full=True)
+            component = None if path[0] == "globals" else self.session.model.components[path[0]]
+            full += "\n" + tr(parameter_info(component, path[1]).tip)
             value, plus = value_cells(path[1], parameter.value, error, parameter.free)
             why = ""
             if predicted is not None and parameter.free:
@@ -472,7 +477,7 @@ class FitResultsMixin:
         if data is None or not data.q.size:
             self._status(tr("Open a curve first."), "warning")
             return None
-        path = path or self._save_path("Save Data and Fit", f"{self._stem()}_fit.csv", SAVE_DATA_FILTER)
+        path = path or self._save_path("Save Curve and Parameters…", f"{self._stem()}_fit.csv", SAVE_DATA_FILTER)
         if not path:
             return None
         names, table = export_table(self.session.model, data)

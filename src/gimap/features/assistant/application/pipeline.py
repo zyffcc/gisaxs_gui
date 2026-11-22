@@ -170,6 +170,7 @@ class _Run:
     attention: list = field(default_factory=list)
     calibration: Optional[dict] = None
     geometry_source: str = ""
+    strongest_ring_index: Optional[int] = None
     stopped: Optional[str] = None
     """The step that was not started because a stop was requested (``None``: ran to the end)."""
     failed: Optional[str] = None
@@ -473,6 +474,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             self._decide("requested ring", f"q ≈ {asked:g} Å⁻¹", "the person asked for it")
         for q in sorted(centres):
             if self._call("ring_orientation", {"q_center": q}) is not None:
+                if chosen and q == chosen[0].q:
+                    self._run.strongest_ring_index = len(self.catalog.results.rings) - 1
                 self._pole()
             if any(abs(peak.q - q) <= 0.5 * peak.fwhm for peak in reliable):
                 self._call("crystallite_size", {"q_center": q})
@@ -490,6 +493,9 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         # The record keeps the geometry as applied (the CSV headers do too): four significant digits can erase a
         # resolved subpixel shift, and 147.6 mm is not the distance q was computed with. report.md rounds for reading.
         geometry = clean(status.get("geometry") or {}, digits=FULL_PRECISION)
+        rings = [_ring_row(ring) for ring in results.rings]
+        if run.strongest_ring_index is not None:
+            rings[run.strongest_ring_index]["strongest_by_area"] = True
         return self._phase_rows({
             "ok": run.ok,
             "stopped": run.stopped,
@@ -503,7 +509,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             "calibration_quality": calibration_quality(run.calibration),
             "peaks": _peak_rows(results),
             "peak_search": _peak_search(results),
-            "rings": [_ring_row(ring) for ring in results.rings],
+            "rings": rings,
             "series_hints": list(getattr(results.peak_searches.get("radial"), "series", ()) or ()),
             "error_model": status.get("error_model"),
             "decisions": run.decisions,

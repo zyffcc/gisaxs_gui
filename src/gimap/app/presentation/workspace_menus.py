@@ -135,7 +135,7 @@ FITTING_MENU = (
     SEPARATOR,
     Entry("fitting_load_model", "&Load Model…", "A model saved from Fitting (JSON), for this curve"),
     Entry("fitting_save_model", "Save &Model…", "The model (values, fit/fixed, ranges) as JSON, to load for another curve"),
-    Entry("fitting_save_data", "Save Data &and Fit…",
+    Entry("fitting_save_data", "Save Curve &and Parameters…",
           "CSV: q, I, σ, the model, the residuals and each term; a JSON record of the model and the fit next to it"),
     Entry("fitting_save_plot", "Save &Plot…", "The plot as shown: PNG (image) or SVG (vector)"),
     SEPARATOR,

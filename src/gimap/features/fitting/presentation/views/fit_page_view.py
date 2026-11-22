@@ -157,7 +157,7 @@ class FitPageView(FitStepsView):
         self.export_button.setToolTip("Save the data and fit, the plot, or the model")
         self.export_button.setPopupMode(QToolButton.InstantPopup)
         export_menu = QMenu(self.export_button)
-        self.export_data_action = export_menu.addAction("Data and Fit…")
+        self.export_data_action = export_menu.addAction("Save Curve and Parameters…")
         self.export_plot_action = export_menu.addAction("Plot…")
         self.export_plot_action.setToolTip("The plot with the residuals: PNG, SVG or PDF, with error bars")
         self.save_model_action = export_menu.addAction("Model…")

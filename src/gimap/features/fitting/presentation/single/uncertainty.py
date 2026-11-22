@@ -276,9 +276,12 @@ class UncertaintyMixin:
         return lines
 
     def flag_cell(self, path, result, plus: str, why: str) -> tuple[str, str]:
-        """The ± cell of a value the curve does not determine: marked ⚠."""
+        """Mark uncertainty cells for unconstrained values and values at a fit bound."""
         if result is not None and path in undetermined(result):
             return (plus or "–") + " ⚠", tr(UNDETERMINED_TIP)
+        if result is not None and path in result.at_bounds:
+            label = plus + " ⚠" if plus.startswith("±") else "⚠ " + tr("at a bound")
+            return label, why or tr("At a bound of the fit range.")
         return plus, why
 
 

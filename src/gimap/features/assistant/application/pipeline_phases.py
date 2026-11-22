@@ -21,6 +21,14 @@ POLE_RULE = (
 )
 
 
+def orientation_checks_only(report: dict) -> bool:
+    if not report.get("ok") or report.get("stopped") or report.get("failed"):
+        return False
+    points = report.get("needs_attention") or ()
+    return bool(points and all(
+        item.get("item") in {"orientation factor", "pole figure"} and not item.get("option") for item in points))
+
+
 def pole_direction(ring) -> Optional[float]:
     """χ0 of the automatic pole-figure fit from the highest maximum of the ring's I(χ) (``None``: fitted)."""
     maxima = getattr(ring, "maxima", None) or ()
@@ -190,4 +198,4 @@ def pole_line(pole: dict) -> str:
             "1 − φ is conditional on the background b.")
 
 
-__all__ = ["PhaseStepsMixin", "assignment_lines", "assignment_text", "pole_direction", "pole_line", "pole_summary"]
+__all__ = ["PhaseStepsMixin", "assignment_lines", "assignment_text", "orientation_checks_only", "pole_direction", "pole_line", "pole_summary"]

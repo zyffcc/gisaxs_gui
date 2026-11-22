@@ -69,15 +69,19 @@ class PersistenceMixin:
             )
         return text
 
-    def export_result(self) -> None:
+    def export_result(self, *, poni: bool = False) -> None:
         if self.result is None:
             return
         self._commit_manual_values()
         default = self.view_model.default_export_path(self.result.source_image)
+        poni_filter = tr("pyFAI geometry (*.poni)")
+        filters = poni_filter if poni else f"{tr('JSON Files (*.json)')};;{poni_filter}"
+        if poni:
+            default = str(Path(default).with_suffix(".poni"))
         path, chosen = QFileDialog.getSaveFileName(
-            self, tr("Export Calibration"), default, f"{tr('JSON Files (*.json)')};;{tr('pyFAI geometry (*.poni)')}"
+            self, tr("Export .poni") if poni else tr("Export Calibration"), default, filters
         )
-        if path and chosen == tr("pyFAI geometry (*.poni)") and not path.lower().endswith(".poni"):
+        if path and (poni or chosen == poni_filter) and not path.lower().endswith(".poni"):
             path = str(Path(path).with_suffix(".poni"))
         if path:
             try:

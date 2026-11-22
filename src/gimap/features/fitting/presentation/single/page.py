@@ -204,7 +204,8 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         elif solutions:  # a solution of Analyze: its χ² is Analyze's, not of a fit here
             self.step_rail.set_state("fit", "pending", tr("From Analyze: Fit to refine it"))
         else:
-            self.step_rail.set_state("fit", "pending", tr("Choose a method, then Fit"))
+            self.step_rail.set_state("fit", "pending", tr("Ready to fit") if curve is not None
+                                    else tr("Choose a method, then Fit"))
         if result is not None:
             current_result = session.result_is_current()
             self.step_rail.set_state("results", "ok" if current_result else "warn", "" if current_result else stale)
@@ -497,6 +498,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         """After a switch of the interface language (``i18n.language_changed``): what this page composed with
         ``tr`` at run time — the steps, the curve card, the model's cards, the legends, the results — again."""
         self.model_editor.refresh_language()
+        self._show_method_buttons()
         self._render_all(preserve_view=True)
         self._refresh_residual_tooltip()
         if self._status_text is not None:

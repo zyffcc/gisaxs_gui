@@ -489,6 +489,10 @@ Geometry Calibration (Tools menu) finds the beam centre, the distance and the de
 
 ### 3.1 Calibrants
 
+Geometry Calibration accepts the measured beam energy in keV or wavelength in Å.
+For a wavelength entry it uses equation (1.1) to fill the energy field. The ring fit uses
+the displayed energy in keV (five decimal places). For example, 1.0 Å gives 12.39842 keV.
+
 | Key | Standard | Values in the code | Lines used |
 |---|---|---|---|
 | `agbh` | silver behenate | lamellar `d_001` = 58.38 Å | orders n = 1 … 20 |

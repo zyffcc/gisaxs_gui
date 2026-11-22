@@ -39,9 +39,17 @@ from .zh_ring_assignment import RING_ASSIGNMENT_ZH
 from .zh_roll_check import ROLL_CHECK_ZH
 from .zh_series_chain import SERIES_CHAIN_ZH
 from .zh_series_selection import SERIES_SELECTION_ZH
+from .zh_usability_analyze import USABILITY_ANALYZE_ZH
+from .zh_usability_calibration import USABILITY_CALIBRATION_ZH
+from .zh_usability_gisaxs import USABILITY_GISAXS_ZH
+from .zh_usability_giwaxs import USABILITY_GIWAXS_ZH
 from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 
 FEATURES_ZH = {
+    **USABILITY_ANALYZE_ZH,
+    **USABILITY_CALIBRATION_ZH,
+    **USABILITY_GISAXS_ZH,
+    **USABILITY_GIWAXS_ZH,
     **PREDICT_SAMPLING_ZH,
     **VERTICAL_CONSISTENCY_ZH,
     **GISAXS_FIT_LEVEL_ZH,
