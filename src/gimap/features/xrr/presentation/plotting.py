@@ -81,7 +81,7 @@ class XrrPlotPresenter:
             color="#00d9ff",
             label="Direct beam",
         )
-        if roi_center is not None:
+        if roi_center is not None and np.isfinite(roi_center).all():
             circle = Circle(
                 roi_center,
                 max(0.55, float(radius_px)),

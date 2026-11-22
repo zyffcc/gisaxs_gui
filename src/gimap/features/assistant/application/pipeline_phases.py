@@ -9,15 +9,14 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from .pipeline_assignment import assignment_lines, assignment_text, axis_text
+
 POLE_MODEL = "gaussian"
 POLE_RULE = (
-    "a Gaussian about the direction χ0 plus an isotropic fraction, fitted to the folded, Lorentz-corrected I(χ) of "
-    "each analysed ring minus the radial background, on the measured bins up to χ = 85°; χ0 is 0° when the highest "
-    "maximum of I(χ) lies below 20°, 90° when above 70°, fitted otherwise; the oriented fraction and the f of the "
-    "fit include the missing wedge as the model fills it (Physics and Methods 7.11)"
+    "A Gaussian in polar angle plus isotropic density is fitted to the measured bins after the exit-angle cut. "
+    "The strongest maximum sets χ0 to 0° below 20° or 90° above 70°. Otherwise χ0 is fitted. "
+    "The fitted f includes the model in the missing wedge. 1 − φ is conditional on the background b."
 )
-POOR_FIT = 10.0
-"""A pole-figure fit above this χ²_red is flagged: one Gaussian and an isotropic part do not describe the ring."""
 
 
 def pole_direction(ring) -> Optional[float]:
@@ -27,11 +26,11 @@ def pole_direction(ring) -> Optional[float]:
         return 0.0
     top = float(maxima[0].get("chi", 0.0))
     return 0.0 if top < 20.0 else 90.0 if top > 70.0 else None
+
+
 ASSIGN_RULE = (
-    "the nearest powder-ring position |q| of the phases given ({phases}; Analyze ▸ Phases or --phase) within "
-    "max(3 σ(q0), FWHM/2); q is kinematic unless αc is given, so rings near the horizon can be shifted by up to "
-    "k sin αi; other reflections within the window are listed as alternatives (report.json); the nearest match is "
-    "an assignment, not a proof of the phase"
+    "Nearest powder-ring position of the phases given ({phases}) within max(3 σ(q0), FWHM/2). "
+    "Multiple reflection families in the window make the assignment ambiguous."
 )
 
 
@@ -39,21 +38,11 @@ def _short(value: Optional[float], digits: int) -> str:
     return "—" if value is None or not math.isfinite(value) else f"{value:.{digits}f}"
 
 
-def assignment_text(item: dict) -> str:
-    """``q = 0.9973 → MAPbI3 110 (Δq = −0.0040 Å⁻¹, −41 σ)`` of one assignment record."""
-    if not item.get("assigned"):
-        return f"q = {item['q']:.4f}: none within ±{item['tolerance']:.4f} Å⁻¹"
-    sigma = item.get("delta_sigma")
-    in_sigma = f", {sigma:+.1f} σ" if sigma is not None and math.isfinite(sigma) else ""
-    return (f"q = {item['q']:.4f} → {item['phase']} {item['hkl']} (q_hkl = {item['q_hkl']:.4f}, "
-            f"Δq = {item['delta_q']:+.4f} Å⁻¹{in_sigma})")
-
-
 class PhaseStepsMixin:
     """Needs ``catalog``, ``options``, ``_run``, ``_decide`` and ``_attention`` (``StandardPipeline``)."""
 
     _assignment: Optional[dict] = None
-    _poles: list
+    _reported_pole: bool = False
 
     def _workbench_with(self, name: str):
         workbench = getattr(self.catalog, "workbench", None)
@@ -61,7 +50,8 @@ class PhaseStepsMixin:
 
     def _phases_given(self) -> None:
         """The phases of the options replace those of the Phases window (``--phase``)."""
-        self._poles = []
+        self._reported_pole = False
+        self._assignment = None
         phases = tuple(getattr(self.options, "phases", ()) or ())
         workbench = self._workbench_with("set_phases")
         if not phases or workbench is None:
@@ -93,42 +83,46 @@ class PhaseStepsMixin:
         if missing:
             decision += f"; not assigned: {', '.join(missing)}"
         names = ", ".join(phase.get("name", "?") for phase in found["phases"])
-        self._decide("phase assignment", decision, ASSIGN_RULE.format(phases=names))
+        self._decide("phase assignment", decision, ASSIGN_RULE.format(phases=names) + " " + axis_text(found.get("q_axis") or {}))
 
     def _pole(self) -> None:
-        """The pole figure of the ring just analysed (its I(χ) window is still set)."""
-        workbench = self._workbench_with("pole_figure")
-        rings = self.catalog.results.rings
-        search = self.catalog.results.peak_searches.get("radial")
-        if workbench is None or not rings:
+        ring = self.catalog.results.rings[-1]
+        pole = ring.pole_figure
+        if not pole:
             return
-        low, high = rings[-1].q_window
-        centre = 0.5 * (low + high)
-        background = search.background_at(centre) if search is not None else None
-        try:
-            record = workbench.pole_figure(background=background, model=POLE_MODEL, chi0_deg=pole_direction(rings[-1]))
-        except ValueError as error:
-            record = {"ok": False, "message": str(error)}
-        if not self._poles:
+        if not self._reported_pole:
             self._decide("pole figure", "fitted for every analysed ring", POLE_RULE)
-        self._poles.append((centre, record))
+            self._reported_pole = True
+        reasons = pole.get("quality_reasons") or []
+        if reasons:
+            q = sum(ring.q_window) / 2
+            self._attention("pole figure", f"At q = {q:.4g} Å⁻¹ the pole fit is not determined ({', '.join(reasons)}).",
+                            None, "Inspect the profile and background in Phases ▸ Pole Figure.")
 
     def _phase_rows(self, report: dict) -> dict:
         """The assignment in the peak rows and the pole figures in the ring rows of ``report``."""
         if self._assignment:
-            report["phase_assignment"] = {key: self._assignment[key] for key in ("phases", "rule", "assignments")}
+            report["phase_assignment"] = dict(self._assignment)
             items = self._assignment.get("assignments") or []
             for row in report.get("peaks") or []:
                 match = min(items, key=lambda item: abs(item["q"] - row.get("q", math.inf)), default=None)
                 if match is not None and abs(match["q"] - row.get("q", math.inf)) < 1e-9 + 1e-6 * match["q"]:
-                    row.update({key: match.get(key) for key in ("phase", "hkl", "q_hkl", "delta_q", "delta_sigma")})
+                    row.update({key: match.get(key) for key in ("phase", "hkl", "q_hkl", "delta_q", "delta_sigma",
+                                                                 "relative_d", "ambiguous", "tolerance", "tentative")})
                     row["alternatives"] = match.get("alternatives") or []
-        for row in report.get("rings") or []:
-            pole = min(getattr(self, "_poles", None) or [], key=lambda entry: abs(entry[0] - row.get("q", math.inf)),
-                       default=None)
-            if pole is not None and abs(pole[0] - row.get("q", math.inf)) <= 2e-3 * pole[0]:  # row q: 4 digits
-                row["pole_figure"] = pole_summary(pole[1])
         return report
+
+
+def fit_ring_pole(workbench, ring, background=None) -> dict:
+    """Use the Phases fit so the tool, automatic report and dialog share one set of numbers."""
+    fit = getattr(workbench, "pole_figure", None)
+    if fit is None:
+        return {}
+    try:
+        record = fit(background=background, model=POLE_MODEL, chi0_deg=pole_direction(ring))
+    except ValueError as error:
+        record = {"ok": False, "message": str(error)}
+    return pole_summary(record)
 
 
 def pole_summary(record: dict) -> dict:
@@ -140,44 +134,54 @@ def pole_summary(record: dict) -> dict:
         if key in values:
             summary[key] = values[key]
             summary[f"{key}_err"] = errors.get(key)
-    for key in ("herman_measured", "reduced_chi2", "points", "weighted_coverage", "fitted_up_to_chi_deg",
+    for key in ("herman_measured", "herman_measured_err", "reduced_chi2", "points", "weighted_coverage", "fitted_up_to_chi_deg",
                 "lorentz_corrected_input"):
         summary[key] = record.get(key)
+    summary["at_bound"] = list(record.get("at_bound") or ())
+    summary["quality_reasons"] = list(record.get("quality_reasons") or ())
+    if not summary["ok"] and not summary["quality_reasons"]:
+        summary["quality_reasons"].append(summary["message"] or "fit did not converge")
+    for key in ("systematics", "converged", "min_exit_deg", "exit_angle_source", "polarization"):
+        if key in record:
+            summary[key] = record[key]
     background = record.get("background")
     summary["background"] = background.get("value") if isinstance(background, dict) else background
     return summary
 
 
+def measured_f_text(value, sigma=None, limits=None, *, stat_label="stat") -> str:
+    """Measured f and its uncertainties to three significant digits."""
+    def number(amount):
+        return f"{float(amount):#.3g}".removesuffix(".").replace("-", "−")
+    text = number(value)
+    if sigma is not None:
+        text += f" ± {number(sigma)} ({stat_label})"
+    if limits is not None:
+        text += f" [{number(limits[0])}, {number(limits[1])}]"
+    return text
+
+
+def pole_estimate(pole: dict, key: str) -> str:
+    value, error = pole.get(key), pole.get(f"{key}_err")
+    if value is None or not math.isfinite(value):
+        return "—"
+    estimate = f"{value:#.3g}".removesuffix(".")
+    if error is not None and math.isfinite(error) and error > 0:
+        estimate += " ± " + f"{error:#.3g}".removesuffix(".")
+    return estimate
+
+
 def pole_line(pole: dict) -> str:
-    """One line of report.md for a ring's pole figure."""
+    """One line beside the measured f, with a verdict on the fit before its estimates."""
+    reasons = pole.get("quality_reasons") or []
+    lead = ("not determined (" + ", ".join(reasons) + "). " if reasons else "")
     if not pole.get("ok"):
-        return f"pole figure: no fit ({pole.get('message') or 'no result'})"
+        return "pole figure: " + (lead.rstrip() or "not determined")
 
-    def pm(key: str, digits: int) -> str:
-        error = pole.get(f"{key}_err")
-        text = _short(pole.get(key), digits)
-        return text + (f" ± {error:.{digits}f}" if error is not None and math.isfinite(error) and error > 0 else "")
-
-    return (f"pole figure (Gaussian + isotropic): oriented fraction {pm('oriented_fraction', 3)}, "
-            f"FWHM {pm('fwhm_deg', 1)}°, χ0 = {pm('chi0_deg', 1)}°, f = {pm('herman', 3)} (missing wedge filled; "
-            f"from the measured bins {_short(pole.get('herman_measured'), 3)}), χ²_red = "
-            f"{_short(pole.get('reduced_chi2'), 1)}" + (f"; {pole['message']}" if pole.get("message") else "")
-            + ("; poor fit (χ²_red above 10): one Gaussian and an isotropic part do not describe this ring"
-               if (pole.get("reduced_chi2") or 0.0) > POOR_FIT else ""))
-
-
-def assignment_lines(report: dict) -> list[str]:
-    """The *Phase assignment* section of report.md (empty without phases)."""
-    found = report.get("phase_assignment")
-    if not found:
-        return []
-    names = ", ".join(phase.get("name", "?") for phase in found.get("phases") or ())
-    lines = [f"Phases given: {names}. Rule: {found.get('rule')}.", ""]
-    for item in found.get("assignments") or []:
-        others = "; ".join(f"{other['phase']} {other['hkl']} ({other['delta_q']:+.4f})"
-                           for other in item.get("alternatives") or [])
-        lines.append(f"- {assignment_text(item)}" + (f"; also within the window: {others}" if others else ""))
-    return lines
+    return (f"pole figure (Gaussian + isotropic): {lead}f = {pole_estimate(pole, 'herman')}, "
+            f"oriented fraction 1 − φ = {pole_estimate(pole, 'oriented_fraction')}, FWHM {pole_estimate(pole, 'fwhm_deg')}°, "
+            f"χ0 = {_short(pole.get('chi0_deg'), 1)}°, χ²_red = {_short(pole.get('reduced_chi2'), 1)}. "
+            "1 − φ is conditional on the background b.")
 
 
 __all__ = ["PhaseStepsMixin", "assignment_lines", "assignment_text", "pole_direction", "pole_line", "pole_summary"]

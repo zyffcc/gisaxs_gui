@@ -11,7 +11,7 @@ from src.gimap.shared import fit_names
 
 SHOWN = ("R", "sigma_R", "h", "sigma_h", "D", "sigma_nn")
 """The populations' values listed in Fit details."""
-VALUES = "Values in Model with their 68 % posterior intervals (refined value [interval]): {values}."
+VALUES = "Values in Model with their 68 % posterior intervals extended to include the least-squares value — {values}."
 VALUES_BIC = "Values in Model with 68 % intervals from the least-squares errors (refined value [interval]): {values}."
 ONLY_ONE = "Only this composition was tried: no probability."
 AMONG_ONE = "Probability {p} among the solutions of the one composition that was tried."
@@ -87,6 +87,8 @@ def _shown(solution, many: bool):
 def probability_line(solution, solutions) -> str:
     if solution.probability is None:
         return ""
+    if "bic" in solution.flags:
+        return trf("BIC weight {weight} among the solutions compared.", weight=f"{solution.probability:.3g}")
     if solution.tried == 1:
         same = [s for s in solutions if s.tried == 1 and s.probability is not None]
         return tr(ONLY_ONE) if len(same) <= 1 else trf(AMONG_ONE, p=f"{solution.probability:.2f}")
@@ -94,19 +96,29 @@ def probability_line(solution, solutions) -> str:
 
 
 def solution_lines(solution, solutions, many: bool) -> list[str]:
-    """Fit details of the solution in Model: the refined values with their intervals (never the median), the
-    probability, the points of χ²ᵣ; then the flags of the populations and of the solution, one line each, and the
-    flags of background, beam tail and resolution in one paragraph."""
+    """Fit details of the kept mode, with separate least-squares and sampled estimates."""
     flags = tuple(solution.flags)
     by_errors = "bic" in flags
     shown = list(_shown(solution, many))
     lines = []
     if shown:
         parts = [f"{label} {fit_names.interval_text(best, low, high, unit)}" for _n, label, unit, best, low, high in shown]
-        lines.append(trf(VALUES_BIC if by_errors else VALUES, values="; ".join(parts)))
+        template = VALUES_BIC if by_errors else VALUES
+        if by_errors and any(row[6] is None for _, row in solution.intervals):
+            template = "Values in Model with reported 68 % intervals. Least-squares errors are used where available — {values}."
+        lines.append(trf(template, values="; ".join(parts)))
+    medians = []
+    for name, sampled in getattr(solution, "posterior_summary", {}).items():
+        label = fit_names.display_name(name, many, tr)
+        interval = fit_names.interval_text(sampled["median"], sampled["low68"], sampled["high68"], fit_names.unit_of(name))
+        medians.append(f"{label} {interval}")
+    if medians:
+        lines.append(trf("Posterior median [central 68 % interval] — {values}.", values="; ".join(medians)))
     chance = probability_line(solution, solutions)
     if chance:
         lines.append(chance)
+    lines.extend(trf(template, **values) for template, values in
+                 fit_names.diagnostic_lines(getattr(solution, "diagnostics", {}), getattr(solution, "ess", None)))
     if solution.points:
         lines.append(trf(POINTS, points=points_text(solution.points)))
     if not by_errors:

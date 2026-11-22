@@ -111,15 +111,18 @@ class PredictProgressMixin:
             return
         finished, total = kept[1], kept[2]
         self.session.predict_run = {"stopped": True, "finished": finished, "total": total}
+        message = ("Stopped. {solutions} kept after sampling {finished} of {total} solutions. "
+                   "BIC weights refer to the finished solutions.") if any("bic" in s.flags for s in solutions) else KEPT
         self._solutions_found(solutions, curve, selection, message=lambda: trf(
-            KEPT, solutions=count_solutions(len(solutions)), finished=finished, total=total))
+            message, solutions=count_solutions(len(solutions)), finished=finished, total=total))
 
 
 def as_solutions(items, *, incomplete: bool = False) -> list[Solution]:
     """``Predicted`` solutions of the job as the session keeps them."""
     return [Solution(p.model, p.chi2, f"Predict parameters · {p.name}", 0.0, probability=p.probability,
                      intervals=tuple(p.intervals.items()), flags=p.flags, points=points_tuple(p.points), tried=p.tried,
-                     composition=p.name, ess=p.ess, incomplete=incomplete) for p in items]
+                     composition=p.name, ess=p.ess, incomplete=incomplete, diagnostics=p.diagnostics,
+                     posterior_summary=p.posterior_summary, importance_starts=p.importance_starts) for p in items]
 
 
 def partial_solutions(encoded, tried) -> list[Solution]:

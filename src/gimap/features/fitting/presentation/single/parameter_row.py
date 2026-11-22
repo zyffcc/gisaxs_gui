@@ -27,7 +27,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
 
 from ...application.fit_uncertainty import parameter_name
-from ...application.single_fit import INFO, LINEAR, parameter_text
+from ...application.single_fit import INFO, LINEAR, parameter_info, parameter_text
 from ..layout_primitives import ScientificDoubleSpinBox
 
 VALUE_LIMIT = 1e15
@@ -84,9 +84,9 @@ def set_value(box: ScientificDoubleSpinBox, value: float) -> None:
     box.blockSignals(False)
 
 
-def label_text(key: str) -> str:
+def label_text(key: str, component=None) -> str:
     """“Tail w (nm⁻¹)”: the name in the interface language, the unit as it is."""
-    info = INFO[key]
+    info = parameter_info(component, key)
     return tr(info.label) + (f" ({info.unit})" if info.unit else "")
 
 
@@ -106,8 +106,10 @@ class ParameterRow:
         self.editor, self.path = editor, path
         parameter = editor.model.get(path)
         key = path[1]
-        self.name = Elided(label_text(key), parent, 44)
-        self.name.setToolTip(tr(INFO[key].tip) + "\n" + trf("Name in links: {name}", name=parameter_name(path)))
+        component = None if path[0] == "globals" else editor.model.components[path[0]]
+        info = parameter_info(component, key)
+        self.name = Elided(label_text(key, component), parent, 44)
+        self.name.setToolTip(tr(info.tip) + "\n" + trf("Name in links: {name}", name=parameter_name(path)))
         self.value = spin(parent, parameter.value, f"fitValue_{path[0]}_{key}", VALUE_WIDTH, fixed=True)
         self.error = Elided("", parent, 40)
         self.error.setObjectName(f"fitError_{path[0]}_{key}")

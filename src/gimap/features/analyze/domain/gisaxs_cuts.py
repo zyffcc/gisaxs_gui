@@ -30,7 +30,7 @@ from typing import Any, Mapping, Optional
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry
-from src.gimap.shared.geometry.q_inverse import alpha_f_of_qz, q_of_positions, two_theta_f_of_qy
+from src.gimap.shared.geometry.q_inverse import alpha_f_of_qz, q_of_positions, qy_on_horizon, two_theta_f_of_qy
 
 from .binning import BinnedMean, native_profile
 from .curve_errors import PixelErrors, pixel_errors
@@ -333,6 +333,7 @@ def row_band_q(geometry: DetectorGeometry, start: float, stop: float) -> dict[st
     the automatic horizontal cut lies in q (its pixels are whole rows, so off the column the q_z of an edge changes
     a little)."""
     _qy, qz = q_of_positions(geometry, np.full(2, geometry.beam_center_x_px), np.array([stop, start], dtype=float))
+    qz = np.sort(qz)
     alpha = alpha_f_of_qz(geometry, qz)
     return {"qz_edges": [float(value) for value in qz], "alpha_f_edges_deg": [float(value) for value in alpha]}
 
@@ -340,7 +341,7 @@ def row_band_q(geometry: DetectorGeometry, start: float, stop: float) -> dict[st
 def column_band_q(geometry: DetectorGeometry, start: float, stop: float) -> dict[str, list[float]]:
     """The q_y and 2θ_f of a band of columns' edges on the sample horizon (α_f = 0): where the automatic vertical cut
     lies in q."""
-    qy, _qz = q_of_positions(geometry, np.array([start, stop], dtype=float), np.full(2, geometry.horizon_row()))
+    qy = np.sort(qy_on_horizon(geometry, [start, stop]))
     angle = two_theta_f_of_qy(geometry, qy)
     return {"qy_edges": [float(value) for value in qy], "two_theta_f_edges_deg": [float(value) for value in angle]}
 

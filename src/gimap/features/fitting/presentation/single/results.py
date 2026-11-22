@@ -21,6 +21,8 @@ from PyQt5.QtWidgets import QFileDialog, QHeaderView, QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
 
+from src.gimap.shared import fit_names
+from ...application.solution_export import posterior_by_path
 from ...application.single_fit import (
     GRAZING,
     INFO,
@@ -179,7 +181,7 @@ class FitResultsMixin:
     """Needs the page's widgets, ``session``, ``_status``, ``_log`` and ``_data``."""
 
     def setup_results(self) -> None:
-        self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), "±"])
+        self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), "±", tr("posterior median")])
         self.parameters_table.horizontalHeaderItem(2).setToolTip(tr(PLUS_HEADER_TIP))
         self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", "χ²", "p"])
         self.use_solution_button.clicked.connect(self.use_selected_solution)
@@ -240,7 +242,7 @@ class FitResultsMixin:
         header = self.parameters_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)  # a long name is cut short (its tooltip has it whole)
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), "±"])
+        self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), "±", tr("posterior median")])
         self.parameters_table.horizontalHeaderItem(2).setToolTip(tr(PLUS_HEADER_TIP))
         session = self.session
         result = session.result
@@ -252,6 +254,9 @@ class FitResultsMixin:
                                            "and the error of every value.",
                                            solutions=predict_texts.count_solutions(len(session.solutions)))
                                        + self._incomplete_note())
+            current = next((s for s in session.solutions if s.model == session.model), None)
+            if current and any(flag.split(":")[0] in fit_names.GRAZING_FLAGS for flag in current.flags):
+                self.quality_label.setText(tr("Needs attention") + " · " + current.label)
             self.warnings_label.setText("\n".join(self.posterior_lines() + search_note))
             self.warnings_label.setToolTip("")
             stale = tr("Changed after the fit: Fit again") + " · " if old_search else ""
@@ -343,6 +348,8 @@ class FitResultsMixin:
     def _incomplete_note(self) -> str:
         if not any(getattr(solution, "incomplete", False) for solution in self.session.solutions):
             return ""
+        if any("bic" in s.flags for s in self.session.solutions):
+            return "\n⚠ " + tr("Incomplete. BIC weights refer to the finished solutions.")
         return "\n⚠ " + tr("Incomplete: Predict was stopped; these are the solutions it finished, their probabilities "
                            "over those alone.")
 
@@ -350,6 +357,11 @@ class FitResultsMixin:
         rows = []
         predicted = None if result is not None else next(  # a solution of Predict in Model: ± from its interval
             (s for s in self.session.solutions if s.model == self.session.model and s.intervals), None)
+        posterior = posterior_by_path(predicted) if predicted else {}
+        self.parameters_table.setColumnHidden(3, predicted is None)
+        self.parameters_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.parameters_table.horizontalHeaderItem(1).setText(tr("least-squares\nvalue") if predicted else tr("value"))
+        self.parameters_table.horizontalHeaderItem(3).setToolTip(tr("Posterior median. Hover over a value for its central 68 % interval."))
         for path, parameter in self.session.model.parameters():
             if self._unused(path, parameter):
                 continue  # an unused term (no resolution peak, no background, spheres at q_z = 0)
@@ -362,14 +374,18 @@ class FitResultsMixin:
             if result is not None and parameter.free and not plus:  # a free value the fit gives no error for
                 plus, why = "–", predict_texts.no_error_reason(path, parameter, result, self.session.model)
             plus, why = self.flag_cell(path, result, plus, why)
-            rows.append(((self._path_name(path), full), value, (plus, why)))
+            rows.append(((self._path_name(path), full), value, (plus, why), posterior.get(path)))
         self.parameters_table.setRowCount(len(rows))
         self._row_paths = [path for path, parameter in self.session.model.parameters()
                            if not self._unused(path, parameter)]
-        for line, ((name, full), value, (plus, why)) in enumerate(rows):
+        for line, ((name, full), value, (plus, why), sampled) in enumerate(rows):
             self.parameters_table.setItem(line, 0, _item(name, full))
             self.parameters_table.setItem(line, 1, _item(value))
             self.parameters_table.setItem(line, 2, _item(plus, why))
+            median = f"{sampled['median']:.5g}" if sampled else "—"
+            interval = (fit_names.interval_text(sampled["median"], sampled["low68"], sampled["high68"])
+                        if sampled and "low68" in sampled else "")
+            self.parameters_table.setItem(line, 3, _item(median, interval))
         fit_to_rows(self.parameters_table)  # every row shown: only the step's page scrolls
 
     def _fill_solutions(self) -> None:
@@ -381,9 +397,11 @@ class FitResultsMixin:
         searched = self.session.solutions_searched()  # its χ²ᵣ computed here (run.py); else Analyze's fit
         predicted = any(s.points or s.probability is not None for s in solutions) or not searched
         chi = "χ²ᵣ" if predicted or curve is None or curve.sigma is not None else "var ln I"
-        self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", chi, "p"])
+        bic = any("bic" in s.flags for s in solutions)
+        weight = tr(fit_names.BIC_WEIGHT) if bic else "p"
+        self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", chi, weight])
         for column, tip in ((2, tr(predict_texts.SIZES_TIP)), (3, tr(predict_texts.SIZES_TIP)),
-                            (4, predict_texts.chi2_definition() if chi == "χ²ᵣ" else ""), (5, tr(predict_texts.P_TIP))):
+                            (4, predict_texts.chi2_definition() if chi == "χ²ᵣ" else ""), (5, weight if bic else tr(predict_texts.P_TIP))):
             self.solutions_table.horizontalHeaderItem(column).setToolTip(tip)
         self.solutions_table.setColumnHidden(5, not any(s.probability is not None for s in solutions))
         shown = tuple(solutions)
@@ -403,13 +421,14 @@ class FitResultsMixin:
                 tip += " " + tr("This model differs from the solution by up to {percent} %.").format(
                     percent=f"{100 * solution.deviation:.3g}")
             alone = solution.tried == 1 and len(solutions) == 1  # one composition tried: p is no finding
-            if alone:
+            if alone and not bic:
                 tip += " " + tr(predict_texts.ONLY_ONE)
             if getattr(solution, "incomplete", False):
-                tip += " " + tr("Incomplete: Predict was stopped; its probability is over the solutions finished.")
+                tip += " " + (tr("Incomplete. BIC weights refer to the finished solutions.") if bic else
+                              tr("Incomplete: Predict was stopped; its probability is over the solutions finished."))
             cells = (str(line + 1), labels[line], radii, distances,
                      f"{solution.chi2:.3g}" if math.isfinite(solution.chi2) else "—",
-                     "—" if solution.probability is None or alone else f"{solution.probability:.2f}")
+                     "—" if solution.probability is None or (alone and not bic) else f"{solution.probability:.2f}")
             for column, text in enumerate(cells):
                 self.solutions_table.setItem(line, column, _item(text, tip))
         if fresh or self.solutions_table.currentRow() < 0:  # new solutions: the one in Model is selected

@@ -237,8 +237,9 @@ def model_row(label: str, rows: Sequence[dict], *, error: str = "", halves: str 
     row["model"] = model_name(best)
     row["chi2"] = float(best.get("best_chi2_weighted", math.nan))
     row["log rmse"] = float(best.get("best_log_rmse", math.nan))
-    if best.get("probability") is not None:
-        row["probability"] = float(best["probability"])
+    for key in ("probability", "bic_weight"):
+        if best.get(key) is not None:
+            row[key] = float(best[key])
     for index, component in enumerate(best.get("components") or (), start=1):
         prefix = f"c{index} {component.get('type', '')}"
         row[f"{prefix} weight"] = float(component.get("weight", math.nan))

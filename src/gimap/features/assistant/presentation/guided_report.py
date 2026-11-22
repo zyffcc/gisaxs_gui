@@ -10,6 +10,7 @@ analysed) gets a “Geometry report” with the q map only.
 
 from __future__ import annotations
 
+
 import base64
 import html
 import io
@@ -21,6 +22,7 @@ import numpy as np
 from PyQt5.QtGui import QTextDocument
 
 from src.gimap.app.presentation.i18n import current_language
+from src.gimap.shared import fit_names
 from src.gimap.shared.version import SOFTWARE
 
 from ..application import (
@@ -64,6 +66,7 @@ TITLES = {"gisaxs": "GISAXS report", "giwaxs": "GIWAXS report", "geometry": "Geo
 _GIWAXS_HEADING = "# GIWAXS — "
 _GIWAXS_CLOSING = "Sizes are Scherrer lower bounds"
 GISAXS_CUT_CAPTION = "The horizontal cut I(qy) at the Yoneda band (not fitted here)."
+BIC_CAPTION = "Horizontal cut I(|qy|) on log–log axes, with the fit of highest BIC weight drawn over the data."
 NO_RINGS_CAPTION = "The q map of the analysed frames."
 FIT_COLOURS = ("#1f4e79", "#c62828")
 
@@ -123,6 +126,10 @@ def report_html(
     procedure = procedure or procedure_of(report)
     title = title or TITLES.get(procedure, f"{procedure.upper()} report")
     q_caption, curve_caption = captions or CAPTIONS.get(procedure, CAPTIONS["giwaxs"])
+    if procedure == "gisaxs" and curve_caption == CAPTIONS["gisaxs"][1]:
+        _, solution = chosen_solution((report.get("gisaxs") or {}).get("fit"))
+        if fit_names.weight_key(solution or {}) == "bic_weight":
+            curve_caption = BIC_CAPTION
     frame = str(report.get("frame") or "")
     made = time.strftime("%Y-%m-%d %H:%M")
     return "\n".join((
@@ -195,11 +202,13 @@ def fit_png(report: dict, width: int = 1000) -> Optional[bytes]:
         name = str(top.get("model") or "").replace("_", " ")
         detail = f" R {' / '.join(f'{radius:.3g}' for radius in radii)} nm" if radii else ""  # every population
         chance = probability(top)
-        which = "best fit" if math.isnan(chance) else "most probable fit"  # (a report before Predict: no probability)
+        by_bic = fit_names.weight_key(top) == "bic_weight"
+        which = "best fit" if math.isnan(chance) or by_bic else "most probable fit"
+        kind = fit_names.BIC_WEIGHT if by_bic else "p"
         bounds = ", ".join(bound_phrases(top))
         axes.loglog(q[fitted], model[fitted], "-", color=FIT_COLOURS[1], linewidth=1.4,
                     label=f"{which}: {name}{detail} ("
-                    + ("" if math.isnan(chance) else f"p {chance:.2f}, ")
+                    + ("" if math.isnan(chance) else f"{kind} {chance:.2f}, ")
                     + f"χ²ᵣ {float(top.get('chi2') or 0):.3g})" + (f" ⚠ {bounds}" if bounds else ""))
     axes.set_xlabel("|qy| (Å⁻¹)")
     axes.set_ylabel("Intensity")

@@ -211,8 +211,9 @@ Ask AI… 用同样的工具（GIWAXS 或 GISAXS 的结果选项随当前模式�
   `shared/geometry/poni.py`）。不符的文件先询问；有波长的文件保存为配置并被选中，没有波长的打开对话框。
 - **几何对话框**：波长与能量联动，下面一行写来源（文件头、`.poni`、配置、用户）；没有时显示 *Required* 并以警告样式说明，
   保存和导出要等输入；rot1、rot2、rot3（度）。
-- **打开帧时已有帧**（`bindings/frame_import.py`）：询问 Replace / Add to List；追加时读入第一帧的尺寸，另一台探测器的帧拒绝
-  （`application/frame_import.other_detector`）。
+- **打开帧时已有帧**（`bindings/frame_import.py`）：询问 Replace / Add to List（`app/presentation/question_box.ask_choice`，
+  不是 `QMessageBox`；问题开着时再拖入的帧被拒绝，回答后若批处理或自动分析已开始也拒绝）；追加时读入第一帧的尺寸，另一台
+  探测器的帧拒绝（`application/frame_import.other_detector`）。测试：`tests/test_open_frames_question.py`（offscreen 下连开两帧）。
 - **批量导出**：每个文件夹的几何来源一行（`application/batch_geometry.py`）；没有任何帧能有几何时 Export 不可用。
 - **透射模式** `transmission`（命令栏 **SAXS**；`domain/transmission.py`，自动判断在 `application/technique.py`）：
   整环 I(q)、−180°…180° 的 I(χ)、区域、q_y–q_z 图和 −180°…180° 的展开图；没有地平线和 Yoneda 切线。自动分析把它
@@ -336,12 +337,15 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
 - 叠加：`bindings/indexing.IndexingMixin._sync_reflections` 在 `display.py` 画图像、展开图和 GIWAXS 曲线后调用，按当前视图
   （探测器像素、q∥–qz、q–χ）画点、弧线和直线（`reflection_layer.ReflectionLayer`，自己的 pyqtgraph 项，不碰页面的其他项）；
   I(q) 上画每个环的虚线。
-- 科学部分：`domain/crystal/`（晶胞、CIF、对称操作与消光、Cromer–Mann f0、衍射与分组、纤维织构与折射两通道、环的指认、极图模型与拟合），
+- 科学部分：`domain/crystal/`（晶胞、CIF、对称操作与消光、Cromer–Mann f0、衍射与分组、纤维织构与折射两通道、环的指认、极图模型与拟合；
+  CIF 不列对称操作时由空间群生成：`space_group_table.py` 的 Hall 符号表、`hall.py` 的生成、`space_groups.py` 的符号读法与设置选择，
+  生成不了时物相仅给出位置、指认为暂定），
   用例 `application/indexing.py`（物相、叠加、表、指认、记录）和 `application/pole_figure.py`（I(χ) 窗口所在环的极图、背景、CSV）。
 - 给其他组件：`automation_indexing.IndexingAutomationMixin`（`set_phases`、`assign_peaks`、`pole_figure`），经 assistant 的
   `GuiWorkbench` 到 `pipeline_phases.PhaseStepsMixin`：决策 *phase assignment*、峰行的 `phase`/`hkl`/`delta_q`、环行的 `pole_figure`、
   `report.md` 的 *Phase assignment* 一节。
 - 测试：`tests/test_crystal_indexing.py`（LaB₆、MAPbI₃ 消光、纤维点、折射、指认、P08 公开帧、极图拟合恢复）、
+  `tests/test_space_groups.py`（Hall 表每一项的一般位置数和符号的滑移面、螺旋轴，薄膜材料的消光，符号读法，只写空间群的 CIF）、
   `tests/test_indexing_panel.py`（窗口、叠加、导出、中文、自动分析的指认与极图）。
 - 公式：*Physics and Methods* 7.10、7.11；手册 5.9。
 

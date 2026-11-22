@@ -6,8 +6,7 @@
 - the exposure time and monitors come from the header (summed over summed frames) or are typed; a header that lacks
   the value asked for is said, not guessed;
 - a dark frame is subtracted before the background and makes σ the pixel scatter;
-- the Lorentz factor of a fibre texture is GIXSGUI's ``1 / (cos αi cos αf |sin 2θf|)``; the Hermans factor of a
-  Lorentz-corrected I(χ) is not weighted by sin χ again.
+- the detector Lorentz factor weights summed crystalline intensities; ring profiles start before this correction.
 """
 
 from __future__ import annotations
@@ -53,8 +52,10 @@ GISAXS_GEOMETRY = DetectorGeometry(172e-6, 172e-6, 2.5, 120.0, 140.0, 1.0, 0.3)
 LEVEL = 400.0
 
 MAIN_CURVES = {  # (points, Σx, ΣI, Σσ, Σpixels) of each curve with Corrections(), as the release before computed them
+    # GALAXI's automatic vertical band now leaves 15 columns beside the specular rod (the particle model excludes the
+    # rod): 10 columns off the rod instead of 11 on it, hence its new sums.
     "galaxi": {"horizontal": (974, -48.3395814206, 121654.0, 3153.87629673, 4870),
-               "vertical": (638, 119.013875328, 278261.0, 1236.95412207, 7018)},
+               "vertical": (638, 119.013672038, 22873.5, 821.673773407, 6380)},
     "p08": {"radial": (2050, 4901.63819899, 41555.2331458, 1343.12795251, 3731451),
             "in_plane": (1396, 2363.36253493, 13451.4440037, 2930.53001397, 216834),
             "out_of_plane": (1384, 2265.20326733, 40319.2098257, 2859.11223685, 254936),
@@ -125,7 +126,8 @@ def test_with_every_new_option_off_the_curves_and_errors_are_those_of_the_releas
     }
     for name, (frame, mode, geometry, shape) in cases.items():
         analysis = _analyze(InstrumentProfile(name, geometry, None, shape))(AnalysisRequest(
-            path=DATA / frame, mode=mode, profile_name=name, corrections=Corrections(pooled_scatter=False)))
+            path=DATA / frame, mode=mode, profile_name=name,
+            corrections=Corrections(pooled_scatter=False, orientation_min_exit_deg=0.0, orientation_polarization=False)))
         assert analysis.normalisation is None and analysis.intensity_scale is None
         record = analysis_metadata(analysis)
         assert record["normalisation"] is None and not any("normalised" in line or "dark frame" in line
@@ -240,12 +242,23 @@ def test_monitor_names_of_cbf_and_edf_headers_are_offered() -> None:
     assert header_values(nexus) == {"exposure_time_s": 0.1, "monitors": {"/entry/monitor/data": 9.5e6}}
 
 
+@pytest.mark.parametrize("options,reason", [
+    ({"lorentz_band_px": -0.5}, "Lorentz"),
+    ({"orientation_min_exit_deg": 95}, "orientation"),
+    ({"counts_per_adu": 0}, "Counts per ADU"),
+])
+def test_corrections_validate_orientation_and_detector_response(options, reason):
+    with pytest.raises(ValueError, match=reason):
+        Corrections(**options)
+
+
 def test_settings_files_keep_the_dark_frame_the_normalisation_and_the_lorentz_factor(tmp_path: Path) -> None:
     corrections = Corrections(dark_path=str(tmp_path / "dark.tif"), dark_frame=2, dark_scale=0.5, lorentz=True,
                               background_dark_scale=0.25, background_already_dark_subtracted=True,
                               flat_already_dark_subtracted=True, flat_field_floor=0.1,
                               use_profile_response=False, counts_per_adu=1.5, offset_adu=25, error_model="sigma",
                               sigma_path=str(tmp_path / "uncertainty.npy"), poisson_variance="smoothed", pooled_scatter=False,
+                              lorentz_band_px=2.5, orientation_min_exit_deg=0.35, orientation_polarization=False,
                               normalisation=Normalisation(exposure="header", monitor="header", monitor_key="I0",
                                                           transmission=0.8, absolute_factor=1.5e-3))
     record = json.loads(json.dumps(settings_record(AnalyzeSettings(corrections=corrections))))
@@ -254,7 +267,8 @@ def test_settings_files_keep_the_dark_frame_the_normalisation_and_the_lorentz_fa
     for key in ("dark_path", "dark_frame", "dark_scale", "normalisation", "lorentz", "background_dark_scale",
                 "background_already_dark_subtracted", "flat_already_dark_subtracted", "flat_field_floor",
                 "counts_per_adu", "offset_adu", "error_model", "sigma_path", "use_profile_response",
-                "pooled_scatter", "poisson_variance"):
+                "pooled_scatter", "poisson_variance", "lorentz_band_px",
+                "orientation_min_exit_deg", "orientation_polarization"):
         old["corrections"].pop(key)
     assert settings_from_record(old).corrections == Corrections()  # a file of the release before: all off
 
@@ -293,19 +307,14 @@ def test_the_lorentz_factor_is_gixsgui_s_fibre_texture_factor() -> None:
     cos_exit = np.sqrt(1.0 - sin_exit**2)
     sin_2theta_f = np.abs(across) / cos_exit  # across = cos αf sin 2θf
     expected = 1.0 / (math.cos(GEOMETRY.incidence_rad) * cos_exit * sin_2theta_f)
-    finite = np.isfinite(expected)
+    finite = np.isfinite(expected) & (np.abs(across) >= 2 * GEOMETRY.pixel_size_x_m / GEOMETRY.distance_m)
+    assert np.isinf(factor[~finite]).all()
     np.testing.assert_allclose(factor[finite], expected[finite], rtol=1e-5)
-    # Near the beam 1/L ≈ (q/k) sin χ: the sin χ weight of the Hermans factor, made exact.
-    k = 2 * math.pi / GEOMETRY.wavelength_angstrom
-    from src.gimap.features.analyze.domain import giwaxs as giwaxs_domain
-
-    maps = giwaxs_domain.giwaxs_maps(SHAPE, GEOMETRY)
-    approx = (maps.q / k) * np.abs(np.sin(np.radians(maps.chi_deg)))
-    near = maps.above_horizon & (maps.q < 0.3 * maps.q.max()) & (np.abs(maps.chi_deg) > 20)
-    np.testing.assert_allclose(1.0 / factor[near], approx[near], rtol=0.05)
+    wider = intensity_factor(SHAPE, GEOMETRY, lorentz=True, lorentz_band_px=5.0)
+    np.testing.assert_array_equal(np.isinf(wider), np.abs(across) < 5 * GEOMETRY.pixel_size_x_m / GEOMETRY.distance_m)
 
 
-def test_lorentz_corrected_rings_count_crystallites_and_record_the_formula(tmp_path: Path) -> None:
+def test_lorentz_corrected_radial_sums_and_records_the_formula(tmp_path: Path) -> None:
     path = _save_int(tmp_path / "ring.tif", np.random.default_rng(5).poisson(LEVEL, SHAPE))
     analyze = _analyze(InstrumentProfile("synthetic", GEOMETRY, None, SHAPE))
     request = AnalysisRequest(path=path, mode="giwaxs", profile_name="synthetic", corrections=Corrections(bad_pixels=False))
@@ -316,23 +325,114 @@ def test_lorentz_corrected_rings_count_crystallites_and_record_the_formula(tmp_p
     np.testing.assert_allclose(corrected.data[valid], (plain.data / factor)[valid], rtol=1e-5)
     np.testing.assert_allclose(corrected.intensity_scale[valid], (1.0 / factor)[valid], rtol=1e-5)
     record = analysis_metadata(corrected)["intensity_corrections"]
-    assert "GIXSGUI" in record["lorentz"]["formula"] and "not weighted by sin(chi) again" in record["lorentz"]["orientation"]
+    assert "GIXSGUI" in record["lorentz"]["formula"] and "before the Lorentz" in record["lorentz"]["orientation"]
+    radial = corrected.reduction.curve("radial")
+    assert radial.y_label == "I (summed counts)"
+    assert fit_input_observation(corrected)["intensity_unit"] == "summed counts"
+    from src.gimap.features.analyze.domain.giwaxs import giwaxs_maps
+    usable = valid & giwaxs_maps(SHAPE, GEOMETRY).above_horizon
+    np.testing.assert_allclose(radial.intensity.sum(), corrected.data[usable].sum(dtype=float))
+    np.testing.assert_allclose(np.sum(radial.sigma**2),
+                               (corrected.data[usable] * corrected.intensity_scale[usable]).sum(dtype=float))
     assert error_model(corrected) == "scaled_poisson"
 
 
-def test_the_hermans_factor_of_a_lorentz_corrected_ring_is_not_weighted_twice() -> None:
-    chi = np.arange(-89.5, 90.0, 1.0)
-    density = 1.0 + 4.0 * np.exp(-0.5 * (chi / 15.0) ** 2)  # pole density: oriented along the normal
-    sigma = np.full(chi.shape, 0.02)
-    measured = ring_orientation(Profile.of(chi, 100.0 * density, sigma, np.ones_like(chi)), q_window=(1.0, 1.1))
-    corrected = ring_orientation(Profile.of(chi, 100.0 * density * np.abs(np.sin(np.radians(chi))), sigma,
-                                            np.ones_like(chi)), q_window=(1.0, 1.1), lorentz=True)
-    assert corrected.herman == pytest.approx(measured.herman, abs=0.01)  # one sin χ, not two
-    twice = ring_orientation(Profile.of(chi, 100.0 * density * np.abs(np.sin(np.radians(chi))), sigma,
-                                        np.ones_like(chi)), q_window=(1.0, 1.1))
-    assert twice.herman < measured.herman - 0.1  # what weighting it again would have given
-    assert corrected.herman_isotropic == pytest.approx(measured.herman_isotropic)
-    assert "not weighted by sin χ again" in corrected.notes[0]
+@pytest.mark.parametrize("pole", [20.0, 80.0])
+@pytest.mark.parametrize("poisson", [False, True], ids=["expectation", "poisson"])
+def test_detector_fibre_ring_recovers_analytic_f_with_either_lorentz_setting(tmp_path, pole, poisson):
+    from scipy.integrate import quad
+    from src.gimap.features.analyze.domain import GiwaxsSettings
+    from src.gimap.features.analyze.domain.giwaxs import giwaxs_maps
+
+    geometry = DetectorGeometry(0.0001, 0.0001, 0.2, 300.5, 286.5, 1.0, 0.01)
+    shape, window = (306, 605), (0.74, 0.79)
+    maps = giwaxs_maps(shape, geometry)
+    ring = (maps.q >= window[0]) & (maps.q <= window[1])
+    # A flat radial top across the selected band isolates the angular quadrature from radial sampling.
+    def density(chi):
+        return np.exp(-4 * np.log(2) * ((chi - pole) / 10.0)**2)
+
+    polar = intensity_factor(shape, geometry, polarization=0.99)
+    expected_counts = polar * (3 + 90 * ring * density(abs(maps.chi_deg)))
+    if poisson:
+        raw = np.random.default_rng(22).poisson(expected_counts)
+    else:  # Quantise the expected signal to whole photons, preserving the total to the nearest photon.
+        cumulative = np.rint(np.cumsum(expected_counts, dtype=float))
+        raw = np.diff(cumulative, prepend=0).reshape(shape)
+    path = _save_int(tmp_path / "fibre.tif", raw)
+    analyze = _analyze(InstrumentProfile("fibre", geometry, None, shape))
+    request = AnalysisRequest(path, mode="giwaxs", profile_name="fibre", with_map=False,
+                              giwaxs=GiwaxsSettings(chi_q_window=window))
+    def integral(power):
+        return quad(lambda angle: density(np.degrees(angle)) * np.sin(angle) * np.cos(angle)**power,
+                    0, np.pi/2)[0]
+    expected = (3 * integral(2) / integral(0) - 1) / 2
+    results = []
+    for lorentz in (False, True):
+        frame = analyze(replace(request, corrections=Corrections(bad_pixels=False, lorentz=lorentz)))
+        curve = frame.reduction.curve("azimuthal")
+        assert min(abs(curve.x)) > 2.0  # the actual missing wedge
+        assert curve.region["min_exit_deg"] == 2 * geometry.incidence_deg
+        assert curve.region["polarization"] == 0.99
+        result = ring_orientation(Profile.of(curve.x, curve.intensity, curve.sigma, curve.pixels),
+                                  q_window=window, background=3)
+        assert abs(result.herman - expected) <= (2 if poisson else 1) * result.herman_err
+        results.append(curve)
+    for key in ("x", "intensity", "sigma", "pixels"):
+        np.testing.assert_array_equal(getattr(results[0], key), getattr(results[1], key))
+
+
+@pytest.mark.parametrize("critical,override,nominal", [(None, None, 0.4), (0.13, None, 0.26), (0.13, 1.4, 1.4)])
+def test_exit_angle_is_cut_on_detector_pixels_before_azimuthal_binning(critical, override, nominal):
+    from src.gimap.features.analyze.domain import GiwaxsSettings, reduce_giwaxs
+    from src.gimap.features.analyze.domain.giwaxs import giwaxs_maps
+    geometry = replace(GEOMETRY, incidence_deg=0.2)
+    if critical:
+        geometry = geometry.with_critical_angle(critical)
+    maps = giwaxs_maps(SHAPE, geometry)
+    window = (0.2, 0.8)
+    along, x, y = geometry_rays(geometry, (0, SHAPE[0]), (0, SHAPE[1]))
+    _, _, sin_exit = exit_directions(x, y, along, geometry.incidence_rad)
+    valid = np.ones(SHAPE, bool)
+    p = intensity_factor(SHAPE, geometry, polarization=0.99)
+    reduction = reduce_giwaxs(100.0 * p, valid, geometry, GiwaxsSettings(chi_q_window=window), maps=maps,
+                              with_map=False, corrections=Corrections(orientation_min_exit_deg=override))
+    for multiplier, curve in reduction.orientation_profiles.items():
+        assert curve.region["min_exit_deg"] == pytest.approx(nominal * multiplier)
+        kept = (maps.above_horizon & (maps.q >= window[0]) & (maps.q <= window[1])
+                & (sin_exit >= math.sin(math.radians(nominal * multiplier))))
+        assert np.sum(curve.pixels) == kept.sum()
+        np.testing.assert_allclose(curve.intensity, 100, rtol=1e-6)
+
+
+def test_orientation_of_summed_frames_keeps_profile_gain_and_propagated_variance(tmp_path):
+    from src.gimap.features.analyze.domain import GiwaxsSettings
+
+    path = _save_int(tmp_path / "film.tif", np.full(SHAPE, 52))
+    background = _save_int(tmp_path / "prepared.tif", np.full(SHAPE, 3))
+    sigma_path = tmp_path / "sigma.npy"
+    np.save(sigma_path, np.full(SHAPE, 3.0))
+    profile = InstrumentProfile("integrating", GEOMETRY, detector_shape=SHAPE,
+                                detector_response=DetectorResponse(2.0, 40.0, "sigma", str(sigma_path)))
+    corrections = Corrections(bad_pixels=False, lorentz=True, mirror_fill=True, background_path=str(background),
+                              background_already_dark_subtracted=True)
+    analyze = _analyze(profile)
+    frame = analyze(AnalysisRequest(path, mode="giwaxs", summed_frames=((path, 0),), corrections=corrections,
+                                    giwaxs=GiwaxsSettings(chi_q_window=(0.2, 0.8)), with_map=False))
+    curve = frame.reduction.curve("azimuthal")
+    assert curve.pixels.sum() > 0 and curve.region["error_model"] == "sigma_frame"
+    used = analyze.source_masks(frame, ["azimuthal"])["azimuthal"]
+    polar = intensity_factor(SHAPE, GEOMETRY, polarization=0.99)[used]
+    # Two exposures, gain 2, offset 40 per exposure, prepared background of six counts.
+    signal = 2 * (2 * 52 - 2 * 40) - 6
+    variance = (2 * 3)**2 + 6  # supplied sample variance plus independent background counts
+    np.testing.assert_allclose(curve.intensity @ curve.pixels, np.sum(signal / polar, dtype=float), rtol=1e-6)
+    np.testing.assert_allclose(np.sum((curve.sigma * curve.pixels)**2),
+                               np.sum(variance / polar**2, dtype=float), rtol=1e-6)
+    record = analysis_metadata(frame)
+    assert record["error_model"] == "pixel_scatter"  # mirror-filled radial channel
+    assert any(source["file"] == sigma_path.name and source["sha256"] for source in record["input_sha256"])
+    assert "ring orientation error model: sigma_frame" in provenance_lines(record, "Analyze")
 
 
 # -- exports ---------------------------------------------------------------------------------------------------------

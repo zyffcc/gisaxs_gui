@@ -24,6 +24,16 @@ OUTSIDE_COLOR, MODEL_COLOR, LEFT_OUT_COLOR = "#94a3b8", "#f97316", "#dc2626"
 COMPONENT_COLORS = ("#0d9488", "#8b5cf6", "#b08728", "#b85e9d", "#609f42", "#628ba8")
 
 
+def plotted_model(model, full, data):
+    """Continuous constant-resolution curve, or the model at each measured q with its own dQ."""
+    if model.resolution_mode == "file":
+        if data is None or not data.q.size:
+            raise ValueError("Resolution from the file needs fitted points with dQ.")
+        return data.q, *evaluate(model, data.q, dq=data.dq, parts=True)
+    q = np.geomspace(max(full.q.min(), 1e-6), full.q.max(), MODEL_POINTS)
+    return q, *evaluate(model, q, parts=True)
+
+
 def component_label(name: str) -> str:
     """Human labels only: native keys and exported scientific records stay untouched."""
     if name == "background_B":
@@ -128,9 +138,8 @@ class FitPlotMixin:
                 curves.append((tr(name), q, intensity))
                 colors.append(color)
                 markers.append(True)
-            q_model = np.geomspace(max(full.q.min(), 1e-6), full.q.max(), MODEL_POINTS)
             try:
-                total, parts = evaluate(session.model, q_model, parts=True)
+                q_model, total, parts = plotted_model(session.model, full, data)
             except (ValueError, FloatingPointError):
                 total, parts = None, {}
             if total is not None:

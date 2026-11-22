@@ -159,14 +159,25 @@ class NormalisationView:
         return section
 
     def _lorentz_row(self, section) -> None:
-        self.lorentz_check = QCheckBox("Lorentz factor (fibre texture)", section)
+        self.lorentz_check = QCheckBox("Lorentz factor for peak areas", section)
         self.lorentz_check.setObjectName("analyzeLorentzCheck")
         self.lorentz_check.setToolTip(
-            "Crystallites oriented at random about the surface normal: divide by L = 1/(cos αi cos αf |sin 2θf|) "
-            "(GIXSGUI). I(χ) then counts the crystallites per degree of χ; the Hermans factor of the automatic "
-            "analysis is then not weighted by sin χ again. Only for crystalline peaks: it also scales diffuse "
-            "scattering and the I(q) of a ring")
+            "Weight crystalline intensities by cos αi |qy|/k. The radial curve sums these pixels in each q bin.")
         section.add_widget(self.lorentz_check)
+        form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        self.lorentz_band_spin = _spin(section, 0.0, 100.0, 2.0, 1, " px")
+        self.lorentz_band_spin.setToolTip("Exclude |qy|/k below this many horizontal pixel widths divided by distance.")
+        self.orientation_exit_spin = _spin(section, -0.001, 90.0, -0.001, 3, " °")
+        self.orientation_exit_spin.setSpecialValueText("Automatic")
+        self.orientation_exit_spin.setSingleStep(0.05)
+        self.orientation_exit_spin.setToolTip("Automatic uses twice the film critical angle, or twice the incidence angle.")
+        form.addRow("Incidence-plane half-width", self.lorentz_band_spin)
+        form.addRow("Orientation minimum αf", self.orientation_exit_spin)
+        section.add_layout(form)
+        self.orientation_polar_check = QCheckBox("Polarise ring profiles by default", section)
+        self.orientation_polar_check.setToolTip("Use f = 0.99 for orientation when the frame polarisation is off.")
+        section.add_widget(self.orientation_polar_check)
 
 
 __all__ = ["EXPOSURE_ITEMS", "MONITOR_ITEMS", "NORMALISATION_TIP", "NormalisationView"]

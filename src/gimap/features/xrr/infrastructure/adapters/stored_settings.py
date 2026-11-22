@@ -56,6 +56,9 @@ class SettingsXrrGeometryAdapter:
             timestamp=str(info.get("timestamp") or ""),
             image_shape=_shape(info.get("image_shape")),
             detector=str(info.get("detector") or ""),
+            rot1_deg=_number(info.get("rot1_deg")),
+            rot2_deg=_number(info.get("rot2_deg")),
+            rot3_deg=_number(info.get("rot3_deg")),
         )
         values = (
             geometry.distance_mm, geometry.energy_kev, geometry.pixel_size_x_um,

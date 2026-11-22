@@ -2,9 +2,8 @@
 
 The run is the one Run Automatic Analysis and ``tools/gimap_agent.py auto`` start: an offscreen Analyze page with
 the standard pipeline on it. An αi typed in Analyze's command bar is the αi Analyze uses, so the run takes it and
-does not ask for αi; a list of peaks cut at the cap says so; q is said to be kinematic, the uncertainties to be
-statistical (from the pixel scatter of this floating-point frame); the rings whose f depends on the bins next to
-the sample horizon are named.
+does not ask for αi. The report states the peak cap, the q convention and the statistical error model used
+for this floating-point frame. For the ring orientation it gives the exit-angle cut and a systematic range for f.
 """
 
 from __future__ import annotations
@@ -88,7 +87,9 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) ->
     assert "k·sin αi = 0.0119 Å⁻¹ here (αi = 0.075°, λ = 0.6888 Å)" in q["why"]  # 2π/λ · sin αi
     assert report["error_model"] == "pixel_scatter"  # a floating-point frame
     errors = _decision(report, "uncertainties")
-    assert errors["decision"] == "statistical only" and "scatter of the corrected pixels" in errors["why"]
+    assert errors["decision"] == "statistical ± and systematic range for f"
+    assert "scatter of the corrected pixels" in errors["why"]
+    assert "pixel-scatter uncertainty, not counting noise" in errors["why"]
     assert "pooled variance for points containing fewer than ten pixels" in errors["why"]
 
     search = report["peak_search"]
@@ -106,17 +107,28 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) ->
 
     rule = _decision(report, "texture rule")  # the margin names "along the normal" or "in the plane", not "tilted"
     assert rule["decision"].endswith("|f − f_iso| ≥ max(0.1, 3σ_f)") and "without this margin" in rule["why"]
-    assert any(ring["texture"].startswith("tilted") for ring in report["rings"])  # 2.224 Å⁻¹, f − f_iso below 0.1
-    horizon = _decision(report, "ring orientation")  # on this frame I(χ) falls to the background next to the horizon
-    assert "|χ| ≥ 85°" in horizon["decision"] and "0.9972 (+0.141 → +0.095" in horizon["why"]  # with the .poni tilt (0.31°)
-    assert all(ring.get("herman_excess") is not None for ring in report["rings"])
+    horizon = _decision(report, "ring orientation")
+    assert "αf < 0.15° (2 × αi)" in horizon["decision"] and "factor 0.99" in horizon["decision"]
+    ring = min(report["rings"], key=lambda r: abs(r["q"] - 0.997))
+    assert ring["orientation_settings"]["error_model"] == "pixel_scatter"
+    pole = ring["pole_figure"]
+    low, high = ring["herman_systematic_range"]
+    assert low <= ring["herman"] <= high
+    assert ring["herman"] == pytest.approx(pole["herman_measured"])
+    assert {s["threshold_multiplier"] for s in pole["systematics"]["scenarios"]} == {0.5, 1.0, 2.0}
+    assert pole["systematics"]["background_rule"] == "fitted sigma"
+    assert "reduced χ² exceeds 5" in pole["quality_reasons"]
+    assert any("0.997" in item["why"] and "not determined" in item["why"] for item in report["needs_attention"])
+    assert any("pole fit not determined. Measured f =" in line for line in text.splitlines() if "q ≈ 0.997" in line)
+    assert "1 − φ is conditional on the background b" in text and "(stat) [" in text
 
 
 def test_more_peaks_are_fitted_when_asked_and_a_clean_one_left_out_by_the_cap_is_listed(p08) -> None:
     session, poni = p08
     report = session.run_pipeline(
-        PipelineOptions(calibration=str(poni), incidence_deg=0.075, follow_detection=True, max_peaks=40),
+        PipelineOptions(calibration=str(poni), incidence_deg=0.075, follow_detection=True, max_peaks=40, orientation_min_exit_deg=0.35),
     )
+    assert report["rings"][0]["orientation_settings"]["min_exit_deg"] == 0.35
     found = [peak["q"] for peak in report["peaks"]]
     assert len(found) > 12 and any(abs(q - 3.585) < 0.01 for q in found)  # SNR 33, dropped by the default cap
     assert report["peak_search"]["max_peaks"] == 40

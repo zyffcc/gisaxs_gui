@@ -367,7 +367,7 @@ class CalibrationToolsMixin:
         ending = suffix(path)
         name = Path(path).name
         if ending == ".poni":
-            geometry = parse_poni(self.explorer.read_text(path))
+            geometry = parse_poni(self.explorer.read_text(path), frame_shape=self._frame().get("shape"))
             values = {
                 "distance_mm": geometry.distance_mm,
                 "beam_center_x_px": geometry.beam_center_x_px,

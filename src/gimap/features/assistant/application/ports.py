@@ -41,6 +41,8 @@ class AnalysisWorkbench(Protocol):
 
     def set_incidence(self, degrees: Optional[float]) -> dict: ...
 
+    def set_orientation_min_exit(self, degrees: float) -> dict: ...
+
     def set_critical_angle(self, degrees: Optional[float]) -> dict:
         """The film's critical angle for the refraction of q_z (``None``: kinematic q_z); returns the status."""
         ...
@@ -180,8 +182,8 @@ class GeometryCalibrator(Protocol):
 
 
 class CurveFitter(Protocol):
-    """Predict parameters on one curve (|q| > 0, q in Å⁻¹): the distinct solutions, most probable first
-    (Fitting's ``create_curve_fit``: rows with ``probability``, values, ``posterior`` intervals, curves)."""
+    """Predict parameters on one curve (|q| > 0, q in Å⁻¹), yielding solutions in descending comparison weight.
+    Fitting's ``create_curve_fit`` supplies probability or BIC weight, parameter summaries, diagnostics and curves."""
 
     def __call__(self, q_inv_angstrom, intensity, sigma, *, components=(), report=None, cancelled=None,
                  cut_qz=None) -> list[dict]:

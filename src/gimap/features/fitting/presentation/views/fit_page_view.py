@@ -163,8 +163,7 @@ class FitPageView(FitStepsView):
         self.save_model_action = export_menu.addAction("Model…")
         self.export_solutions_action = export_menu.addAction("Solutions…")
         self.export_solutions_action.setToolTip(
-            "Every solution of Predict parameters: probability, χ²ᵣ, flags and every value with its intervals "
-            "(CSV and JSON), and their curves")
+            "Export each solution's probability or BIC weight, χ²ᵣ, flags, least-squares values, posterior quantiles and fitted curves.")
         self.export_solutions_action.setEnabled(False)
         export_menu.setToolTipsVisible(True)
         self.export_button.setMenu(export_menu)

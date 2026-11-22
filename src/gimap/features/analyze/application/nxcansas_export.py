@@ -82,16 +82,19 @@ def sas_curves(curves: Sequence[Curve], metadata: Mapping[str, Any], *, run: str
         if not against_q(curve):
             continue
         axis = Q_AXES[curve.x_label]
+        summed = bool(curve.region.get("aggregation"))
+        description = f"sum of Lorentz-weighted pixels per q bin ({curve.y_label})" if summed else intensity_description
         record = {**dict(metadata), "curve": {"key": curve.key, "title": curve.title, "x_label": curve.x_label,
-                                             "region": curve.region}}
+                                             "y_label": curve.y_label, "region": curve.region}}
         out.append(SasCurve(
             title=export_text(f"{run}: {curve.title}; Q is {axis}"),
-            q=curve.x, intensity=curve.intensity, sigma=curve.sigma, q_unit=PER_ANGSTROM, intensity_unit=unit,
+            q=curve.x, intensity=curve.intensity, sigma=curve.sigma, q_unit=PER_ANGSTROM,
+            intensity_unit=ARBITRARY if summed else unit,
             run=run, sample=run, instrument=known,
             process="GIMaP Analyze" if written_by == "Analyze" else f"GIMaP Analyze ({written_by})",
             description=export_text(
-                f"Reduced by {RELEASE}: {curve.title}. Q: {axis}, in 1/angstrom. I: {intensity_description}. "
-                f"Idev: the standard error of that mean ({error}). The record "
+                f"Reduced by {RELEASE}: {curve.title}. Q: {axis}, in 1/angstrom. I: {description}. "
+                f"Idev: the standard error of that {'sum' if summed else 'mean'} ({error}). The record "
                 "of the frame (settings, geometry, corrections, inputs with SHA-256) is the NXnote gimap_record."),
             record=json.dumps(record, ensure_ascii=True, sort_keys=True, default=str),
             date=str(metadata.get("created") or ""),

@@ -37,12 +37,12 @@ def _shape_text(shape) -> str:
     return f"{int(shape[0])}×{int(shape[1])}"
 
 
-def read_poni_file(path) -> PoniFile:
+def read_poni_file(path, *, frame_shape=None) -> PoniFile:
     """The ``.poni`` at ``path`` (``ValueError`` when it is no geometry file; ``OSError`` when unreadable)."""
     raw = Path(path).read_bytes()
     for encoding in POSSIBLE_ENCODINGS:
         try:
-            return read_poni(raw.decode(encoding))
+            return read_poni(raw.decode(encoding), frame_shape=frame_shape)
         except UnicodeDecodeError:
             continue
     raise ValueError("The .poni file is not a text file.")
@@ -116,10 +116,10 @@ class SiblingPoni:
     def __init__(self) -> None:
         self._cache: dict[str, _Cached] = {}
 
-    def _read(self, frame_path) -> tuple[Optional[Path], Optional[PoniFile]]:
+    def _read(self, frame_path, shape) -> tuple[Optional[Path], Optional[PoniFile]]:
         folder = Path(frame_path).parent
         try:
-            stamp = (os.stat(folder).st_mtime_ns,)
+            stamp = (os.stat(folder).st_mtime_ns, tuple(shape))
         except OSError:
             return None, None
         path = sibling_poni(frame_path)
@@ -135,7 +135,7 @@ class SiblingPoni:
         poni = None
         if path is not None:
             try:
-                poni = read_poni_file(path)
+                poni = read_poni_file(path, frame_shape=shape)
             except (OSError, ValueError):
                 poni = None
         self._cache[key] = _Cached(stamp, poni, path)
@@ -144,7 +144,7 @@ class SiblingPoni:
     def __call__(self, frame_path, shape, pixel_size_m=None, detector_name: Optional[str] = None) -> Optional[InstrumentProfile]:
         if frame_path is None:
             return None
-        path, poni = self._read(frame_path)
+        path, poni = self._read(frame_path, shape)
         if poni is None or not poni.wavelength_angstrom or poni_problem(poni, shape, pixel_size_m) is not None:
             return None
         named = detector_name or (poni.detector if poni.detector.lower() not in ("", "detector") else None)

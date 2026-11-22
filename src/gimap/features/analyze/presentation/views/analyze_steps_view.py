@@ -348,11 +348,31 @@ class AnalyzeStepsView:
         self.center_menu.addAction(self.save_center_action)
         self.center_button.setMenu(self.center_menu)
         layout.addWidget(self.center_button, 0, Qt.AlignLeft)
+        self.roll_button = QToolButton(page)
+        self.roll_button.setText("Check rot3")
+        self.roll_button.setPopupMode(QToolButton.InstantPopup)
+        roll_menu = QMenu(self.roll_button)
+        self.check_rod_action = roll_menu.addAction("Measure Specular Rod")
+        self.check_band_action = roll_menu.addAction("Measure Horizon or Yoneda Band")
+        self.roll_button.setMenu(roll_menu)
+        layout.addWidget(self.roll_button, 0, Qt.AlignLeft)
+        self.roll_result = QLabel(page)
+        self.roll_result.setWordWrap(True)
+        self.roll_result.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.roll_result)
+        self.roll_button.hide()
+        self.roll_result.hide()
         layout.addStretch(1)
 
     # -- 3 mask and corrections ----------------------------------------------------------
 
     def _mask_step(self, page: QWidget, layout: QVBoxLayout) -> None:
+        # Keep intensity corrections together above the detector errors and mask controls.
+        self.corrections_section.set_expanded(False)
+        layout.addWidget(self.normalisation_section)
+        layout.addWidget(self.corrections_section)
+        layout.addWidget(self.intensity_section)
+        layout.addWidget(self.detector_errors_section)
         card, self.mask_summary_label = info_card(page)
         self.mask_summary_label.setObjectName("analyzeMaskSummary")
         self.mask_summary_label.setToolTip(MASK_TIP)
@@ -369,9 +389,9 @@ class AnalyzeStepsView:
         self.mirror_fill_check = QCheckBox("Fill gaps from the mirror side (GIWAXS)", page)
         self.mirror_fill_check.setObjectName("analyzeMirrorFillCheck")
         self.mirror_fill_check.setToolTip(
-            "GIWAXS is symmetric in ±q∥: a pixel without data (module gap, mask, hot pixel) takes the value "
-            "at its mirror position about the beam-centre column when that one was measured. Filled pixels "
-            "are counted and recorded in the export."
+            "Assumes left–right symmetry of the sample. An unmeasured pixel takes the interpolated intensity "
+            "at the opposite in-plane angle and the same exit angle. Every contributing pixel must be measured. "
+            "The export records how many pixels were filled."
         )
         layout.addWidget(self.mirror_fill_check)
         add_mask_editor(self, page, layout)
@@ -380,11 +400,6 @@ class AnalyzeStepsView:
         self.show_mask_button.setToolTip("Circle every pixel left out (gaps, hot and dead pixels, your masks) on the image")
         self.show_mask_button.setCheckable(True)
         layout.addWidget(self.show_mask_button, 0, Qt.AlignLeft)
-        self.corrections_section.set_expanded(False)
-        layout.addWidget(self.corrections_section)
-        layout.addWidget(self.detector_errors_section)
-        layout.addWidget(self.normalisation_section)
-        layout.addWidget(self.intensity_section)
         layout.addStretch(1)
 
     # -- 4 cuts ------------------------------------------------------------------------

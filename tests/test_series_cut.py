@@ -103,7 +103,7 @@ def test_every_frame_of_a_gisaxs_series_is_cut_where_the_frame_on_screen_is(tmp_
     assert model.series_cut_text() == ("horizontal cut: rows {low}–{high} for every frame", {"low": "202", "high": "206"})
     requests = model.batch_requests()
     assert len(requests) == 5 and {request.gisaxs.horizontal_row for request in requests} == {0.5 * (low + high)}
-    assert {request.gisaxs.vertical_column for request in requests} == {120.0}
+    assert {request.gisaxs.vertical_column for request in requests} == {140.0}
     assert set(_rows_of(model, requests)) == {(202, 207)}  # one cut: the rows of the frame on screen
 
     model.set_pin_series_cuts(False)  # “Find the cut again in every frame”
@@ -124,7 +124,7 @@ def test_a_cut_the_person_set_is_kept_and_said_as_theirs(tmp_path: Path) -> None
     model.set_horizontal_band(190.0, 196.0)
     model.accept(model.analyze(model.request()))
     cut = model.series_cut()  # the vertical cut is still automatic: only that one is pinned
-    assert cut["horizontal_rows"] is None and cut["vertical_columns"] == (115.0, 125.0)
+    assert cut["horizontal_rows"] is None and cut["vertical_columns"] == (135.0, 145.0)
     assert model.series_cut_text() == ("cuts as set by you, the same for every frame", {})
     assert {request.gisaxs.horizontal_row for request in model.batch_requests()} == {193.0}
     model.set_vertical_band(100.0, 110.0)

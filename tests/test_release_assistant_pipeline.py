@@ -173,7 +173,7 @@ def test_a_batch_summary_is_titled_by_the_procedure_that_ran() -> None:
     one = batch_markdown([NO_GEOMETRY, _giwaxs(), UNREADABLE])
     assert one.startswith("# GIWAXS — batch\n") and "##" not in one.split("## Open questions")[0]
     assert "| lonely.tif | needs input | 1 | — | — | — | calibration |" in one
-    assert "| film.tif | OK | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.61 | — |" in one
+    assert "| film.tif | OK | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.610 | — |" in one
     assert batch_markdown([_gisaxs(), UNREADABLE]).startswith("# GISAXS — batch\n")
 
 
@@ -183,7 +183,7 @@ def test_a_mixed_batch_keeps_the_results_of_its_gisaxs_frames() -> None:
     assert text.startswith("# GIMaP — batch\n\n3 frame(s); each has its own report.md.\n")
     giwaxs, gisaxs, rest = text.index("## GIWAXS"), text.index("## GISAXS"), text.index("## Not analysed")
     assert giwaxs < gisaxs < rest < text.index("Open questions")
-    assert "| film.tif | needs input | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.61 | incidence angle αi |" in text[giwaxs:gisaxs]
+    assert "| film.tif | needs input | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.610 | incidence angle αi |" in text[giwaxs:gisaxs]
     # Halves, spacing and best fit of the GISAXS frame: they were dropped from a table of GIWAXS columns.
     row = "| dots.tif | needs input | mean | 53.5 (shoulder) | sphere R 9.40 nm, D 53.4 nm, χ²ᵣ 1.31 | incidence angle αi |"
     assert row in text[gisaxs:rest]
@@ -346,7 +346,7 @@ def test_the_fit_solutions_table_starts_with_what_it_is_and_the_units() -> None:
 # -- the command line, on real images ---------------------------------------------------------------------
 
 
-def test_the_command_line_prints_where_the_calibration_was_found_and_still_exits_0(tmp_path: Path, capsys) -> None:
+def test_the_command_line_distinguishes_the_calibration_notice_from_poor_pole_fits(tmp_path: Path, capsys) -> None:
     from tests.test_assistant_calibration import ENERGY_KEV, agbh_image, giwaxs_frame, save_tiff
     from tools import gimap_agent
 
@@ -359,15 +359,18 @@ def test_the_command_line_prints_where_the_calibration_was_found_and_still_exits
                              "--no-saved-profiles", "--quiet"])
     printed = capsys.readouterr().out
 
-    assert code == gimap_agent.EXIT_DONE  # said, not asked: the exit code is the one of a run with nothing open
-    assert printed.startswith("# GIWAXS — batch") and "P3HT_00012.tif | OK" in printed
+    import json
+    record = json.loads((out / "P3HT_00012" / "report.json").read_text(encoding="utf-8"))
+    assert {item["item"] for item in record["needs_attention"]} == {"pole figure"}
+    assert code == gimap_agent.EXIT_QUESTIONS
+    assert printed.startswith("# GIWAXS — batch") and "P3HT_00012.tif | needs input" in printed
     note = next(line for line in printed.splitlines() if line.startswith("Calibration found by the automatic search"))
     assert str(image) in note and "sibling folder calib, seen from the frame's folder" in note and "1 frame(s)" in note
-    assert "Open questions" not in printed
+    assert "Open questions" in printed
     report = (out / "P3HT_00012" / "report.md").read_text(encoding="utf-8")
     found = next(line for line in report.splitlines() if line.startswith("- found by the automatic search"))
     assert f"`{image}`" in found and "(sibling folder calib, seen from the frame's folder)" in found
     assert report.index("- source: AgBH_00001.tif") < report.index(found) < report.index("- quality: good")
-    assert "Status: **OK**" in report and f"- **{SEARCHED}**: {image} — sibling folder calib" in report
+    assert "Status: **NEEDS INPUT**" in report and f"- **{SEARCHED}**: {image} — sibling folder calib" in report
     assert note in (out / "summary.md").read_text(encoding="utf-8")
     assert not (root / "P3HT_film" / "gimap_analysis").exists() and not (root / "calib" / "gimap_analysis").exists()

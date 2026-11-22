@@ -76,6 +76,9 @@ class NormalisationMixin:
         for edit in (self.monitor_edit, self.absolute_edit):
             edit.editingFinished.connect(self._normalisation_changed)
         self.lorentz_check.toggled.connect(self._lorentz_changed)
+        self.lorentz_band_spin.valueChanged.connect(self._orientation_options_changed)
+        self.orientation_exit_spin.valueChanged.connect(self._orientation_options_changed)
+        self.orientation_polar_check.toggled.connect(self._orientation_options_changed)
         self._sync_normalisation_widgets()
 
     # -- the dark frame -------------------------------------------------------------------
@@ -161,6 +164,13 @@ class NormalisationMixin:
 
     def _lorentz_changed(self, on: bool) -> None:
         self.view_model.set_lorentz(on)
+        self.lorentz_band_spin.setEnabled(on)
+        self._options_changed()
+
+    def _orientation_options_changed(self, *_args) -> None:
+        threshold = self.orientation_exit_spin.value()
+        self.view_model.set_orientation_options(self.lorentz_band_spin.value(), None if threshold < 0 else threshold,
+                                                self.orientation_polar_check.isChecked())
         self._options_changed()
 
     def _fill_monitors(self, monitors: dict) -> None:
@@ -213,6 +223,13 @@ class NormalisationMixin:
         if getattr(self, "_displayed_calibration", None) is not None and norm.absolute_factor is None:
             self.absolute_edit.setText("1")
         self._displayed_calibration = norm.standard_calibration
+        self.lorentz_band_spin.setEnabled(corrections.lorentz)
+        for widget, value in ((self.orientation_exit_spin, corrections.orientation_min_exit_deg),
+                              (self.lorentz_band_spin, corrections.lorentz_band_px)):
+            with QSignalBlocker(widget):
+                widget.setValue(widget.minimum() if value is None else value)
+        with QSignalBlocker(self.orientation_polar_check):
+            self.orientation_polar_check.setChecked(corrections.orientation_polarization)
         for spin, value in ((self.dark_scale_spin, corrections.dark_scale), (self.dark_frame_spin, corrections.dark_frame),
                             (self.exposure_spin, norm.exposure_s), (self.transmission_spin, norm.transmission),
                             (self.thickness_spin, norm.thickness_mm)):

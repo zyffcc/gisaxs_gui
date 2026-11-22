@@ -60,6 +60,10 @@ class OptionsModelMixin:
         """GIWAXS: divide by the Lorentz factor of a fibre texture."""
         self.state.corrections = replace(self.state.corrections, lorentz=bool(on))
 
+    def set_orientation_options(self, band_px: float, minimum_exit: Optional[float], polarize: bool) -> None:
+        self.state.corrections = replace(self.state.corrections, lorentz_band_px=float(band_px),
+                                         orientation_min_exit_deg=minimum_exit, orientation_polarization=polarize)
+
     def set_flat_field(self, path: Optional[str | Path]) -> None:
         """Divide every analysed frame by this flat field (``None`` stops)."""
         self.state.corrections = replace(self.state.corrections, flat_field_path=str(path) if path else None)

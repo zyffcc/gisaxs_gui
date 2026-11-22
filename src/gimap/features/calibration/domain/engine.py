@@ -261,6 +261,8 @@ class CalibrationEngine:
         candidates = candidates[:5]
         if not candidates:
             raise CalibrationError("Calibration candidates were rejected as physically implausible.")
+        for candidate in candidates:
+            candidate.rot3_deg = rot3_deg  # Fixed by the user, including when tilt refinement is skipped.
         if tilt != "off":
             self._stage(92, "Refining detector tilt")
             for candidate in candidates:

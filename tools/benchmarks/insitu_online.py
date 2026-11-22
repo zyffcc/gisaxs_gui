@@ -4,6 +4,7 @@ grown map. Public data only: crops of the GALAXI frame (tests/data/external) wit
 noise, written into a temporary folder.
 
     python tools/benchmarks/insitu_online.py --frames 1000 --burst 50
+    python tools/benchmarks/insitu_online.py --synthetic-mpx 1 4 --frames 8 --json tools/benchmarks/insitu_online.json
 
 Prints one JSON object: frames, seconds per frame (reduction and append, at the end), peak resident memory and its
 growth per 100 frames, map rows and bytes, database size, timeline and stage times. Runs offscreen with a fresh
@@ -56,11 +57,29 @@ def _frames(folder: Path, first: int, count: int, crop) -> None:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--frames", type=int, default=1000)
+    parser = argparse.ArgumentParser(description="Time the folder watch on GALAXI crops or the online processing "
+                                                 "steps on synthetic full-size detectors.")
+    parser.add_argument("--frames", type=int, help="frames per detector (watch: 1000, synthetic: 8)")
     parser.add_argument("--burst", type=int, default=50, help="frames written between two looks at the folder")
     parser.add_argument("--no-record", action="store_true", help="do not record in the results database")
+    parser.add_argument("--synthetic-mpx", type=int, choices=(1, 4), nargs="+",
+                        help="time reduction, cuts, chained fits and Predict at a stage break on synthetic TIFFs")
+    parser.add_argument("--json", type=Path, help="also write the result to this JSON file")
     args = parser.parse_args(argv)
+    if args.frames is None:
+        args.frames = 8 if args.synthetic_mpx else 1000
+    if args.synthetic_mpx:
+        if args.frames < 2:
+            parser.error("the synthetic series needs at least two frames to cross its stage boundary")
+        with tempfile.TemporaryDirectory(prefix="gimap_online_") as temp:
+            _environment(Path(temp) / "home")
+            from tools.benchmarks.insitu_synthetic import benchmark
+
+            report = benchmark(Path(temp), args.synthetic_mpx, args.frames)
+        _write_report(report, args.json)
+        return 0
+    if args.frames < 1 or args.burst < 1:
+        parser.error("--frames and --burst must be positive")
     work = Path(tempfile.mkdtemp(prefix="gimap_online_"))
     _environment(work / "home")
 
@@ -146,8 +165,15 @@ def main(argv=None) -> int:
     }
     page.stop_watch()
     page.dispose()
-    print(json.dumps(report, indent=2))
+    _write_report(report, args.json)
     return 0
+
+
+def _write_report(report: dict, path) -> None:
+    result = json.dumps(report, indent=2, allow_nan=False)
+    print(result)
+    if path is not None:
+        path.write_text(result + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

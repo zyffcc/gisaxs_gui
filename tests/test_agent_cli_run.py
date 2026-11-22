@@ -131,16 +131,17 @@ def test_the_command_expands_its_arguments_and_refuses_what_it_cannot_run(monkey
     seen: dict = {}
 
     def analyse_frames(frames, options, out, **kwargs):
-        seen.update(kwargs, frames=list(frames), out=out)
+        seen.update(kwargs, frames=list(frames), out=out, options=options)
         return [{"ok": True, "frame": frame, "procedure": "giwaxs", "needs_attention": [], "decisions": [], "steps": []}
                 for frame in frames]
 
     monkeypatch.setattr(headless_assistant, "analyse_frames", analyse_frames)
     out = tmp_path / "out"
     code = gimap_agent.main(["auto", str(folder / "*.tif"), "--quiet", "--out", str(out), "--notes", "alpha_i 0.2 deg",
-                             "--overwrite", "--language", "zh"])
+                             "--overwrite", "--language", "zh", "--orientation-min-exit-deg", "0.35"])
     printed = capsys.readouterr().out
     assert code == 0 and [Path(frame).name for frame in seen["frames"]] == ["film_2.tif", "film_10.tif"]
+    assert seen["options"].orientation_min_exit_deg == 0.35
     assert seen["overwrite"] is True and seen["mask"] is None and seen["language"] == "zh"
     assert f"Pattern {folder / '*.tif'}: 2 file(s) matched." in printed and seen["found"] == (f"Pattern {folder / '*.tif'}: 2 file(s) matched.",)
     # The options as they were given, for the record: the pattern itself, the notes, and no function.
@@ -280,15 +281,16 @@ def test_every_csv_starts_with_the_same_lines_that_name_the_inputs(two_of_one_na
     digest = _sha256(Path(two_of_one_name["frames"][0]))
     tables = sorted(folder.glob("*.csv"))
     assert {path.name for path in tables} == {"horizontal.csv", "vertical.csv", "fit_curve.csv", "fit_solutions.csv"}
-    heads = {path.name: path.read_text(encoding="utf-8").splitlines()[:4] for path in tables}
+    heads = {path.name: path.read_text(encoding="utf-8").splitlines()[:5] for path in tables}
     assert len({tuple(head) for head in heads.values()}) == 1, heads
     head = heads["fit_solutions.csv"]
     assert head[0] == f"# {SOFTWARE} (command line); settings and decisions in report.json"
     assert head[1] == f"# input: galaxi_data.tif sha256 {digest}" and head[2].startswith("# frame: ")
     assert head[3].startswith("# geometry: distance 1730.0000 mm, direct beam (") and "alpha_i 0.2 deg" in head[3]
+    assert head[4] == "# error model: poisson, observed sample shot variance"
     solutions = (folder / "fit_solutions.csv").read_text(encoding="utf-8").splitlines()
-    assert solutions[4].startswith("# GISAXS fit solutions [") and solutions[5].startswith("# units: ")
-    assert solutions[6].startswith("rank,model,chi2,probability") and b"\r" not in (folder / "fit_solutions.csv").read_bytes()
+    assert solutions[5].startswith("# GISAXS fit solutions [") and solutions[6].startswith("# units: ")
+    assert solutions[7].startswith("rank,model,chi2,probability") and b"\r" not in (folder / "fit_solutions.csv").read_bytes()
     for path in tables:  # a reader that skips the comment lines still gets numbers
         if path.name != "fit_solutions.csv":
             assert np.loadtxt(path, delimiter=",", encoding="utf-8").shape[1] >= 3

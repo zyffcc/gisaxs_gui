@@ -10,6 +10,9 @@ import html
 import math
 from datetime import datetime, timezone
 
+from src.gimap.shared import fit_names
+
+from .solution_export import composition_of, intervals_by_path, posterior_by_path
 from ..domain.fit_model import INFO, SIZE_LAWS
 from .fit_uncertainty import (
     SHOWN_CORRELATION,
@@ -51,7 +54,7 @@ def _status(model, result, path, parameter) -> str:
     return "fitted"
 
 
-def blocks(model, data, curve, *, side: str, q_range, result, excluded=()) -> list:
+def blocks(model, data, curve, *, side: str, q_range, result, excluded=(), solutions=()) -> list:
     """The report as blocks: ``("h1"|"h2"|"p", text)``, ``("ul", [items])``, ``("table", header, rows)``."""
     record = fit_record(model, data, curve, side=side, q_range=q_range, result=result, excluded=excluded)
     out: list = [("h1", "GIMaP fit report"),
@@ -69,22 +72,35 @@ def blocks(model, data, curve, *, side: str, q_range, result, excluded=()) -> li
                  + (" (fitting range set)" if points["q_range_nm^-1"] else " (the whole curve)"))
     items.append(f"Made of: {SIDES.get(points.get('halves_used') or side, side)}; points left out by hand: "
                  f"{len(points['left_out_q_nm^-1'])}")
-    items.append("Weighting: " + ("(I − model)/σ with the σ of the file" if points["weighting"] == "sigma"
-                                  else "ln I − ln model, every point the same relative weight (no σ)"))
+    weights = {"file": ("(I − model)/σ with the σ of the file" if data.sigma is not None else
+                        "σ from the file selected, no usable σ. Residual = ln I − ln model"),
+               "relative": "relative, (I − model)/I", "poisson": "Poisson, (I − model)/√I",
+               "none": "none, ln I − ln model"}
+    items.append("Weighting: " + weights[points["weighting_choice"]])
     out += [("h2", "Data"), ("ul", items)]
 
     items = [record["equation"]]
+    resolution = record["resolution"]
+    if resolution["mode"] == "file":
+        items.append("Gaussian q resolution: dQ from the file at each fitted point (nm⁻¹)")
+    else:
+        items.append(f"Gaussian q resolution: constant σ_q = {_number(resolution['sigma_q_nm^-1'])} nm⁻¹")
     for index, component in enumerate(model.components, start=1):
         structure = interference_label(component)
         coupling = f", {component.coupling.upper()}" if component.structure else ""
         items.append(f"{index}: {FAMILIES[component.family][0]}; sizes: {SIZE_LAWS[component.law]}; "
                      f"interference: {structure}{coupling}")
+        size = record["derived"][index - 1]
+        if size["R_number_mean_nm"] is not None:
+            items.append(f"Number mean radius {_number(size['R_number_mean_nm'])} nm, "
+                         f"relative standard deviation {_number(size['sigma_R_number_rel'])}")
     items.append(f"Spheres: {record['sphere_model']}")
     items.append("Contact: " + ("particles do not overlap (D ≥ 2R, R_HS ≥ R)" if model.contact else "off"))
     links = describe_links(model)
     items.append("Links and constraints: " + ("; ".join(links) if links else "none"))
     out += [("h2", "Model"), ("ul", items)]
 
+    selected = next((s for s in solutions if s.model == model and s.intervals), None) if result is None else None
     if result is not None:
         chi = "χ²ᵣ" if result.weighting == "sigma" else "var ln I (χ²ᵣ of the relative residuals)"
         state = ("did not improve on the start values" if result.start_kept else
@@ -93,11 +109,16 @@ def blocks(model, data, curve, *, side: str, q_range, result, excluded=()) -> li
             f"Method: {METHODS.get(result.method, result.method)}; {state} ({result.message})",
             f"{chi} = {_number(result.chi2_reduced)} over {result.points} points with {result.free} free values; "
             f"log RMSE {_number(result.log_rmse)}",
-            f"{result.evaluations} evaluations, {result.seconds:.1f} s",
+            f"{result.evaluations} evaluations, {result.seconds:.1f} s"
+            + (f"; the least squares went on from its own result {result.restarts} times" if result.restarts else ""),
             "Errors: 1σ from the covariance (JᵀJ)⁻¹·s², s² = Σr²/(N − p); linked values by propagation"])]
+    elif selected is not None:
+        out += [("h2", "Fit"), ("p", f"Predict parameters. Reduced χ² = {_number(selected.chi2)}.")]
     else:
         out += [("h2", "Fit"), ("p", "No fit of these values yet: the values are those in Model, without errors.")]
 
+    sampled = posterior_by_path(selected) if selected else {}
+    reported = intervals_by_path(selected) if selected else {}
     rows = []
     for path, parameter in model.parameters():
         if path[0] == "globals" and not parameter.free and not parameter.tie and parameter.value == INFO[path[1]].value:
@@ -106,7 +127,26 @@ def blocks(model, data, curve, *, side: str, q_range, result, excluded=()) -> li
         rows.append([parameter_label(model, path), parameter_name(path), _number(parameter.value, 6),
                      "" if error is None else _number(error, 3), _status(model, result, path, parameter),
                      f"{_number(parameter.lower)} – {_number(parameter.upper)}"])
-    out += [("h2", "Parameters"), ("table", ["Parameter", "Name", "Value", "± 1σ", "Status", "Range"], rows)]
+        if selected:
+            q = sampled.get(path, {})
+            rows[-1][4] = "free" if parameter.free else "fixed"
+            bounds = reported.get(path)
+            interval = f"{_number(bounds[2])} – {_number(bounds[3])}" if bounds else "—"
+            rows[-1][3:4] = [interval, _number(q.get("median")), _number(q.get("low68")), _number(q.get("high68"))]
+    columns = (["Least-squares value", "Reported 68 % interval", "Posterior median", "Posterior 16 %", "Posterior 84 %"]
+               if selected else ["Value", "± 1σ"])
+    out += [("h2", "Parameters"), ("table", ["Parameter", "Name", *columns, "Status", "Range"], rows)]
+    for index, solution in enumerate(solutions, 1):
+        if solution.probability is None:
+            continue
+        label = "BIC weight" if "bic" in solution.flags else "Solution probability"
+        notes = [f"{label} {_number(solution.probability)} among the solutions compared."]
+        if "bic" not in solution.flags and solution.tried == 1 and len(solutions) == 1:
+            notes = ["Only one composition and one solution were compared."]
+        notes.extend(template.format(**values) for template, values in
+                     fit_names.diagnostic_lines(solution.diagnostics, solution.ess))
+        notes += fit_names.sentences(solution.flags, len(solution.model.components) > 1)
+        out += [("h2", f"Solution {index} · {composition_of(solution)}"), ("ul", notes)]
 
     if result is not None:
         pairs = strong_pairs(result)
@@ -131,9 +171,10 @@ def render(parts: list, fmt: str = "markdown") -> str:
     return _markdown(parts)
 
 
-def report(model, data, curve, *, side: str, q_range, result, excluded=(), fmt: str = "markdown") -> str:
+def report(model, data, curve, *, side: str, q_range, result, excluded=(), solutions=(), check_blocks=(), fmt: str = "markdown") -> str:
     """The report in ``fmt`` (``FORMATS``)."""
-    return render(blocks(model, data, curve, side=side, q_range=q_range, result=result, excluded=excluded), fmt)
+    return render(blocks(model, data, curve, side=side, q_range=q_range, result=result, excluded=excluded,
+                         solutions=solutions) + list(check_blocks), fmt)
 
 
 def _markdown(parts) -> str:

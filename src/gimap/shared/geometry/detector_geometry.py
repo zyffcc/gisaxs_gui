@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, replace
 
+from .orientation import orientation_number
+
 
 def _positive(name: str, value: float) -> float:
     number = float(value)
@@ -45,6 +47,8 @@ class DetectorGeometry:
       one inside the film (refraction, ``q_mapping.refracted_qz``), 0 (the default) the kinematic q_z in vacuum. It
       belongs to the sample, not to the instrument: a profile keeps 0 and Analyze sets it per measurement.
     * Lengths are metres, the wavelength is in Å, so q comes out in Å⁻¹.
+    * ``orientation`` is pyFAI's detector orientation. Relative to native orientation 3,
+      1 reverses rows and columns, 2 reverses rows and 4 reverses columns before rotation.
     """
 
     pixel_size_x_m: float
@@ -58,8 +62,10 @@ class DetectorGeometry:
     rot2_rad: float = 0.0
     rot3_rad: float = 0.0
     critical_angle_deg: float = 0.0
+    orientation: int = 3
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "orientation", orientation_number(self.orientation))
         object.__setattr__(self, "pixel_size_x_m", _positive("pixel_size_x_m", self.pixel_size_x_m))
         object.__setattr__(self, "pixel_size_y_m", _positive("pixel_size_y_m", self.pixel_size_y_m))
         object.__setattr__(self, "distance_m", _positive("distance_m", self.distance_m))
@@ -88,6 +94,11 @@ class DetectorGeometry:
         return bool(self.rot1_rad or self.rot2_rad or self.rot3_rad)
 
     @property
+    def requires_projection(self) -> bool:
+        """Whether the native, unrotated image-to-laboratory axes need transforming."""
+        return self.tilted or self.orientation != 3
+
+    @property
     def tilt_deg(self) -> float:
         """Angle between the detector normal and the beam, ``arccos(cos rot1 · cos rot2)``."""
         cosine = math.cos(self.rot1_rad) * math.cos(self.rot2_rad)
@@ -106,7 +117,8 @@ class DetectorGeometry:
         down = (c2 * c3, c2 * s3, s2)                                      # M[:, 0] in pyFAI's (1, 2, 3)
         right = (c3 * s1 * s2 - c1 * s3, c1 * c3 + s1 * s2 * s3, -c2 * s1)  # M[:, 1]
         lab = lambda v, sign: (sign * v[2], sign * v[1], -sign * v[0])     # noqa: E731
-        return lab(right, 1.0), lab(down, -1.0)
+        return (lab(right, -1.0 if self.orientation in (1, 4) else 1.0),
+                lab(down, 1.0 if self.orientation in (1, 2) else -1.0))
 
     @property
     def wavevector_inv_angstrom(self) -> float:
@@ -153,27 +165,40 @@ class DetectorGeometry:
 
         Evaluated on the beam-centre column. For a detector perpendicular to the
         beam the relation is ``Y = D·tan(alpha_f + alpha_i)`` above the direct beam;
-        a tilted detector is solved for the row numerically.
+        for a tilted detector the ray on this column is intersected with the cone of constant exit angle.
         """
         angle = math.radians(float(alpha_f_deg)) + self.incidence_rad
         if not -math.pi / 2 < angle < math.pi / 2:
             raise ValueError("The requested exit angle does not reach the detector.")
         height_m = self.distance_m * math.tan(angle)
-        row = self.beam_center_y_px - height_m / self.pixel_size_y_m
         if not self.tilted:
-            return row
+            sign = 1 if self.orientation in (1, 2) else -1
+            return self.beam_center_y_px + sign * (height_m / self.pixel_size_y_m)
+        # At the beam column the ray is D*(e_beam + t*row_up). Solve n·r = |r| sin α_f;
+        # squaring also yields the opposite exit angle, checked on the unsquared ray below.
         target = math.radians(float(alpha_f_deg))
-        for _ in range(60):  # Newton on the row, with a numerical slope; converges in a few steps
-            here = self.exit_angle_at(self.beam_center_x_px, row)
-            step = 1e-3
-            slope = (self.exit_angle_at(self.beam_center_x_px, row + step) - here) / step
-            if slope == 0.0:
-                break
-            change = (here - target) / slope
-            row -= change
-            if abs(change) < 1e-9:
-                break
-        return row
+        if target == 0:
+            row = self.horizon_row()
+            if math.isfinite(row):
+                return row
+        _col, (ax, _, up) = self.in_plane_axes()
+        si, ci = math.sin(self.incidence_rad), math.cos(self.incidence_rad)
+        b = up * ci - ax * si
+        s2 = math.sin(target) ** 2
+        aa, bb, cc = b * b - s2, -2 * (si * b + s2 * ax), si * si - s2
+        roots = []
+        if abs(aa) > 1e-16:
+            disc = bb * bb - 4 * aa * cc
+            if disc >= 0:
+                root = math.sqrt(disc)
+                roots = [(-bb + root) / (2 * aa), (-bb - root) / (2 * aa)]
+        elif bb != 0:
+            roots = [-cc / bb]
+        for t in sorted(roots, key=abs):
+            row = self.beam_center_y_px - t * self.distance_m / self.pixel_size_y_m
+            if abs(self.exit_angle_at(self.beam_center_x_px, row) - target) < 1e-9:
+                return row
+        raise ValueError("The exit angle does not cross the beam-centre column.")
 
     def exit_angle_at(self, x_px: float, y_px: float) -> float:
         """Exit angle alpha_f (radians) of the ray to a continuous detector position."""
@@ -186,10 +211,40 @@ class DetectorGeometry:
         normal = (up * math.cos(self.incidence_rad) - along * math.sin(self.incidence_rad)) / radius
         return math.asin(max(-1.0, min(1.0, normal)))
 
-    def horizon_row(self) -> float:
-        """Row of the sample horizon (alpha_f = 0)."""
-        return self.row_for_exit_angle(0.0)
+    def horizon_plane(self) -> tuple[float, float, float]:
+        """The horizon in pixels relative to the direct beam: A·dx + B·dy = C (the sample normal dotted with the ray)."""
+        (ax, _, ux), (ay, _, uy) = self.in_plane_axes()
+        si, ci = math.sin(self.incidence_rad), math.cos(self.incidence_rad)
+        return ((ux * ci - ax * si) * self.pixel_size_x_m,
+                (ay * si - uy * ci) * self.pixel_size_y_m, self.distance_m * si)
+
+    def horizon_line(self) -> tuple[tuple[float, float], float] | None:
+        """A point on α_f = 0 and the angle of its detector trace in (column, row) coordinates."""
+        if not self.requires_projection:
+            return (self.beam_center_x_px, self.horizon_row()), 0.0
+        a, b, c = self.horizon_plane()
+        norm2 = a * a + b * b
+        if norm2 == 0.0:
+            return None
+        point = self.beam_center_x_px + c * a / norm2, self.beam_center_y_px + c * b / norm2
+        return point, math.degrees(math.atan2(a, -b))
+
+    def horizon_row(self, x_px: float | None = None) -> float:
+        """Row of α_f = 0 at this column (default: direct beam); NaN for a vertical horizon."""
+        if not self.tilted:
+            return self.row_for_exit_angle(0.0)
+        a, b, c = self.horizon_plane()
+        if abs(b) <= 1e-14 * self.pixel_size_y_m:
+            return math.nan
+        dx = 0.0 if x_px is None else x_px - self.beam_center_x_px
+        return self.beam_center_y_px + (c - a * dx) / b
 
     def specular_row(self) -> float:
         """Row of the specularly reflected beam (alpha_f = alpha_i)."""
-        return self.row_for_exit_angle(self.incidence_deg)
+        if not self.requires_projection:
+            return self.row_for_exit_angle(self.incidence_deg)
+        from .q_inverse import positions_of_rays
+        import numpy as np
+
+        ray = np.array([math.cos(2 * self.incidence_rad), 0, math.sin(2 * self.incidence_rad)])
+        return float(positions_of_rays(self, ray)[1])

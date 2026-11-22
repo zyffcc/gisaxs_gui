@@ -61,7 +61,8 @@ _CORRECTIONS = (
     (("normalisation",), "normalisation"),
     (("mirror_fill",), "mirror filling"),
     (("minimum", "maximum", "gap_guard_px", "bad_pixels"), "pixel limits"),
-    (("solid_angle", "polarization", "film_thickness_nm", "attenuation_length_um", "lorentz"), "intensity corrections"),
+    (("solid_angle", "polarization", "film_thickness_nm", "attenuation_length_um", "lorentz", "lorentz_band_px",
+      "orientation_min_exit_deg", "orientation_polarization"), "intensity corrections"),
     (("critical_angle_deg",), "refraction"),
 )
 _GIWAXS = (

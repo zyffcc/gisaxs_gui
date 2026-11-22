@@ -294,7 +294,7 @@ def test_the_command_line_pipeline_analyses_real_images_end_to_end(tmp_path: Pat
     reports = analyse_frames([str(frame)], PipelineOptions(notes=notes, technique="giwaxs"), out, saved_profiles=False)
 
     report = reports[0]
-    assert report["ok"] and report["needs_attention"] == [], report["needs_attention"]
+    assert report["ok"] and {item["item"] for item in report["needs_attention"]} == {"pole figure"}
     assert decision(report, "geometry")["decision"] == "calibrated from AgBH_00001.tif"
     assert decision(report, "technique")["why"].startswith("forced")
     assert report["measurement"] == "giwaxs" and report["geometry"]["incidence_deg"] == pytest.approx(0.2)
@@ -304,7 +304,7 @@ def test_the_command_line_pipeline_analyses_real_images_end_to_end(tmp_path: Pat
     folder = out / "P3HT_00012"
     for name in ("report.md", "report.json", "radial.csv", "qmap.png"):
         assert (folder / name).is_file(), name
-    assert (out / "summary.md").is_file() and "P3HT_00012.tif | OK" in (out / "summary.md").read_text(encoding="utf-8")
+    assert (out / "summary.md").is_file() and "P3HT_00012.tif | needs input" in (out / "summary.md").read_text(encoding="utf-8")
 
     # The same tools over MCP stdio, as Codex or Claude Code would call them.
     requests = [
@@ -327,7 +327,7 @@ def test_the_command_line_pipeline_analyses_real_images_end_to_end(tmp_path: Pat
     assert answers[3]["result"]["isError"] and "open_frame" in answers[3]["result"]["content"][0]["text"]
     assert not answers[4]["result"]["isError"]
     pipeline = json.loads(answers[5]["result"]["content"][0]["text"])
-    assert pipeline["ok"] and "tables" not in pipeline and pipeline["needs_attention"] == []
+    assert pipeline["ok"] and "tables" not in pipeline and {item["item"] for item in pipeline["needs_attention"]} == {"pole figure"}
     assert (tmp_path / "mcp_out" / "report.md").is_file() and len(pipeline["outputs"]) >= 4
     ring = json.loads(answers[6]["result"]["content"][0]["text"])
     assert not answers[6]["result"]["isError"] and ring["coverage"] > 0.5

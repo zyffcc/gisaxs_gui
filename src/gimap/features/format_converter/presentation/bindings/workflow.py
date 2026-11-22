@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
 
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.question_box import ACCEPT, DESTRUCTIVE, REJECT, QuestionBox
 from src.gimap.app.presentation.theme import set_role
 from ..display_formatting import _human_bytes
 
@@ -104,15 +105,14 @@ class WorkflowMixin:
                 self, tr("Output settings"), trf("Invalid output settings:\n{error}", error=tr(str(exc)))
             )
             return
-        dialog = QMessageBox(self)
-        dialog.setWindowTitle(tr("Confirm conversion"))
-        dialog.setIcon(QMessageBox.Information)
-        dialog.setText(review_text(review, options.output_format))
-        back = dialog.addButton(tr("Back"), QMessageBox.RejectRole)
-        convert = dialog.addButton(tr("Convert"), QMessageBox.AcceptRole)
-        dialog.addButton(tr("Cancel"), QMessageBox.DestructiveRole)
+        dialog = QuestionBox(self, tr("Confirm conversion"), review_text(review, options.output_format))
+        back = dialog.addButton(tr("Back"), REJECT)
+        convert = dialog.addButton(tr("Convert"), ACCEPT)
+        dialog.addButton(tr("Cancel"), DESTRUCTIVE)
+        dialog.setEscapeButton(back)
         dialog.setDefaultButton(convert)
         dialog.exec_()
+        dialog.deleteLater()
         if dialog.clickedButton() == convert:
             self._start_conversion(options)
         elif dialog.clickedButton() == back:

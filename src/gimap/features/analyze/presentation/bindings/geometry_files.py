@@ -49,7 +49,7 @@ class GeometryFilesMixin:
             if not path:
                 return False
         try:
-            poni = read_poni_file(path)
+            poni = read_poni_file(path, frame_shape=analysis.shape)
         except (OSError, ValueError) as exc:
             self._status(trf("Could not read the .poni file: {error}", error=message_text(str(exc))), "error")
             return False

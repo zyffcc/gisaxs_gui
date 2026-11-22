@@ -49,8 +49,6 @@ INDEXING_ZH = {
         "把 I(χ) 的环移到所选衍射上，并以该衍射的 χ0 拟合极图",
     "Direction": "方向",
     "Fit up to χ": "拟合到 χ",
-    "Bins above this χ are left out of the fit: next to the sample horizon absorption or a shadow lowers the "
-    "intensity": "χ 大于此值的分档不参与拟合：靠近样品地平线处，吸收或遮挡会降低强度",
     "The local linear background of a Gaussian fitted to I(q) at the ring": "在环处对 I(q) 拟合高斯峰得到的局部线性背景",
     "Fit Pole Figure": "拟合极图",
     "The pole figure as CSV and the indexing record (.json) beside it": "极图写为 CSV，旁边写指标化记录（.json）",
@@ -62,7 +60,6 @@ INDEXING_ZH = {
     "Fitted direction": "拟合方向",
     "N(χ) ∝ crystallites per degree": "N(χ) ∝ 每度的晶粒数",
     "not fitted": "未拟合",
-    "I(χ) of the ring": "环的 I(χ)",
     # messages of the window
     "Add Phase from CIF": "从 CIF 添加物相",
     "CIF files (*.cif);;All files (*)": "CIF 文件 (*.cif);;所有文件 (*)",
@@ -93,18 +90,14 @@ INDEXING_ZH = {
     "Pole figure, q = {low}–{high} Å⁻¹": "极图，q = {low}–{high} Å⁻¹",
     "Ring of I(χ): q = {low}–{high} Å⁻¹ (drag the purple band over I(q), or choose a reflection).":
         "I(χ) 的环：q = {low}–{high} Å⁻¹（拖动 I(q) 上的紫色带，或选择一个衍射）。",
-    "No fit: {reason}": "未拟合：{reason}",
     "{model}: oriented fraction {fraction}, FWHM {fwhm}°, direction χ0 = {chi0}°":
         "{model}：取向分数 {fraction}，半高宽 {fwhm}°，方向 χ0 = {chi0}°",
     "Hermans f = {f} (fitted distribution, missing wedge filled; oriented part {f_oriented}); from the measured bins "
     "{f_measured}": "Hermans f = {f}（拟合的分布，缺失楔由模型补全；取向部分 {f_oriented}）；只用测到的分档为 {f_measured}",
     "2D order 2<cos²χ> − 1 = {order}; χ²_red = {chi2} over {points} bins up to χ = {chi_max}°; weighted coverage "
     "{coverage}": "二维取向参数 2<cos²χ> − 1 = {order}；χ²_red = {chi2}，共 {points} 个分档，到 χ = {chi_max}°；加权覆盖 {coverage}",
-    "Background {value} counts/pixel ({source}); {lorentz}": "背景 {value} 计数/像素（{source}）；{lorentz}",
     "local linear background of a Gaussian fit to I(q)": "I(q) 高斯拟合的局部线性背景",
     "mean of I(q) beside the window": "窗口两侧 I(q) 的平均值",
-    "I(χ) already Lorentz-corrected": "I(χ) 已做 Lorentz 校正",
-    "Lorentz factor sin χ applied": "已乘 Lorentz 因子 sin χ",
 }
 
 __all__ = ["INDEXING_ZH"]

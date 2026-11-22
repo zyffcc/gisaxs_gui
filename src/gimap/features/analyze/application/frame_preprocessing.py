@@ -8,6 +8,8 @@ field) → (GIWAXS, when asked, once the geometry is known) the intensity correc
 film absorption, Lorentz factor (``_correct_intensity``) → the normalisation, one constant (``_normalise``). Hot,
 dead and drawn-mask pixels are part of the frame's validity; the rest are corrections, so the raw frame is kept for
 re-analysis with other settings.
+For a rotated detector the two mirrored rays can subtend different solid angles. When angle corrections are
+enabled, interpolate the corrected donor intensities and keep targets with an undefined correction masked.
 """
 
 from __future__ import annotations
@@ -25,11 +27,11 @@ from ..domain import (
     GIWAXS,
     Corrections,
     apply_flat_field,
-    has_intensity_corrections,
     intensity_factor,
     apply_valid_range,
     find_bad_pixels,
     guard_invalid,
+    has_intensity_corrections,
     mirror_fill,
     normalisation_use,
     rasterize,
@@ -224,11 +226,11 @@ class FramePreprocessingMixin(FlatFieldMixin):
 
     def _preprocess(
         self, raw_data: np.ndarray, raw_valid: np.ndarray, corrections: Corrections,
-        metadata: Mapping[str, Any], mirror_center_x: Optional[float], geometry=None, exposures=1,
+        metadata: Mapping[str, Any], mirror_geometry: Optional[DetectorGeometry], geometry=None, exposures=1,
     ) -> dict:
         """The frame to reduce and what was done to it (fields of ``FrameAnalysis``).
 
-        ``mirror_center_x``: the beam-centre column when the frame is GIWAXS with a geometry
+        ``mirror_geometry``: the detector geometry when the frame is GIWAXS
         (mirror filling needs it); ``None`` never fills.
         """
         bad = self._bad_pixels(raw_data, raw_valid, metadata) if corrections.bad_pixels else None
@@ -240,7 +242,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
             usable = usable & ~drawn
         record: dict = {"corrections": corrections, "bad_pixels": bad, "drawn_mask": drawn}
         record["error_model_used"] = effective_error_model(
-            metadata, corrections, mirror_filled=corrections.mirror_fill and mirror_center_x is not None)
+            metadata, corrections, mirror_filled=corrections.mirror_fill and mirror_geometry is not None)
         if corrections.is_identity:
             record.update(data=raw_data, valid=usable)
             if corrections.error_model == "poisson" and floating(metadata):
@@ -250,8 +252,9 @@ class FramePreprocessingMixin(FlatFieldMixin):
             return record
         data, valid = self._corrected(raw_data, usable, corrections, record, exposures)
         filled = None
-        if corrections.mirror_fill and mirror_center_x is not None:
-            data, valid, filled = mirror_fill(data, valid, mirror_center_x)
+        if corrections.mirror_fill and mirror_geometry is not None:
+            if not (mirror_geometry.tilted and has_intensity_corrections(corrections)):
+                data, valid, filled = mirror_fill(data, valid, mirror_geometry.beam_center_x_px, geometry=mirror_geometry)
         record.update(data=data, valid=valid, raw_data=raw_data, raw_valid=raw_valid, filled_pixels=filled)
         return record
 
@@ -261,6 +264,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
             solid_angle=bool(corrections.solid_angle), polarization=corrections.polarization,
             film_thickness_nm=corrections.film_thickness_nm, attenuation_length_um=corrections.attenuation_length_um,
             lorentz=bool(getattr(corrections, "lorentz", False)),
+            lorentz_band_px=corrections.lorentz_band_px,
         )
         key = (shape, geometry, tuple(sorted(options.items())))
         cached, cached_key = self._intensity, self._intensity_key
@@ -271,8 +275,8 @@ class FramePreprocessingMixin(FlatFieldMixin):
 
     def correct_pixels(self, common: dict, raw_data, raw_valid, corrections, geometry, kind) -> bool:
         """Apply the pixel-dependent corrections shared by sample and standard. Return the counting model."""
-        mirror_x = geometry.beam_center_x_px if geometry is not None and kind == GIWAXS else None
-        common.update(self._preprocess(raw_data, raw_valid, corrections, common["metadata"], mirror_x, geometry,
+        mirror_geometry = geometry if kind == GIWAXS else None
+        common.update(self._preprocess(raw_data, raw_valid, corrections, common["metadata"], mirror_geometry, geometry,
                                        exposures=1 + len(common.get("summed_frames", ()))))
         counting = common["error_model_used"] == "poisson"
         if kind == GIWAXS and geometry is not None and has_intensity_corrections(corrections):
@@ -288,7 +292,13 @@ class FramePreprocessingMixin(FlatFieldMixin):
             corrected = (data / factor).astype(np.float32, copy=False)
         if common.get("raw_data") is None:
             common["raw_data"], common["raw_valid"] = raw_data, raw_valid
-        common["data"], common["valid"] = corrected, valid & np.isfinite(factor) & (factor > 0)
+        defined = np.isfinite(factor) & (factor > 0)
+        valid = valid & defined
+        if corrections.mirror_fill and geometry.tilted:
+            corrected, valid, filled = mirror_fill(corrected, valid, geometry.beam_center_x_px, geometry=geometry)
+            common["filled_pixels"] = filled & defined
+            valid &= defined
+        common["data"], common["valid"] = corrected, valid
         for field in ("pixel_variance", "extra_variance"):
             if common.get(field) is not None:
                 with np.errstate(invalid="ignore", divide="ignore"):

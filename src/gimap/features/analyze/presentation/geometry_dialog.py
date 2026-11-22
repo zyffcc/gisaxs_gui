@@ -79,6 +79,7 @@ class GeometryDialog(QDialog, GeometryDialogView):
         center_step_px: float = 1.0,
     ):
         super().__init__(parent)
+        self._orientation = defaults.get("orientation", 3)
         self.setup_geometry_ui(
             name, defaults, allow_delete=allow_delete, center_step_px=center_step_px,
         )
@@ -174,6 +175,7 @@ class GeometryDialog(QDialog, GeometryDialogView):
 
     def set_geometry(self, geometry: DetectorGeometry, *, source: str, name: str = "") -> None:
         """Fill every field from ``geometry`` (a ``.poni`` read: ``source`` ``SOURCE_PONI``, ``name`` its file)."""
+        self._orientation = geometry.orientation
         for spin, value in ((self.distance_spin, geometry.distance_m * 1e3),
                             (self.pixel_x_spin, geometry.pixel_size_x_m * 1e6),
                             (self.pixel_y_spin, geometry.pixel_size_y_m * 1e6),
@@ -203,6 +205,7 @@ class GeometryDialog(QDialog, GeometryDialogView):
             rot1_rad=math.radians(self.rot1_spin.value()),
             rot2_rad=math.radians(self.rot2_spin.value()),
             rot3_rad=math.radians(self.rot3_spin.value()),
+            orientation=self._orientation,
         )
 
     def source_text(self) -> str:

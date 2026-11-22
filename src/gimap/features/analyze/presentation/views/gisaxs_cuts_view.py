@@ -1,7 +1,7 @@
 """Static layout of the GISAXS cuts in the Cuts step: the table of cuts, adding and drawing them, the editor.
 
 The first two rows are the automatic cuts (the horizontal cut at the Yoneda band, which Fitting takes, and the
-vertical cut at the beam centre); the cuts the person adds follow. A cut is added from the Add menu (typed: it starts
+vertical cut beside the specular rod); the cuts the person adds follow. A cut is added from the Add menu (typed: it starts
 where it is easy to see) or drawn on the detector image or the q map (Horizontal / Vertical: one click; Box: two
 corners; Sector: one click in its direction; Line: its two ends). The tick shows or hides a cut's curve and outline;
 double-click a name to rename it; the editor under the table sets the position and width in the unit chosen (q,
@@ -56,9 +56,8 @@ CUT_TABLE_TIP = (
     "automatic cuts; Fitting takes the horizontal one."
 )
 CUT_UNIT_TIP = (
-    "The unit to type and show positions in. Cuts are kept in q, so they hold for every frame of this geometry. Exit "
-    "angles: αf of qz, and 2θf of qy on the sample horizon; pixels: rows on the beam-centre column and columns on the "
-    "horizon row."
+    "Cuts are stored in q. Exit angles give αf for qz and 2θf on the sample horizon for qy. Pixel units give "
+    "rows along the beam-centre column and columns along the calculated horizon."
 )
 CUT_NOTICE_TIP = "The cuts are in q: kept, they cut this frame at the same q; removed, only the automatic cuts stay."
 

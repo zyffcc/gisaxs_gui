@@ -24,6 +24,7 @@ from PyQt5.QtWidgets import QGridLayout, QLabel, QPushButton, QSizePolicy, QVBox
 from src.gimap.app.presentation.components import CurvePlot
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import theme_manager
+from src.gimap.shared import fit_names
 
 from ..application import bound_phrases, interval, probability
 from .guided_text import ScaledPixmapLabel, label
@@ -284,26 +285,36 @@ class SolutionDetails(QWidget):
         fitted = solution.get("points") or fit.get("fitted_points") or {}
         over = "" if fitted.get("fitted") is None else " (" + trf(
             "{fitted} of {given} points", fitted=fitted["fitted"], given=fitted.get("given", fitted["fitted"])) + ")"
-        pairs += [("probability", tr("only this composition was tried") if solution.get("alone")
+        by_bic = fit_names.weight_key(solution) == "bic_weight"
+        pairs += [(fit_names.BIC_WEIGHT if by_bic else "probability", tr("only this composition was tried") if solution.get("alone")
                    else "—" if math.isnan(chance) else _number(chance, 3)),
                   ("χ²ᵣ", _number(solution.get("chi2")) + over), ("log RMSE", _number(solution.get("log_rmse"))),
                   ("converged", tr("yes") if solution.get("converged", True) else tr("no")),
                   ("time", "—" if solution.get("seconds") is None else f"{solution['seconds']:.1f} s")]
+        for name, stat in (solution.get("posterior_summary") or {}).items():
+            pairs.append((name, trf("Posterior median {value} (68 % {low}–{high})", value=_number(stat["median"]),
+                                    low=_number(stat["low68"]), high=_number(stat["high68"]))))
         self.values.set_values(pairs)
         low, high = (fit.get("q_range_inv_angstrom") or [math.nan, math.nan])[:2]
         screen = tr("the composition you gave") if solution.get("screen") == "user_composition" else tr(
             "the composition the network chose")
-        self.settings.setText(tr(
+        setting = (
             "{points} points, |qy| {low}–{high} Å⁻¹ ({low_nm}–{high_nm} nm⁻¹); {screen}. {algorithm}. Sizes in nm; "
             "σ/value are relative size spreads; the weight is the share of the fitted amplitude, not a volume "
             "fraction; the intervals hold 68 % of the posterior."
-        ).format(points=fit.get("points", "—"), low=_number(low), high=_number(high),
+        ) if not by_bic else (
+            "{points} points, |qy| {low}–{high} Å⁻¹ ({low_nm}–{high_nm} nm⁻¹). {screen}. {algorithm}. "
+            "BIC fallback intervals use least-squares errors."
+        )
+        self.settings.setText(tr(setting).format(points=fit.get("points", "—"), low=_number(low), high=_number(high),
                  low_nm=_number(NM_PER_A * low), high_nm=_number(NM_PER_A * high),
                  screen=screen, algorithm=words(solution.get("algorithm")) or tr("Bounded least squares")))
         notes = [words(note) for note in list(solution.get("warnings") or ())
                  + ([] if solution.get("converged", True) else ["not converged"])]
         notes += [words(phrase) for phrase in bound_phrases(solution)]  # which values ended on a bound of their range
         lines = ["⚠ " + note for note in notes]
+        lines += [trf(template, **values) for template, values in fit_names.diagnostic_lines(
+            solution.get("diagnostics") or {}, solution.get("ess"))]
         more = [words(note) for note in solution.get("more_warnings") or ()]
         if more:  # not the particles' values: one paragraph after the others
             lines.append(trf(MORE_NOTES, notes="; ".join(more)))

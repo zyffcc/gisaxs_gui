@@ -5,6 +5,10 @@ time at two looks in a row — so a curve that is still being written is not fit
 file that changed after its frame was read (it was read while it was written) is read and fitted again
 when it has settled. The box can be ticked and unticked while the series runs. A run that has fitted
 everything there is says that it is waiting, and for what; it ends with Stop, or when the box is unticked.
+
+Analyze ▸ Fit New Frames in Fitting… ticks the box itself and starts once the curves are listed
+(``watch_and_start``): every curve written so far and every new one is fitted. While Single analysis' model is
+still the starting guess nobody set up, it does not start (the status line says to set it up, then Start).
 """
 
 from __future__ import annotations
@@ -23,6 +27,8 @@ from ...application.series_frames import file_stamp
 
 WATCH_MS = 2000
 FOLDER_GONE = "The folder of the curves cannot be read: waiting for it … (Stop to end)"
+WATCHING_NOT_SET_UP = ("Watch for new curves is on: set the model up on a frame in Single analysis, then press Start — "
+                       "every curve listed and every new one is fitted.")
 
 
 class FitSeriesWatchMixin:
@@ -42,7 +48,32 @@ class FitSeriesWatchMixin:
         """How a frame's file looked when it was read for its fit."""
         self._folder_gone = False
         """The last look could not list the folder (a share that dropped, a folder moved away)."""
+        self._start_when_listed = False
+        """Fit New Frames in Fitting…: Start once the curves being listed are there (``watch_and_start``)."""
         self.watch_check.toggled.connect(self._watch_toggled)
+
+    def watch_and_start(self) -> None:
+        """Analyze ▸ Fit New Frames in Fitting…: Watch for new curves on, and Start as soon as the curves are listed —
+        when Single analysis' model was set up; else the status line says to set it up and press Start."""
+        if self.imported_mode():
+            return
+        self.watch_check.setChecked(True)
+        self._start_when_listed = True
+        if not self._listing_busy:
+            self.start_watched()
+
+    def start_watched(self) -> None:
+        """The curves asked for by ``watch_and_start`` are listed: Start (once)."""
+        if not self._start_when_listed:
+            return
+        self._start_when_listed = False
+        model = self.single.session.model
+        if self.running or not self._listed() or not model.components:
+            return
+        if not self.single.session.edited:  # the starting guess: fitted to every frame it would say nothing
+            self._status(lambda: tr(WATCHING_NOT_SET_UP), "warning")
+            return
+        self.start()
 
     def _watch_toggled(self, on: bool) -> None:
         """Ticked or unticked while the series runs: from now on, or no longer — a run that only waited ends."""
@@ -62,7 +93,7 @@ class FitSeriesWatchMixin:
             self._next()  # with nothing left to fit: says what it waits for
         else:
             self._watch.stop()
-            if not self.queue and not self.tasks.is_busy():
+            if not self.queue and not self.tasks.is_busy() and not self.begin_smoothing():
                 self._finish()
         if self.running:
             self.refresh()
@@ -73,6 +104,9 @@ class FitSeriesWatchMixin:
                 and not self._stop.is_set())
 
     def _say_waiting(self) -> None:
+        if self._smoothing_error:
+            self._status(lambda: trf("Series smoothing failed: {error}", error=tr(self._smoothing_error)), "warning")
+            return
         self._status(lambda folder=self._folder_name(): trf(
             "Waiting for new curves in {folder} … (Stop to end)", folder=folder))
 
@@ -184,4 +218,4 @@ class FitSeriesWatchMixin:
             self._log(trf("{count} of them are outside the chosen frames and are not fitted.", count=len(new) - len(fresh)))
 
 
-__all__ = ["FOLDER_GONE", "FitSeriesWatchMixin", "WATCH_MS", "file_stamp"]
+__all__ = ["FOLDER_GONE", "FitSeriesWatchMixin", "WATCHING_NOT_SET_UP", "WATCH_MS", "file_stamp"]

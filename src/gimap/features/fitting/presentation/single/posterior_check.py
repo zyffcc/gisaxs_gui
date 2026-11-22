@@ -21,17 +21,20 @@ from PyQt5.QtWidgets import QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application.posterior_check import CHANGED, CHECK_ONLY, NOTHING, record, rows, run, target_for, trace, verdict
+from ...application.posterior_check import (
+    BIC_REFERENCE, CHANGED, CHECK_ONLY, ENSEMBLES, NOTHING, PREDICT_CHECK, record, report_blocks, rows, run, target_for,
+    trace, verdict,
+)
 from ..views.posterior_check_view import build_check_tab
 
-WHAT = {"predict": ("Checks the solution of Predict parameters in Model: its posterior (the model error and the scales "
-                    "integrated out, the network's prior), against the median and intervals Predict gave."),
+WHAT = {"predict": PREDICT_CHECK,
         "fit": ("Checks the last Refine or Search: its likelihood (Σr² scaled by its χ²ᵣ, the scales solved), "
                 "against its value ± 1σ (± 1.96σ for 95 %).")}
-RUNNING = "Running {steps} steps of {walkers} walkers …"
-DONE = "{steps} steps of {walkers} walkers in {seconds:.1f} s, acceptance {acceptance:.2f}."
+RUNNING = "Running {ensembles} ensembles of {walkers} walkers for {steps} steps each …"
+DONE = "{ensembles} ensembles of {walkers} walkers, {steps} steps each in {seconds:.1f} s, acceptance {acceptance:.2f}."
 STOPPED = "Stopped after {steps} steps: the steps done are shown."
 DIFFERS = "⚠ The run's 68 % interval does not overlap the one checked: {names}."
+POINTS_CHANGED = "The data selection changed. The displayed check uses the points selected when it started."
 TRACE_WALKER, TRACE_BAND, TRACE_MEDIAN = "#9aa5b1", "#e07b00", "#3b82d6"
 """Data colours of the trace (readable in both themes): single walkers grey, the 16–84 % band orange, the median blue."""
 
@@ -41,7 +44,7 @@ class _CheckProgress(QObject):
 
 
 def _interval(low: float, high: float) -> str:
-    if not (math.isfinite(low) and math.isfinite(high)):
+    if low is None or high is None or not (math.isfinite(low) and math.isfinite(high)):
         return "—"
     return f"{low:.5g} – {high:.5g}"
 
@@ -80,7 +83,8 @@ class PosteriorCheckMixin:
 
     def _checked(self):
         """What a run would check now (``application.posterior_check.target_for``)."""
-        return target_for(self.session.model, self._data(), self.session.solutions, self._current_result())
+        solutions = self.session.solutions if self.session.solutions_are_current() else ()
+        return target_for(self.session.model, self._data(), solutions, self._current_result())
 
     def render_check(self) -> None:
         busy = self.tasks.is_busy()
@@ -90,10 +94,19 @@ class PosteriorCheckMixin:
             self.check_what.setText(tr(str(exc)) if str(exc) == NOTHING else str(exc))
             self.check_run.setEnabled(False)
         else:
-            self.check_what.setText(tr(WHAT[checked.kind]) + " " + tr(CHECK_ONLY))
+            wording = tr(WHAT[checked.kind])
+            if checked.kind == "predict" and checked.reference_kind == "least_squares":
+                wording += ". " + tr(BIC_REFERENCE)
+            self.check_what.setText(wording)
             self.check_run.setEnabled(not busy)
-        if self._check is not None and self._check[2] != self.session.model:
-            self.check_verdict.setText(tr(CHANGED) + " " + self._verdict_text())
+        if self._check is not None and not busy:
+            message = self._verdict_text()
+            _, _, model, curve, selection = self._check
+            if curve is not self.session.curve or selection != self.session.selection():
+                message = tr(POINTS_CHANGED) + " " + message
+            elif model != self.session.model:
+                message = tr(CHANGED) + " " + message
+            self.check_verdict.setText(message)
         self.check_save.setEnabled(self._check is not None)
 
     def run_check(self) -> None:
@@ -113,11 +126,12 @@ class PosteriorCheckMixin:
         self.check_progress.setRange(0, steps)
         self.check_progress.setValue(0)
         self.check_progress.show()
-        self.check_verdict.setText(trf(RUNNING, steps=steps, walkers=walkers or tr("auto")))
+        self.check_verdict.setText(trf(RUNNING, ensembles=ENSEMBLES, steps=steps, walkers=walkers or tr("auto")))
         model, signal = self.session.model, self._check_signal
+        curve, selection = self.session.curve, self.session.selection()
         job = lambda: run(checked, steps=steps, walkers=walkers, seed=seed,  # noqa: E731
                           progress=signal.changed.emit, stop=self._check_stop.is_set)
-        self.tasks.submit("check", job, on_done=lambda result: self._check_done(result, checked, model),
+        self.tasks.submit("check", job, on_done=lambda result: self._check_done(result, checked, model, curve, selection),
                           on_error=lambda message, _details="": self._check_failed(message))
 
     def _check_progress(self, done: int, total: int) -> None:
@@ -133,9 +147,9 @@ class PosteriorCheckMixin:
         self.check_verdict.setText(trf("The check failed: {reason}", reason=tr(message)))
         self.render_check()
 
-    def _check_done(self, result, checked, model) -> None:
+    def _check_done(self, result, checked, model, curve=None, selection=None) -> None:
         self._check_finish()
-        self._check = (result, checked, model)
+        self._check = (result, checked, model, curve, selection)
         table_rows = rows(result, checked.reference)
         table = self.check_table
         table.setRowCount(len(table_rows))
@@ -163,9 +177,10 @@ class PosteriorCheckMixin:
     def _verdict_text(self) -> str:
         if self._check is None:
             return ""
-        result, checked, _model = self._check
+        result, checked = self._check[:2]
         d = result.diagnostics
-        lines = [trf(DONE, steps=result.steps, walkers=result.walkers, seconds=result.seconds, acceptance=d.acceptance)]
+        lines = [trf(DONE, ensembles=d.ensembles, steps=result.steps, walkers=result.walkers, seconds=result.seconds,
+                     acceptance=d.acceptance)]
         if result.stopped:
             lines.append(trf(STOPPED, steps=result.steps))
         template, values = verdict(result)
@@ -173,8 +188,17 @@ class PosteriorCheckMixin:
         apart = [row["name"] for row in rows(result, checked.reference) if row["overlap"] is False]
         if apart:
             lines.append(trf(DIFFERS, names=", ".join(apart)))
-        lines.append(tr(CHECK_ONLY))
+        if checked.kind == "fit":
+            lines.append(tr(CHECK_ONLY))
         return " ".join(lines)
+
+    def check_report_blocks(self) -> list:
+        if not getattr(self, "_check", None):
+            return []
+        result, checked, model, curve, selection = self._check
+        if model != self.session.model or curve is not self.session.curve or selection != self.session.selection():
+            return []
+        return report_blocks(result, checked)
 
     def _plot_trace(self) -> None:
         if self._check is None or not self.check_trace_value.currentText():
@@ -201,7 +225,7 @@ class PosteriorCheckMixin:
         path = path or self._save_path("Save Check", f"{self._stem()}_posterior_check.json", "JSON (*.json)")
         if not path:
             return None
-        result, checked, _model = self._check
+        result, checked = self._check[:2]
         try:
             Path(path).write_text(json.dumps(record(result, checked), indent=1, ensure_ascii=False, allow_nan=False),
                                   encoding="utf-8")

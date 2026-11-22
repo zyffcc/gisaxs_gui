@@ -105,11 +105,16 @@ def test_the_dark_frame_and_the_lorentz_factor_are_set_from_their_controls(tmp_p
         monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *_args, **_kw: (str(dark), "")))
         page.dark_button.click()
         page.lorentz_check.setChecked(True)
+        page.lorentz_band_spin.setValue(4.5)
+        page.orientation_exit_spin.setValue(0.35)
+        page.orientation_polar_check.setChecked(False)
         page._options_timer.stop()
         page.run_analysis()
         _done(page)
         analysis = page.view_model.state.analysis
         assert analysis.corrections.dark_path == str(dark) and analysis.corrections.lorentz
+        assert analysis.corrections.lorentz_band_px == 4.5 and analysis.corrections.orientation_min_exit_deg == 0.35
+        assert not analysis.corrections.orientation_polarization
         np.testing.assert_allclose(np.nanmax(analysis.raw_data - 3.0 - np.where(analysis.valid, 0, np.nan)),
                                    np.nanmax(analysis.raw_data) - 3.0)
         assert page.dark_label.text() == "dark.tif" and "dark dark.tif" in page.settings_summary()

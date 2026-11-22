@@ -36,6 +36,8 @@ class CurveData:
     without one, a cut detector frame); empty when nobody said."""
     rows_left_out: int = 0
     """Rows of the file that are not in the curve: not numbers, or NaN / inf in q, I or σ."""
+    dq: np.ndarray | None = None
+    """One standard deviation of the Gaussian q resolution, in q_source_unit."""
 
     def __post_init__(self) -> None:
         q = _one_dimensional(self.q, "q")
@@ -45,6 +47,9 @@ class CurveData:
         error = None if self.error is None else _one_dimensional(self.error, "error")
         if error is not None and error.size != q.size:
             raise ValueError("error and q must have the same length")
+        dq = None if self.dq is None else _one_dimensional(self.dq, "dQ")
+        if dq is not None and dq.size != q.size:
+            raise ValueError("dQ and q must have the same length")
         if self.q_source_unit not in ("nm", "angstrom"):
             raise ValueError(f"Unsupported q unit: {self.q_source_unit}")
         pixels = None if self.pixels is None else _one_dimensional(self.pixels, "pixels")
@@ -53,6 +58,7 @@ class CurveData:
         object.__setattr__(self, "q", q)
         object.__setattr__(self, "intensity", intensity)
         object.__setattr__(self, "error", error)
+        object.__setattr__(self, "dq", dq)
         object.__setattr__(self, "pixels", pixels)
         object.__setattr__(self, "observation", dict(self.observation or {}))
 

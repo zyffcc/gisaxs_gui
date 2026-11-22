@@ -14,8 +14,16 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 - **Analyze ▸ Mask & corrections.** Raw background and flat-field frames can use an exposure-scaled dark.
   Set the flat-field threshold, save detector gain, offset and error model in an instrument profile, and choose
-  pooled scatter errors or smoothed counting errors for sparse curves. Propagated errors include flat-field noise and treat the measured flat mean as fixed.
+  pooled scatter errors or smoothed counting errors for sparse curves. Propagated errors include flat-field
+  noise and treat the measured flat mean as fixed. GIWAXS exports identify the error model for the measured
+  orientation curve when it differs from the model for the radial curve.
 
+- **GIWAXS ring orientation** uses polarisation-corrected pixel means and an exit-angle cut. Reports give measured Hermans f with a statistical error and systematic range, fitted f and the background-dependent oriented fraction. Poor pole fits are flagged. Tilted-axis models average over azimuth. Lorentz weighting is available for peak areas, with an exclusion band around the plane of incidence. Phase assignments identify the q convention, Δq, Δd/d, ambiguous matches and unassigned peaks.
+
+- **Fitting ▸ In-situ series.** Inspect each Predict choice, its rank and its probability in the results table,
+  CSV, JSON and series report. The closest-solution rule now includes the relative radius width σ_R/R.
+  An optional hidden Markov model selects a path through the series and gives each solution a smoothed probability.
+  The trend shows the chosen mode's posterior median and 68% interval, with an optional least-squares marker.
 - **Analyze ▸ Absolute Scale from a Standard…** fits a detector frame or reduced radial curve against water at the
   measured temperature or a user-supplied reference such as glassy carbon. Calibrated exports carry intensity in
   cm⁻¹ and record the standard, fitted range, scale and uncertainty. The instrument profile keeps the calibration.
@@ -24,6 +32,30 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   shrinkage and inversion. Each mask edit supports Undo and Redo. Save an ordered JSON recipe or the current
   frame's user mask as EDF, TIFF, NumPy or Fit2D with its source record. See User Manual 5.2 and Physics and
   Methods 4.5.
+- **Fitting, Refine and Search.** Choose a number-weighted Gaussian, log-normal or Schulz distribution for each
+  population, use per-point Gaussian resolution from text curves or NXcanSAS, and select file, relative, Poisson
+  or logarithmic residuals. The fit record and report identify the settings used.
+- **Detector geometry in grazing incidence.** Analyze reads and writes pyFAI detector orientations 1–4,
+  displays the tilted horizon, and projects GIWAXS mirror partners onto the detector. XRR projects the
+  specular spot using the detector rotations. GISAXS users can check rot3 on a measured ridge or band.
+  The automatic vertical cut clears the specular rod by 15 columns where possible. Joint fitting warns
+  about a vertical band on the rod, and automatic horizontal cuts warn when the horizon crosses more than half a row.
+
+- **In-situ series after a user test.** The chained fit no longer breaks where a value reaches a bound of its range (the beam tail, the background or any other), at an undetermined value or at a poor fit — those are flagged; it breaks only at a failed or unconverged fit, a new stage or a jump of χ²ᵣ, and there Predict parameters (unchanged) restarts from its solution closest to the frame before among those at least a tenth as probable as the most probable one. A smooth series no longer gets steps from restarts (a linked two-sphere model jumped by a factor 2 in R₁ where only the beam tail's exponent had reached its bound). The table's new **Started from** column says “continued from frame n” or “restarted from Predict (why)”, with the rule that chose Predict's solution on hover; the saved table and record add `start_frame` and `predict_choice`. **Refine** and **Search** go on from their own result while χ²ᵣ falls by more than 0.1 % (at most 5 more runs, counted in the Run Log, the record and the report). **Fit New Frames in Fitting…** ticks **Watch for new curves** and starts once the model is set up; a map the watch begins includes the frame on screen when watching began; the Series map comes back with a project and after a crash; NXcanSAS files of fits mark their entries as data or model, and opened again offer the measured curves. Manual 3.9, 5.1, 6.1, 6.2, 6.5; *Physics and Methods* 9.8, 11.13, 14.2.
+- **Third user test: Analyze and GIWAXS.** Opening frames while others are listed no longer ends the program on a
+  computer without a display (the Replace / Add to List question, and the other questions of Analyze, Batch
+  Export, Sputter, Format Converter and the session, are now GIMaP's own question window). A CIF that names its
+  space group without listing the operations gets them from the symbol (all 230 groups and the common settings);
+  without that the phase gives positions only, says so in the Symmetry column and the report, and its assignments
+  are tentative — it no longer lists forbidden reflections with wrong intensities. A phase is named after its common
+  or mineral name or its data block, not its sum formula. The Results peak table has the phase, hkl and Δq of each
+  peak. A pole figure whose fit ends at a bound leads with *not determined* and the Hermans f of the measured bins.
+  The Normalisation, Corrections and intensity-correction sections head the Mask & corrections step, and the step
+  says when the intensities are scaled. Geometry Calibration shows one RMS residual and names it (ring points with the
+  tilt, ring radii without). Manual 5.2, 5.9, 4.3; *Physics and Methods* 3.4, 7.10, 7.11.
+- **Predict parameters** reports least-squares values, sampled medians, interval sources, BIC weights and Monte
+  Carlo errors. It flags high-q_z·R limits and departures from the validation point density. The MCMC check
+  compares independently initialized ensembles and reports autocorrelation time and split R̂.
 
 - **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
   sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture
@@ -32,7 +64,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   film with the transmitted and reflected DWBA channels; a table lists hkl, d, q∥, qz, χ, m and |F|². Run Automatic
   Analysis assigns each ring to the nearest reflection within max(3σ, FWHM/2) (a *phase assignment* decision, the
   peak rows, a report section; `--phase FILE.cif` on the command line) and fits the pole figure of each analysed
-  ring — Gaussian or Maier–Saupe about a direction plus an isotropic fraction, Lorentz-corrected, the missing wedge
+  ring — Gaussian or Maier–Saupe about a direction plus an isotropic fraction, the missing wedge
   filled by the model — giving the oriented fraction, the FWHM and Hermans f with their errors next to the Hermans
   factor of the measured bins. The window exports the pole figure as CSV with a JSON record. Manual 5.9;
   *Physics and Methods* 7.10, 7.11.
@@ -43,7 +75,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   the exports to In-situ series. The plot under the Series map has a timeline — the χ² of every frame to the one
   before and to a reference frame, with stage boundaries, jumps and odd frames — and a click on it shows that frame.
   Fitting ▸ In-situ series can start every frame from the previous result and ask Predict parameters only where that
-  chain breaks (a failed or flagged fit, a jump of χ²ᵣ, a new stage; Predict's method is unchanged), add a backward
+  chain breaks (a failed or unconverged fit, a jump of χ²ᵣ, a new stage; Predict's method is unchanged), add a backward
   pass, show a Flags column, draw the trend against time, and save the fits as NXcanSAS or into the results database.
   Compare ▸ Add Series ▸ **Results Database…** reads a recorded series without its frames. Manual sections 5.1, 5.6,
   6.5, 7.2, 12 and 13; *Physics and Methods* 11.12–11.14.
@@ -92,9 +124,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   Poisson, scaled); the unit of the intensity goes into the plots, the CSV column, an `# intensity:` line of every
   curve file, the fit input and the record (`normalisation`: the factor and each term with its source). A **dark
   frame** with its own scale is subtracted before the background (σ then from the pixel scatter). **Lorentz factor
-  (fibre texture)** among the GIWAXS intensity corrections divides by GIXSGUI's L = 1/(cos αi cos αf |sin 2θf|);
-  the Hermans factor of a Lorentz-corrected I(χ) is no longer weighted by sin χ a second time. With all of them off,
-  curves and σ are those of before. *Physics and Methods* 4.11, 4.12, 5.6 and 7.7.
+  for peak areas** among the GIWAXS intensity corrections divides by GIXSGUI's L = 1/(cos αi cos αf |sin 2θf|);
+  the radial curve then sums the weighted pixels. Ring orientation uses the mean intensities before this weighting. *Physics and Methods* 4.11, 4.12, 5.6 and 7.7.
 - **The Analyze display.** In log display, pixels at or below 0 (a dark-subtracted frame) take the lowest colour
   instead of none, and the automatic limits come from the positive values: such frames no longer look black. In
   linear display the colour bar is drawn around the limits. The image is the widest panel, and **Panels ▾** hides

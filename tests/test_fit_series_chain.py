@@ -1,10 +1,12 @@
 """The In-situ series page with a chained fit: each frame from the result of the one before, Predict parameters (a
-stand-in here, the page's ``predictor``: its method is not this test's) where the chain breaks, a backward pass, the
-Flags column, and the fits saved as a table with flag columns, as NXcanSAS and into the results database."""
+stand-in here, the page's ``predict_solutions``: its method is not this test's) where the chain breaks, a backward
+pass, the Started from and Flags columns, and the fits saved as a table with flag columns, as NXcanSAS (measured curves
+and models told apart) and into the results database; Fit New Frames in Fitting… ticks Watch and starts."""
 
 from __future__ import annotations
 
 import csv
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,7 +15,8 @@ from src.gimap.shared.series_store import SeriesStore
 from tests.test_fit_series import _model, _open_series, _pages, _series, _wait
 
 RADII = (5.0, 5.2, 5.4, 9.0, 9.2)
-"""A sample that changes at once between frame 3 and 4: refined from 5.4 nm, frame 4 is a poor fit."""
+"""A sample that changes at once between frame 3 and 4: there a new stage begins (said so here: the stages are not this
+test's), and the chain breaks."""
 
 
 def test_a_chained_series_asks_predict_only_where_the_chain_breaks_and_saves_its_flags(tmp_path, monkeypatch) -> None:
@@ -21,15 +24,18 @@ def test_a_chained_series_asks_predict_only_where_the_chain_breaks_and_saves_its
     try:
         folder = _series(tmp_path, RADII)
         single.open_curve(folder / "run_00001_fit_input.dat")
-        single.set_model(_model(5.2))
+        # The background held at 0: a value the chained fits keep; the stand-in's solutions have it free (better fits).
+        single.set_model(_model(5.2).with_parameter(("globals", "background"), value=0.0, free=False))
         assert _open_series(series, folder)
+        monkeypatch.setattr(series, "_new_stage", lambda index: index == 3)
         asked = []
 
-        def predictor(settings, previous, new_stage):
-            assert settings.method == "predict"
-            return lambda data, start: asked.append(len(data.q)) or _model(9.0)
+        def solutions(data, start):  # far, closer and probable, close but too unlikely
+            asked.append(len(data.q))
+            return [SimpleNamespace(model=_model(radius), probability=probability)
+                    for radius, probability in ((9.0, 1.0), (8.8, 0.5), (5.5, 0.01))]
 
-        monkeypatch.setattr(series, "predictor", predictor)
+        monkeypatch.setattr(series, "predict_solutions", lambda: solutions)
         series.skip_odd_check.setChecked(False)
         series.start_chain.setChecked(True)
         series.backward_check.setChecked(True)
@@ -41,23 +47,33 @@ def test_a_chained_series_asks_predict_only_where_the_chain_breaks_and_saves_its
         assert asked  # Predict parameters was asked …
         jump = fits[3]
         assert jump.chain and jump.start_from == "predict"  # … where the chain broke
+        # 8.8 nm, not 5.5 (too unlikely) nor 9.0: the closest to frame 3 (forward) or 5 (the backward pass, kept)
+        assert jump.predict_choice.startswith("the closest to frame ")
         assert jump.result.model.get((0, "R")).value == pytest.approx(9.0, rel=0.05)
         assert [fits[index].start_from for index in (1, 2)] in (["previous", "previous"], ["next", "next"])
         assert "Backward pass" in series.log_view.toPlainText()
         flags_column = series.results_table.columnCount() - 3  # (before Points and Halves)
         assert series.results_table.horizontalHeaderItem(flags_column).text() == "Flags"
-        assert "chain broke" in series.results_table.item(3, flags_column).text()
+        started = flags_column - 1
+        assert series.results_table.horizontalHeaderItem(started).text() == "Started from"
+        assert series.results_table.item(3, started).text() == "restarted from Predict (a new stage begins)"
+        assert "the closest to frame " in series.results_table.item(3, started).toolTip()
+        assert series.results_table.item(1, started).text() in ("continued from frame 1",
+                                                                 "continued from frame 3 (backward pass)")
+        assert "chain broke" not in series.results_table.item(3, flags_column).text()  # (said where it started)
 
         (tmp_path / "out").mkdir()
         table = series.save_table(tmp_path / "out" / "fits.csv")
         with open(table, encoding="utf-8") as stream:
             rows = list(csv.DictReader(stream))
         assert rows[3]["start_from"] == "predict" and "chain broke" in rows[3]["flags"]
+        assert rows[3]["predict_choice"].startswith("the closest to frame ") and rows[2]["start_frame"] in ("2", "4")
         assert {row["fit_pass"] for row in rows} <= {"forward", "backward"}
 
         written = series.save_fits_nxcansas(tmp_path / "out" / "fits.h5")
         curves = read_nxcansas(written)
         assert len(curves) == 10 and curves[0].title.startswith("frame 1 ") and curves[1].title.endswith("the model")
+        assert [curve.role for curve in curves[:2]] == ["data", "model"]
 
         store = series.save_results_database(tmp_path / "out" / "gimap_series.sqlite")
         with SeriesStore(store, read_only=True) as database:
@@ -69,6 +85,40 @@ def test_a_chained_series_asks_predict_only_where_the_chain_breaks_and_saves_its
     finally:
         series.dispose()
         single.dispose()
+
+
+def test_fit_new_frames_ticks_watch_and_starts_once_the_model_is_set_up(tmp_path) -> None:
+    from src.gimap.features.fitting.presentation.single.series_watch import WATCHING_NOT_SET_UP
+
+    single, series = _pages()
+    try:
+        folder = _series(tmp_path, RADII[:3])
+        series.open_series(folder)
+        series.watch_and_start()  # (asked while the curves are still being listed)
+        _wait_listed(series)
+        assert series.watch_check.isChecked() and not series.running  # the model is still the starting guess
+        assert series.status_label.text() == WATCHING_NOT_SET_UP
+        single.open_curve(folder / "run_00001_fit_input.dat")
+        single.set_model(_model(5.2))
+        series.watch_and_start()  # listed already: at once
+        assert series.running and series._watch.isActive()
+        series.stop()
+        _wait(series)
+    finally:
+        series.dispose()
+        single.dispose()
+
+
+def _wait_listed(series) -> None:
+    import time
+
+    from PyQt5.QtWidgets import QApplication
+
+    end = time.monotonic() + 30
+    while (series._listing_busy or series._start_when_listed) and time.monotonic() < end:
+        QApplication.processEvents()
+        time.sleep(0.005)
+    QApplication.processEvents()
 
 
 def test_the_trend_is_drawn_against_time_when_the_curves_say_when_they_were_measured(tmp_path) -> None:
@@ -118,12 +168,24 @@ def test_every_new_text_of_the_page_has_its_chinese() -> None:
                  series.backward_check.toolTip(), series.save_nxcansas_action.text(), series.save_nxcansas_action.toolTip(),
                  series.save_store_action.text(), series.save_store_action.toolTip(), series.trend_axis_combo.toolTip(),
                  *(series.trend_axis_combo.itemText(index) for index in range(series.trend_axis_combo.count()))]
+        from src.gimap.app import document_session  # noqa: F401 - (the window's session texts load with it)
+        from src.gimap.features.analyze.presentation.bindings import project, watch_online
         from src.gimap.features.fitting.application.series_chain import FLAG_KINDS
-        from src.gimap.features.fitting.presentation.single import series_chain, series_results
+        from src.gimap.features.fitting.presentation import curve_import
+        from src.gimap.features.fitting.presentation.single import (
+            page,
+            run,
+            series_chain,
+            series_results,
+            series_watch,
+            start_texts,
+        )
 
         texts += [*FLAG_KINDS, series_results.FLAGS_TIP, series_chain.BACKWARD_STARTED, series_chain.BACKWARD_KEPT,
                   series_chain.CHAIN_REFINE_ONLY, series_chain.NOTHING_TO_SAVE, series_chain.SAVED_NXCANSAS,
-                  series_chain.SAVED_STORE, "Flags", "from the previous frame, Predict where the chain breaks"]
+                  series_chain.SAVED_STORE, "Flags", "from the previous frame, Predict where the chain breaks",
+                  *start_texts.TEXTS, series_watch.WATCHING_NOT_SET_UP, run.RESTARTED, watch_online.FIT_HANDED,
+                  page.CHOOSE_MEASURED, curve_import.NXCANSAS_FITS_NOTE, project.MAP_NOT_KEPT, project.MAP_UNREADABLE]
         assert sorted(text for text in texts if text not in ZH) == []
     finally:
         series.dispose()

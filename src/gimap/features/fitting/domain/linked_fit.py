@@ -12,7 +12,7 @@ import numpy as np
 from scipy.optimize import lsq_linear
 
 from . import fit_links
-from .fit_model import LINEAR, FitModel, component_form, grazing, resolution_shape
+from .fit_model import LINEAR, FitModel, particle_forms, resolution_shape
 
 
 def inequalities(problem, model: FitModel) -> list:
@@ -105,8 +105,8 @@ def bound(problem, values, t=None) -> np.ndarray:
 def scales_linked(problem, model: FitModel) -> FitModel:
     """``_scales`` with linked scales that read the fitted ones: each linked scale is c₀ + Σ cⱼ xⱼ of the fitted
     scales xⱼ (``check_linear``), so its term joins their columns and its c₀ part the fixed curve."""
-    q, k, geometry = problem.data.q, float(model.globals["k"].value), grazing(model)
-    forms: dict = {}
+    q, k = problem.data.q, float(model.globals["k"].value)
+    forms = particle_forms(model, q, problem.data.dq, problem.cache, scale_columns=True)
 
     def basis(path):
         owner, key = path
@@ -114,8 +114,6 @@ def scales_linked(problem, model: FitModel) -> FitModel:
             return np.ones_like(q)
         if key == "res_amplitude":
             return k * resolution_shape(model, q)
-        if owner not in forms:
-            forms[owner] = component_form(model.components[owner], q, problem.cache, geometry)
         return k * forms[owner]
 
     tied = list(problem.linear_ties)

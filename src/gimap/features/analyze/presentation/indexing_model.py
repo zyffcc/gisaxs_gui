@@ -72,8 +72,8 @@ class IndexingModel:
     def visible_overlays(self, geometry) -> tuple[PhaseOverlay, ...]:
         return tuple(overlay for overlay in self.overlays(geometry) if overlay.spec.visible)
 
-    def assign(self, peaks: Sequence[dict]) -> dict:
-        return assign_peaks(peaks, self.phases, self.settings.q_max)
+    def assign(self, peaks: Sequence[dict], geometry=None, *, transmission=False) -> dict:
+        return assign_peaks(peaks, self.phases, self.settings.q_max, geometry=geometry, transmission=transmission)
 
     def record(self, geometry) -> dict:
         return indexing_record(self.phases, self.settings, self.overlays(geometry))

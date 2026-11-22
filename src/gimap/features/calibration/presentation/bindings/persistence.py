@@ -111,6 +111,8 @@ class PersistenceMixin:
             self._set_energy(self.result.energy_kev, FROM_IMPORT)
             self.pixel_x_spin.setValue(self.result.pixel_size_x_m * 1e6)
             self.pixel_y_spin.setValue(self.result.pixel_size_y_m * 1e6)
+            roll = self.result.selected_candidate.rot3_deg
+            self.rot3_spin.setValue(roll if -180 <= roll <= 180 else (roll + 180) % 360 - 180)
             # A new run fits the standard this calibration was made with: left on "Auto Detect" it could
             # settle on another one than the calibration that was imported.
             standard_index = self.standard_combo.findData(self.result.selected_candidate.standard_key)

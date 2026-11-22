@@ -3,7 +3,7 @@
 ERROR_MODELS = {
     "poisson": "Poisson counting statistics of each bin",
     "scaled_poisson": "Poisson counting statistics propagated through the reduction",
-    "pixel_scatter": "the scatter of the corrected pixels in each bin",
+    "pixel_scatter": "the scatter of the corrected pixels in each bin (a pixel-scatter uncertainty, not counting noise)",
     "sigma_frame": "the supplied pixel standard deviations propagated through the reduction",
 }
 

@@ -76,7 +76,7 @@ class GeometryCalibrationTranslations:
         self.calibrationAdvancedDescription.setText(  # the tooltip of the toggle (bind_advanced_section)
             _translate(
                 "GeometryCalibrationDialog",
-                "Detector overrides (pixel size), custom distance bounds for the search, and preview overlays.",
+                "Detector rotations, pixel sizes, distance limits and preview overlays.",
             )
         )
         self.advanced_group.setTitle(

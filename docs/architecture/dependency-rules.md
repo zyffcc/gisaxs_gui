@@ -24,6 +24,7 @@
 | **feature 之间不互相导入**：`src/gimap/features/X/` 里不能出现 `src.gimap.features.Y`（Y ≠ X）。 | `test_features_do_not_import_other_feature_internals` |
 | `src/gimap/shared` 和 `src/gimap/app/presentation` 都不导入 `src.gimap.features`。 | `test_shared_does_not_import_feature_implementations`、`test_ui_design_system.py::test_shared_components_construct_without_feature_or_scientific_dependencies` |
 | `QFileDialog`、`QMessageBox` 只在路径含 `presentation` 的模块里导入（`app/menus.py` 等经 `app/presentation/app_dialogs.py`）。 | `test_qt_file_and_message_dialogs_are_confined_to_presentation` |
+| 带自定按钮的提问用 `app/presentation/question_box.py` 的 `QuestionBox` / `ask_choice`，不构造 `QMessageBox(...)`：Windows 的 offscreen 平台上显示 `QMessageBox` 会使进程崩溃（访问冲突）。 | `tests/test_open_frames_question.py::test_no_question_is_built_as_a_qmessagebox` |
 | 删除的顶层包不回来：`calibration/`、`controllers/`、`trainset/`、`ui/`、`WAXS/` 下没有 `.py`；`utils/` 顶层除 `__init__.py` 外没有 `.py`；`core/`、`config/` 没有 `.py`；没有 `legacy_bridge.py` / `legacy_controller.py`；`src/gimap` 不 `import` 顶层 `calibration`、`controllers`、`trainset`、`ui`、`utils`、`waxs`、`core`、`config`。 | `test_deleted_compatibility_aliases_do_not_regrow`、`test_new_source_does_not_depend_on_legacy_compatibility_packages`、`test_settings_live_in_the_user_store_only`、`test_production_source_does_not_use_internal_legacy_bridges` |
 | 每个 `.qss` 在浅色和深色主题下都能被 Qt 解析。 | `test_every_style_sheet_parses_in_qt_in_both_themes` |
 | 真实主窗口能 offscreen 启动：6 个页面、fitting / prediction / trainset 三个 binding、一个 Compare 页面。 | `tools/offscreen_smoke.py`（`tools/check.py` 的一步） |

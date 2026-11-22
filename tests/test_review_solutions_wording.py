@@ -216,7 +216,7 @@ def test_fit_details_give_the_value_in_model_with_its_interval_and_few_warning_l
     lines = predict_texts.solution_lines(by_errors, [by_errors], many=False)
     assert lines[0].startswith("Values in Model with 68 % intervals from the least-squares errors")
     assert "median" not in "\n".join(lines) and "posterior intervals" not in lines[0]
-    assert "Probability 0.60, relative to the compositions that were tried." in lines
+    assert "BIC weight 0.6 among the solutions compared." in lines
     assert not any("edge of the posterior" in line for line in lines)  # an interval from errors has no such edge
 
 
@@ -274,7 +274,7 @@ def test_predict_then_refine_on_the_page_says_the_points_of_each_chi2(tmp_path, 
         assert f"(χ²ᵣ {chi2} over 200 of 203 points; 3 below the network's q window)" in status
         assert page.solutions_table.item(0, 4).text() == chi2  # the same number in the table
         details = page.warnings_label.text()
-        assert "Values in Model with" in details and "median" not in details
+        assert "Values in Model with" in details and "Posterior median [central 68 % interval]" in details
         assert "χ²ᵣ is over 200 of 203 points; 3 below the network's q window." in details
         radius = page.session.model.components[0].value("R")
         assert radius == pytest.approx(4.0, rel=0.05) and f"R {radius:.2f} [" in details  # the value that is in Model

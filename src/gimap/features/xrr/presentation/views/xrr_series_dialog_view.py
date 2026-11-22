@@ -14,6 +14,7 @@ from src.gimap.app.presentation import (
     SafeWheelDoubleSpinBox,
     SafeWheelSpinBox,
 )
+from src.gimap.app.presentation.components.sections import AdvancedSection
 
 from ..pixel_coordinates import PIXEL_NOTE
 
@@ -158,7 +159,7 @@ class XrrSeriesDialogView:
         self.center_y_spin.setObjectName("xrrCenterYSpin")
         self.direction_combo = SafeWheelComboBox(self.geometry_section.content)
         self.direction_combo.setObjectName("xrrDirectionCombo")
-        self.direction_combo.addItems(["Specular moves up (−y)", "Specular moves down (+y)"])
+        self.direction_combo.addItems(["Up in the laboratory frame", "Down in the laboratory frame"])
         # Beside each value: where it came from (file, last calibration, default …); empty once typed.
         self.geometry_source_labels = {}
         self.geometry_field_labels = {}  # the name of each value, at the left of its row
@@ -179,6 +180,26 @@ class XrrSeriesDialogView:
             self.geometry_field_labels[key].setToolTip(PIXEL_NOTE)
         form.addRow("Reflection direction", self.direction_combo)
         self.geometry_section.add_layout(form)
+        self.rotation_section = AdvancedSection("Detector rotations", "pyFAI rotations in degrees. "
+                                               "Check these values for a tilted or rolled detector.",
+                                               self.geometry_section.content)
+        rotation_form = QtWidgets.QFormLayout()
+        for key in ("rot1", "rot2", "rot3"):
+            limit = 89.99999 if key != "rot3" else 360.0
+            spin = self._double(0.0, -limit, limit, 5, 0.01)
+            spin.setRange(-limit, limit)  # Qt rounds the range to the current decimal precision
+            spin.setObjectName(f"xrr{key.title()}Spin")
+            setattr(self, f"{key}_spin", spin)
+            field = self._sourced_field(key, spin)
+            rotation_form.addRow(f"{key} (°)", field)
+            self.geometry_field_labels[key] = rotation_form.labelForField(field)
+        self.orientation_spin = self._double(3, 1, 4, 0, 1)
+        self.orientation_spin.setObjectName("xrrOrientationSpin")
+        field = self._sourced_field("orientation", self.orientation_spin)
+        rotation_form.addRow("pyFAI orientation", field)
+        self.geometry_field_labels["orientation"] = rotation_form.labelForField(field)
+        self.rotation_section.add_layout(rotation_form)
+        self.geometry_section.add_widget(self.rotation_section)
         self.geometry_note = QtWidgets.QLabel("", self.geometry_section.content)
         self.geometry_note.setObjectName("xrrGeometryNote")
         self.geometry_note.setProperty("gimapMeta", True)

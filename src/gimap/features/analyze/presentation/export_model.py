@@ -72,6 +72,11 @@ class ExportModelMixin:
     def series_row(self, request: AnalysisRequest, key: str) -> tuple:
         """Thread-safe: ``(x, intensity, x_label, row label, (path, frame_index))`` of one frame's curve."""
         analysis = self.analyze(replace(request, with_map=False))  # one curve per frame: no q map
+        return self.series_row_of(analysis, key)
+
+    @staticmethod
+    def series_row_of(analysis: FrameAnalysis, key: str) -> tuple:
+        """The same row of a frame already analysed (the one on screen): nothing is read again."""
         x, intensity, x_label = series_row(analysis, key)
         return x, intensity, x_label, row_label(analysis), (Path(analysis.path), int(analysis.frame_index))
 

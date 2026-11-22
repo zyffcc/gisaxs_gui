@@ -45,7 +45,7 @@ def default_options() -> dict:
         q_unit="A^-1",
         render_points=500,
         side="both",
-        cut_qz=None,
+        cut_qz=None, reflected_beam=False, measured_qz=None,
     )
 
 
@@ -75,6 +75,9 @@ def validate_options(options: dict) -> dict:
     qz = out["cut_qz"]
     if qz is not None and (isinstance(qz, bool) or not np.isfinite(qz) or not 0 <= qz <= 10):
         raise ValueError("cut_qz must be within [0, 10] nm^-1, or empty")
+    measured = out["measured_qz"]
+    if measured is not None and (isinstance(measured, bool) or not np.isfinite(measured) or not 0 < measured <= 10):
+        raise ValueError("Measured q_z for level-1 flags must be within (0, 10] nm⁻¹.")
     for key, lo, hi in (
         ("max_solutions", 1, 100),
         ("render_points", 2, 2000),

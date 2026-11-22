@@ -89,7 +89,7 @@ def test_a_frame_cut_at_the_cut_of_the_series_says_so_in_its_record(tmp_path: Pa
                                      "vertical_columns": held["vertical_columns"]}
     record = json.loads(json.dumps(analysis_metadata(other)))  # (what the _analysis.json beside its curves says)
     cuts = frame_cuts(record)
-    assert cuts["horizontal_source"] == "series"
+    assert cuts["horizontal_source"] == "series" and cuts["vertical_source"] == "series"
     assert cuts["series_cut"] == {"frame": [str(shown.path), 0], "horizontal_rows": list(held["horizontal_rows"]),
                                   "vertical_columns": list(held["vertical_columns"])}
     model.set_pin_series_cuts(False)  # found again in every frame: each frame its own Yoneda cut, no cut of a series
@@ -120,7 +120,7 @@ def test_a_cut_the_person_set_stays_theirs_in_the_record(tmp_path: Path) -> None
     other = model.analyze(model.batch_requests()[2])
     markers = other.reduction.markers
     assert markers["horizontal_source"] == "manual"
-    assert markers["series_cut"] == {"frame": (str(shown.path), 0), "vertical_columns": (115.0, 125.0)}
+    assert markers["series_cut"] == {"frame": (str(shown.path), 0), "vertical_columns": (135.0, 145.0)}
     assert frame_cuts(analysis_metadata(other))["horizontal_source"] == "manual"
 
 

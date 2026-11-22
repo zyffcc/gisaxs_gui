@@ -30,6 +30,21 @@ def _spacing(q: float) -> Optional[float]:
     return 2.0 * math.pi / q if q > 1e-9 else None
 
 
+def rod_rotation_deg(geometry: DetectorGeometry, first, second) -> float:
+    """Rotation nearest the current rot3 that puts the picked ridge parallel to the lab vertical.
+
+    Turning rot3 by δ rotates (right, up) about the beam. The horizontal component of the
+    difference must vanish. A ridge has no arrow, hence the correction is modulo 180°.
+    The two q_y readouts separately test that the line also passes through the direct beam.
+    """
+    dx = (second[0] - first[0]) * geometry.pixel_size_x_m
+    dy = (first[1] - second[1]) * geometry.pixel_size_y_m
+    _, right, up = lab_rays(geometry, dx, dy)
+    # Δright after an additional roll δ is right·cos δ − up·sin δ.
+    correction = (math.degrees(math.atan2(right, up)) + 90.0) % 180.0 - 90.0
+    return (math.degrees(geometry.rot3_rad) + correction + 180.0) % 360.0 - 180.0
+
+
 def detector_point(geometry: DetectorGeometry, x_px: float, y_px: float, kind: Optional[str]) -> dict:
     """The coordinates of a detector position (see the module docstring); ``alpha_f_deg`` and ``q_parallel`` are
     ``None`` in transmission."""

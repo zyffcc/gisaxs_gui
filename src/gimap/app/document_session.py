@@ -56,6 +56,11 @@ def fingerprint(components) -> Optional[str]:
         analyze = dict(components.analyze_page.project_state())
         for key in ("current", "frame"):  # the frame looked at is no change of the work
             analyze.pop(key, None)
+        series = analyze.get("series_map")
+        if isinstance(series, dict) and series.get("rows"):
+            # The Series map's rows by their frame and the hash of their encoded values (the same text objects while a
+            # row stays, so the hash is cheap): not the whole of its arrays at every look.
+            analyze["series_map"] = {**series, "rows": [[row.get("ref"), hash(row["y"]["f8"])] for row in series["rows"]]}
         workspace = components.fitting_workspace
         parts = {"analyze": analyze, "single": workspace.fit_page.project_state(),
                  "series": workspace.series_page.project_state()}

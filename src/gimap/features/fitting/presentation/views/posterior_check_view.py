@@ -50,7 +50,7 @@ def build_check_tab(owner, tabs: QTabWidget) -> QWidget:
                               "Steps of every walker; the first half is discarded (burn-in)")
     owner.check_steps.setSingleStep(500)
     owner.check_walkers = _spin(tab, "fitCheckWalkers", 0, 400, 0,
-                                "Walkers of the ensemble (even); 0: four per value, at least 16")
+                                "Walkers in each independent ensemble (even). Auto uses at least 16 and four per value.")
     owner.check_walkers.setSpecialValueText("auto")
     owner.check_seed = _spin(tab, "fitCheckSeed", 0, 999999, 0, "Seed of the random numbers (the same seed, the same run)")
     owner.check_run = QPushButton("Run Check", tab)

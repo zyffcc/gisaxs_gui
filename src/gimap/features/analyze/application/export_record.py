@@ -133,6 +133,7 @@ def frame_cuts(metadata: Optional[Mapping[str, Any]]) -> dict[str, Any]:
         cuts["horizontal_rows"] = list(rows) if rows else None
         cuts["horizontal_source"] = markers.get("horizontal_source")
         cuts["vertical_columns"] = list(columns) if columns else None
+        cuts["vertical_source"] = markers.get("vertical_source")
     elif metadata.get("measurement") in (GIWAXS, "transmission"):
         window = markers.get("chi_q_window")
         cuts["chi_q_window"] = [float(value) for value in window] if window else None
@@ -184,7 +185,8 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
         "pixels_filled_from_mirror": None if analysis.filled_pixels is None else int(analysis.filled_pixels.sum()),
         "markers": _plain(reduction.markers) if reduction is not None else {},
         "curves": [
-            {"key": curve.key, "title": curve.title, "x_label": curve.x_label, "region": _plain(curve.region)}
+            {"key": curve.key, "title": curve.title, "x_label": curve.x_label, "y_label": curve.y_label,
+             "region": _plain(curve.region)}
             for curve in (reduction.curves if reduction is not None else ())
         ],
         "messages": list(analysis.messages),
@@ -209,7 +211,9 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
         record["source_files"] = files
     # Every input by file name and SHA-256: the paths above are where the files were on this computer.
     references = [corrections.dark_path, corrections.background_path, corrections.flat_field_path]
-    if getattr(analysis, "error_model_used", None) == "sigma":
+    if getattr(analysis, "error_model_used", None) == "sigma" or any(
+        curve["region"].get("error_model") == "sigma_frame" for curve in record["curves"]
+    ):
         references.append(corrections.sigma_path)
     record["input_sha256"] = input_digests(
         [*(files or [analysis.path]), *(path for path, _ in analysis.summed_frames or ()), *mask_sources,
@@ -265,12 +269,20 @@ def intensity_lines(record: Mapping[str, Any]) -> list[str]:
         lines.append(f"background dark scale: {reference['background_dark_scale']:g} ({reference['source']})")
     model = record.get("error_model")
     if model:
-        details = ""
-        if model in (POISSON, SCALED_POISSON):
-            details = f", {corrections.get('poisson_variance', 'observed')} sample shot variance"
-        elif model == PIXEL_SCATTER and corrections.get("pooled_scatter"):
-            details = ", pooled below 10 pixels"
-        lines.append(f"error model: {model}{details}")
+        def estimator(name):
+            if name in (POISSON, SCALED_POISSON):
+                return f"{name}, {corrections.get('poisson_variance', 'observed')} sample shot variance"
+            if name == PIXEL_SCATTER and corrections.get("pooled_scatter"):
+                return f"{name}, pooled below 10 pixels"
+            return name
+
+        ring = next(((c.get("region") or {}).get("error_model") for c in record.get("curves") or ()
+                     if c.get("key") == "azimuthal"), None)
+        if ring and ring != model:
+            lines.append(f"radial and sector error model: {estimator(model)}")
+            lines.append(f"ring orientation error model: {estimator(ring)}")
+        else:
+            lines.append(f"error model: {estimator(model)}")
     norm = record.get("normalisation")
     if norm:
         terms = ", ".join(f"{key} {item['value']:.6g} ({item['source']})" for key, item in norm.items()
@@ -320,7 +332,7 @@ def binning(analysis: FrameAnalysis) -> Optional[dict[str, Any]]:
         "bins_chosen": None if not radial else (
             "auto: the q range over the q step of one pixel (99th percentile), 100 to 3000 bins" if radial.get("chosen") == "auto" else "set in Options"),
         "radial_points": None if curve is None else int(np.asarray(curve.x).size),
-        "merge": MERGE_RULE,
+        "merge": "none (sum per original q bin)" if curve is not None and curve.region.get("aggregation") else MERGE_RULE,
         "chi_bin_deg": 1.0, "chi_merge": "none (the I(χ) bins are kept as they are)",
     }
 
@@ -398,6 +410,11 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
         "gap_guard_px": int(corrections.gap_guard_px),
         "summed_frames": analysis.frame_total,
     }
+    if analysis.kind == GIWAXS and corrections.lorentz:
+        radial = analysis.reduction.curve("radial") if analysis.reduction is not None else None
+        if radial is not None:
+            record["intensity_unit"] = radial.y_label.removeprefix("I (").removesuffix(")")
+            record["aggregation"] = radial.region.get("aggregation")
     if analysis.kind == GISAXS and halves in FIT_HALVES:
         record["halves"] = halves
     count = int(getattr(analysis, "frame_count", 1) or 1)
