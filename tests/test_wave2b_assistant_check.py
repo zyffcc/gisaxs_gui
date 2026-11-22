@@ -40,6 +40,7 @@ ROOT = Path(__file__).resolve().parents[1] / "src" / "gimap" / "features"
 SOURCES = [*(ROOT / "assistant" / "domain").glob("*.py"), *(ROOT / "assistant" / "application").glob("*.py"),
            ROOT / "fitting" / "infrastructure" / "adapters" / "posterior_job.py",  # the warnings of Predict parameters
            ROOT.parent / "shared" / "fit_names.py",  # … whose sentences and names are written there
+           ROOT.parent / "shared" / "orientation_notes.py",  # the measured χ coverage warning
            ROOT.parent / "shared" / "geometry" / "header_check.py"]  # the header's distance against the calibration
 ZH_TEST = {
     "tilted: maximum at χ ≈ ±{chi}°": "倾斜取向：极大值位于 χ ≈ ±{chi}°",

@@ -72,18 +72,20 @@ def _delete_closed_dialogs() -> None:
 def qt_application():
     """One QApplication with the production theme for every UI test.
 
-    Windows offscreen Qt has no system font database, so real glyphs are
-    loaded for layout checks.
+    On Windows the offscreen font database can be partial, and even with
+    QT_QPA_FONTDIR set its default can be Helvetica. Use the desktop font
+    for the same text widths as the application.
     """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PyQt5.QtGui import QFont, QFontDatabase
     from PyQt5.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication([])
-    if sys.platform == "win32" and not QFontDatabase().families():
+    if sys.platform == "win32":
         fonts = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
-        for name in ("arial.ttf", "segoeui.ttf", "msyh.ttc"):
-            if (fonts / name).is_file():
+        families = set(QFontDatabase().families())
+        for family, name in (("Arial", "arial.ttf"), ("Segoe UI", "segoeui.ttf"), ("Microsoft YaHei", "msyh.ttc")):
+            if family not in families and (fonts / name).is_file():
                 QFontDatabase.addApplicationFont(str(fonts / name))
         app.setFont(QFont("Segoe UI", 9))
     from src.gimap.app.presentation.theme import apply_theme

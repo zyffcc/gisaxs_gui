@@ -12,6 +12,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- The manuals document the precision of an applied beam centre in Analyze, Geometry Calibration and XRR,
+  and the differences observed when reproducing archived Predict parameters fits on another platform.
 - **Predict parameters** flags upright cylinders that could represent spheres above q_z·R = 2 at levels 2 and 3,
   and uncertain radius intervals above 1.7 at level 3. Fit details compare the point spacing at the intensity
   maximum with the linear validation grid and flag cuts with fewer than 80 or more than 400 points.
