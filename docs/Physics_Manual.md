@@ -534,7 +534,7 @@ Inputs: the image, the energy (λ from (1.1)), the pixel size (from the header o
 4. **Distance hypotheses and matching.** Each of the first 35 peaks paired with each line of the standard gives a distance by inverting (3.6); distances inside the range are clustered within 0.8 %. At each distance, predicted and observed radii are paired greedily within a tolerance of `max(3 px, 0.018 r, 0.6 w)` (w: peak width). With the pairs fixed, L is solved by one-parameter linear least squares, equation (3.7).
 5. **Ranking.** A weighted score rewards matched rings (each counted in proportion to its prominence up to 0.1 in the log-scaled profile, about 10 % contrast, and whole above it: chance coincidences with noise-level peaks do not outweigh fewer clear rings), azimuthal coverage, valid area, centre support, an unbroken run of orders and prominence, and a Gaussian prior of 20 % width around an estimated distance. It penalises the residual, inconsistent per-ring distances, unexplained inner peaks and (for AgBH) a missing first order.
 6. **Joint refinement.** For up to 6 groups of proposals with up to 3 distinct distances each, the beam centre and L are refined together. Ring points are the valid pixels within `h = clip(0.012 r, 3, 10)` px of each predicted ring whose preprocessed signal reaches the 70th percentile of the annulus, at most 800 per ring. The residual (3.8) is minimised with `scipy.optimize.least_squares` (soft-L1 loss, f_scale 2 px, at most 80 evaluations). The centre may move by 5 px (direct-beam proposal), by 40 to 140 px (arc voting) or by 12 to 60 px (other proposals); L may move by ±15 %. Only `x_c`, `y_c` and `L` are free.
-7. **Re-matching.** At the refined centre the rings are detected again and matched at the refined L, and L is solved again with (3.7). **The distance and the residual that are reported come from this step**, not from the joint fit. On a synthetic AgBH frame (true L = 1600.0 mm, 4 rings) the joint fit gave 1599.96 mm and the reported value was 1599.85 mm; the centre was within 0.03 px of the true one.
+7. **Re-matching.** At the refined centre the rings are detected again and matched at the refined L, and L is solved again with (3.7). The ring-radius RMS from this step is used to rank the candidates.
 8. **Result.** The best three candidates are kept, plus the best candidate of each other standard tried, up to five. The record holds the SHA-256, size and modification time of the image, the energy, λ, the pixel sizes, every candidate and the image shape. With fewer than two matched rings a warning says that the distance is ambiguous.
 
 ```text
@@ -544,15 +544,14 @@ L = Σ_m u_m r_m / Σ_m u_m²,     u_m = tan 2θ_m / p̄     (r_m: observed radi
 
 In (3.8), `(x_p, y_p)` are the integer index coordinates of ring pixel p, `q_p` the line it was assigned to, and ρ_p is in pixels.
 
-9. **Detector tilt.** For the candidates shown, rot1 and rot2 are then fitted with the centre and the distance (section 3.8), by default when at least three rings are matched (**Refine rot1, rot2**, on by default; off: the steps above are the result unchanged).
+9. **Final geometry.** With at least two matched rings and enough points, the centre and distance of each retained candidate are refined on the sector centroids in section 3.8. Enabling tilt refinement also frees rot1 and rot2 when at least three rings are matched.
 
 Wavelength, pixel size and rot3 are fixed. Powder rings measure angles to the incident beam, so they cannot determine a rotation about it. The engine keeps the supplied rot3 even when refinement is skipped (default 0°). The physical rotations of a candidate are `rot1_deg`, `rot2_deg` and `rot3_deg`.
 
 **Uncertainty.** The points along one ring are not independent: when a ring is slightly off, all of them move
 together. The 1σ of x_c, y_c and L is therefore the scatter between the rings: with three or more matched rings the
 fit is repeated with each ring left out, and σ² = (n − 1)/n · Σ (θ_i − θ̄)² (jackknife). With two rings only the
-least-squares covariance s² (JᵀJ)⁻¹ is left, a lower bound. On a synthetic AgBh image with five rings σ is 0.02 px
-for the centre and 0.04 mm at 1 m. A ring matched wrongly, or a bias common to all rings, is not in σ. The values are
+least-squares covariance s² (JᵀJ)⁻¹ is left, a lower bound. A ring matched wrongly, or a bias common to all rings, is not in σ. The values are
 in the calibration record (`center_x_sigma_px`, `center_y_sigma_px`, `distance_sigma_mm`, `uncertainty_method`), in
 the tooltips of the result, and in the `source` of the instrument profile, so they reach every `<stem>_analysis.json`.
 
@@ -562,7 +561,7 @@ Implementation: `src/gimap/features/calibration/domain/engine.py`, `src/gimap/fe
 
 GIMaP uses two measures of a calibration.
 
-**Ring residual (the Geometry Calibration window).** `rms_residual_px` is the RMS of observed minus predicted ring radius, in pixels, at the reported centre and distance (step 7). The window shows one residual, of the geometry it displays: this one as *Ring-radius RMS* when the tilt was not refined, else the ring-point RMS of (3.17) with the tilt (`point_rms_px`, section 3.8) as *Ring-point RMS*; the tooltip says which, and gives the same points without the tilt. `distance_consistency` is the standard deviation divided by the mean of the per-ring distances. `azimuthal_coverage` is the mean coverage of the matched rings. The window shows a confidence:
+**Ring residual (the Geometry Calibration window).** *Ring-point RMS* gives the RMS of (3.17) for the final geometry with fixed or fitted tilt. Its tooltip gives the starting geometry on the same points. After fitting tilt, it also gives the RMS for centre and distance refitted at zero tilt on those points. *Ring-radius RMS* is shown when no point fit is recorded. The ring-radius value `rms_residual_px` comes from re-matching (step 7) and determines confidence. `distance_consistency` is the standard deviation divided by the mean of the per-ring distances. `azimuthal_coverage` is the mean coverage of the matched rings. The window shows a confidence:
 
 | Confidence | Condition |
 |---|---|
@@ -590,7 +589,7 @@ GIMaP uses two measures of a calibration.
 
 Among the candidates with at least 3 accepted lines, the one with the smallest ε is chosen, even when the engine ranked another first; the record says which rule chose (`chosen_by`).
 
-"Good" means that the geometry agrees with its own calibration image. It does not show that the calibration belongs to the sample data. On the partial arcs of the public pyFAI AgBH frame the centre-and-distance fit alone put the centre about 3 px off and the distance 0.45 % off; with the tilt stage (section 3.8) the centre lies within 0.2 px of the `.poni`'s direct beam.
+"Good" measures agreement with the calibration image. Check the acquisition records to establish that the calibration belongs to the sample data. Section 3.8 gives the fixed- and free-tilt results on the public pyFAI AgBh frame.
 
 Implementation: `src/gimap/features/calibration/domain/candidate_ranker.py`, `src/gimap/features/calibration/domain/line_check.py`, `src/gimap/features/calibration/application/headless.py`, `src/gimap/features/assistant/domain/calibration_quality.py`
 
@@ -692,8 +691,7 @@ Implementation: `src/gimap/shared/geometry/detector_geometry.py` (`in_plane_axes
 ### 3.8 Detector tilt from the rings of the standard
 
 A detector that is not perpendicular to the beam turns the rings into conic sections. After the centre-and-distance
-fit (section 3.3, steps 1–7), five parameters are fitted together: the direct beam `(x_c, y_c)`, the distance `L` to
-it, rot_1 and rot_2; rot_3 is kept (0, or a value given). The geometry is GIMaP's (1.3)–(1.4) with (3.15), the one
+fit (section 3.3, steps 1–7), the sector centroids determine the direct beam `(x_c, y_c)` and the distance `L`. When tilt refinement is enabled they also determine rot_1 and rot_2. Rot_3 stays at its supplied value (default 0°). The geometry is GIMaP's (1.3)–(1.4) with (3.15), the one
 Analyze uses, so a calibrated geometry and the q of Analyze agree by construction.
 
 **Ring points.** For each matched ring of q_m, the valid pixels within `h = 2 clip(0.012 r, 3, 10)` px (first pass)
@@ -714,25 +712,20 @@ in pixels; for an untilted detector (3.17) is exactly (3.8). It is minimised wit
 (soft-L1 loss, f_scale 2 px, at most 200 evaluations); the centre may move by `clip(0.04 max(W, H), 12, 60)` px,
 L by ±25 % within the distance range, rot_1 and rot_2 within ±30°. The points are taken again around the rings of
 the new geometry and the fit repeated, four passes at most (fewer when the centre moves less than 0.01 px and the
-rotations less than 10⁻⁶ rad). The RMS of (3.17) is reported with and without the tilt (`point_rms_px`,
-`untilted_point_rms_px`).
+rotations less than 10⁻⁶ rad). On the final set of points the record gives the RMS of the starting geometry (`initial_point_rms_px`) and the fitted geometry (`point_rms_px`). A tilted fit also reports `untilted_point_rms_px` after fitting centre and distance on these points with rot_1 = rot_2 = 0.
 
-**When.** By default (**Refine rot1, rot2** ticked) with three or more matched rings; with fewer the candidate
-carries the warning *The detector tilt was not refined: it needs at least three matched rings.* Unticked, nothing
-of this step runs.
+**When.** The point fit needs at least 30 points on at least two matched rings. By default **Refine rot1, rot2** frees the tilt with three or more matched rings. With two rings, or with this option cleared, the centre and distance are fitted with fixed tilt.
 
-**Uncertainty.** As in section 3.3: with three or more rings the jackknife over rings of all five parameters
-(`rot1_sigma_deg`, `rot2_sigma_deg` next to the centre and the distance), with two rings the covariance
-`s² (JᵀJ)⁻¹` of the five.
+In a calibration JSON, `metadata.ring_point_fits` stores the before and after values for each geometry and its matched lines. Headless summaries give both values directly on each solution.
+
+**Uncertainty.** The estimates in section 3.3 use the final points and the same three or five free parameters as the fit. For a fitted tilt, the record includes `rot1_sigma_deg` and `rot2_sigma_deg`.
+
+Applying or exporting a manually changed geometry clears the point-fit RMS values and uncertainties. The retained ring-radius RMS describes the original automatic ring matches.
 
 **Validation.** Ring points of the public Xeuss `.poni` geometry (tilt 6.06°, rot_1 = −5.100°, rot_2 = −3.274°),
 from an untilted start 3 % off in distance, give rot_1 and rot_2 within 0.012° of the file's. A synthetic LaB₆
 frame (1200 × 1200 px, 172 µm, 12 keV, L = 200 mm, rot_1 = 2.0°, rot_2 = −1.5°) through the whole engine gives
-2.0006° and −1.4985° (1σ 0.003°), the centre within 0.01 px and L within 0.02 %; the ring-point RMS falls from
-4.7 to 0.17 px. On the public pyFAI AgBh frame (12 keV entered; the file states no energy) the fit gives
-rot_1 = −0.07 ± 0.17°, rot_2 = 0.48 ± 0.16° against the `.poni`'s 0.37° and 0.43°, the direct beam within 0.2 px of
-the `.poni`'s, and an RMS of 0.45 px instead of 1.80 px; at this SAXS distance (2θ below 4°) a tilt of 0.4° moves
-the outer ring by only about 0.3 px relative to the inner ones, which is why rot_1 is so loosely determined. For an
+rot_1 and rot_2 within 0.05° of their input values. On the public pyFAI AgBh frame at λ = 1.0 Å, the fixed-tilt fit reduces the ring-point RMS from 1.835 to 0.473 px. Its direct beam (179.744, 264.139) px is 0.119 px from the free-tilt fit (179.771, 264.024) px. On the free-tilt fit's final points, the RMS is 0.450 px with tilt and 0.459 px with centre and distance refitted at zero tilt. For an
 untilted geometry the tilt fields change no pixel's q (equal to 10⁻¹²).
 
 Implementation: `src/gimap/features/calibration/domain/tilt_fit.py`, `src/gimap/features/calibration/domain/optimizer.py`
@@ -1156,7 +1149,9 @@ s_k² = [Σ X² − (Σ X)² / n_k] / (n_k − 1)                               
 σ_k² = s_k² / n_k                                                              (6.8)
 ```
 
-For `n_k < 10`, the default uses a pooled pixel variance `a + b I_k`, divided by `n_k`. The fit uses the unbiased variances of bins with at least two pixels on this curve, weighted by `n−1` and downweighted for large residuals using Huber weights. With sparsely populated bins, groups of nearby intensity are first averaged by degrees of freedom (target up to 24 per group). Evaluation is restricted to the fitted intensity range. Negative variance estimates are clipped at zero. For one distinct intensity the fit gives a constant. With pooling off, a singleton takes the median measured variance. If every bin is a singleton the scatter is unmeasurable and the reported σ is zero. Texture and gradients within a bin contribute to scatter.
+For `n_k < 10`, the default estimates pixel variance from a line `v_k = a + b I_k`. The fit uses the unbiased variances of bins with at least two pixels on this curve, weighted by `n−1` and downweighted for large residuals using Huber weights. With sparsely populated bins, groups of nearby intensity are first averaged by degrees of freedom (target up to 24 per group). Evaluation is restricted to the fitted intensity range. For one distinct intensity the fit gives a constant.
+
+If the line predicts `v_j ≤ 0` for bins with `n_j ≥ 2`, their measured scatter sets a floor `V = Σ (n_j−1)s_j² / Σ (n_j−1)`, summed over those bins. Otherwise `V = 0`. The variance of a sparse bin's mean is `σ_k² = max(v_k, V) / n_k`. This retains measured χ bins whose scatter is positive where the line crosses zero. With pooling off, a singleton takes the median measured variance. If every bin is a singleton the scatter is unmeasurable and the reported σ is zero. Texture and gradients within a bin contribute to scatter.
 
 **(c) Propagated errors.** Scaled Poisson uses sections 4.10 and 5.5. **Given σ frame** takes an independent standard deviation in sample input units for each pixel (for a sum, supply σ of the sum). Convert it by `g`, propagate through all corrections, add reference variance and use `σ_k² = Σ Var(X_p) / n_k²` without a one-count floor. Charge sharing, correlations between bins and covariance between frames using the same references are outside these point uncertainties.
 
@@ -1621,6 +1616,12 @@ leaves the measured ring pixels and their propagated errors intact. The saved ri
 Bins without pixels are unmeasured. When `b > 0`, bins whose intensity is below 0.2 b (a shadow), and their
 neighbours, count as unmeasured too.
 
+At the high-|χ| edge set by the exit-angle cut, GIMaP also excludes a contiguous run of weak bins.
+Starting in the last measured bin at that edge, it moves inward while Ī_k ≤ 0.05 M, where M is the
+median net intensity of measured, unshadowed folded bins. A gap or a bin above the threshold ends the
+run. The test requires M > 0. An isolated weak bin inside the ring stays in the sum. The report gives
+the edges of the excluded 1° bins. The pole fit uses the same selection.
+
 **Requirements.** No factor is computed when fewer than 10 χ bins are measured, when no folded bin reaches
 `Ī_k / σ_k ≥ 3`, or when the measured share of the sin χ weight is below 80 %:
 
@@ -1687,7 +1688,7 @@ statistical uncertainties σ_f when they are larger. A maximum next to an unmeas
 maximum may lie inside that range. The report's *Decisions* line *texture rule* states the rule, and every ring
 row gives the measured f, its statistical error and its systematic range. The difference from f_iso is a coverage diagnostic used by the texture rule. Subtracting an isotropic reference cannot reconstruct missing intensity in a ratio of weighted sums.
 
-**Systematic range.** For each combination of exit-angle minimum × {0.5, 1, 2} and b shifted by {−σ_b, 0, +σ_b}, recompute the measured f. When the background has no fitted standard error, use 20% of |b|. Repeat the moment with measured bins retained and the contiguous missing wedge below the first measured χ filled from the refitted model. The outer limits include one propagated fit standard error of the wedge contribution (§7.11). Failed extrapolations are recorded. A poor fit makes its extrapolation model-dependent. The bracket describes sensitivity to these choices. Geometry uncertainty, χ-dependent background and any residual horizon attenuation can lie outside it.
+**Systematic range.** Recompute f for each combination of exit-angle minimum × {0.5, 1, 2}, horizon intensity threshold {off, 0.05 M, 0.10 M} and background shift {−σ_b, 0, +σ_b}. Use 20% of |b| when the background has no fitted standard error. Each combination contributes its measured f. Folding uses either measured ±χ partner, so a wedge missing on both sides stays empty. A model extrapolation enters the range only when both the nominal fit and the fit for that combination are determined (§7.11). It fills only the contiguous wedge below the first measured |χ| and contributes one propagated standard error on either side of the filled moment. The bracket describes sensitivity to these choices. Geometry uncertainty, χ-dependent background and residual horizon attenuation can lie outside it.
 
 Implementation: `src/gimap/features/assistant/domain/orientation.py`, with the window in
 `src/gimap/features/assistant/application/tools.py`
@@ -1938,7 +1939,7 @@ which includes the missing wedge as the model fills it, next to f from the measu
 on N_k) and the 2D order `2⟨cos²χ⟩ − 1` of ρ along the ring without the sin χ weight (the orientation parameter
 SciAnalysis reports). Statistical errors of the fit and of its derived moments use the fitted covariance. For the filled-wedge sensitivity, the measured bins are held fixed and the Jacobian of the hybrid moment propagates covariance of all fitted parameters through the extrapolation.
 
-**Automatic analysis.** A Gaussian cone plus an isotropic component is fitted to each selected ring. The highest I(χ) maximum fixes χ₀ to 0° below 20° or to 90° above 70°. Other directions are fitted. The report gives the measured f, the model f and oriented fraction together. **1 − φ is conditional on the background b.** A fit that fails to converge, reaches a free-parameter bound, exceeds χ²_red = 5 gives FWHM > 100°, or has unidentifiable parameters is reported as *not determined*. *Needs attention* identifies the reason. Numerical outputs from such a fit describe its failure and should not be interpreted as a measured population fraction.
+**Automatic analysis.** A Gaussian cone plus an isotropic component is fitted to each selected ring. The highest I(χ) maximum fixes χ₀ to 0° below 20° or to 90° above 70°. Other directions are fitted. The report gives the measured f, the model f and oriented fraction together. **1 − φ is conditional on the background b.** A fit is reported as *not determined* if it fails to converge, reaches a free-parameter bound, gives χ²_red > 5 or FWHM > 100°, or has unidentifiable parameters. *Needs attention* identifies the reason. Its numerical outputs are diagnostic. Its extrapolation is excluded from the systematic range in §7.7.
 
 **Export.** *Export…* writes the profile as CSV (`chi_deg N sigma measured model`; the source, geometry and fit in
 `#` lines) and `<stem>_indexing.json` beside it: the record of the frame (14.2), the phases with their source files
@@ -4904,7 +4905,7 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10), the four-term DWBA on a known bare substrate (section 9.17) and the vertical cut of a fit of several curves (section 9.18); a layered substrate, an oxide or a film on the wafer and roughness are not modelled. The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). The film absorption correction and the q_z of the XRR extractor also ignore refraction (sections 5.4, 13.1). The only refraction-corrected quantity is the Sputter island height H(t), which uses the refracted wavevector transfer for the positions of fringe minima, not a DWBA intensity (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
 - **Absolute intensity.** A secondary standard sets the absolute scale for its measurement conditions (section 4.12). In grazing incidence, footprint, illuminated volume and interface effects require a sample-specific treatment. The scale parameter Int in Fitting is an empirical amplitude because the form factors use P(0) = 1 (section 9.4).
 - **Lorentz weighting.** The optional detector Jacobian applies to integrated crystalline intensities (§5.6).
-- **Texture.** The analysis assumes fibre symmetry. The systematic range tests the exit threshold, background and a model extrapolation into the low-χ wedge (§§7.7, 7.11). Residual horizon attenuation can still affect f.
+- **Texture.** The analysis assumes fibre symmetry. The systematic range tests both horizon thresholds, the background and, for determined fits, extrapolation into the low-χ wedge (§§7.7, 7.11). Residual horizon attenuation can still affect f.
 - **Phases.** No phase is assigned. Lamellar and hexagonal series are reported as hints (section 7.4).
 - **GISAXS models.** The 1D models of a horizontal cut depend on the magnitude of q_y only; q_z at the Yoneda row and the Yoneda enhancement are not modelled (sections 8.6, 9.2), except in the four-term DWBA with a known substrate (section 9.17). A vertical cut is modelled only in a fit of several curves, for spheres and upright cylinders, at one in-plane q and without a q resolution or the specular rod (section 9.18). The model adds the empirical beam tail after smearing the horizontal particle terms (sections 8.6, 9.2 and 9.13). Fitting and Predict parameters use sizes by number unless a component's Sizes says otherwise (sections 8.5, 9.3). Without a given composition the automatic analysis lets the network choose among one or two populations of spheres and upright cylinders; random cylinders and three populations only when given (section 8.6).
 - **Paracrystal spread.** Until 0.2.0 the quick fit and 1D Predict reported σ_D/D, √(2π) ≈ 2.51 times smaller than the relative standard deviation of the neighbour distance σnn/D that Fitting and Predict parameters now use (sections 9.5, 13.5); the 1D Predict window gives both.

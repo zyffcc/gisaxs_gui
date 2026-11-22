@@ -24,20 +24,8 @@ SENTENCES = (
     "{texture} — but the strongest measured |χ| ({chi}°) borders an unmeasured range, so the true maximum may lie "
     "inside it",
     "no single preferred orientation: maxima of similar height at |χ| ≈ {a}° and {b}°",
-    "no clear preferred orientation (f − f_iso = {f}, within ±{margin}): the ring is strongest at |χ| ≈ {chi}° but "
-    "nearly as intense elsewhere",
-    "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "
-    "nearer the sample plane",
-    "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "
-    "nearer the surface normal",
-    "Leaving out |χ| ≥ {chi}°, next to the sample horizon, changes f − f_iso from {a} to {b} ({n}σ_f): f depends on "
-    "those bins. There the exit angle αf is smallest, and absorption in the film, the transmission function or a "
-    "shadow can lower the intensity; GIMaP corrects none of them.",
-    "Without those bins the texture rule (|f − f_iso| against {margin}) would give another verdict.",
     "tilted: maximum at χ ≈ ±{chi}°",
     "The radial background under the ring ({background} counts/pixel) was subtracted.",
-    "The radial background under the ring ({background} counts/pixel) was subtracted, scaled like an isotropic ring "
-    "(∝ sin χ).",
     "|χ| {where} is shadowed: the intensity there is below {fraction} of the diffuse background at this q (a shadow, "
     "absorber or insensitive detector area), so it counts as unmeasured.",
     "The missing wedge covers |χ| < {angle}°. The measured f excludes these orientations.",
@@ -104,6 +92,10 @@ SENTENCES = (
     "or pixel size may be wrong, or the rings are too weak",
     "clear: {standard} ({rings} rings, rms {rms} px) beats {second} ({second_rings} rings, rms {second_rms} px)",
     "clear: {standard} ({rings} rings, rms {rms} px)",
+    "none fits well (best {standard}: {rings} rings, ring-radius RMS {rms} px): the image may show another standard, "
+    "the energy or pixel size may be wrong, or the rings are too weak",
+    "clear: {standard} ({rings} rings, ring-radius RMS {rms} px) beats {second} ({second_rings} rings, ring-radius RMS {second_rms} px)",
+    "clear: {standard} ({rings} rings, ring-radius RMS {rms} px)",
     "clear: {standard}, and its distance agrees with the expected {distance} mm",
     "probably {second}: its distance agrees with the expected {distance} mm, although {standard} matches as many rings",
     "ambiguous: {standard} and {second} fit about equally well; check the distance in the header or a log, or ask "
@@ -179,10 +171,30 @@ _FIELD = re.compile(r"\{(\w+)\}")
 _SENTENCE_BREAK = re.compile(r"(?<=[.。])\s+(?=[A-Z])")
 """Between two sentences of a text that has no form of its own (a hint made of several sentences)."""
 
+_SAVED_SENTENCES = (
+    "no clear preferred orientation (f − f_iso = {f}, within ±{margin}): the ring is strongest at |χ| ≈ {chi}° but "
+    "nearly as intense elsewhere",
+    "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "
+    "nearer the sample plane",
+    "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "
+    "nearer the surface normal",
+    "Leaving out |χ| ≥ {chi}°, next to the sample horizon, changes f − f_iso from {a} to {b} ({n}σ_f): f depends on "
+    "those bins. There the exit angle αf is smallest, and absorption in the film, the transmission function or a "
+    "shadow can lower the intensity; GIMaP corrects none of them.",
+    "Without those bins the texture rule (|f − f_iso| against {margin}) would give another verdict.",
+    "The radial background under the ring ({background} counts/pixel) was subtracted, scaled like an isotropic ring "
+    "(∝ sin χ).",
+    "none fits well (best {standard}: {rings} rings, rms {rms} px): the image may show another standard, the energy "
+    "or pixel size may be wrong, or the rings are too weak",
+    "clear: {standard} ({rings} rings, rms {rms} px) beats {second} ({second_rings} rings, rms {second_rms} px)",
+    "clear: {standard} ({rings} rings, rms {rms} px)",
+)
+"""Wording from earlier analyses, still translated when a saved report is reopened."""
+
 
 @lru_cache(maxsize=1)
 def _ordered() -> tuple[str, ...]:
-    return tuple(sorted(SENTENCES, key=lambda template: -len(_FIELD.sub("", template))))
+    return tuple(sorted((*SENTENCES, *_SAVED_SENTENCES), key=lambda template: -len(_FIELD.sub("", template))))
 
 
 @lru_cache(maxsize=None)

@@ -157,9 +157,6 @@ def test_calibration_verdicts_and_decisions_keep_their_numbers_and_names(monkeyp
 
     for english, chinese in {
         "good: {lines} lines of the standard land within {error} of their q on average": "好：标样的 {lines} 条谱线平均落在其 q 的 {error} 以内",
-        "clear: {standard} ({rings} rings, rms {rms} px)": "明确：{standard}（{rings} 个环，rms {rms} px）",
-        "clear: {standard} ({rings} rings, rms {rms} px) beats {second} ({second_rings} rings, rms {second_rms} px)":
-            "明确：{standard}（{rings} 个环，rms {rms} px）优于 {second}（{second_rings} 个环，rms {second_rms} px）",
         "rejected {name} ({standard})": "未采用 {name}（{standard}）", "rejected {name}": "未采用 {name}",
         "from given": "由你给出", "from {name}": "来自 {name}",
     }.items():
@@ -170,8 +167,8 @@ def test_calibration_verdicts_and_decisions_keep_their_numbers_and_names(monkeyp
                                                                                   "rms_residual_px": 1.2}]
     beats = compare_verdict(fits)
     assert beats.startswith("clear: AgBH (6 rings") and " beats LaB6 " in beats
-    assert words(beats) == "明确：AgBH（6 个环，rms 0.4 px）优于 LaB6（3 个环，rms 1.2 px）"  # not the short form
-    assert words(compare_verdict(fits[:1])) == "明确：AgBH（6 个环，rms 0.4 px）"
+    assert words(beats) == "明确：AgBH（6 个环，环半径 RMS 为 0.4 px）优于 LaB6（3 个环，环半径 RMS 为 1.2 px）"
+    assert words(compare_verdict(fits[:1])) == "明确：AgBH（6 个环，环半径 RMS 为 0.4 px）"
     assert words("rejected AgBH_00001.tif (agbh)") == "未采用 AgBH_00001.tif（agbh）"
     assert words("rejected AgBH_00001.tif") == "未采用 AgBH_00001.tif"
     assert words("from given") == "由你给出" and words("from AgBH.poni") == "来自 AgBH.poni"  # the exact sentence first

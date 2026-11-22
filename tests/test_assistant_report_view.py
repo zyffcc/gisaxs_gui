@@ -54,6 +54,20 @@ def test_a_chinese_report_translates_the_fixed_headings() -> None:
     assert "计算结果（来自工具）" in page and "注意事项" in page and "记录的缺失功能" in page
 
 
+def test_calibration_reports_distinguish_ring_points_from_ring_radii():
+    from src.gimap.features.assistant.application.pipeline_report import _geometry_lines, calibration_quality
+
+    result = {"matched_rings": 3, "rms_residual_px": 0.8, "initial_point_rms_px": 1.1, "point_rms_px": 0.3}
+    outcome = _outcome()
+    outcome.results.calibrations.extend((result, {"rms_residual_px": 0.65}))
+    expected = "Ring-point RMS 1.100 px before refinement, 0.300 px after"
+    page = report_html(outcome)
+    assert expected in page and "Ring-radius RMS 0.650 px" in page
+    assert "精修前为 1.100 px，精修后为 0.300 px" in report_html(outcome, language="中文")
+    lines = _geometry_lines({"geometry": {"distance_mm": 200}, "calibration_quality": calibration_quality(result)})
+    assert "- " + expected in lines
+
+
 def test_gisaxs_results_have_readable_headings() -> None:
     from src.gimap.features.assistant.application import AssistantReport, ReportItem
 
@@ -100,11 +114,14 @@ def test_computed_ring_table_reports_the_measured_range_and_conditional_pole_fit
     ring = ring_orientation(profile, q_window=(0.99, 1.01))
     outcome = _outcome()
     outcome.results.rings.append(replace(
-        ring, orientation_settings={"min_exit_deg": .3, "polarization": .99},
+        ring, orientation_settings={"min_exit_deg": .3, "polarization": .99,
+                                    "horizon_excluded_deg": [82, 87], "horizon_fraction": .05},
         pole_figure={"ok": True, "quality_reasons": ["reduced χ² exceeds 5"], "herman": .1,
-                     "oriented_fraction": .2, "systematics": {"range": [.01, .03]}}))
+                     "oriented_fraction": .2, "systematics": {"range": [.01, .03], "model_fill_allowed": False}}))
     page = report_html(outcome)
     assert "Pole fit not determined (reduced χ² exceeds 5)" in page
     assert "(stat) [0.0100, 0.0300]" in page and "1 − φ is conditional on the background b." in page
     assert "Excluded αf &lt; 0.3°. Polarisation 0.99." in page
-    assert "极图拟合未能确定取向" in report_html(outcome, language="中文")
+    assert "Excluded |χ| 82–87°" in page and "leaves the missing wedge empty" in page
+    chinese = report_html(outcome, language="中文")
+    assert "极图拟合未能确定取向" in chinese and "缺失楔留空" in chinese and "|χ| 82–87°" in chinese

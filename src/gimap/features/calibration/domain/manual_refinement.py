@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import copy
 
-from .models import CalibrationCandidate, CalibrationResult
+from .models import MANUAL_REFINEMENT_WARNING, CalibrationCandidate, CalibrationResult
 
 
-MANUAL_REFINEMENT_WARNING = (
-    "Geometry was manually adjusted after automatic calibration."
-)
+def _adjust(candidate: CalibrationCandidate, x: float, y: float, distance: float) -> None:
+    if (x, y, distance) == (candidate.center_x_px, candidate.center_y_px, candidate.distance_mm):
+        return
+    candidate.center_x_px, candidate.center_y_px, candidate.distance_mm = x, y, distance
+    candidate.clear_fit_statistics()
+    if MANUAL_REFINEMENT_WARNING not in candidate.warnings:
+        candidate.warnings = [*candidate.warnings, MANUAL_REFINEMENT_WARNING]
 
 
 def preview_manual_candidate(
@@ -22,9 +26,7 @@ def preview_manual_candidate(
 ) -> CalibrationCandidate:
     preview = copy.deepcopy(candidate)
     if enabled:
-        preview.center_x_px = center_x_px
-        preview.center_y_px = center_y_px
-        preview.distance_mm = distance_mm
+        _adjust(preview, center_x_px, center_y_px, distance_mm)
     return preview
 
 
@@ -38,11 +40,7 @@ def commit_manual_refinement(
 ) -> CalibrationCandidate:
     candidate = result.selected_candidate
     if enabled:
-        candidate.center_x_px = center_x_px
-        candidate.center_y_px = center_y_px
-        candidate.distance_mm = distance_mm
-        if MANUAL_REFINEMENT_WARNING not in candidate.warnings:
-            candidate.warnings.append(MANUAL_REFINEMENT_WARNING)
+        _adjust(candidate, center_x_px, center_y_px, distance_mm)
     return candidate
 
 

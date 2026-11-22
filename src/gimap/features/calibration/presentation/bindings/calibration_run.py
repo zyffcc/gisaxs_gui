@@ -151,5 +151,5 @@ class CalibrationRunMixin:
             return
         # Manual values committed for the previous candidate do not stay on it.
         self._restore_fitted_geometry()
-        candidate = self.view_model.select_candidate(rows[0].row())
-        self._show_candidate(candidate)
+        self.view_model.select_candidate(rows[0].row())
+        self._refresh_manual_result()

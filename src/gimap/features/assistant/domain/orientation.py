@@ -237,6 +237,7 @@ def ring_orientation(
     background: float = 0.0,
     min_snr: float = 3.0,
     seed: int = 0,
+    horizon_chi_deg: Optional[float] = None,
 ) -> RingOrientation:
     """Orientation from binned mean pixel intensities before the detector Lorentz correction."""
     from scipy.ndimage import gaussian_filter1d
@@ -255,7 +256,8 @@ def ring_orientation(
             tuple(q_window), background, float(seen.mean()), _runs(~seen), None, None, None, (), None, "",
             f"Only {data.size} measured χ bins in this ring.", tuple(notes),
         )
-    chi, folded, error, measured, shadow = fold_ring(data.x, data.y, data.sigma, background)
+    chi, folded, error, measured, shadow, _ = fold_ring(data.x, data.y, data.sigma, background,
+                                                        horizon_chi_deg=horizon_chi_deg)
     shadowed = _runs(shadow, minimum=1)
     if shadowed:
         where = ", ".join(f"{a:.0f}–{b:.0f}°" for a, b in shadowed)

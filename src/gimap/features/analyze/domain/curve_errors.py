@@ -89,7 +89,13 @@ def _pooled_variance(means, sample_variance, pixels):
         intercept, slope = new_intercept, new_slope
     # Avoid extrapolating the variance through a region sampled only by singleton bins.
     target = np.clip((means - low) / intensity_scale, 0.0, (high - low) / intensity_scale)
-    return np.maximum(new_intercept + new_slope * target, 0.0)
+    predicted = new_intercept + new_slope * target
+    # Texture or an intensity gradient can bend the variance curve. If the line
+    # crosses zero, estimate its floor from measured scatter on that side.
+    # Clipping to zero would discard these measured bins in weighted fits.
+    tail = measured & (predicted <= 0.0)
+    floor = np.average(sample_variance[tail], weights=pixels[tail] - 1) if tail.any() else 0.0
+    return np.maximum(predicted, floor)
 
 
 def scatter_sigma(sums, squares, counts, *, pooled=True):

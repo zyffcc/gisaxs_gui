@@ -12,6 +12,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Geometry Calibration and GIWAXS orientation.** Calibration now refines the beam centre and distance with tilt fixed and reports ring-point RMS before and after refinement. Orientation reports identify weak bins excluded next to the exit-angle cut, vary that threshold in the Hermans f range, and omit model fills from undetermined pole fits. Sparse bins with measured scatter retain an uncertainty when the pooled variance fit crosses zero.
 - **Analyze ▸ Mask & corrections.** Raw background and flat-field frames can use an exposure-scaled dark.
   Set the flat-field threshold, save detector gain, offset and error model in an instrument profile, and choose
   pooled scatter errors or smoothed counting errors for sparse curves. Propagated errors include flat-field

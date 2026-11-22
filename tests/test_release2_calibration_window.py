@@ -194,6 +194,17 @@ def test_every_number_of_the_window_is_the_centre_of_the_saved_profile(window, y
     assert (settings.get("detector", "beam_center_x"), settings.get("detector", "beam_center_y")) == fitted[:2]
 
 
+def test_ring_point_rms_tooltips_follow_the_language_of_the_open_window(window) -> None:
+    dialog = window.dialog
+    try:
+        i18n.apply_language("zh", [dialog])
+        for tip in (dialog.resultRmsTitle.toolTip(), dialog.candidate_table.item(0, 4).toolTip()):
+            assert "精修前" in tip and "倾斜为零" in tip
+    finally:
+        i18n.apply_language("en", [dialog])
+    assert "Before refinement" in dialog.resultRmsTitle.toolTip()
+
+
 def test_the_preview_is_drawn_in_the_same_pixels(window) -> None:
     dialog = window.dialog
     candidate = dialog.result.selected_candidate
@@ -266,6 +277,7 @@ def test_a_centre_typed_in_the_window_lands_on_that_pixel_in_analyze(window, yes
     app = _app()
     fitted = dialog.result.selected_candidate
     before = (fitted.center_x_px, fitted.center_y_px, fitted.distance_mm)
+    fit_stats = (fitted.point_rms_px, fitted.center_x_sigma_px)
     row, column = 300, 200
     try:
         dialog.manual_refine_button.click()
@@ -286,6 +298,8 @@ def test_a_centre_typed_in_the_window_lands_on_that_pixel_in_analyze(window, yes
         # Inside, the fit's own pixels: the index of that pixel.
         committed = dialog.result.selected_candidate
         assert (committed.center_x_px, committed.center_y_px) == (float(column), float(row))
+        assert committed.point_rms_px is committed.center_x_sigma_px is None
+        assert "automatic ring-matching step" in dialog.resultRmsTitle.toolTip()
 
         page = _analyze_page(window.context)
         try:
@@ -306,6 +320,8 @@ def test_a_centre_typed_in_the_window_lands_on_that_pixel_in_analyze(window, yes
         _settle(app, 0.2)
     restored = dialog.result.selected_candidate
     assert (restored.center_x_px, restored.center_y_px, restored.distance_mm) == before
+    assert (restored.point_rms_px, restored.center_x_sigma_px) == fit_stats
+    assert "Before refinement" in dialog.resultRmsTitle.toolTip()
 
 
 def test_a_typed_centre_is_saved_and_exported_as_the_same_point(window, yes, tmp_path, monkeypatch) -> None:

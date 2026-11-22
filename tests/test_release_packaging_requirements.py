@@ -143,8 +143,11 @@ def test_the_program_starts_and_opens_every_workspace_without_the_optional_packa
 
     script = textwrap.dedent("""
         import sys
+        import time
         for name in ("tensorflow", "keras", "bornagain", "anthropic", "openai"):
             sys.modules[name] = None  # importing it raises ImportError, as when it is not installed
+        from PyQt5.QtCore import QCoreApplication, QEvent
+        from PyQt5.QtTest import QTest
         from PyQt5.QtWidgets import QApplication
         app = QApplication([])
         from main import MainWindow
@@ -156,14 +159,22 @@ def test_the_program_starts_and_opens_every_workspace_without_the_optional_packa
             settings=InMemorySettingsRepository(), session=InMemorySessionRepository(),
             preferences=InMemoryUserPreferencesRepository(), jobs=LocalProcessJobRunner()))
         window.show()
-        for index in range(window.mainWindowWidget.count()):
-            window.mainWindowWidget.setCurrentIndex(index)
+        deadline = time.monotonic() + 30
+        while not window._initialization_completed and time.monotonic() < deadline:
+            QTest.qWait(20)
+        for key in window.components.pages:
+            window.runtime.navigate(key)  # Compare and Sputter build on first navigation.
             app.processEvents()
-        print("opened", window.mainWindowWidget.count())
+            assert window.mainWindowWidget.currentWidget() is window.components.built_page(key)
+        print("opened", window.mainWindowWidget.count(), flush=True)
+        # Run the application's shutdown and destroy the native views while QApplication is still alive.
+        assert window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
     """)
     environment = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "GIMAP_HOME": str(tmp_path)}
-    result = subprocess.run([sys.executable, "-c", script], cwd=ROOT, env=environment, capture_output=True,
-                            text=True, timeout=600)
+    result = subprocess.run([sys.executable, "-X", "faulthandler", "-c", script], cwd=ROOT, env=environment,
+                            capture_output=True, text=True, timeout=600)
     assert result.returncode == 0, result.stderr[-3000:]
     assert "opened" in result.stdout
 

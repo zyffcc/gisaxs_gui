@@ -99,7 +99,13 @@ class ResultPreviewMixin:
         try:
             self._show_overlay_legend()
             if self.result is not None:
-                self._show_tilt(self.result.selected_candidate)
+                candidate = self.result.selected_candidate
+                self._show_tilt(candidate)
+                self._show_rms(candidate)
+                for row, other in enumerate(self.result.candidates):
+                    item = self.candidate_table.item(row, 4)
+                    if item is not None:
+                        item.setToolTip(rms_title(other) + " " + rms_tip(other))
             if getattr(self, "_shown_warnings", None):
                 self._show_warnings(self._shown_warnings)
         except RuntimeError:  # the dialog is being destroyed
@@ -146,10 +152,7 @@ class ResultPreviewMixin:
                 value=f"{value:.2g}", unit=unit, method=tr(candidate.uncertainty_method)))
         self._show_tilt(candidate)
         self.result_labels["Matched rings"].setText(str(candidate.matched_ring_count))
-        self.result_labels["RMS residual"].setText(rms_text(candidate))  # one value, of the geometry shown
-        self.result_labels["RMS residual"].setToolTip(rms_tip(candidate))
-        self.resultRmsTitle.setText(rms_title(candidate))  # which residual it is
-        self.resultRmsTitle.setToolTip(rms_tip(candidate))
+        self._show_rms(candidate)
         # Confidence and warnings are the engine's English (also in the exported record), shown translated.
         self.result_labels["Confidence"].setText(tr(candidate.confidence))
         self._show_warnings(candidate.warnings)
@@ -170,6 +173,14 @@ class ResultPreviewMixin:
         self._populate_manual_rings(candidate)
         self.redraw_preview()
         self._fit_results_height()
+
+    def _show_rms(self, candidate: CalibrationCandidate) -> None:
+        label = self.result_labels["RMS residual"]
+        tip = rms_tip(candidate)
+        label.setText(rms_text(candidate))
+        label.setToolTip(tip)
+        self.resultRmsTitle.setText(rms_title(candidate))
+        self.resultRmsTitle.setToolTip(tip)
 
     def _show_tilt(self, candidate: CalibrationCandidate) -> None:
         """The Detector tilt row: rot1, rot2 (± 1σ) when they were fitted, else why not."""

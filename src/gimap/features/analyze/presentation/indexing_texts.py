@@ -6,6 +6,7 @@ import math
 from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.orientation_notes import orientation_notes
 
 from .texts import message_text
 
@@ -125,6 +126,7 @@ def pole_result_text(result) -> str:
                          else f"{result.polarization:g}"))
     if result.systematics.get("incomplete"):
         lines.append(tr("Some systematic estimates are unavailable."))
+    lines.extend(orientation_notes(result.systematics, result.systematics, trf))
     return "\n".join(lines)
 
 

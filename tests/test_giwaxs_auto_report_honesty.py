@@ -115,6 +115,14 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) ->
     low, high = ring["herman_systematic_range"]
     assert low <= ring["herman"] <= high
     assert ring["herman"] == pytest.approx(pole["herman_measured"])
+    assert ring["orientation_settings"]["horizon_excluded_deg"] == [84, 88]
+    assert "Excluded |χ| 84–88°" in text
+    assert "uses measured ±χ partners only" in text
+    scenarios = pole["systematics"]["scenarios"]
+    assert {s["horizon_fraction"] for s in scenarios} == {0., .05, .10}
+    assert all(s["model_fill"] is None for s in scenarios)
+    moments = [s["measured"] for s in scenarios if s["measured"] is not None]
+    assert [low, high] == pytest.approx([min(moments), max(moments)])
     assert {s["threshold_multiplier"] for s in pole["systematics"]["scenarios"]} == {0.5, 1.0, 2.0}
     assert pole["systematics"]["background_rule"] == "fitted sigma"
     assert "reduced χ² exceeds 5" in pole["quality_reasons"]

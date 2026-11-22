@@ -10,7 +10,7 @@ from scipy.optimize import least_squares
 from .geometry_model import q_to_ring_radius_m
 from .models import CalibrationCandidate
 from .preprocessing import AnalysisImage
-from .tilt_fit import tilt_residual, tilted_ring_points
+from .tilt_fit import tilt_residual
 
 
 def _ring_points(
@@ -63,7 +63,7 @@ def _ring_residual(xs, ys, qs, wavelength_angstrom, pixel_size_x_m, pixel_size_y
 
 
 def estimate_uncertainty(
-    analysis: AnalysisImage,
+    points: tuple[np.ndarray, np.ndarray, np.ndarray] | None,
     candidate: CalibrationCandidate,
     wavelength_angstrom: float,
     pixel_size_x_m: float,
@@ -75,30 +75,25 @@ def estimate_uncertainty(
     least-squares covariance of the points says too little. With three or more matched rings the error is the
     jackknife over rings: the fit is repeated with each ring left out, and
     σ² = (n − 1)/n · Σ (θ_i − θ̄)². With two rings it is the least-squares covariance s² (JᵀJ)⁻¹, s² the mean square
-    residual per point, which is a lower bound. Nothing is set when the ring points are too few. A tilted candidate
-    (``tilt_fit.refine_tilt``) is treated the same way with its five parameters and the points about its tilted
-    rings."""
-    if candidate.matched_ring_count < 2:
+    residual per degree of freedom, which is a lower bound. Each estimate uses the points of the final fit
+    and frees the same parameters."""
+    if points is None:
         return candidate
-    px, py = pixel_size_x_m, pixel_size_y_m
+    xs, ys, qs = points
+    rot3 = math.radians(candidate.rot3_deg)
+    rotations = np.radians([candidate.rot1_deg, candidate.rot2_deg])
+    centre = np.array([candidate.center_x_px, candidate.center_y_px, candidate.distance_mm])
+    fixed_tilt = rotations
     if candidate.tilt_refined:
-        rot3 = math.radians(candidate.rot3_deg)
-        centre = np.array([candidate.center_x_px, candidate.center_y_px, candidate.distance_mm,
-                           math.radians(candidate.rot1_deg), math.radians(candidate.rot2_deg)])
-        xs, ys, qs = tilted_ring_points(analysis, candidate, centre, wavelength_angstrom, px, py, rot3)
+        centre = np.r_[centre, rotations]
+        fixed_tilt = None
 
-        def make(xs, ys, qs):
-            return tilt_residual(xs, ys, qs, wavelength_angstrom, px, py, rot3)
-        steps = np.array([1e-3, 1e-3, max(1e-6, 1e-6 * centre[2]), 1e-7, 1e-7])
-        scale = np.array([1.0, 1.0, max(1.0, 1e-3 * centre[2]), 1e-3, 1e-3])
-    else:
-        centre = np.array([candidate.center_x_px, candidate.center_y_px, candidate.distance_mm])
-        xs, ys, qs = _ring_points(analysis, candidate, px, py)
+    def make(xs, ys, qs):
+        return tilt_residual(xs, ys, qs, wavelength_angstrom, pixel_size_x_m, pixel_size_y_m, rot3,
+                             fixed_tilt=fixed_tilt)
 
-        def make(xs, ys, qs):
-            return _ring_residual(xs, ys, qs, wavelength_angstrom, px, py)
-        steps = np.array([1e-3, 1e-3, max(1e-6, 1e-6 * centre[2])])
-        scale = 1.0
+    steps = np.array([1e-3, 1e-3, max(1e-6, 1e-6 * centre[2]), 1e-7, 1e-7])[:centre.size]
+    scale = np.array([1.0, 1.0, max(1.0, 1e-3 * centre[2]), 1e-3, 1e-3])[:centre.size]
     if xs.size < 30:
         return candidate
     rings = np.unique(qs)
@@ -152,13 +147,7 @@ def refine_candidate(
     if xs.size < 30:
         candidate.warnings.append("Too few experimental ring points were available for joint refinement.")
         return candidate
-    mean_pixel = 0.5 * (pixel_size_x_m + pixel_size_y_m)
-
-    def residual(params: np.ndarray) -> np.ndarray:
-        cx, cy, distance = params
-        observed_m = np.sqrt(((xs - cx) * pixel_size_x_m) ** 2 + ((ys - cy) * pixel_size_y_m) ** 2)
-        predicted_m = q_to_ring_radius_m(qs, wavelength_angstrom, distance)
-        return (observed_m - predicted_m) / mean_pixel
+    residual = _ring_residual(xs, ys, qs, wavelength_angstrom, pixel_size_x_m, pixel_size_y_m)
 
     if candidate.center_method == "direct beamstop":
         center_window = 5.0

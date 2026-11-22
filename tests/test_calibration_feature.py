@@ -219,6 +219,9 @@ def test_manual_refinement_preview_commit_and_significant_change_are_stable(
     result = _result(tmp_path / "source.cbf")
     original = result.selected_candidate
 
+    original.point_rms_px, original.initial_point_rms_px, original.untilted_point_rms_px = 0.6, 1.2, 0.8
+    original.center_x_sigma_px, original.center_y_sigma_px, original.distance_sigma_mm = 0.1, 0.2, 0.3
+    original.uncertainty_method = "ring jackknife"
     preview = preview_manual_candidate(
         original,
         enabled=True,
@@ -230,6 +233,7 @@ def test_manual_refinement_preview_commit_and_significant_change_are_stable(
     assert preview is not original
     assert original.center_x_px == 123.5
     assert preview.center_x_px == 130.0
+    assert preview.point_rms_px is None and original.point_rms_px == 0.6
     committed = commit_manual_refinement(
         result,
         enabled=True,
@@ -245,11 +249,32 @@ def test_manual_refinement_preview_commit_and_significant_change_are_stable(
         distance_mm=1500.0,
     )
     assert committed is original
+    assert committed.point_rms_px is committed.initial_point_rms_px is committed.untilted_point_rms_px is None
+    assert committed.center_x_sigma_px is committed.center_y_sigma_px is committed.distance_sigma_mm is None
+    assert committed.uncertainty_method == ""
     assert committed.warnings.count(MANUAL_REFINEMENT_WARNING) == 1
     assert geometry_change_is_significant(
         {"distance": 1000.0, "beam_center_x": 130.0, "beam_center_y": 240.0},
         committed,
     )
+
+
+def test_headless_line_selection_keeps_each_centres_own_fit_statistics(tmp_path: Path, monkeypatch) -> None:
+    from dataclasses import replace
+    from src.gimap.features.calibration.application import headless
+
+    result = _result(tmp_path / "standard.cbf")
+    first = result.selected_candidate
+    first.point_rms_px = 1.5
+    other = replace(first, center_x_px=155.0, point_rms_px=0.4, initial_point_rms_px=1.8, center_x_sigma_px=0.1)
+    result.candidates.append(other)
+    image = DetectorImage(np.ones((4, 4)), None, Path(result.source_image))
+    monkeypatch.setattr(headless, "check_lines", lambda *a, **kw: {})
+    monkeypatch.setattr(headless, "best_by_lines", lambda checks: 1)
+    report = headless.with_line_checks(headless.describe_calibration(result), image)
+    assert (report["initial_point_rms_px"], report["point_rms_px"], report["uncertainty"]["beam_center_px"][0]) == (
+        other.initial_point_rms_px, other.point_rms_px, other.center_x_sigma_px)
+    assert report["alternatives"][0]["point_rms_px"] == first.point_rms_px
 
 
 def test_calibration_applies_with_in_memory_context_and_no_qapplication(tmp_path: Path) -> None:
