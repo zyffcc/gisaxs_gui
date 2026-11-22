@@ -283,20 +283,6 @@ points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife
 ## The third set
 
 `posterior_newseed` was run at commit 6bb1a18 (fitting tree d139e6f5). The fitting code differs from the tree of the other runs (7e68831a) in its reporting. The five-cut regression above checks the archived numerical results from three runs. The seed (20261122) was chosen after the last change of the procedure, so no change was judged on it. The stage `auto` in this archive is the automatic analysis's call as it was then: the first level (q_z = 0), spheres and upright cylinders, one or two populations.
-Among recovered frames, each cell gives the fraction within 1σ, fraction within 2σ and median |error|/σ.
-The three-ring row uses the separate set. The other rows use the 300-frame set.
-
-| Matched rings | Frames | beam x | beam y | L | rot1 | rot2 |
-|---|---:|---|---|---|---|---|
-| 3 | 112 | 0.74 / 0.92 / 0.54 | 0.55 / 0.82 / 0.86 | 0.75 / 0.96 / 0.58 | 0.53 / 0.83 / 0.95 | 0.52 / 0.78 / 0.95 |
-| 4–6 | 81 | 0.78 / 0.97 / 0.54 | 0.74 / 0.90 / 0.59 | 0.79 / 0.97 / 0.47 | 0.72 / 0.99 / 0.75 | 0.81 / 0.95 / 0.55 |
-| ≥7 | 125 | 0.52 / 0.94 / 0.97 | 0.67 / 0.95 / 0.72 | 0.79 / 0.99 / 0.51 | 0.57 / 0.91 / 0.84 | 0.70 / 0.98 / 0.71 |
-
-The main set also yielded 7 three-ring recoveries, reported separately in the JSON. With seven or more
-rings, a Student t reference for ring scatter gives 65.1% within 1σ. The measured rates were 52.0% for beam x
-and 56.8% for rot1. Taking the larger of the jackknife and covariance standard errors on the same
-points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife for these fits.
-
 `posterior_newseed_auto2` repeats the stage `auto` on the same 300 cuts after the automatic analysis was changed to fit at the second level when it knows both angles (commit f73d9c8): the true composition is the most probable in 75 % of the cuts (27 % at the first level) and the median error of R is 0.8 % (13 %).
 
 `posterior_dwba_auto2` (commit 9c90e6a): with DWBA truth the automatic analysis's call chooses the true composition in 31 % of the cuts; by the largest q_zR of a cut: 80 % (median |ΔR/R| 1 %) at 1.2–1.7, 29 % (10 %) at 1.7–2.3 and 23 % (9 %) above 2.3; cuts of spheres alone 9 %, of cylinders alone 78 %. The q_zR flags of Predict mark the solutions above these limits.
