@@ -385,7 +385,7 @@ class ApplicationMenus:
         self._remember_project(written)
         if self.document is not None:
             self.document.mark_clean(settle=0)
-        show_toast(self.window, tr("Saved the project {name}").format(name=written.name), level="ok",
+        show_toast(self.window, trf("Saved the project {name}", name=written.name), level="ok",
                    action=(tr("Open Folder"), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(written.parent)))))
         return True
 

@@ -132,14 +132,17 @@ class FittingViewModel(FittingWorkflowViewModelMixin):
                 status_message=outcome.error.message,
             )
             return outcome
+        self.accept_loaded_curve(name, outcome.value)
+        return outcome
+
+    def accept_loaded_curve(self, name, curve):
         self.state = replace(
             self.state,
             curve_status="ready",
-            current_curve=outcome.value,
+            current_curve=curve,
             error_message=None,
             status_message=f"Loaded {name}",
         )
-        return outcome
 
     def read_series_curve(self, request: LoadCurveRequest):
         """Read in a worker without changing Single analysis' current curve or UI state."""

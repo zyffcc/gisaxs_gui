@@ -339,7 +339,7 @@ def test_an_entry_shows_its_page_first_then_does_what_the_page_does(window, monk
 
 
 @needs_galaxi
-def test_the_analyze_menu_follows_the_frame_shown(window) -> None:
+def test_the_analyze_menu_follows_the_frame_shown(window, tmp_path, monkeypatch) -> None:
     components = window.components
     page = components.analyze_page
     menu_bar = window.menus.menu_bar
@@ -362,6 +362,13 @@ def test_the_analyze_menu_follows_the_frame_shown(window) -> None:
     assert actions["analyze_send_fitting"].toolTip().startswith("The horizontal cut (GISAXS)")
     assert not actions["analyze_send_series"].isEnabled()  # one frame: no series
     assert not actions["analyze_send_compare"].isEnabled()  # no Series map built
+
+    monkeypatch.setattr(page.view_model, "default_export_dir", lambda: tmp_path)
+    actions["analyze_send_both_cuts"].trigger()
+    joint = components.fitting_workspace.joint_fit_dialog()
+    assert joint.joint_dialog.isVisible() and [s.kind for s in joint.specs] == ["horizontal", "vertical"]
+    assert all(Path(spec.path).parent == tmp_path for spec in joint.specs)
+    joint.joint_dialog.close()
 
     page.clear_files()
     _settle()

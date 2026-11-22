@@ -12,12 +12,16 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- Analyze saves indexed q maps with their visible phase and region overlays, legend and publication settings.
+  The GIWAXS report opens with phase matches, ring orientations and warnings. Replacing a sample offers to
+  reset its αi and visibility settings. In situ fits can export radius and spacing together against elapsed
+  time and point to the first fit needing review. Both GISAXS cuts open together for a joint fit. A saved
+  fit can be reopened, compared after a change and reproduced using a relocated copy of its verified input.
 - **First-use workflows.** Geometry Calibration accepts wavelength, identifies pixel pitch inferred from frame size,
   shows ring-fit warnings beside the job status and saves a PONI directly. Fitting explains which halves Predict
   uses, marks bound-limited values and saves the curve and parameters together from Results. The GIWAXS examples
   include candidate CIFs. Analyze can load several at once, identifies the strongest reliable ring by fitted area
-  and exports the measured peak table with its indexing and geometry. Phase arcs and their legend are visible
-  on the interactive q-map only.
+  and exports the measured peak table with its indexing and geometry.
 - The manuals document the precision of an applied beam centre in Analyze, Geometry Calibration and XRR,
   and the differences observed when reproducing archived Predict parameters fits on another platform.
 - **Predict parameters** flags upright cylinders that could represent spheres above q_z·R = 2 at levels 2 and 3,

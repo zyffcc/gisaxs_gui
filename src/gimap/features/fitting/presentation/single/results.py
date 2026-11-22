@@ -233,6 +233,7 @@ class FitResultsMixin:
         return tr("{points} points fitted").format(points=count)
 
     def render_results(self) -> None:
+        self.compare_saved_fit_button.setVisible(self.session.saved_fit is not None)
         self._render_model_results()
         self.render_result_actions()  # next steps, what the fit did by itself, the folds (result_actions.py)
         notes = self.warnings_label.text()
@@ -253,8 +254,7 @@ class FitResultsMixin:
         search_note = ["⚠ " + tr("The halves, the fitting range or the left-out points changed after the search: "
                                  "the χ² of the solutions is of the points before.")] if old_search else []
         if result is None and session.solutions:
-            self.quality_label.setText(trf("{solutions} below; the best is in Model. Fit (Refine) gives its quality "
-                                           "and the error of every value.",
+            self.quality_label.setText(trf("{solutions} below. Refine reports fit quality and uncertainties where estimable.",
                                            solutions=predict_texts.count_solutions(len(session.solutions)))
                                        + self._incomplete_note())
             current = next((s for s in session.solutions if s.model == session.model), None)
@@ -266,7 +266,15 @@ class FitResultsMixin:
             show_line(self.step_intro["results"], stale + trf(
                 "{solutions} to compare.", solutions=predict_texts.count_solutions(len(session.solutions))))
         elif result is None:
-            self.quality_label.setText(tr("No fit yet."))
+            saved = session.saved_fit
+            if saved is None:
+                self.quality_label.setText(tr("No fit yet."))
+            else:
+                text = trf("Saved model from {name} · {count} points", name=saved.path.name, count=saved.count)
+                if saved.quality is not None:
+                    metric = "χ²ᵣ" if saved.weighting == "sigma" else "var ln I"
+                    text += f" · {metric} {saved.quality:.4g}"
+                self.quality_label.setText(text)
             self.warnings_label.setText("")
             self.warnings_label.setToolTip("")
             show_line(self.step_intro["results"], "")  # the box below and the rail's “After a fit” say it
@@ -486,6 +494,9 @@ class FitResultsMixin:
                             result=self.session.result if self.session.result_is_current() else None,
                             excluded=self.session.excluded, curve_table=(names, table))
         record.update(self.solutions_record(record))
+        saved = self.session.saved_fit
+        if saved is not None:
+            record["parent_fit_record"] = {"path": str(saved.path), "sha256": saved.sha256}
         if Path(path).suffix.lower() == ".h5":  # NXcanSAS: the points fitted and the model, q in 1/nm
             curves = fit_curves(self.session.model, data, record, self._stem())
             write = lambda target: write_curves(target, curves)  # noqa: E731

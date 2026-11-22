@@ -61,6 +61,7 @@ class IndexingPanel(QDialog, IndexingView):
         self._page = page
         self._filling = False
         self._rows: list[dict] = []
+        self._read_messages = []
         self.setup_ui(self)
         self.buttons.rejected.connect(self.close)
         self.add_cif_button.clicked.connect(self._add_cif)
@@ -88,7 +89,10 @@ class IndexingPanel(QDialog, IndexingView):
         self._fill_settings()
 
     def _refresh_language(self, *_args) -> None:
+        last_read = self.status_label.text() == getattr(self, "_last_read_text", None)
         self.refresh()
+        if last_read:
+            self._show_read_messages()
         if self._displayed_pole is not None:
             self._show_pole(self._displayed_pole)
 
@@ -112,15 +116,26 @@ class IndexingPanel(QDialog, IndexingView):
             try:
                 selected = self.model.add_cif(path)
             except (OSError, ValueError) as error:
-                messages.append(f"{Path(path).name} — " + trf("Could not read the CIF: {error}", error=str(error)))
+                messages.append((Path(path).name, None, str(error), False))
                 continue
             spec = self.model.phases[selected]
-            read = trf("Read {name} from {file}.", name=spec.name, file=Path(path).name)
-            messages.append(read + (" ⚠ " + tr("See the Symmetry column.") if spec.warnings else ""))
+            messages.append((Path(path).name, spec.name, None, bool(spec.warnings)))
         if selected is not None:
             self._changed(select=selected)
         if messages:
-            self.status_label.setText("\n".join(messages))
+            self._read_messages = messages
+            self._show_read_messages()
+
+    def _show_read_messages(self):
+        lines = []
+        for file, name, error, warning in self._read_messages:
+            if error is not None:
+                lines.append(f"{file} — " + trf("Could not read the CIF: {error}", error=tr(error)))
+            else:
+                read = trf("Read {name} from {file}.", name=name, file=file)
+                lines.append(read + (" ⚠ " + tr("See the Symmetry column.") if warning else ""))
+        self._last_read_text = "\n".join(lines)
+        self.status_label.setText(self._last_read_text)
 
     def _add_cell(self) -> None:
         index = self.model.add(PhaseSpec(trf("Phase {n}", n=len(self.model.phases) + 1),

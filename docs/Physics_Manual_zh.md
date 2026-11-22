@@ -3451,6 +3451,11 @@ s(x)      = max( ν(x), median_x ν )                                           
 
 ### 11.13 原位序列的链式拟合
 
+拟合参数趋势图的经过时间等于该帧的探测器时间减去有时间记录的已拟合帧中最早的探测器时间。
+趋势图和导出表的 `elapsed_time_s` 列使用同一时间原点，缺少采集时间的帧留空。JSON 分别保留数值帧时间和
+日期时间戳。“精修”的误差棒显示已记录的局部标准误差（§9.8）。“预测参数”在有估计值时显示中位数和中央
+68% 区间（§9.13）。
+
 若预测与手动拟合的尺寸分布、权重或分辨率不同，则以预测值作为起点，按手动设置进行局部精修。
 两个候选结果按同一目标函数比较。
 
@@ -3987,6 +3992,10 @@ NXcanSAS：`src/gimap/shared/nxcansas.py`、`src/gimap/features/analyze/applicat
 实现：`src/gimap/features/xrr/application/export_record.py`, `src/gimap/features/sem/infrastructure/exporter.py`, `src/gimap/features/prediction/application/export_record.py`, `src/gimap/features/format_converter/infrastructure/adapters/local_files.py`, `src/gimap/features/trainset/infrastructure/adapters/portable_job_package.py`。
 
 ### 14.7 校验和
+
+从导出的单条曲线拟合记录开始重新拟合时，新拟合 JSON 的 `parent_fit_record` 写明原记录路径和打开时的文件字节
+SHA-256。若原输入文件已移动，复现时改用记录旁的副本，`comparison.json` 的 `relocated_inputs`
+会写出实际读取的路径及核验的摘要。
 
 SHA-256 摘要标识内容重要的文件：
 

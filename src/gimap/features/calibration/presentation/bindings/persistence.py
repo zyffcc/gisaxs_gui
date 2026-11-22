@@ -48,10 +48,10 @@ class PersistenceMixin:
         self._sync_main_window_geometry()
         self.calibrationApplied.emit(self.result)
         # One confirmation: a toast that never blocks (no message box after the overwrite question).
-        show_toast(self._toast_host(), self._applied_text(), level="ok")
+        candidate, profile = self.result.selected_candidate, self.view_model.last_profile
+        show_toast(self._toast_host(), lambda: self._applied_text(candidate, profile), level="ok")
 
-    def _applied_text(self) -> str:
-        candidate = self.result.selected_candidate
+    def _applied_text(self, candidate, profile) -> str:
         # The centre as the saved instrument profile holds it and as Analyze shows it.
         center_x, center_y = shown_center(candidate)
         text = trf(
@@ -60,7 +60,6 @@ class PersistenceMixin:
             y=f"{center_y:.2f}",
             distance=f"{candidate.distance_mm:.2f}",
         )
-        profile = self.view_model.last_profile
         if profile is not None:
             text += " " + trf(
                 "Saved as instrument profile \u201c{name}\u201d; Analyze uses it automatically "

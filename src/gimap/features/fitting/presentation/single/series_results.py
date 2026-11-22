@@ -39,6 +39,7 @@ from ...application.series_fit import (
 from ..views.fit_series_view import RESULTS_WIDTH
 from .results import folder_action, start_folder, write_pair, write_plot, write_text_whole
 from .series_stages import CHI2
+from .series_trend import paired_choice, paired_label
 from .series_selection import CHOICE_TIPS, INTERVAL_NOTE, choice_cells, choice_headers, selection_summary
 from .series_text import HALF_TEXT, STATE_COLOR, STATE_MARK
 from .session import path_name
@@ -90,6 +91,9 @@ class FitSeriesResultsMixin:
         self.results_table.currentCellChanged.connect(lambda row, *_: self._select_table_row(row))
         self.trend_combo.currentIndexChanged.connect(lambda _index: self._show_trend_column())
         self.to_single_button.clicked.connect(self._open_in_single)
+        self.quick_table_button.clicked.connect(self.save_table_action.trigger)
+        self.quick_trend_button.clicked.connect(self.save_trend_action.trigger)
+        self.review_frame_button.clicked.connect(self._review_first_warning)
         self.save_table_action.triggered.connect(lambda: self.save_table())
         self.save_report_action.triggered.connect(lambda: self.save_report())
         self.save_trend_action.triggered.connect(lambda: self._save_plot(self.trend_plot, "trend"))
@@ -298,6 +302,10 @@ class FitSeriesResultsMixin:
     def _poor_frames(self) -> list[int]:
         return [index for index, frame in self.fits.items() if poor_fit(frame)]
 
+    def _review_first_warning(self):
+        if self._first_warning is not None:
+            self._select(self._first_warning, follow=True)
+
     def _flagged_frames(self) -> list[int]:
         """Frames fitted with a value the curve does not determine or a beam tail at an edge (``flagged_fit``)."""
         return sorted(index for index, frame in self.fits.items() if flagged_fit(frame))
@@ -343,6 +351,14 @@ class FitSeriesResultsMixin:
         has_intervals = summary and any(f.selection and f.selection.intervals for f in frames)
         self.selection_summary.setText(summary + ("\n" + tr(INTERVAL_NOTE) if has_intervals else ""))
         self.save_button.setVisible(bool(self.fits))
+        self.result_actions.setVisible(bool(self.fits))
+        self.result_actions.setEnabled(not self._listing_busy)
+        self.quick_trend_button.setEnabled(self.trend_plot.has_curves())
+        self._first_warning = next((i for i in sorted(self.fits) if self._frame_state(i)[0] in STATE_COLOR), None)
+        self.review_frame_button.setVisible(self._first_warning is not None)
+        if self._first_warning is not None:
+            self.review_frame_button.setText(trf("Review frame {frame}", frame=self._first_warning + 1))
+            self.review_frame_button.setToolTip(self.flags_cell(self.fits[self._first_warning]))
         self._refresh_open_frame()
         self.save_button.setEnabled(not self._listing_busy)
         self.results_card.setVisible(started)  # before the first Start the rail's “After Start” says it
@@ -479,6 +495,9 @@ class FitSeriesResultsMixin:
             key, model = self.trend_combo.currentData(), self._start_model
             if model is None or not any(frame.ok for frame in self.fits.values()) or key is None:
                 return "series_trend", ""
+            if paired_choice(key):
+                title = paired_label(model, key[0], translate=False)
+                return f"series_trend_{key[0] + 1}_R_D_nm", f"{title} · {folder} · {model_label_plain(model)}"
             column = "chi2_reduced" if key == CHI2 else dict(parameter_columns(model)).get(key, "value")
             value = "χ²ᵣ" if key == CHI2 else path_name(model, key, unit=True, translate=False, full=True)
             return f"series_trend_{column}", f"{value} · {folder} · {model_label_plain(model)}"

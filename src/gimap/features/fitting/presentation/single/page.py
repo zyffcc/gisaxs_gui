@@ -57,6 +57,7 @@ from .plotting import FitPlotMixin
 from .posterior_check import PosteriorCheckMixin
 from .results import FitResultsMixin
 from .run import FitRunMixin
+from .saved_fit import compare_saved_fit, open_saved_fit
 from .session import FitSession, Solution, model_label
 from .tail_ranges import TailRangesMixin
 from .uncertainty import UncertaintyMixin
@@ -135,6 +136,8 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self._render_all()
 
     def _connect(self) -> None:
+        self.open_saved_fit_action.triggered.connect(lambda: open_saved_fit(self))
+        self.compare_saved_fit_button.clicked.connect(lambda: compare_saved_fit(self))
         self.open_button.clicked.connect(self.open_curve_dialog)
         self.import_curves_button.clicked.connect(lambda: self.importCurvesRequested.emit([]))
         self.open_curve_step_button.clicked.connect(self.open_curve_dialog)
@@ -224,12 +227,15 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
 
     def open_curve_dialog(self) -> None:
         start = str(self._remembered("folder") or "")
-        path, _ = QFileDialog.getOpenFileName(self, tr("Open Curve"), start, CURVE_FILTER)
+        path, _ = QFileDialog.getOpenFileName(self, tr("Open Curve"), start,
+                                               CURVE_FILTER + ";;" + tr("Saved fit records (*.json)"))
         if path:
             self.open_curve_file(path)
 
     def open_curve_file(self, path) -> bool:
         """Open Curve… and a dropped file: an NXcanSAS file of several curves asks which one (by their titles)."""
+        if Path(path).suffix.lower() == ".json":
+            return open_saved_fit(self, path)
         titles, measured = (), ()
         if Path(path).suffix.lower() not in (".dat", ".txt"):
             try:
@@ -269,13 +275,21 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self._status(lambda: tr("Could not open {name}: {reason}").format(name=name, reason=tr(outcome.error.message)),
                          "info" if outcome.error.message == COLUMNS_TO_CHOOSE else "error")
             return False
-        loaded = outcome.value
+        curve = self._loaded_curve(outcome.value, path, name)
+        return self._show_loaded_curve(curve, outcome.value, source, side, unit)
+
+    @staticmethod
+    def _loaded_curve(loaded, path, name, *, verified_sha256=None):
         made = (getattr(loaded, "observation", None) or {}).get("curve_source") or {}
         if made.get("format") == "NXcanSAS" and int(made.get("curves_in_file") or 1) > 1:  # which of its curves
             name = f"{Path(str(made.get('path'))).name} · curve {made.get('curve')}"  # a name, as records keep it
-        curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=name, path=str(path),
-                                  unit=loaded.q_source_unit, dq=loaded.dq, unit_from=getattr(loaded, "q_unit_from", ""),
-                                  rows_left_out=getattr(loaded, "rows_left_out", 0), columns=made.get("columns"))
+        return Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=name, path=str(path),
+                                 unit=loaded.q_source_unit, dq=loaded.dq, unit_from=getattr(loaded, "q_unit_from", ""),
+                                 rows_left_out=getattr(loaded, "rows_left_out", 0), columns=made.get("columns"),
+                                 verified_sha256=verified_sha256)
+
+    def _show_loaded_curve(self, curve, loaded, source, side, unit) -> bool:
+        path, name = curve.path, curve.name
         self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
         if side is not None and curve.signed:  # a curve with one side has no halves to choose from
@@ -439,7 +453,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.status_label.setText(text)  # one line, shortened to fit; its tooltip has it whole
         self._log(text)
         if (level in TOAST_LEVELS or (level == "ok" and action is not None)) and self.isVisible():
-            show_toast(self.window(), text, level=level, action=action)
+            show_toast(self.window(), text, level=level, action=action, refresh=self._status_text)
 
     def _log(self, text: str) -> None:
         from datetime import datetime

@@ -41,6 +41,7 @@ from typing import Callable, Iterable, Optional
 from PyQt5.QtCore import QEvent, QObject, QPoint, QRect, Qt, QTimer
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QPushButton, QToolButton, QWidget
 
+from ..i18n import FormattedText, language_changed, tr, translate
 from .toast_band import BandContent, band_content
 
 LEVELS = ("info", "ok", "warning", "error")
@@ -71,19 +72,27 @@ def default_timeout(level: str) -> int:
     return 0 if level == "error" else WARNING_TIMEOUT_MS if level == "warning" else DEFAULT_TIMEOUT_MS
 
 
+def _in_current_language(text):
+    if callable(text):
+        return text
+    if isinstance(text, FormattedText):
+        return text.current
+    original = translate(text, "en") or text
+    return lambda: tr(original)
+
+
 class Toast(QWidget):
     def __init__(
         self,
         parent: QWidget,
-        text: str,
+        text: str | Callable[[], str],
         *,
         level: str = "info",
         action: Optional[tuple[str, Callable[[], None]]] = None,
         timeout_ms: Optional[int] = None,
+        refresh: Optional[Callable[[], str]] = None,
     ):
         """``timeout_ms``: ``None`` for the level's default (``default_timeout``), 0 to stay until closed."""
-        from ..i18n import tr
-
         super().__init__(parent)
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
@@ -95,7 +104,9 @@ class Toast(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 4, 6, 4)
         layout.setSpacing(8)
-        self._text = tr(text)
+        self._message = refresh or _in_current_language(text)
+        self._action_title = _in_current_language(action[0]) if action else None
+        self._text = self._message()
         self.label = QLabel(self._text, self)
         self.label.setWordWrap(True)
         self.label.setProperty("gimapToastText", True)
@@ -125,6 +136,7 @@ class Toast(QWidget):
         close.clicked.connect(self.close)
         layout.addWidget(close)
         self.close_button = close
+        language_changed().connect(self._refresh_language)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self.close)
@@ -136,6 +148,17 @@ class Toast(QWidget):
     def text(self) -> str:
         """The whole text (also while the notice shows it shortened)."""
         return self._text
+
+    def _refresh_language(self, _language):
+        self._text = self._message()
+        metrics = self.label.fontMetrics()
+        self.preferred_text_width = max(metrics.horizontalAdvance(line) for line in self._text.split("\n")) + 4
+        self.close_button.setToolTip(tr("Close"))
+        if self.action_button is not None:
+            self.action_button.setText(self._action_title())
+        stack = _stacks.get(id(self.parentWidget()))
+        if stack is not None:
+            stack.layout()
 
     def _beside(self) -> int:
         """The width of what stands beside the text: the margins and the buttons."""
@@ -360,15 +383,16 @@ def _stack(parent: QWidget) -> _Stack:
 
 def show_toast(
     parent: QWidget,
-    text: str,
+    text: str | Callable[[], str],
     *,
     level: str = "info",
     action: Optional[tuple[str, Callable[[], None]]] = None,
     timeout_ms: Optional[int] = None,
+    refresh: Optional[Callable[[], str]] = None,
 ) -> Toast:
     """``timeout_ms``: ``None`` — until closed for an error, 10 s for a warning, 5 s otherwise; 0 — until closed."""
     stack = _stack(parent)
-    toast = Toast(parent, text, level=level, action=action, timeout_ms=timeout_ms)
+    toast = Toast(parent, text, level=level, action=action, timeout_ms=timeout_ms, refresh=refresh)
     toast.show()
     stack.add(toast)
     return toast

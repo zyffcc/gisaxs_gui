@@ -16,11 +16,12 @@ import math
 import threading
 from pathlib import Path
 
+import numpy as np
 from PyQt5.QtCore import QObject, QSignalBlocker, Qt, pyqtSignal
 from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.i18n import language_changed, tr, trf
+from src.gimap.app.presentation.i18n import FormattedText, language_changed, tr, trf
 from src.gimap.app.presentation.task_runner import TaskRunner
 
 from ...application import CURVE_SUFFIXES, LoadCurveRequest
@@ -46,7 +47,7 @@ from ...application.joint_fit import (
     warnings,
     with_heights,
 )
-from ...application.single_fit import Curve
+from ...application.single_fit import FAMILIES, Curve
 from ...application.substrate_level import CUSTOM, SUBSTRATE_CHOICES
 from ..views.joint_fit_view import build_joint_dialog
 from .results import folder_action
@@ -63,6 +64,7 @@ MIXED = "The curves are weighted differently (some by σ, some by ln I): their �
 NOT_ADDED = "{name} was not added: {reason}"
 GEOMETRY = {"horizontal": "αi {ai}°, αf {af}°, λ {wl} nm", "vertical": "αi {ai}°, q∥ {qp} nm⁻¹, λ {wl} nm",
             "other": "q_z = 0"}
+CHOOSE_SUBSTRATE = "Choose substrate for vertical cut"
 
 
 class _Progress(QObject):
@@ -78,6 +80,7 @@ class JointFitDialog:
         self.result = None
         self.result_specs: list[CurveSpec] = []
         self.result_substrate = None
+        self._formatted_status = None
         self.tasks = TaskRunner(parent)
         self._stop = threading.Event()
         self._signal = _Progress(parent)
@@ -90,6 +93,8 @@ class JointFitDialog:
             self.joint_substrate.addItem(tr(text), key)
         for key, text in METHODS:
             self.joint_method.addItem(tr(text), key)
+        for key, (name, _parameters) in FAMILIES.items():
+            self.joint_family.addItem(tr(name), key)
         self._sync_substrate()
         self._connect()
         language_changed().connect(self.refresh_language)
@@ -105,6 +110,7 @@ class JointFitDialog:
                     self.joint_critical):
             box.valueChanged.connect(lambda _v: self._edited())
         self.joint_substrate.currentIndexChanged.connect(lambda _i: self._sync_substrate())
+        self.joint_family.activated.connect(self._choose_family)
         self.joint_run.clicked.connect(self.run)
         self.joint_stop.clicked.connect(self._stop.set)
         self.joint_shown.currentIndexChanged.connect(lambda _i: self._plot())
@@ -114,6 +120,7 @@ class JointFitDialog:
 
     def show(self) -> None:
         self._render()
+        self._summary()
         self.joint_dialog.show()
         self.joint_dialog.raise_()
 
@@ -207,6 +214,8 @@ class JointFitDialog:
         self._kind_fields(kind)
         self._fill_curves()
         self._fill_parameters()
+        self._ready()
+        self._plot()
         self._warn()
 
     def _warn(self) -> None:
@@ -220,6 +229,13 @@ class JointFitDialog:
         custom = self.joint_substrate.currentData() == CUSTOM
         for widget in (self.joint_delta_label, self.joint_delta, self.joint_beta_label, self.joint_beta):
             widget.setVisible(custom)
+        self._ready()
+
+    def _ready(self) -> None:
+        vertical = any(spec.kind == "vertical" for spec in self.specs)
+        self.joint_substrate.setItemText(0, tr(CHOOSE_SUBSTRATE if vertical else SUBSTRATE_CHOICES[0][1]))
+        self.joint_run.setEnabled(bool(self.specs) and not self.tasks.is_busy()
+                                  and (not vertical or bool(self.joint_substrate.currentData())))
 
     def substrate(self):
         def number(field):
@@ -243,6 +259,15 @@ class JointFitDialog:
         model = self.page.session.model
         return with_heights(model) if any(s.kind == "vertical" for s in self.specs) else model
 
+    def _choose_family(self, index: int) -> None:
+        if len(self.page.session.model.components) == 1:
+            self.page.model_editor.set_family(0, self.joint_family.itemData(index))
+            self._render()
+
+    def _same_families(self) -> bool:
+        return self.result is not None and [c.family for c in self.result.models[0].components] == [
+            c.family for c in self.page.session.model.components]
+
     def shared(self) -> set:
         out = set()
         for line in range(self.joint_parameters.rowCount()):
@@ -261,7 +286,8 @@ class JointFitDialog:
         default = default_shared(model)
         table = self.joint_parameters
         table.setRowCount(len(paths))
-        result = self.result if self.result is not None and len(self.result.models) == len(self.result_specs) else None
+        result = self.result if self._same_families() else None
+        fitted_paths = {path for path, _p in result.models[0].parameters()} if result is not None else set()
         for line, path in enumerate(paths):
             item = QTableWidgetItem(path_name(model, path, unit=True, full=True))
             item.setData(Qt.UserRole, list(path))
@@ -272,7 +298,7 @@ class JointFitDialog:
             box.setCheckState(Qt.Checked if (height or before.get(path, path in default)) else Qt.Unchecked)
             table.setItem(line, 1, box)
             value, error = f"{model.get(path).value:.5g}", "—"
-            if result is not None:
+            if path in fitted_paths:
                 found = values_of(result, path)
                 value = " | ".join(f"{v:.5g}" for v, _e in found) if len({v for v, _e in found}) > 1 else f"{found[0][0]:.5g}"
                 error = " | ".join("—" if not math.isfinite(e) else f"{e:.3g}" for _v, e in found[:1 if len(
@@ -290,7 +316,9 @@ class JointFitDialog:
             geometry = trf(GEOMETRY[spec.kind], ai=f"{spec.alpha_i:g}", af=f"{spec.alpha_f:g}",
                            wl=f"{spec.wavelength:g}", qp=f"{spec.q_parallel:g}")
             for column, text in enumerate((spec.name, tr(kinds[spec.kind]), str(len(spec.q)), geometry)):
-                table.setItem(line, column, QTableWidgetItem(text))
+                item = QTableWidgetItem(text)
+                item.setToolTip(text)
+                table.setItem(line, column, item)
 
     def _render(self) -> None:
         row = self.joint_curves.currentRow()
@@ -298,34 +326,62 @@ class JointFitDialog:
         if 0 <= row < len(self.specs):
             self.joint_curves.selectRow(row)
         self._selected()
+        components = self.page.session.model.components
+        self.joint_family_label.setVisible(len(components) == 1)
+        self.joint_family.setVisible(len(components) == 1)
+        if len(components) == 1:
+            self.joint_family.setCurrentIndex(self.joint_family.findData(components[0].family))
         self._fill_parameters()
         busy = self.tasks.is_busy()
-        self.joint_run.setEnabled(bool(self.specs) and not busy)
+        self._ready()
+        self.joint_family.setEnabled(not busy)
         self.joint_add_current.setEnabled(self.page.session.curve is not None)
-        self.joint_use.setEnabled(self.result is not None and not busy)
+        self.joint_use.setEnabled(self._same_families() and not busy)
         self.joint_save.setEnabled(self.result is not None)
         self.joint_report.setEnabled(self.result is not None)
         blocker = QSignalBlocker(self.joint_shown)
+        previous = self.joint_shown.currentText()
         self.joint_shown.clear()
         for spec in (self.result_specs if self.result is not None else self.specs):
             self.joint_shown.addItem(spec.name)
+        self.joint_shown.setCurrentIndex(max(0, self.joint_shown.findText(previous)))
         del blocker
         self._plot()
 
     def _plot(self) -> None:
         index = self.joint_shown.currentIndex()
-        if self.result is None or not 0 <= index < len(self.result_specs):
-            self.joint_plot.clear_curves()
+        specs = self.specs if self.result is None else self.result_specs
+        self.joint_dimensions.setVisible(self.result is not None)
+        if not 0 <= index < len(specs):
+            self.joint_plot.set_curves([])
             self.joint_plot.set_empty_text(tr("Add the curves, then Fit Together: each curve is shown here with its "
                                               "model."))
             return
-        spec = self.result_specs[index]
+        spec = specs[index]
+        self.joint_plot.set_labels("q_z (nm⁻¹)" if spec.kind == "vertical" else "|q| (nm⁻¹)", "I")
+        if self.result is None:
+            x = spec.q if spec.kind == "vertical" else np.abs(spec.q)
+            self.joint_plot.set_curves([(spec.name, x, spec.intensity)], markers=[True])
+            return
+        model = self.result.models[index]
+        errors = curve_errors(self.result, index)
+        dimensions = []
+        for owner, component in enumerate(model.components):
+            values = []
+            for key in ("R", "h"):
+                if key in component.keys():
+                    value = component.value(key)
+                    error = errors.get((owner, key), math.nan)
+                    estimate = f"{value:.5g} ± {error:.3g}" if math.isfinite(error) else f"{value:.5g}"
+                    values.append(f"{key} = {estimate} nm")
+            dimensions.append(" · ".join([tr(FAMILIES[component.family][0]), *values]))
+        self.joint_dimensions.setText(trf("Last fit: {dimensions}", dimensions="\n".join(dimensions)))
         try:
-            x, y, fitted = plot_points(spec, self.result.models[index])
+            x, y, fitted = plot_points(spec, model)
         except ValueError as exc:
+            self.joint_plot.set_curves([])
             self.joint_plot.set_empty_text(str(exc))
             return
-        self.joint_plot.set_labels("q_z (nm⁻¹)" if spec.kind == "vertical" else "|q| (nm⁻¹)", "I")
         self.joint_plot.set_curves([(spec.name, x, y), (tr("Model"), x, fitted)], markers=[True, None])
 
     # -- the fit ------------------------------------------------------------------------------------------------
@@ -343,6 +399,7 @@ class JointFitDialog:
         min_exit_angle_ac = self.joint_min_exit.value()
         self._stop.clear()
         self.joint_run.setEnabled(False)
+        self.joint_family.setEnabled(False)
         self.joint_stop.show()
         self.joint_progress.setRange(0, 100)
         self.joint_progress.setValue(0)
@@ -356,7 +413,7 @@ class JointFitDialog:
 
     def _progress(self, fraction: float, line: str) -> None:
         self.joint_progress.setValue(int(100 * fraction))
-        self.joint_status.setText(progress_line(line))
+        self._set_status_text(progress_line(line))
 
     def _finish(self) -> None:
         self.joint_stop.hide()
@@ -476,18 +533,26 @@ class JointFitDialog:
         return path
 
     def _say(self, text: str, level: str) -> None:
-        self.joint_status.setText(text)
+        self._set_status_text(text)
         self.joint_status.setProperty("gimapRole", {"error": "danger", "warning": "warning"}.get(level, "muted"))
         self.joint_status.style().unpolish(self.joint_status)
         self.joint_status.style().polish(self.joint_status)
+
+    def _set_status_text(self, text: str) -> None:
+        self._formatted_status = text if isinstance(text, FormattedText) else None
+        self.joint_status.setText(text)
 
     def refresh_language(self) -> None:
         for combo, items in ((self.joint_kind, KINDS), (self.joint_substrate, SUBSTRATE_CHOICES),
                              (self.joint_method, METHODS)):
             for index, (_key, text) in enumerate(items):
                 combo.setItemText(index, tr(text))
+        for index, (name, _parameters) in enumerate(FAMILIES.values()):
+            self.joint_family.setItemText(index, tr(name))
         self._render()
         self._summary()
+        if self._formatted_status is not None:
+            self.joint_status.setText(self._formatted_status.current())
         self._warn()
 
     def dispose(self) -> None:

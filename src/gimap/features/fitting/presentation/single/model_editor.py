@@ -176,7 +176,7 @@ class FitModelEditor(QWidget):
         self._errors = {}
         self._emit(replace(model, components=tuple(components)))
 
-    def _family(self, index: int, family: str) -> None:
+    def set_family(self, index: int, family: str) -> None:
         old = self.model.components[index]
         if family == old.family:
             return
@@ -288,7 +288,7 @@ class FitModelEditor(QWidget):
             if key not in NETWORK_FAMILIES:
                 family.setItemData(family.count() - 1, tr(MANUAL_ONLY), Qt.ToolTipRole)
         family.setCurrentIndex(family.findData(component.family))
-        family.currentIndexChanged.connect(lambda _i, box=family, at=index: self._family(at, box.currentData()))
+        family.currentIndexChanged.connect(lambda _i, box=family, at=index: self.set_family(at, box.currentData()))
         structure = QCheckBox("S(q)", card)
         structure.setObjectName(f"fitStructure_{index}")
         structure.setToolTip(tr("Interference between neighbours (a structure factor): choose its kind below the "

@@ -142,9 +142,20 @@ class BatchWatchMixin(WatchSeriesMixin):
         if state is None:
             self._status(tr("Open a frame first."), "warning")
             return
-        path = self._figure_path("Save Image", ("detector", "qmap", "cake")[self.view_combo.currentIndex()])
+        view = self.view_combo.currentIndex()
+        if view == 1:
+            from ..qmap_figure import displayed_layers, figure_options
+
+            state["layers"] = displayed_layers(self)
+        path = self._figure_path("Save Image", ("detector", "qmap", "cake")[view])
         if path is None:
             return
+        if view == 1:
+            options = figure_options(self, getattr(self, "_qmap_figure_options", {}))
+            if options is None:
+                return
+            self._qmap_figure_options = options
+            state.update(options)
         image = state.pop("image")
         try:
             written = self.view_model.save_image_figure(path, image, **state)

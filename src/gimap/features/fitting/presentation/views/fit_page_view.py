@@ -119,6 +119,7 @@ class FitPageView(FitStepsView):
         self.open_button.setPopupMode(QToolButton.MenuButtonPopup)
         self.open_button.setToolTip("Open a 1D curve (q, I, σ) — Analyze ▸ Send to Fitting opens its cut here")
         open_menu = QMenu(self.open_button)
+        self.open_saved_fit_action = open_menu.addAction("Open Saved Fit…")
         self.load_model_action = QAction("Load Model…", page)
         self.load_model_action.setToolTip("A model saved from Fitting (JSON), for this curve")
         open_menu.addAction(self.load_model_action)

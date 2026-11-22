@@ -18,7 +18,7 @@ from PyQt5.QtCore import QSignalBlocker
 from PyQt5.QtWidgets import QMenu
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_state
 
 from ..views.analyze_page_view import INCIDENCE_FROM_PROFILE, INCIDENCE_TIP
@@ -120,10 +120,10 @@ class IncidenceMixin:
             self.incidence_spin.setValue(INCIDENCE_FROM_PROFILE if profile is None else profile.geometry.incidence_deg)
         self._show_incidence_state()
         self._remember()
-        text = tr(NOT_USED_NO_PROFILE).format(value=_degrees(value)) if profile is None else tr(NOT_USED_NOTICE).format(
-            value=_degrees(value), profile=_degrees(profile.geometry.incidence_deg))
+        text = (trf(NOT_USED_NO_PROFILE, value=_degrees(value)) if profile is None else
+                trf(NOT_USED_NOTICE, value=_degrees(value), profile=_degrees(profile.geometry.incidence_deg)))
         show_toast(self.window(), text, level="warning", timeout_ms=20000,
-                   action=(tr(USE_IT).format(value=_degrees(value)), lambda: self._use_incidence(float(value))))
+                   action=(trf(USE_IT, value=_degrees(value)), lambda: self._use_incidence(float(value))))
         if analysis.geometry is None:
             return False  # nothing was computed with it
         self.run_analysis()
@@ -174,7 +174,7 @@ class IncidenceMixin:
         if profile is None:
             return  # no profile to compare with yet: tell it with the first frame that has one
         self._incidence_notice_pending = False
-        text = tr(RESTORED_NOTICE).format(value=_degrees(value), profile=_degrees(profile.geometry.incidence_deg))
+        text = trf(RESTORED_NOTICE, value=_degrees(value), profile=_degrees(profile.geometry.incidence_deg))
         show_toast(self.window(), text, level="info", action=(tr("Back to Profile"), self.reset_incidence),
                    timeout_ms=15000)
 

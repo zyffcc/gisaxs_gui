@@ -258,9 +258,20 @@ def tr(text: str) -> str:
     return translate(text, current_language()) or text if current_language() != DEFAULT_LANGUAGE else text
 
 
+class FormattedText(str):
+    """A translated UI string that a long-lived notice can render again after a language switch."""
+
+    def current(self):
+        values = {key: val.current() if isinstance(val, FormattedText) else val for key, val in self.values.items()}
+        return tr(self.template).format(**values)
+
+
 def trf(template: str, **values) -> str:
-    """``tr(template).format(**values)``: the table holds the template, the values are filled in after."""
-    return tr(template).format(**values)
+    """Translate the template before filling in its values. Preserve those inputs for live notices."""
+    text = FormattedText(tr(template).format(**values))
+    text.template = template
+    text.values = {key: str(val) if isinstance(val, BaseException) else val for key, val in values.items()}
+    return text
 
 
 __all__ = [

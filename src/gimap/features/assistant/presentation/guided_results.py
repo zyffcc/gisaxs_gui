@@ -29,6 +29,7 @@ from src.gimap.app.presentation.components import AdvancedSection
 from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, tr, trf
 
 from ..application import found_by_search, reliable_row, ring_overlays, series_changes
+from ..application.giwaxs_summary import result_lines
 from .guided_details import PeakDetails, SolutionDetails, method_text
 from .guided_gisaxs import GisaxsResults, outcome_summary
 from .guided_report import report_markdown
@@ -258,7 +259,8 @@ class GuidedResultsPanel(QWidget):
         frames = report.get("frames") or {}
         if report.get("ok") and int(frames.get("total") or 1) > 1:
             self._series(report)
-        self._report(report)
+        if not self._has_giwaxs_summary(report):
+            self._report(report)
         self.layout_.addStretch(1)
         if current_language() != DEFAULT_LANGUAGE:  # built after the window was translated
             apply_to(self, current_language())
@@ -307,6 +309,10 @@ class GuidedResultsPanel(QWidget):
                 gap = "" if current_language() == "zh" else " "  # Chinese sentences follow each other without a space
                 text += gap + tr("{n} question(s) in the Results step.").format(n=len(questions))
             self.layout_.addWidget(badge(text, GOOD, self))
+            if self._has_giwaxs_summary(report):
+                self.layout_.addWidget(_heading("Result summary", self))
+                self.layout_.addWidget(label("\n".join(result_lines(report, words)), self))
+                self._report(report)
             found = found_by_search(report)
             if found and report.get("procedure") != "geometry":  # Find Geometry says it in its outcome line
                 above = label(trf(SEARCHED_ABOVE, name=Path(str(found["decision"]).replace("\\", "/")).name), self, role="muted")
@@ -316,9 +322,9 @@ class GuidedResultsPanel(QWidget):
             if strongest:
                 self.layout_.addWidget(_heading("Strongest reliable ring by fitted area", self))
                 self._ring(strongest)
-            if points:
+            if points and not self._has_giwaxs_summary(report):
                 self.layout_.addWidget(label(tr("{n} point(s) to check — see below").format(n=len(points)), self, role="muted"))
-            for item in points:
+            for item in ([] if self._has_giwaxs_summary(report) else points):
                 point = badge(_point(item), NOTE, self)
                 self.layout_.addWidget(point)
                 if item.get("hint") and item.get("item") in HINT_IN_TIP:  # its details are in the sections below
@@ -407,6 +413,11 @@ class GuidedResultsPanel(QWidget):
     def _checks(self, report: dict) -> None:
         self.layout_.addWidget(_heading("Checks", self))
         found = 0
+        for item in to_check(report.get("needs_attention") or []):
+            self.layout_.addWidget(badge(_point(item), NOTE, self))
+            if item.get("hint"):
+                self.layout_.addWidget(label(words(item["hint"]), self, role="muted"))
+            found += 1
         for peak in report.get("peaks") or ():
             if peak.get("caveat"):
                 self.layout_.addWidget(badge(trf("q = {q} Å⁻¹: {caveat}", q=f"{peak['q']:.4g}", caveat=tr(peak["caveat"])),
@@ -539,6 +550,10 @@ class GuidedResultsPanel(QWidget):
         toggle.toggled.connect(lambda on: toggle.setText(tr("Hide the Full Text") if on else tr("Show the Full Text")))
         self.layout_.addWidget(toggle, 0, Qt.AlignLeft)
         self.layout_.addWidget(self.report_view)
+
+    @staticmethod
+    def _has_giwaxs_summary(report):
+        return report.get("ok") and not report.get("stopped") and report.get("procedure") not in ("gisaxs", "geometry")
 
     # -- the interface language -----------------------------------------------------------
 

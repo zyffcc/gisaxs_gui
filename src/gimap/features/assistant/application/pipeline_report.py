@@ -15,6 +15,7 @@ from src.gimap.shared.orientation_notes import coverage_warning, measured_f_text
 from ..domain import AT_EDGE
 from .calibration_report import calibration_quality, calibration_rms
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
+from .giwaxs_summary import result_lines
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
 from .pipeline_phases import assignment_lines, orientation_checks_only, pole_line
 from .report_language import ENGLISH, heading as section
@@ -236,7 +237,7 @@ def _hints_title(report: dict) -> str:
     return "Series hints (reliable peaks only)"
 
 
-def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: str = ENGLISH) -> str:
+def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: str = ENGLISH, summary_word=str) -> str:
     frame = report.get("frame") or ""
     name = title or Path(frame).name or "frame"
     attention = report.get("needs_attention") or []
@@ -249,6 +250,8 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: st
     undecided = _no_technique(report)
     heading = "GISAXS" if gisaxs else ("GIMaP" if undecided else "GIWAXS")
     lines = [f"# {heading} — {name}", "", f"Status: **{state}**  ", f"File: `{frame}`", ""]
+    if report.get("ok") and not gisaxs and report.get("procedure") != "geometry":
+        lines += [section("Result summary", language), "", *("- " + line for line in result_lines(report, summary_word)), ""]
     if attention:
         heading = "Orientation checks" if orientation_checks_only(report) else "Needs attention (answer, then run again)"
         lines += [section(heading, language), ""]
