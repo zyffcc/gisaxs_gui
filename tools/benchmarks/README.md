@@ -25,7 +25,7 @@ fit 89 in `per_cut/posterior_newseed_auto2.json.gz` and known-composition fit 20
 
 The archive was produced on Windows with Python 3.10.18 and one BLAS thread per fit. On that platform
 and Python version the test requires exact agreement for every archived numerical field except run time.
-Elsewhere it checks the compositions, allows an absolute difference of 0.01 in each solution probability,
+Elsewhere it checks the compositions, allows an absolute difference of 0.05 in each solution probability (Windows with Python 3.11 moved one of two competing solutions by 0.031),
 and checks every fitted population value and posterior median at a relative tolerance of 0.01 and every 68% and
 95% interval endpoint at 0.02 (Ubuntu CI differs by up to 0.16% in a fitted value); the least-squares standard
 errors, which differ by up to 45% at a bound, are compared on the archive platform only. This includes the

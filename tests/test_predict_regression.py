@@ -2,11 +2,11 @@
 
 Windows with Python 3.10.18 produced the archive. There every archived numerical field must
 match exactly, apart from elapsed time. Elsewhere compare each composition exactly, its
-probability to 0.01 absolute, every population estimate to 1e-2 relative and its interval ends to
+probability to 0.05 absolute, every population estimate to 1e-2 relative and its interval ends to
 2e-2 relative: the least-squares optimum ends where its tolerances stop it and the ends come from
 importance weights, and both amplify the differences of floating-point arithmetic between platforms
-(Ubuntu CI: up to 1.6e-3 for an estimate, 1.25e-3 for a 95 % end). A change of the method moves them by
-more. The least-squares errors (keys ending in _err) are compared on the archive platform only: from a
+(Ubuntu CI: up to 1.6e-3 for an estimate, 1.25e-3 for a 95 % end; Windows, Python 3.11: 0.031 in the
+probability of one of two competing solutions of cut 167). A change of the method moves them by more. The least-squares errors (keys ending in _err) are compared on the archive platform only: from a
 Jacobian at a bound they differ by up to 45 % between platforms (s_nn_err of cut 208 on Ubuntu, Python 3.11).
 The portable diagnostics are bic, low_ess, model_error, qzR_* and cyl_sphere. Refinement near
 a bound can add or remove flags for boundaries, correlations and unconstrained parameters.
@@ -43,7 +43,7 @@ def _check_populations(actual, expected):
 
 def _check_solution(actual, expected):
     assert actual["families"] == expected["families"]
-    assert actual["probability"] == pytest.approx(expected["probability"], abs=0.01)
+    assert actual["probability"] == pytest.approx(expected["probability"], abs=0.05)
     _check_populations(actual["populations"], expected["populations"])
 
 
