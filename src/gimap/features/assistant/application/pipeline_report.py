@@ -17,6 +17,7 @@ from .calibration_report import calibration_quality, calibration_rms
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .giwaxs_summary import result_lines
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
+from .pipeline_roll import incidence_lines
 from .pipeline_crystal import crystal_lines, compact_crystal
 from .report_numbers import _number, _fixed, _pm
 from .pipeline_phases import assignment_lines, orientation_checks_only, pole_line
@@ -101,6 +102,7 @@ def _geometry_lines(report: dict) -> list[str]:
         f"αi {_number(geometry.get('incidence_deg'))}°",
     ]
     pixel, wavelength = geometry.get("pixel_size_um") or (), geometry.get("wavelength_A")
+    lines.extend(incidence_lines(report))
     if "sample_roll_deg" in geometry:
         lines.append(f"- sample roll ψ applied: {_number(geometry['sample_roll_deg'])}°")
     roll = report.get("sample_roll_measurement")

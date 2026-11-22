@@ -17,6 +17,13 @@ def result_lines(report, word=str):
     ambiguous = sum(bool(p.get("ambiguous") or p.get("alternatives")) for p in matched)
     lines = [word("{matched} of {total} peaks indexed to candidate phases ({ambiguous} ambiguous).").format(
         matched=len(matched), total=len(peaks), ambiguous=ambiguous)]
+    incidence = report.get("incidence_measurement") or {}
+    nominal = incidence.get("override_deg", incidence.get("reference_deg"))
+    measured, error = incidence.get("deg"), incidence.get("error_deg")
+    if nominal is not None and nominal > 0 and measured is not None and error and abs(nominal - measured) > 3 * error:
+        lines.append(word("Nominal αi {nominal}° and measured αi {value} ± {error}° differ by more than 3σ. Used {used}°.").format(
+            nominal=f"{nominal:g}", value=f"{measured:.4f}", error=f"{error:.4f}",
+            used=f"{report['geometry']['incidence_deg']:.5g}"))
     if not matched:
         lines.append(word("No phase matched the measured peaks.") if report.get("phase_assignment") else
                      word("No phase assignments recorded."))

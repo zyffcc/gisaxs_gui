@@ -34,7 +34,17 @@ class RollMeasurement:
         return {**asdict(self), "significant": self.significant}
 
 
-def _horizon(data, valid, g):
+@dataclass(frozen=True)
+class HorizonTrace:
+    roll: RollEstimate
+    incidence_deg: float
+    incidence_error_deg: float
+    intercept_px: tuple[float, float]
+    near_beam_incidence_deg: float | None
+
+
+def fit_horizon_trace(data, valid, g):
+    """Fit the illuminated-side edge across strips. Retain slope and direct-beam intercept."""
     if min(data.shape) < 32:
         return None
     # Restrict the search to the vicinity of the horizon, allowing displacement of the
@@ -44,7 +54,8 @@ def _horizon(data, valid, g):
     zero = len(angles)//2
     cx, cy = g.beam_center_x_px, g.beam_center_y_px
     px, py = g.pixel_size_x_m, g.pixel_size_y_m
-    if abs(a[zero]) > abs(b[zero]):  # steep detector trace: take row strips
+    transpose = abs(a[zero]) > abs(b[zero])
+    if transpose:  # steep detector trace: take row strips
         a, b = b, a
         cx, cy, px, py = cy, cx, py, px
         data, valid = data.T, valid.T
@@ -101,7 +112,15 @@ def _horizon(data, valid, g):
         i, j = np.unravel_index(np.argmax(score), score.shape)
         if score[i, j] < .45 or i in (0, len(angles)-1) or j in (0, len(offsets)-1):
             return None
-        return float(angles[i])
+        coordinate = crossing[i] + offsets[j]
+        point = (coordinate, cx) if transpose else (cx, coordinate)
+        # At αf=0 the ray has rolled-up/along = tan αi, even on a tilted detector.
+        col_axis, row_axis = g.with_sample_roll(angles[i]).rolled_detector_axes()
+        x = (point[0] - g.beam_center_x_px) * g.pixel_size_x_m
+        y = (g.beam_center_y_px - point[1]) * g.pixel_size_y_m
+        along = g.distance_m + x*col_axis[0] + y*row_axis[0]
+        up = x*col_axis[2] + y*row_axis[2]
+        return float(angles[i]), math.degrees(math.atan2(up, along)), point
 
     indices = np.arange(len(stack))
     result = best(indices)
@@ -112,9 +131,16 @@ def _horizon(data, valid, g):
     if any(item is None for item in estimates):
         return None
     # Deleting contiguous strips accounts for coherent curvature / displaced local edges.
-    error = math.sqrt(4 * np.var(estimates))
+    error = math.sqrt(4 * np.var([fit[0] for fit in estimates]))
     span = np.ptp(strip_x) * px / py
-    return RollEstimate(result, max(.10, error, math.degrees(math.atan2(1., span))))
+    roll = RollEstimate(result[0], max(.10, error, math.degrees(math.atan2(1., span))))
+    # Compare the half of the strips nearest the direct beam with the full baseline.
+    # Different shadows in different detector regions invalidate subpixel precision.
+    near = best(np.argsort(np.abs(strip_x))[:len(stack)//2]) if len(stack) >= 20 else None
+    incidence_error = max(math.sqrt(4 * np.var([fit[1] for fit in estimates])),
+                          math.degrees(math.atan2(step * py, g.distance_m)),
+                          abs(result[1] - near[1]) if near is not None else 0.)
+    return HorizonTrace(roll, result[1], incidence_error, result[2], near[1] if near else None)
 
 
 def measure_sample_roll(data, geometry: DetectorGeometry, *, valid=None, technique="giwaxs") -> RollMeasurement:
@@ -133,7 +159,8 @@ def measure_sample_roll(data, geometry: DetectorGeometry, *, valid=None, techniq
         if np.shape(valid) != frame.shape:
             raise ValueError("The validity mask must match the frame shape.")
         keep &= valid
-    horizon = _horizon(frame, keep, geometry)
+    trace = fit_horizon_trace(frame, keep, geometry)
+    horizon = trace.roll if trace is not None else None
     gisaxs = str(technique).lower() == "gisaxs"
     feature = "specular rod" if gisaxs else "fibre rings"
     pair = (rod_symmetry if gisaxs else fibre_symmetry)(frame, keep, geometry)

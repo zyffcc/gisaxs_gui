@@ -8,6 +8,7 @@ from typing import Any, Optional
 import h5py
 import numpy as np
 
+from .header_incidence import cbf_incidence
 from .nexus_metadata import extract_nexus_metadata, nxs_header_beam_center_px  # noqa: F401  (re-exported)
 from .radiation import energy_to_wavelength
 
@@ -83,6 +84,7 @@ def extract_cbf_metadata(header: dict[str, Any], shape: tuple[int, int]) -> dict
         px = py = 172e-6
     return {
         **({"pixel_size_source": "frame shape"} if inferred_pixels else {}),
+        **cbf_incidence(contents),
         "detector_name": detector_match.group(1).strip() if detector_match else None,
         "pixel_size_x_m": px,
         "pixel_size_y_m": py,

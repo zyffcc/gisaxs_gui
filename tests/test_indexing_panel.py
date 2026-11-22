@@ -164,7 +164,9 @@ def test_the_automatic_analysis_assigns_the_rings_and_fits_their_pole_figures(tm
     session = open_headless_session(data / FRAME, saved_profiles=False, out_dir=tmp_path / "out")
     try:
         report = session.run_pipeline(PipelineOptions(
-            calibration=str(data / PONI), incidence_deg=0.075, follow_detection=True,
+            # Reproduce the notebook-angle pole-figure reference. The measured-angle
+            # reduction has a different exit-angle cut and different Hermans coverage.
+            calibration=str(data / PONI), incidence_deg=0.075, keep_incidence=True, follow_detection=True,
             phases=(str(tmp_path / "mapi.cif"), str(tmp_path / "pbi2.cif")),
         ))
         decision = next(item for item in report["decisions"] if item["what"] == "phase assignment")

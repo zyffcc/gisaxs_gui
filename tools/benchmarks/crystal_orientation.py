@@ -192,7 +192,7 @@ def sector_diagnostics(analysis, strongest, maps):
 
 def public_diagnostics(report, page, cifs):
     """Repeat the independent-width fit on the original exit cut and inspect signed raw sectors."""
-    from src.gimap.features.analyze.application.crystal_orientation import _pixels, _profile
+    from src.gimap.features.analyze.application.crystal_orientation import _pixels, _profile, frame_crystal_orientation
     from src.gimap.features.analyze.domain.crystal.texture import TextureRing, fit_crystal_orientation
     from src.gimap.features.analyze.domain.giwaxs import giwaxs_maps
 
@@ -203,6 +203,9 @@ def public_diagnostics(report, page, cifs):
     fits = report["crystal_orientation"]
     if fits[0]["rings"]:
         report["benchmark_signed_sectors"] = sector_diagnostics(analysis, fits[0]["rings"][0], maps)
+    report["benchmark_film_absorption"] = frame_crystal_orientation(
+        analysis, [phase_from_cif(path) for path in cifs], frame_source=model.frames,
+        assignment=report["phase_assignment"], fit_absorption=True)
     old_cut = []
     residuals = []
     paired = []
@@ -225,7 +228,7 @@ def public_diagnostics(report, page, cifs):
             use_both = np.minimum(*counts) >= 12
             paired.append({"phase": fit["phase"], "q": row["q"], "chi_centres_deg": (edges[:-1]+1)[use_both].tolist(),
                            "negative": means[0][use_both].tolist(), "positive": means[1][use_both].tolist()})
-            profile, _, _ = _profile(maps, pixels, analysis, row["q_window"], row["q"], {"available": False})
+            profile, _, _, _ = _profile(maps, pixels, analysis, row["q_window"], row["q"], {"available": False})
             rings.append(TextureRing(row["ring_id"], row["q"], *row["q_window"], profile))
             chi = np.asarray(row["chi_deg"])
             use = np.asarray(row["fit_mask"])
@@ -259,7 +262,7 @@ def public_frame(*, with_phases=True, diagnostics=False, incidence_deg=None, sam
     cifs = tuple(str(CIF / CIF_FILES[name]) for name in TEXTURES) if with_phases else ()
     options = PipelineOptions(technique="giwaxs", calibration=str(EXTERNAL / info["poni"]),
                               incidence_deg=info["incidence_deg"] if incidence_deg is None else incidence_deg,
-                              sample_roll_deg=sample_roll_deg, phases=cifs)
+                              keep_incidence=incidence_deg is not None, sample_roll_deg=sample_roll_deg, phases=cifs)
     with tempfile.TemporaryDirectory() as tmp:
         session = open_headless_session(EXTERNAL / info["frame"], saved_profiles=False, out_dir=tmp)
         try:
@@ -299,7 +302,11 @@ def main():
         for item in results["synthetic"]:
             print(item["phase"], item["successes"], "of", item["trials"])
     if "public" in results:
-        for fit in results["public"].get("crystal_orientation", []):
+        public = results["public"]
+        print("Incidence measurement", public.get("incidence_measurement"))
+        print("Angles used", public["geometry"]["incidence_deg"], public["geometry"]["sample_roll_deg"])
+        for fit in public.get("crystal_orientation", []) + public.get("benchmark_film_absorption", []):
+            print("Film absorption", fit.get("film_absorption"), "joint reduced chi2", fit.get("reduced_chi2"))
             print(fit["phase"], fit.get("populations"), "phi", fit.get("fraction_iso"),
                   "delta BIC", fit.get("delta_bic"), "Hermans", fit.get("herman_crystal"))
             for ring in fit.get("rings", []):

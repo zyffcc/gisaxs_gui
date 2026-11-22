@@ -65,14 +65,16 @@ class GeometryFilesMixin:
                              "warning")
                 return False
         name = Path(path).name
+        # A PONI calibrates the detector. Only the profile supplies its default sample angle.
+        profile = analysis.resolution.profile
+        incidence = profile.geometry.incidence_deg if profile else 0.0
         if dialog is not None or not poni.wavelength_angstrom:
             if dialog is None:  # no wavelength in the file: the dialog asks for it
                 self._enter_geometry()
                 dialog = getattr(self, "_geometry_dialog", None)
                 if dialog is None:
                     return False
-            geometry = poni.geometry(wavelength_angstrom=poni.wavelength_angstrom or 1.0,
-                                     incidence_deg=analysis.geometry.incidence_deg if analysis.geometry else 0.0)
+            geometry = poni.geometry(wavelength_angstrom=poni.wavelength_angstrom or 1.0, incidence_deg=incidence)
             dialog.set_geometry(geometry, source=SOURCE_PONI, name=name)
             if not poni.wavelength_angstrom:
                 dialog.set_wavelength(None, SOURCE_PONI, name)
@@ -82,8 +84,8 @@ class GeometryFilesMixin:
                                              name=name)
             return True
         profile_name = self.view_model.suggested_profile_name()
-        profile = poni_profile(poni, path, name=profile_name, detector_name=analysis.detector_name, shape=analysis.shape,
-                               incidence_deg=analysis.geometry.incidence_deg if analysis.geometry else 0.0)
+        profile = poni_profile(poni, path, name=profile_name, detector_name=analysis.detector_name,
+                               shape=analysis.shape, incidence_deg=incidence)
         try:
             self.view_model.save_profile(profile.name, profile.geometry, source=profile.source,
                                          dropped_tilt=profile.dropped_tilt, sample_roll_measurement=poni.sample_roll_measurement)

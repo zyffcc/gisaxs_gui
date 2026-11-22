@@ -140,7 +140,7 @@ def test_single_basal_pole_resolves_two_widths_of_the_same_plane():
 @pytest.mark.skipif(not (EXTERNAL / "giwaxs_p08_mapi" / "S121_MAI_A2_00841.tif").exists(),
                     reason="The public P08 frame is unavailable.")
 def test_public_p08_automatic_crystal_orientation_zero_roll():
-    report = public_frame(sample_roll_deg=0.0)
+    report = public_frame(incidence_deg=.075, sample_roll_deg=0.0)
     mapi, lead = report["crystal_orientation"]
     assert mapi["phase"] == "MAPbI3 (tetragonal)" and lead["phase"] == "PbI2"
     assert not mapi["determined"] and "joint or ring reduced χ² exceeds 5" in mapi["reasons"]
@@ -187,7 +187,7 @@ def test_transmitted_sharp_and_broad_populations_recover_their_own_widths_and_fr
 @pytest.mark.skipif(not (EXTERNAL / "giwaxs_p08_mapi" / "S121_MAI_A2_00841.tif").exists(),
                     reason="The public P08 frame is unavailable.")
 def test_public_p08_without_phases_keeps_the_existing_single_ring_results():
-    report = public_frame(with_phases=False, sample_roll_deg=0.0)
+    report = public_frame(with_phases=False, incidence_deg=.075, sample_roll_deg=0.0)
     assert "crystal_orientation" not in report
     strong = report["rings"][0]
     assert strong["herman"] == pytest.approx(0.14187, abs=2e-4)
@@ -199,14 +199,65 @@ def test_public_p08_without_phases_keeps_the_existing_single_ring_results():
 
 @pytest.mark.skipif(not (EXTERNAL / "giwaxs_p08_mapi" / "S121_MAI_A2_00841.tif").exists(),
                     reason="The public P08 frame is unavailable.")
-def test_measured_roll_reaches_public_crystal_orientation():
-    report = public_frame()
+def test_measured_angles_and_absorption_reach_public_crystal_orientation():
+    report = public_frame(diagnostics=True)
     measurement = report["sample_roll_measurement"]
     assert measurement["method"] == "combined" and measurement["significant"]
     assert measurement["origin"] == "automatic"
     assert report["geometry"]["sample_roll_deg"] == pytest.approx(measurement["deg"])
     assert measurement["deg"] == pytest.approx(-1.30, abs=.07)
+    incidence = report["incidence_measurement"]
+    assert incidence["decision"] == "disagreement"
+    assert incidence["reference_deg"] == .075
+    assert report["geometry"]["incidence_deg"] == pytest.approx(incidence["deg"])
+    assert incidence["deg"] == pytest.approx(.5012, abs=.003)
     mapi, lead = report["crystal_orientation"]
-    assert mapi["reduced_chi2"] == pytest.approx(22.45, abs=.25)
+    assert mapi["reduced_chi2"] == pytest.approx(18.32, abs=.25)
     assert not mapi["determined"] and lead["axes"] == [[0, 0, 1], [0, 0, 1]]
-    assert lead["reduced_chi2"] == pytest.approx(2.08, abs=.12)
+    assert lead["reduced_chi2"] == pytest.approx(1.90, abs=.12)
+    attenuated, basal = report["benchmark_film_absorption"]
+    assert attenuated["film_absorption"]["thick_limit"]
+    assert not attenuated["determined"] and basal["axes"] == [[0, 0, 1], [0, 0, 1]]
+    assert attenuated["points"] == mapi["points"]
+    assert attenuated["reduced_chi2"] == pytest.approx(4.24, abs=.10)
+    assert [r["reduced_chi2"] for r in attenuated["rings"]] == pytest.approx(
+        [5.96, 2.71, 5.92, 3.97, 2.94, 3.88, 5.25, 3.78, 3.76, 3.66], abs=.15)
+    assert basal["reduced_chi2"] == pytest.approx(1.86, abs=.12)
+
+
+def test_texture_recovers_one_optical_depth_across_three_rings():
+    from types import SimpleNamespace
+
+    from src.gimap.features.analyze.domain.crystal import fold_profile
+    from src.gimap.features.analyze.domain.crystal.film_optics import ring_optical_factors
+    from src.gimap.features.analyze.domain.crystal.texture import TextureRing
+    from src.gimap.shared.geometry import DetectorGeometry
+
+    geometry = DetectorGeometry(1e-4, 1e-4, .5, 100., 200., 1., .5)
+    sin_i = np.sin(geometry.incidence_rad)
+    optics = {"delta": 2e-6, "beta": 1e-7}
+    tau = .005
+    name = "PbI2"
+    phase, expected = expected_rings(name)
+    rings = []
+    chi = np.arange(90) + .5
+    for i, (q, low, high, mean, _, background) in enumerate(expected):
+        qz = q * np.cos(np.radians(chi))
+        sine = qz / geometry.wavevector_inv_angstrom - sin_i
+        use = (sine > 0.) & (chi >= 4.) & ((chi < 42.) | (chi > 46.))
+        signed = np.r_[-chi[use], chi[use]]
+        curve = SimpleNamespace(x=signed, sigma=np.ones_like(signed))
+        field, absorption = ring_optical_factors(
+            optics, geometry, q, signed, np.tile(qz[use], 2), curve, fit_absorption=True)
+        # Generate exact bin-centre signals without evaluating the fit's interpolator.
+        s = 1/sin_i + 1/sine[use]
+        attenuation = (2/sin_i) * np.expm1(-tau*s) / (s * np.expm1(-2*tau/sin_i))
+        signal = background + (mean[use] - background) * field[use] * attenuation
+        profile = fold_profile(signed, np.tile(signal, 2), curve.sigma, background)
+        rings.append(TextureRing(i, q, low, high, profile, field, absorption))
+    fitted = fit_crystal_orientation(phase, rings)
+    assert fitted["axes"] == [[0, 0, 1]]
+    assert fitted["film_absorption"]["optical_depth"] == pytest.approx(tau, rel=.01)
+    assert fitted["fwhm_deg"] == pytest.approx(22., abs=.1)
+    assert fitted["parameters"] == 2 + 3 + 1
+    assert sum(r["effective_dof"] for r in fitted["rings"]) == pytest.approx(fitted["points"] - 6)

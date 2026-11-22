@@ -46,6 +46,11 @@ class AnalysisWorkbench(Protocol):
         """Set ψ explicitly, or measure the selected frame and apply a significant estimate."""
         ...
 
+    def apply_frame_angles(self, roll_policy, roll_deg, reference_deg, reference_source, keep_incidence,
+                           yoneda_critical_deg=None, yoneda_material=None) -> dict:
+        """Measure both angles on the same selected frame or sum, then reduce it with the chosen geometry."""
+        ...
+
     def set_orientation_min_exit(self, degrees: float) -> dict: ...
 
     def set_critical_angle(self, degrees: Optional[float]) -> dict:

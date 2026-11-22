@@ -51,6 +51,7 @@ def header_values(metadata: dict) -> dict:
         "detector": metadata.get("detector_name"),
         "pixel_size_um": [_number(metadata, "pixel_size_x_m", 1e6), _number(metadata, "pixel_size_y_m", 1e6)],
         "energy_kev": _number(metadata, "energy_kev"),
+        "incidence_deg": _number(metadata, "incidence_deg"),
         "wavelength_angstrom": _number(metadata, "wavelength_angstrom") or _number(metadata, "header_wavelength_angstrom"),
         "distance_mm": _number(metadata, "distance_m", 1e3) or _number(metadata, "header_distance_m", 1e3),
         "beam_center_px_as_written": center,

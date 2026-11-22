@@ -37,6 +37,7 @@ def reduction_record(analysis, inputs, keys=None):
         **replay_header("reduction", tables),
         "inputs": inputs,
         "geometry": asdict(analysis.geometry),
+        "incidence_measurement": analysis.incidence_measurement,
         "settings": _plain({key: settings[key] for key in ("format", "version", "mode", "gisaxs", "giwaxs", "corrections")}),
         "mask": bitmap_record(analysis.drawn_mask, analysis.shape),
         "excluded_pixels": bitmap_record(~np.asarray(analysis.valid, dtype=bool), analysis.shape),

@@ -1,8 +1,8 @@
 """What the GIWAXS automatic analysis says about its own numbers, on the public P08 frame (tests/data/external).
 
 The run is the one Run Automatic Analysis and ``tools/gimap_agent.py auto`` start: an offscreen Analyze page with
-the standard pipeline on it. An αi typed in Analyze's command bar is the αi Analyze uses, so the run takes it and
-does not ask for αi. The report states the peak cap, the q convention and the statistical error model used
+the standard pipeline on it. A nominal angle from Analyze is checked against the frame before reduction.
+The report states the peak cap, the q convention and the statistical error model used
 for this floating-point frame. For the ring orientation it gives the exit-angle cut and a systematic range for f.
 """
 
@@ -48,7 +48,7 @@ def _alpha_asked(report: dict) -> bool:
 
 
 @pytest.mark.parametrize("how", ["command bar", "set_incidence_angle"])
-def test_an_alpha_i_set_in_analyze_is_used_and_not_asked_for(p08, how: str) -> None:
+def test_the_frame_angle_is_checked_against_the_command_bar(p08, how: str) -> None:
     session, poni = p08
     if how == "command bar":  # typed into the αi field of Analyze's command bar before Run Automatic Analysis
         session.page.incidence_spin.setValue(0.075)
@@ -60,11 +60,18 @@ def test_an_alpha_i_set_in_analyze_is_used_and_not_asked_for(p08, how: str) -> N
     report = session.run_pipeline(PipelineOptions(calibration=str(poni), follow_detection=True))
 
     assert report["ok"] and report["procedure"] == "giwaxs"
-    assert report["geometry"]["incidence_deg"] == pytest.approx(0.075)  # what the analysis used …
-    assert not _alpha_asked(report)  # … so αi is not asked for, nor "0° is used" said
+    measured = report["incidence_measurement"]
+    assert measured["reference_deg"] == 0.075 and measured["decision"] == "disagreement"
+    assert measured["deg"] == pytest.approx(.50, abs=.02) and measured["error_deg"] > 0.
+    assert report["geometry"]["incidence_deg"] == pytest.approx(measured["applied_deg"], abs=1e-10)
+    assert measured["horizon"] and measured["specular"]
+    assert session.page.automation().analysis_record()["incidence_measurement"] == measured
+    assert not _alpha_asked(report)
     alpha = _decision(report, "incidence angle")
     assert alpha["decision"] == "αi = 0.075°" and alpha["why"] == FROM_COMMAND_BAR
-    assert "0° is used" not in pipeline_markdown(report)
+    markdown = pipeline_markdown(report)
+    assert "differ by more than 3σ" in markdown and "0.075°" in markdown
+    assert "0° is used" not in markdown
 
 
 def test_an_alpha_i_given_replaces_the_one_in_the_command_bar_and_is_the_one_used(p08) -> None:
@@ -72,18 +79,22 @@ def test_an_alpha_i_given_replaces_the_one_in_the_command_bar_and_is_the_one_use
     session.page.incidence_spin.setValue(0.075)
     session.page.tasks.wait(60)
 
-    report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.1, follow_detection=True))
+    report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.1, keep_incidence=True,
+                                                  follow_detection=True))
 
     assert report["geometry"]["incidence_deg"] == pytest.approx(0.1)  # before, Analyze kept using 0.075°
     assert _decision(report, "incidence angle")["why"] == "from given; it replaces the 0.075° set in Analyze's command bar"
     assert not _alpha_asked(report)
+    assert report["incidence_measurement"]["decision"] == "user_override"
+    assert "differ by more than 3σ" in pipeline_markdown(report)
 
 
 def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08, tmp_path) -> None:
     from src.gimap.app.headless_record import write_outputs
 
     session, poni = p08
-    report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.075, follow_detection=True, rings=1))
+    report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.075, keep_incidence=True,
+                                                  follow_detection=True, rings=1))
 
     q = _decision(report, "q")
     assert q["decision"] == "kinematic (no refraction correction)"

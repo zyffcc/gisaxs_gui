@@ -91,6 +91,12 @@ def test_p08_roll_reduces_bilateral_profile_residual():
     result = measure_public("giwaxs_p08_mapi")
     assert result["significant"] and result["method"] == "combined"
     assert -2. < result["deg"] < -.7
+    incidence = result["incidence"]
+    assert incidence["used_estimators"] == ("horizon", "specular")
+    assert abs(incidence["deg"]-.50) <= incidence["error_deg"] < .03
+    assert incidence["deg"]-result["published_incidence_deg"] > 3*incidence["error_deg"]
+    # The full frame and the nearest half of strips have different apparent edges.
+    assert incidence["horizon"]["error_deg"] > .2
     profile = result["strongest_ring"]
     before = profile["counts_at_abs_chi_84_to_86_before"]
     after = profile["counts_at_abs_chi_84_to_86_after"]

@@ -52,6 +52,7 @@ from .export_record import (  # noqa: F401 - the record of an export; these name
 from .flat_detector import detector_rotation_message, flat_detector_error, flat_detector_message
 from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating
 from .geometry_files import SiblingPoni, geometry_references
+from .incidence_record import selected_incidence_record
 from .detector_response import with_profile_response
 from .reduction_errors import reduction_errors
 from .geometry_resolution import ResolveGeometry, center_not_used_message, header_beam_center, refused_profile_message
@@ -94,7 +95,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             detector_name=image.detector_name,
             metadata=dict(image.metadata or {}),
             summed_frames=request.summed_frames,
-            frame_files=frame_references(Path(request.path), image.metadata) if request.with_record else {},
+            frame_files=frame_references(Path(request.path), image.metadata) if request.needs_input_identities else {},
         )
         headers = [header_values(image.metadata)]  # exposure and monitors: a sum is divided by their sums
         if request.summed_frames:
@@ -105,10 +106,20 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 extra_data = np.asarray(extra.data, dtype=np.float32)
                 total.add(extra_data, valid_pixels(extra_data, extra.mask, negatives_valid=floating(extra.metadata)))
                 headers.append(header_values(extra.metadata))
-                if request.with_record:
+                # A scan can vary incidence from frame to frame. Only a common header angle
+                # belongs to the summed pixels. Keep the primary image's metadata untouched.
+                metadata = common["metadata"]
+                first = metadata.get("incidence_deg")
+                angle = (extra.metadata or {}).get("incidence_deg")
+                if first is not None and (angle is None or not np.isclose(first, angle, rtol=1e-9, atol=1e-9)):
+                    metadata.pop("incidence_deg", None)
+                    metadata.pop("incidence_source", None)
+                if request.needs_input_identities:
                     common["frame_files"].update(frame_references(path, extra.metadata, common["frame_files"]))
                 del extra, extra_data
             data, valid = total.result()
+            if common["metadata"].get("incidence_deg") is not None:
+                common["metadata"]["incidence_source"] = "all summed frame headers"
         common["header_values"] = headers[0] if len(headers) == 1 else summed_header_values(headers)
         return data, valid, common
 
@@ -199,7 +210,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             and Path(loaded.path) == Path(request.path)
             and loaded.frame_index == int(request.frame_index)
             and tuple(loaded.summed_frames) == request.summed_frames
-            and (not request.with_record or loaded.frame_files)
+            and (not request.needs_input_identities or loaded.frame_files)
         ):
             raw_data = loaded.raw_data if loaded.raw_data is not None else loaded.data
             raw_valid = loaded.raw_valid if loaded.raw_valid is not None else loaded.valid
@@ -216,11 +227,14 @@ class AnalyzeFrame(FramePreprocessingMixin):
         else:
             raw_data, raw_valid, common = self._load_frames(request)
         shape = (int(raw_data.shape[0]), int(raw_data.shape[1]))
+        incidence = request.incidence_deg
+        if incidence is None:
+            incidence = common["metadata"].get("incidence_deg")
         resolution = resolution or self.resolve(
             detector_name=common["detector_name"],
             shape=shape,
             profile_name=request.profile_name,
-            incidence_deg=request.incidence_deg, sample_roll_deg=request.sample_roll_deg,
+            incidence_deg=incidence, sample_roll_deg=request.sample_roll_deg,
             beam_center=request.beam_center,
             use_header_center=request.use_header_center,
             header_center=header_beam_center(common["metadata"], shape),
@@ -231,6 +245,15 @@ class AnalyzeFrame(FramePreprocessingMixin):
             force_profile=shape in {tuple(int(v) for v in item) for item in request.forced_shapes},
         )
         geometry = resolution.geometry
+        corrections = with_profile_response(request.corrections, resolution.profile)
+        if request.needs_input_identities:
+            common["correction_files"] = correction_references(corrections, self.frames)
+        measured = selected_incidence_record(request, resolution, common["metadata"], common["frame_files"],
+                                             common.get("correction_files"))
+        if measured and not request.incidence_locked and measured.get("applied_deg") is not None:
+            incidence = measured["applied_deg"]
+            geometry = geometry.with_incidence(incidence)
+            resolution = replace(resolution, geometry=geometry)
         calibration = request.corrections.normalisation.standard_calibration
         if calibration is not None:
             if resolution.profile is None:
@@ -245,14 +268,12 @@ class AnalyzeFrame(FramePreprocessingMixin):
         if geometry is not None:
             detected, technique_note = self._technique.detect(
                 common["path"], (int(common["frame_index"]), tuple(common["summed_frames"])), raw_data, raw_valid,
-                geometry, request.incidence_deg)
+                geometry, incidence)
         kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)
-        corrections = with_profile_response(request.corrections, resolution.profile)
         counting = self.correct_pixels(common, raw_data, raw_valid, corrections, geometry, kind,
                                        mask_bitmap=mask_bitmap)
         if request.with_record:
             common["request"] = request
-            common["correction_files"] = correction_references(corrections, self.frames)
             common["geometry_files"] = geometry_references(resolution)
         if not corrections.normalisation.is_identity:  # one constant of the frame, last
             self._normalise(common, raw_data, raw_valid, corrections, counting, Path(request.path).name)

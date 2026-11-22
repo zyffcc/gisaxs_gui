@@ -307,7 +307,7 @@ points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife
 
 ## Crystal orientation
 
-Run `python tools/benchmarks/crystal_orientation.py --part all --trials 32 --json results.json`. The JSON contains each simulated fit and its 1σ errors, the public-frame report, an independent-width refit on the original angular cut, and signed-sector measurements around the strongest peak.
+Run `python tools/benchmarks/crystal_orientation.py --part all --trials 32 --json results.json`. The JSON contains each simulated fit and its 1σ errors, the public-frame report, the film-absorption refit, an independent-width refit on the original angular cut, and signed-sector measurements around the strongest peak.
 
 ### Synthetic recovery
 
@@ -335,9 +335,50 @@ Run `python tools/benchmarks/sample_roll.py` for the frame estimates and the P08
 
 The P08 normal leans left. The horizon uncertainty reflects variation across detector strips. The ring carries most of the weight in the combined estimate. The Xeuss beam is only 7 px from the left edge, and the GALAXI frame gives no independently resolved specular-rod slope. Only P08 passes the three-standard-error rule.
 
+The same command measures incidence independently of the supplied αi. The table gives degrees and 1σ errors at the calibrated direct beam. “Used” applies the automatic three-standard-error comparison with the published value.
+
+Synthetic frames with a shadow edge and a specular spot at true αi = 0.310°, 0.520° and 0.450° gave 0.311 ± 0.021°, 0.519 ± 0.021° and 0.455 ± 0.021°, respectively, with 1.89° entered. These tests use tilted, non-square pixels and ψ = 2.2°. Both constituent estimates recover the generated angle within one reported standard error.
+
+| Frame | Published αi | Shadow intercept | Specular spot | Yoneda band | Combined αi | Used |
+|---|---:|---:|---:|---:|---:|---:|
+| P08 MAPbI₃ | 0.075 | 0.65 ± 0.57 | 0.5012 ± 0.0119 | — | 0.5012 ± 0.0119 | 0.5012 |
+| Xeuss PbTe | 0.235 | −0.067 ± 0.200 | — | — | Unresolved | 0.235 |
+| GALAXI GISAXS | 0.463 | — | 0.4615 ± 0.0042 | 0.444 ± 0.026 | 0.4611 ± 0.0042 | 0.463 |
+
+The P08 specular-like maximum lies at (543.84, 1755.95) px. The full shadow trace crosses about 46 px above the direct beam, but using only the nearer half of the strips gives 0.085°. This strip dependence limits what the edge alone establishes. The selected angle is set chiefly by the spot.
+
+On Xeuss the beam position prevents an independent bilateral spot measurement, and the shadow intercept is consistent with zero. On GALAXI the band centre is at row 607.5 px. Its incidence estimate assumes the Si substrate critical angle 0.19483° from δ = 5.7816 × 10⁻⁶ in the BornAgain GALAXI model. The multilayer also contains PTFE and HMDSO. The specular spot by itself agrees with 0.463°. [Public geometries and source files](../../tests/data/external/README.md)
+
+### P08 crystal orientation at the measured incidence and roll
+
+On the 0.9973 Å⁻¹ ring, the vacuum horizon obeys `cos χ = (2π/λ) sin αi / q`. With λ = 0.688801 Å, its predicted |χ| is 85.41° at the measured incidence and 89.31° at the notebook angle. The observed loss around 84–86° agrees with the former. This check does not enter the incidence estimate.
+
+`python tools/benchmarks/crystal_orientation.py --part public --json measured.json` runs the automatic analysis with the published αi as its reference. For this exposure the reduction uses αi = 0.50124° and ψ = −1.30459°. The JSON keys `crystal_orientation` and `benchmark_film_absorption` contain the exit-transmission fit and the refit including film absorption, respectively. Both use the same CIFs, measured pixels, uncertainties, integration windows and per-ring intensity scales.
+
+The sample YAML gives the coating and annealing conditions but no measured film thickness. The refit allows one effective optical depth τ = μd per phase, common to its rings. With s = csc αi + csc αf and s₀ = 2 csc αi, the normalized F_A = [(1 − exp(−τs))/s] / [(1 − exp(−τs₀))/s₀] follows §5.4 of the Physics Manual. The model multiplies T_f by F_A on each measured ray before binning and folding. It uses geometrical path lengths, an approximation near the critical angle. The extra parameter enters BIC, the covariance and effective degrees of freedom. Both phases reach the thick limit F_A = s₀/s, which supplies no finite estimate of d. [P08 sample and notebook](https://zenodo.org/records/17466183)
+
+| Phase and q (Å⁻¹) | χ²red, T_f | χ²red, T_f × F_A |
+|---|---:|---:|
+| **MAPbI₃ joint (746 bins)** | **18.32** | **4.24** |
+| 0.9973 | 34.94 | 5.96 |
+| 1.4091 | 7.75 | 2.71 |
+| 1.7248 | 12.14 | 5.92 |
+| 1.9903 | 26.37 | 3.97 |
+| 2.2256 | 30.19 | 2.94 |
+| 2.4382 | 6.61 | 3.88 |
+| 2.8148 | 22.03 | 5.25 |
+| 2.9854 | 21.47 | 3.78 |
+| 3.4480 | 4.39 | 3.76 |
+| 4.1040 | 3.71 | 3.66 |
+| **PbI₂ 0.8989 (83 bins)** | **1.90** | **1.86** |
+
+For MAPbI₃ the best pair changes from (102) + (001) with T_f to (221) + (110) with absorption. The latter gives conditional widths of 78.6 ± 6.1° and 11.25 ± 0.39° and fractions of 0.74 ± 0.39 and 0.046 ± 0.003. Three rings still exceed the unchanged χ²red limit of 5. The data do not establish the fibre planes or their populations. The largest residuals on the eight innermost rings are negative at |χ| = 84.5–88.5°. At 84.5° on the 0.9973 Å⁻¹ ring, the measured folded signal is 28.2 ± 3.3 and the model gives 84.4, an excess of 17.2σ. At 85.5° the signal is −0.4 ± 3.6 and the model gives 3.6. The film model describes much of the overall angular attenuation but misses the sharp loss just above the horizon. The outer two rings have their largest residuals at 69.5° and 26.5°.
+
+PbI₂ retains two basal (001) components under both models. With absorption, the widths are 13.9 ± 1.7° and 53.4 ± 5.1° and their fractions are 0.055 ± 0.041 and 0.62 ± 0.47. The BIC difference between the two absorption treatments is only 0.78 on this single reflection. Its broad fraction and the optical depth are poorly constrained.
+
 ### P08 crystal orientation before and after roll
 
-Run `python tools/benchmarks/crystal_orientation.py --part public --public-roll-deg 0 --json zero.json`, then omit `--public-roll-deg 0` for the frame measurement. Both runs use αi = 0.075° and the same two CIFs. Each ring has its own intensity scale. The central columns give χ²red for the original exit-angle cut and the CIF-based exit-transmission fit. The last column compares the two raw arms, using RMS of the difference between mean pixel intensities in matching 2° |χ| bins. Each bin must have at least 12 pixels on each arm in both runs.
+To reproduce the comparison at the published angle, run `python tools/benchmarks/crystal_orientation.py --part public --public-incidence-deg 0.075 --public-roll-deg 0 --json zero.json`, then omit `--public-roll-deg 0` to measure the roll. Both runs use the same two CIFs. Each ring has its own intensity scale. The central columns give χ²red for the original exit-angle cut and the CIF-based exit-transmission fit. The last column compares the two raw arms, using RMS of the difference between mean pixel intensities in matching 2° |χ| bins. Each bin must have at least 12 pixels on each arm in both runs.
 
 | Phase and q (Å⁻¹) | Original cut, ψ = 0 → measured | Exit transmission, ψ = 0 → measured | Paired bins | ±χ RMS, ψ = 0 → measured |
 |---|---:|---:|---:|---:|
@@ -389,6 +430,6 @@ The two detector sectors expose the asymmetry before polarization correction and
 
 At q = 2.2255 Å⁻¹, 60% of the residual χ² lies above 80°. At 3.4480 Å⁻¹ the detector ends before the horizon. Its worst bin is at 68.5°, where only 76% of the radial window is spanned. At 69.5° that falls to 22%.
 
-The calibrated direct-beam height is 1826.95 px. In detector columns 543–547 (zero-based indices), the strongest on-axis excess between rows 1680 and 1839 occurs at row 1755, after subtracting the mean of the flanking strips at columns 510–527 and 560–577. If that feature were specular, its 71.45 px separation would imply αi ≈ ½ arctan(71.45 × 0.200 / 811.77) = 0.50°. The public notebook uses 0.075°. The related P08 chamber study reports 0.5° for its experiment. As a sensitivity test, `--part public --public-incidence-deg 0.5` gives joint χ²red = 27.35 and strongest-ring χ²red = 37.82. This fit also fails. An independent measurement of the sample horizon would be needed to establish the angle for this exposure. [P08 chamber study, §III](https://doi.org/10.1063/5.0149613)
+The calibrated direct-beam height is 1826.95 px. In detector columns 543–547 (zero-based indices), the strongest on-axis excess between rows 1680 and 1839 occurs at row 1755, after subtracting the mean of the flanking strips at columns 510–527 and 560–577. If that feature were specular, its 71.45 px separation would imply αi ≈ ½ arctan(71.45 × 0.200 / 811.77) = 0.50°. The public notebook uses 0.075°. The related P08 chamber study reports 0.5° for its experiment. As a sensitivity test, `--part public --public-incidence-deg 0.5 --public-roll-deg 0` gives joint χ²red = 27.35 and strongest-ring χ²red = 37.82. This fit also fails. The measured-incidence section above compares this feature with an independent, less precise shadow-edge intercept. [P08 chamber study, §III](https://doi.org/10.1063/5.0149613)
 
 The public example’s authors describe the perovskite as visually close to random and attribute additional low-q arcs to an intermediate phase. Those arcs are outside the ten fitted windows. [Public frame, Fig. 6](https://journals.iucr.org/j/issues/2026/01/00/yr5162/index.html)

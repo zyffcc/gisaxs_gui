@@ -9,10 +9,11 @@ import numpy as np
 from src.gimap.shared.profiles import Profile
 from src.gimap.shared.radial_peaks import find_peaks, orientation_peak_rows
 
-from ..domain.crystal.film_optics import film_optics, ring_transmission
+from ..domain.crystal.film_optics import film_optics, ring_optical_factors
 from ..domain.crystal.pole_figure import MIN_BINS, fold_profile
 from ..domain.crystal.texture import TextureRing, fit_crystal_orientation
 from ..domain.giwaxs import giwaxs_maps
+from ..domain.intensity import film_absorption_on
 from ..domain.mask_bitmap import bitmap_record
 from ..domain.orientation_reduction import ring_profiles
 from ..domain.peak_fit import GAUSSIAN, fit_peak
@@ -55,7 +56,7 @@ def _assign(analysis, specs):
     return assign_peaks(sorted(rows, key=lambda row: row["q"]), specs, geometry=analysis.geometry)
 
 
-def _profile(maps, pixels, analysis, window, q, optics):
+def _profile(maps, pixels, analysis, window, q, optics, *, fit_absorption=False):
     corrections = analysis.corrections
     auto_exit = optics["available"] and corrections.orientation_min_exit_deg is None
     if auto_exit:
@@ -70,12 +71,13 @@ def _profile(maps, pixels, analysis, window, q, optics):
             region["exit_angle_source"] = "film exit transmission"
         region.update(horizon_fraction=0., horizon_excluded_deg=None)
         profile = fold_profile(curve.x, curve.intensity, curve.sigma, region["background"])
-        factor = ring_transmission(optics, analysis.geometry, q, maps.chi_deg.flat[indices],
-                                   maps.qz.flat[indices], curve)
-        return profile, region, factor
+        transmission, absorption = ring_optical_factors(
+            optics, analysis.geometry, q, maps.chi_deg.flat[indices], maps.qz.flat[indices], curve,
+            fit_absorption=fit_absorption)
+        return profile, region, transmission, absorption
     profile = fold_profile(curve.x, curve.intensity, curve.sigma, region["background"],
                            horizon_chi_deg=region.get("horizon_chi_deg"))
-    return profile, region, None
+    return profile, region, None, None
 
 
 def _skip(item):
@@ -86,7 +88,8 @@ def _skip(item):
     return None
 
 
-def frame_crystal_orientation(analysis, specs, *, chi_max=90.0, frame_source=None, check_cancel=None, assignment=None):
+def frame_crystal_orientation(analysis, specs, *, chi_max=90.0, frame_source=None, check_cancel=None,
+                              assignment=None, fit_absorption=False):
     """Fit all assigned, phase-resolved rings, independently of the three-ring summaries.
 
     An automatic run supplies its own peak list and integration windows via its assignment record.
@@ -99,6 +102,8 @@ def frame_crystal_orientation(analysis, specs, *, chi_max=90.0, frame_source=Non
         raise ValueError("Open a GIWAXS frame with a geometry first.")
     if len({spec.name for spec in specs}) != len(specs):
         raise ValueError("Use a distinct name for each visible phase.")
+    if fit_absorption and film_absorption_on(analysis.corrections):
+        raise ValueError("The frame already includes a film absorption correction.")
     if assignment is None:
         assignment = _assign(analysis, specs)
     maps = pixels = None
@@ -120,7 +125,8 @@ def frame_crystal_orientation(analysis, specs, *, chi_max=90.0, frame_source=Non
                 if maps is None:
                     maps = giwaxs_maps(analysis.shape, analysis.geometry)
                     pixels = _pixels(analysis, frame_source)
-                profile, settings, factor = _profile(maps, pixels, analysis, window, item["q"], optics)
+                profile, settings, factor, absorption = _profile(
+                    maps, pixels, analysis, window, item["q"], optics, fit_absorption=fit_absorption)
                 use = profile.measured & (profile.chi <= chi_max)
                 use &= np.isfinite(profile.value) & np.isfinite(profile.sigma) & (profile.sigma > 0)
                 if use.sum() < MIN_BINS:
@@ -131,7 +137,8 @@ def frame_crystal_orientation(analysis, specs, *, chi_max=90.0, frame_source=Non
                 excluded.append({"q": item["q"], "q_window": window, "reason": reason,
                                  "overlapping_phases": item.get("overlapping_phases", [])})
                 continue
-            rings.append(TextureRing(index, item["q"], *window, replace(profile, measured=use), transmission=factor))
+            rings.append(TextureRing(index, item["q"], *window, replace(profile, measured=use),
+                                     transmission=factor, absorption=absorption))
             metadata[index] = {"q_window": window, "profile_settings": settings,
                                "exit_transmission": None if factor is None else factor.tolist(),
                                "measured": profile.measured.tolist(), "fit_mask": use.tolist(),

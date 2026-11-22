@@ -53,8 +53,10 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 | frames | 序列取最后五分之一的帧求和，至多 10 帧（终态）；不到 10 帧只取最后一帧 | 问题关心的是过程，或者开头 | `--frame N --sum K`（负数从末尾数；只给 `--frame` 时从该帧起求和同样的默认帧数，单帧用 `--sum 1`；求和块不会越过最后一帧，所以和覆盖整个序列时 Decisions 会写明它是整个序列而不是一个状态） |
 | peak search | 最多拟合 12 个最显著的候选峰（为了快）；候选更多时 Decisions 的 peak search 一行写 “N candidate peaks found; the 12 most prominent were fitted”，峰表、扇区比较、环和序列提示都只来自这 12 个（序列提示的标题也这样写）。候选峰是拟合前的极大，全部拟合得到的峰比候选少（公开 P08 帧：115 个候选，全部拟合是 32 个峰） | 用户要完整的峰表、某个弱一些的峰，或序列提示 | `--max-peaks N`；`find_peaks` / `run_standard_pipeline` 的 `max_peaks` |
 | rings | 面积最大的 3 个没有警告的峰算取向和尺寸 | 用户问的是别的环 | `--rings N`；指定某个 q 要用 `call` 或 MCP 的 `ring_orientation`、`crystallite_size` |
-| 能量 / αi / 像素 | 能量：选项 > 头文件 > 笔记（只认 “12.4 keV” 这种写法；波长要自己换算后传 `--energy-kev`）> 标定文件的波长（这时 Decisions 里没有 energy 一行，能量来源就是几何来源）。αi：选项 > 笔记 > 分析命令栏里设定的 αi（手动或之前的 `set_incidence_angle`；分析用它代替仪器配置的值，Decisions 写 “from Analyze's command bar”）> 仪器配置（只在几何也取自仪器配置时），都没有时先用 0° 并提问；选项或笔记的值与命令栏不同时会替换命令栏里的值，报告的 αi 就是实际用的。像素：选项 > 头文件 > 笔记。笔记里的值只有唯一时才取 | 笔记里有两个不同的值，或者有效值只在幻灯片、日志里 | `--energy-kev`、`--incidence-deg`、`--pixel-size-um` |
+| 能量 / αi / 像素 | 能量：选项 > 头文件 > 笔记（只认 “12.4 keV” 这种写法；波长要自己换算后传 `--energy-kev`）> 标定文件的波长（这时 Decisions 里没有 energy 一行，能量来源就是几何来源）。αi 的名义值依次取自选项、笔记、Analyze 命令栏、图像头、所用的仪器配置，再与帧的测量比较。像素：选项 > 头文件 > 笔记。笔记里的值只有唯一时才取 | 笔记里有两个不同的值，或者有效值只在幻灯片、日志里 | `--energy-kev`、`--incidence-deg`、`--keep-incidence`、`--pixel-size-um` |
 | 标样 | `--standard` > 笔记里唯一点名的标样 > 文件名 > 所有标样拟合比较（笔记和文件名不一致时也比较） | 混合标样的写法：`LaB6+CeO2` 是混合，`LaB6, CeO2` 是两种 | `--standard` |
+
+地平线阴影的截距和镜面峰各给出一个 αi 及误差。先看报告中的各项测量及来源。帧测值与名义值相差超过帧测值的 3σ 时，默认用帧测值重新归约；在 3σ 内保留名义值。要保留已核实的名义值，可用 `--keep-incidence`。没有名义值时用可靠的帧测值，两者都缺时才用 0° 并提问。地平线随探测器区域变化很大时，应说明结果主要由哪一个特征决定。
 
 标定验收看的是标样的线落在的 q：平均误差 ≤ 0.2 % 为好，≤ 0.5 % 可用（需要至少 3 条线）。测到 3 条以上线时不看
 像素残差：宽角和探测器倾斜时 rms 会很大（几个像素），线的位置仍然可以很准；少于 3 条线时才退回看环数和像素残差（≤ 1.5 px）。
@@ -169,7 +171,7 @@ python tools/gimap_agent.py call <图像> steps.json   # 按顺序执行 [{"tool
   - 先用 `open_frame(path, notes, out_dir)` 打开帧，然后可以连续调用所有工具。
   - `run_standard_pipeline` 的参数：
     - 和命令行同名的：`calibration`、`standard`、`energy_kev`、`incidence_deg`、`pixel_size_um`、`frame`、`rings`、
-      `recalibrate`、`technique`；
+      `recalibrate`、`technique`、`keep_incidence`、`yoneda_critical_deg`；
     - 和命令行不同的：`sum_frames`（对应 `--sum`）、`fit`（对应 `--no-fit`）、`out_dir`；
     - 没有 notes 参数，笔记来自 `open_frame`。
   - 同一会话里用 `technique=X` 跑过一次后，之后不指定 technique 的运行也沿用 X。

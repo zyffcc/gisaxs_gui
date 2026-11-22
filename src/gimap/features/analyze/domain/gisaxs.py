@@ -115,6 +115,7 @@ def locate_yoneda(
     exclusion_px: int = SPECULAR_EXCLUSION_PX,
     side_width_px: int = SIDE_BAND_WIDTH_PX,
     smooth_rows: int = 3,
+    require_peak: bool = False,
 ) -> YonedaEstimate | None:
     """Brightest row between the sample horizon and ``search_max_deg`` exit angle.
 
@@ -172,12 +173,48 @@ def locate_yoneda(
     smoothed = _nan_smooth(profile, smooth_rows)
     if not np.any(np.isfinite(smoothed)):
         return None
-    row = start + int(np.nanargmax(smoothed)) + 0.5
+    peak = int(np.nanargmax(smoothed))
+    error_rows = None
+    if require_peak:
+        from scipy.signal import peak_prominences, peak_widths
+        # A brightest row is sufficient to place a cut. To measure an angle the
+        # band must rise and fall on observed rows, clear of the search boundaries.
+        if not has_data[peak]:
+            return None
+        missing = np.flatnonzero(~has_data)
+        lo = int(max(missing[missing < peak], default=-1)) + 1
+        hi = int(min(missing[missing > peak], default=len(profile)))
+        if min(peak-lo, hi-peak-1) < 3:
+            return None
+        values = smoothed[lo:hi]
+        prominence = peak_prominences(values, [peak-lo])[0][0]
+        differences = np.diff(profile[lo:hi])
+        noise = 1.4826 * np.median(np.abs(differences-np.median(differences))) / math.sqrt(2)
+        if prominence <= max(6*noise, 1e-12):
+            return None
+        width = peak_widths(values, [peak-lo])[0][0]
+        error_rows = max(1., float(width)/2.355)
+        # Each half of the measured columns must independently locate the same
+        # band. In sparse counts the MAD can vanish on an otherwise random profile.
+        observed = np.flatnonzero(window_valid[lo:hi].any(axis=0))
+        if len(observed) < 8:
+            return None
+        for subset in np.array_split(observed, 2):
+            covered = window_valid[:, subset].sum(axis=1) >= len(subset)/2
+            if not covered[peak]:
+                return None
+            half = np.full_like(profile, np.nan)
+            half[covered] = np.nanmedian(window[covered][:, subset], axis=1)
+            half = _nan_smooth(half, smooth_rows)
+            if abs(int(np.nanargmax(half))-peak) > max(2., 2*error_rows):
+                return None
+    row = start + peak + 0.5
     return YonedaEstimate(
         row=row,
         alpha_f_deg=exit_angle_deg_at_row(geometry, row),
         search_rows=(start, stop),
         side_columns=(left, right),
+        error_rows=error_rows,
     )
 
 

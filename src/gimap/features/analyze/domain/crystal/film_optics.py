@@ -1,10 +1,12 @@
 """Single-interface film optics for a GIWAXS ring of a known crystal phase."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 import math
 import re
 
 import numpy as np
+from scipy.interpolate import PchipInterpolator
 
 from src.gimap.shared.geometry.q_inverse import exit_sine_of_qz
 from src.gimap.shared.ring_profile import fold_ring
@@ -12,6 +14,7 @@ from src.gimap.shared.xray_scattering import (
     ENERGY_RANGE_KEV, HC_KEV_NM, R_E_NM, TABULATED_ELEMENTS, scattering_factors,
 )
 
+from ..intensity import film_absorption_factor
 from .scattering import ATOMIC_NUMBER
 from .symmetry import expand_sites
 
@@ -81,21 +84,63 @@ def exit_transmission(sin_exit, delta, beta):
     return np.abs(amplitude)**2
 
 
-def ring_transmission(optics, geometry, q, chi_pixels, qz_pixels, signed_profile):
-    """Average the field intensities over the pixels used for I and fold using the same errors.
+def ring_optical_factors(optics, geometry, q, chi_pixels, qz_pixels, signed_profile, *, fit_absorption=False):
+    """Fold pixel averages of T_f (and, optionally, T_f F_A) with the intensity weights.
 
-    In unobserved bins only, predict at the ring centre. Invert the active q map to find the
-    external exit angle even when Analyze already applies its film refraction correction.
+    Model-only bins use the ray at the ring centre. The fitted attenuation curve
+    divides the folded product by the folded field already present in the texture library.
     """
-    def factor(qz):
-        return exit_transmission(exit_sine_of_qz(geometry, qz), optics["delta"], optics["beta"])
-
-    # Use the same closed final edge as the signed BinnedMean for the intensities.
+    sine = exit_sine_of_qz(geometry, qz_pixels)
+    centres = np.arange(90) + 0.5
+    central_sine = exit_sine_of_qz(geometry, q * np.cos(np.radians(centres)))
+    field = exit_transmission(sine, optics["delta"], optics["beta"])
+    central_field = exit_transmission(central_sine, optics["delta"], optics["beta"])
     index = np.clip(np.floor(chi_pixels.astype(float) + 90).astype(int), 0, 179)
     counts = np.bincount(index, minlength=180)
-    totals = np.bincount(index, weights=factor(qz_pixels), minlength=180)
-    signed_bin = np.floor(signed_profile.x + 90).astype(int)
-    signed_factors = totals[signed_bin] / counts[signed_bin]
-    centres, measured_factor, _, measured, _, _ = fold_ring(signed_profile.x, signed_factors, signed_profile.sigma, 0.)
-    model = factor(q * np.cos(np.radians(centres)))
-    return np.where(measured, measured_factor, model)
+    signed_bins = np.floor(signed_profile.x + 90).astype(int)
+
+    def fold(pixel_factor, central_factor):
+        totals = np.bincount(index, weights=pixel_factor, minlength=180)
+        signed = totals[signed_bins] / counts[signed_bins]
+        _, values, _, measured, _, _ = fold_ring(signed_profile.x, signed, signed_profile.sigma, 0.)
+        return np.where(measured, values, central_factor)
+
+    transmission = fold(field, central_field)
+    if not fit_absorption:
+        return transmission, None
+    sin_in = math.sin(geometry.incidence_rad)
+    if sin_in <= 0.:
+        raise ValueError("Film absorption requires a positive incidence angle.")
+    # u = 1 − exp(−μd / sin αi) maps both the thin and semi-infinite limits to finite endpoints.
+    # Extra knots near zero resolve the short absorption scale of the lowest exit rays.
+    knots = np.r_[0., np.geomspace(1e-6, .01, 20, endpoint=False), np.linspace(.01, 1., 100)]
+    relative = []
+    for u in knots:
+        tau = -sin_in * np.log1p(-u) if u < 1. else np.inf
+        product = fold(field * np.nan_to_num(film_absorption_factor(sine, sin_in, tau)),
+                       central_field * np.nan_to_num(film_absorption_factor(central_sine, sin_in, tau)))
+        relative.append(np.divide(product, transmission, out=np.ones_like(product), where=transmission > 0.))
+    return transmission, FilmAbsorption(sin_in, PchipInterpolator(knots, relative, axis=0))
+
+
+@dataclass(frozen=True)
+class FilmAbsorption:
+    """Relative angular attenuation multiplying the T_f-weighted polar-bin intensities."""
+
+    sin_incidence: float
+    curve: PchipInterpolator
+
+    def record(self, u, error_u):
+        thin = u < 1e-6
+        thick = u > 1. - 1e-6
+        return {"parameter": "optical depth d / attenuation length, shared across rings of the phase",
+                "formula": "T_f times F_A, with F_A = A(af)/A(ai), A = (1-exp(-mu*d*s))/s, s = csc(ai)+csc(af)",
+                "optical_depth": None if thick else float(-self.sin_incidence * np.log1p(-u)),
+                "optical_depth_error": (None if error_u is None or thin or thick else
+                                        float(error_u * self.sin_incidence / (1.-u))),
+                "thin_limit": bool(thin), "thick_limit": bool(thick),
+                "incident_path_absorbed_fraction": float(u)}
+
+
+def ring_transmission(optics, geometry, q, chi_pixels, qz_pixels, signed_profile):
+    return ring_optical_factors(optics, geometry, q, chi_pixels, qz_pixels, signed_profile)[0]

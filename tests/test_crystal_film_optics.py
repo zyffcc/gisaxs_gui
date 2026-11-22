@@ -77,3 +77,24 @@ def test_folded_field_uses_measured_rays_on_both_q_maps(map_critical_deg):
     expected = exit_transmission(s, **optics)
     assert actual[87] == pytest.approx((expected[:2].mean() + 4*expected[2:].mean()) / 5)
     assert np.all(np.isfinite(actual))
+
+def test_absorption_and_exit_field_are_multiplied_on_each_measured_ray():
+    from scipy.integrate import quad
+
+    from src.gimap.features.analyze.domain.crystal.film_optics import ring_optical_factors
+
+    geometry = DetectorGeometry(100e-6, 100e-6, .5, 100., 200., 1., .5)
+    optics = {"delta": 2e-6, "beta": 1e-7}
+    s = np.array([.0008, .0022, .0035, .008])
+    sin_i = np.sin(geometry.incidence_rad)
+    qz = (s + sin_i) * geometry.wavevector_inv_angstrom
+    chi = np.array([-84.8, -84.1, 84.1, 84.8])
+    profile = SimpleNamespace(x=np.array([-84.5, 84.5]), sigma=np.array([4., 2.]))
+    field, absorption = ring_optical_factors(optics, geometry, 1., chi, qz, profile, fit_absorption=True)
+    for tau in (0., .00007, .0013, .0082, .02):
+        u = -np.expm1(-tau / sin_i)
+        reference = quad(lambda z: np.exp(-tau * z * 2 / sin_i), 0, 1)[0]
+        exact = [quad(lambda z: np.exp(-tau * z * (1/sin_i + 1/v)), 0, 1)[0] / reference for v in s]
+        product = exit_transmission(s, **optics) * exact
+        assert field[84] * absorption.curve(u)[84] == pytest.approx(
+            (product[:2].mean() + 4 * product[2:].mean()) / 5, rel=2e-5)

@@ -1,4 +1,4 @@
-"""Measure absolute sample roll on the three public grazing-incidence reference frames."""
+"""Measure sample roll and incidence on the three public grazing-incidence reference frames."""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.gimap.features.analyze.application import AnalysisRequest, AnalyzeFrame
-from src.gimap.features.analyze.application.sample_roll import measure_frame_roll
+from src.gimap.features.analyze.application.sample_roll import measure_frame_angles
 from src.gimap.features.analyze.domain import Corrections, giwaxs_maps
 from src.gimap.features.analyze.infrastructure.adapters import DetectorIoFrameSource
 
@@ -46,8 +46,14 @@ def measure_public(name):
     analysis = AnalyzeFrame(frames, profiles=None)(request)
     if analysis.geometry is None:
         raise RuntimeError(f"Missing detector geometry on {name}.")
-    result = measure_frame_roll(analysis, frames)
+    # Si substrate δ at the experimental wavelength from BornAgain's GALAXI model
+    # (galaxi_bornagain_model.py). The multilayer's band attribution is conditional.
+    critical = float(np.degrees(np.arccos(1-5.7816e-6))) if name == "gisaxs_galaxi" else None
+    result, incidence = measure_frame_angles(analysis, frames, critical_angle_deg=critical)
     record = result.as_dict()
+    record.update(incidence=incidence.as_dict(), published_incidence_deg=info["incidence_deg"])
+    if critical is not None:
+        record["yoneda_assignment"] = "Si substrate, BornAgain GALAXI model, delta = 5.7816e-6"
     if name == "giwaxs_p08_mapi" and result.deg is not None:
         before = _signed_means(analysis, analysis.geometry.with_sample_roll(0.))
         after = _signed_means(analysis, analysis.geometry.with_sample_roll(result.deg))

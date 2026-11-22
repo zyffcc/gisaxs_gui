@@ -8,7 +8,7 @@ They are not GIMaP's data: keep the licences and the attribution below when you 
 |---|---|---|---|---|
 | `gisaxs_galaxi/` | `galaxi_data.tif` (decompressed from `galaxi_data.tif.gz`) | BornAgain r23 test data, `https://jugit.fz-juelich.de/mlz/bornagain/-/raw/r23/testdata/scatter2d/galaxi_data.tif.gz` | GPL-3.0 (BornAgain) | GISAXS, GALAXI (Jülich), Pilatus 1M, 981 × 1043 px |
 | `saxs_agbh_pyfai/` | `Pilatus1M.edf`, `Pilatus1M.poni` | pyFAI test images, `http://www.silx.org/pub/pyFAI/testimages/` | MIT (pyFAI); the licence of the test-image server's files is not stated there: to be confirmed | Silver behenate calibration image (ESRF BM26, Pilatus 1M) |
-| `giwaxs_p08_mapi/` | `S121_MAI_A2_00841.tif`, `LaB6_2021_12_DESY_P08.poni`, `S121_MAI_A2_metadata.yaml` | pygid usage examples, Zenodo 10.5281/zenodo.17466183 (attribution below) | CC BY 4.0 | GIWAXS of a MAPbI₃ film, DESY P08, PerkinElmer 2048², αi = 0.075° |
+| `giwaxs_p08_mapi/` | `S121_MAI_A2_00841.tif`, `LaB6_2021_12_DESY_P08.poni`, `S121_MAI_A2_metadata.yaml` | pygid usage examples, Zenodo 10.5281/zenodo.17466183 (attribution below) | CC BY 4.0 | GIWAXS of a MAPbI₃ film, DESY P08, PerkinElmer 2048², notebook αi = 0.075° |
 | `giwaxs_xeuss_pbte/` | `PbTe_3010_r1_PT_1_10_0_00028.edf`, `mask_PbTe_3010.edf`, `AgBe_250403_XENOCS.poni` | same Zenodo record | CC BY 4.0 | GIWAXS of PbTe nanoplatelets, Xeuss 2.0 lab source, Pilatus 300K, αi = 0.235° |
 
 `galaxi_bornagain.poni`, `manifest.json` and `reference_values.json` are GIMaP's own files (see below).

@@ -45,6 +45,10 @@ class AnalyzeState:
     incidence_deg: Optional[float] = None
     sample_roll_deg: Optional[float] = None
     sample_roll_measurement: Optional[dict] = None
+    incidence_measurement: Optional[dict] = None
+    incidence_locked: bool = False
+    yoneda_critical_deg: Optional[float] = None
+    yoneda_material: Optional[str] = None
     gisaxs: GisaxsCutSettings = field(default_factory=GisaxsCutSettings)
     giwaxs: GiwaxsSettings = field(default_factory=GiwaxsSettings)
     analysis: Optional[FrameAnalysis] = None
@@ -119,6 +123,9 @@ class AnalyzeViewModel(
             mode=self.state.mode,
             profile_name=self.state.profile_name,
             incidence_deg=self.state.incidence_deg,
+            incidence_measurement=self.state.incidence_measurement, incidence_locked=self.state.incidence_locked,
+            yoneda_critical_deg=None if self.state.yoneda_material else self.state.yoneda_critical_deg,
+            yoneda_material=self.state.yoneda_material,
             sample_roll_deg=self.state.sample_roll_deg, sample_roll_measurement=self.state.sample_roll_measurement,
             gisaxs=self.state.gisaxs,
             giwaxs=self.state.giwaxs,
@@ -177,6 +184,10 @@ class AnalyzeViewModel(
 
     def set_incidence(self, incidence_deg: Optional[float]) -> None:
         self.state.incidence_deg = None if incidence_deg is None else float(incidence_deg)
+        self.state.incidence_measurement = None
+
+    def set_incidence_measurement(self, record: Optional[dict]) -> None:
+        self.state.incidence_measurement = dict(record) if record else None
 
     def set_horizontal_band(self, low: float, high: float) -> None:
         low, high = sorted((float(low), float(high)))

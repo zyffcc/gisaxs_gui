@@ -18,6 +18,7 @@ from dataclasses import fields as _fields
 from typing import Any, Mapping, Optional
 
 from src.gimap.shared.geometry import InstrumentProfile
+from src.gimap.shared.material_optics import MATERIALS
 from src.gimap.shared.geometry.sample_roll_record import measurement_record
 from src.gimap.shared.version import SOFTWARE as RELEASE
 
@@ -35,6 +36,7 @@ from ..domain.mask_edits import mask_edit_from_record, mask_edit_record
 from .cut_regions import region_to_dict, regions_from_dicts
 from .gisaxs_cuts import cut_to_dict, cuts_from_dicts
 from .models import AUTO, MODES
+from .incidence_record import checked_incidence_record
 from .use_cases import SOFTWARE
 
 NORMALISATION_FIELDS = tuple(item.name for item in _fields(Normalisation))
@@ -64,6 +66,10 @@ class AnalyzeSettings:
 
     sample_roll_deg: Optional[float] = None
     sample_roll_measurement: Optional[dict] = field(default=None, hash=False)
+    incidence_measurement: Optional[dict] = field(default=None, hash=False)
+    incidence_locked: bool = False
+    yoneda_critical_deg: Optional[float] = None
+    yoneda_material: Optional[str] = None
 
 
 def _pair(value) -> Optional[tuple[float, float]]:
@@ -96,6 +102,10 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
         "profile_name": settings.profile_name,
         "profile": settings.profile.to_dict() if settings.profile is not None else None,
         "incidence_deg": settings.incidence_deg,
+        "incidence_measurement": settings.incidence_measurement,
+        "incidence_locked": settings.incidence_locked,
+        "yoneda_critical_deg": settings.yoneda_critical_deg,
+        "yoneda_material": settings.yoneda_material,
         "sample_roll_deg": settings.sample_roll_deg,
         "sample_roll_measurement": settings.sample_roll_measurement,
         "beam_center_px": list(settings.beam_center) if settings.beam_center is not None else None,
@@ -238,11 +248,21 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
             regions=tuple(cuts_from_dicts(values.get("cuts"))),
         )
         export = record.get("export")
+        yoneda_critical = _optional_float(record.get("yoneda_critical_deg"))
+        if yoneda_critical is not None and not 0 < yoneda_critical < 90:
+            raise ValueError("The Yoneda critical angle must be between 0 and 90 degrees.")
+        material = record.get("yoneda_material")
+        if material is not None and material not in MATERIALS:
+            raise ValueError("Unknown Yoneda material.")
         return AnalyzeSettings(
             mode=mode,
             profile_name=record.get("profile_name") or (profile.name if profile is not None else None),
             profile=profile,
             incidence_deg=_optional_float(record.get("incidence_deg")),
+            incidence_measurement=checked_incidence_record(record.get("incidence_measurement")),
+            incidence_locked=bool(record.get("incidence_locked", False)),
+            yoneda_critical_deg=yoneda_critical,
+            yoneda_material=material,
             sample_roll_deg=_optional_float(record.get("sample_roll_deg")),
             sample_roll_measurement=measurement_record(record.get("sample_roll_measurement")),
             beam_center=_pair(record.get("beam_center_px")),

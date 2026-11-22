@@ -8,6 +8,7 @@ from typing import Sequence
 import numpy as np
 
 from .....shared.ring_profile import measured_hermans
+from .film_optics import FilmAbsorption
 from .pole_figure import MIN_BINS, PoleProfile
 from .pole_models import GAUSSIAN_MOSAIC, hermans
 from .reflections import Phase, reflections
@@ -27,6 +28,7 @@ class TextureRing:
     q_max: float
     profile: PoleProfile
     transmission: np.ndarray | None = None
+    absorption: FilmAbsorption | None = None
 
 
 def _finite(value):
@@ -88,6 +90,11 @@ def _ring_record(data, trial, coeff, red, dof):
         shape = (1. - trial.x[1])*oriented + trial.x[1]*library.isotropic
     else:
         shape = library.isotropic[None, :]
+    optical_record = {}
+    if ring.absorption is not None:
+        attenuation = ring.absorption.curve(trial.x[-1])
+        shape = shape * attenuation
+        optical_record["exit_transmission_times_absorption"] = (ring.transmission * attenuation).tolist()
     contributions = scale * relative[:, None] * shape
     components = [{"hkl": f.label, "multiplicity": f.multiplicity, "q_hkl": f.q, "sum_f2": f.strength,
                    "kinematic_weight": float(kinematic), "weight": float(weight), "values": curve.tolist()}
@@ -98,6 +105,7 @@ def _ring_record(data, trial, coeff, red, dof):
     worst = int(np.argmax(np.abs(residual)))
     f_ring, f_error, _ = measured_hermans(profile.chi[use], profile.value[use], profile.sigma[use])
     return {
+        **optical_record,
         "ring_id": int(ring.ring_id), "q": float(ring.q), "q_window": [float(ring.q_min), float(ring.q_max)],
         "points": int(use.sum()), "effective_dof": dof, "reduced_chi2": _finite(red), "scale": scale,
         "herman_measured": _finite(f_ring), "herman_measured_err": _finite(f_error),
@@ -152,6 +160,9 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
     if not rings:
         result["reasons"].append("no assigned rings")
         return result
+    incidence_sines = {None if ring.absorption is None else ring.absorption.sin_incidence for ring in rings}
+    if len(incidence_sines) != 1 or any(r.absorption is not None and r.transmission is None for r in rings):
+        raise ValueError("Fitting film absorption needs exit transmission and one incidence angle for all rings.")
     axes = candidate_axes(phase)
     found = reflections(phase, max(r.q_max for r in rings))
     result.update(
@@ -187,6 +198,9 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
     runner = trials[1] if len(trials) > 1 else None
     problem = Hypothesis(data, best.indices, best.free)
     red, covariance, amplitudes, local_red, local_dof = _diagnostics(problem, best.x)
+    if problem.absorption:
+        index = len(best.x) - 1
+        result["film_absorption"] = data[0].ring.absorption.record(best.x[index], _error(covariance, index))
     populations = _populations(best, axes, covariance)
     phi = float(best.x[1]) if best.indices else 1.
     phi_err = _error(covariance, 1) if best.indices else None

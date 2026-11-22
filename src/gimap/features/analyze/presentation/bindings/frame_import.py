@@ -188,6 +188,14 @@ class FrameImportMixin:
         angle = self.view_model.state.incidence_deg
         if angle is not None:
             kept.append(trf("Incidence override: {value}°", value=f"{angle:g}"))
+        if self.view_model.state.incidence_locked:
+            kept.append(tr("Keep entered αi"))
+        if self.view_model.state.yoneda_material:
+            kept.append(f"{tr('Yoneda critical angle')}  {self.view_model.state.yoneda_material}")
+        elif self.view_model.state.yoneda_critical_deg is not None:
+            kept.append(f"{tr('Yoneda critical angle')}  {self.view_model.state.yoneda_critical_deg:g}°")
+        if self.view_model.state.sample_roll_deg is not None:
+            kept.append(f"ψ {self.view_model.state.sample_roll_deg:g}°")
         phases = self.indexing.phases
         if phases:
             kept.append(trf("Phases shown: {names}", names=", ".join(p.name for p in phases if p.visible) or "—"))
@@ -218,6 +226,10 @@ class FrameImportMixin:
                 view.marks.set_visible(key, True)
         self._remember_marks()
         self._adopt_incidence(None)
+        self.view_model.state.incidence_locked = False
+        self.view_model.state.yoneda_critical_deg = None
+        self.view_model.state.yoneda_material = None
+        self.view_model.set_sample_roll(None)
         self._forget_incidence()
         self._remember()
 

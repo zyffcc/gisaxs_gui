@@ -16,7 +16,6 @@ for GISAXS, the I(q) for GIWAXS — also when the I(q) is shown against 2θ.
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -39,8 +38,10 @@ from ..domain import (
 from ..domain.mask_edits import MaskImage, mask_edit_record
 from .flat_detector import flat_detector_record
 from .frame_preprocessing import photon_counts
+from .incidence_record import nominal_incidence
 from .models import FrameAnalysis
 from .ports import frame_label, source_name, source_stem
+from .record_values import plain as _plain
 from .reduction_inputs import source_files
 
 SOFTWARE = "GIMaP Analyze 1"
@@ -62,23 +63,6 @@ MERGE_RULE = (
     "has enough, never across a gap of more than 2.5 bin steps; the point has the pixel-weighted mean of q and of I"
 )
 """How the sparse bins of an I(q) are joined (``domain/binning.merge_sparse_bins``), for the record's ``binning``."""
-
-
-def _plain(value: Any) -> Any:
-    """JSON-friendly copy of markers (dataclasses, tuples, numpy scalars)."""
-    if is_dataclass(value):
-        return _plain(asdict(value))
-    if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_plain(item) for item in value]
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, float) and not math.isfinite(value):
-        return None
-    return value
 
 
 def frame_stem(path: str | Path, source: Any = None, *, frame_index: int = 0, frame_count: int = 1,
@@ -157,6 +141,7 @@ def analysis_metadata(analysis: FrameAnalysis, *, curve_keys=None, with_reproduc
     reduction = analysis.reduction
     profile = analysis.resolution.profile
     loaded = analysis.metadata or {}
+    reference, reference_source = nominal_incidence(analysis)
     record = {
         "software": SOFTWARE,
         "software_version": RELEASE,  # the release that wrote the record (``shared.version.SOFTWARE``)
@@ -176,9 +161,11 @@ def analysis_metadata(analysis: FrameAnalysis, *, curve_keys=None, with_reproduc
         ),
         "geometry_convention": GEOMETRY_CONVENTION,
         "sample_roll_measurement": getattr(analysis, "sample_roll_measurement", None),
+        "incidence_measurement": getattr(analysis, "incidence_measurement", None),
         "geometry_resolution": {
             "method": analysis.resolution.how, "beam_center_source": analysis.resolution.center_source,
             "header_beam_center_px": _plain(analysis.resolution.header_center),
+            "nominal_incidence_deg": reference, "nominal_incidence_source": reference_source,
         },
         "instrument_profile": (
             profile.to_dict()

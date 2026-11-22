@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from src.gimap.shared.detector_io.metadata import extract_cbf_metadata
@@ -31,6 +33,22 @@ def test_header_without_geometry_lines() -> None:
     assert metadata["header_distance_m"] is None
     assert metadata["header_beam_xy_px"] is None
     assert metadata["pixel_size_x_m"] == pytest.approx(172e-6)
+
+
+@pytest.mark.parametrize("line, expected", [
+    ("# Incidence_angle 0.38 deg", .38),
+    ("# Alpha_i 0.21 deg.", .21),
+    ("# Incident angle: 0.006 radians", math.degrees(.006)),
+    ("# Grazing_incidence_angle = 0.41°", .41),
+    ("# Incidence_angle 0.36", None),
+    ("# Detector_2theta 0.45 deg", None),
+    ("# Omega 0.52 deg", None),
+    ("# Incidence_angle 100 degrees", None),
+    ("# Incident_angle 4 degrees\n# Incidence_angle 0.23 deg", None),
+])
+def test_explicit_sample_incidence_and_units(line, expected):
+    incidence = _metadata(line).get("incidence_deg")
+    assert incidence == (pytest.approx(expected) if expected is not None else None)
 
 
 def test_geometry_lines_are_reported_separately() -> None:

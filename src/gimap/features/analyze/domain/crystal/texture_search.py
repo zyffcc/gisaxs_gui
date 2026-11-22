@@ -106,11 +106,14 @@ class Hypothesis:
     def __init__(self, rings, indices, free):
         self.rings, self.indices, self.free = rings, indices, free
         self.curves = [tuple((r.by_family if free else r.fixed)[:, :, i] for i in indices) for r in rings]
-        self.parameters = 2*len(indices) + sum(len(r.families) if free else 1 for r in rings)
+        self.absorption = rings[0].ring.absorption is not None
+        self.parameters = 2*len(indices) + int(self.absorption) + sum(len(r.families) if free else 1 for r in rings)
         self.points = sum(len(r.y) for r in rings)
 
-    def _model(self, x, index):
+    def _texture(self, x, index):
         curves = self.curves[index]
+        if not curves:
+            return self.rings[index].iso[None], []
         first, d_first = _spline(curves[0], x[0])
         iso, phi = self.rings[index].iso, x[1]
         if len(curves) == 1:
@@ -121,6 +124,16 @@ class Hypothesis:
         return ((1. - phi)*oriented + phi*iso,
                 [(1. - phi)*share*d_first, iso - oriented, (1. - phi)*(1. - share)*d_second,
                  (1. - phi)*(first - second)])
+
+    def _model(self, x, index):
+        shape, gradients = self._texture(x, index)
+        if self.absorption:
+            ring = self.rings[index]
+            curve = ring.ring.absorption.curve
+            factor = curve(x[-1])[ring.mask]
+            gradients = [g * factor for g in gradients] + [shape * curve(x[-1], 1)[ring.mask]]
+            shape = shape * factor
+        return shape, gradients
 
     def shapes(self, x, index):
         return self._model(x, index)[0]
@@ -159,6 +172,15 @@ class Hypothesis:
 
         lower = [LOG_WIDTHS[0], 0.] * len(self.indices)
         upper = [LOG_WIDTHS[-1], 1.] * len(self.indices)
+        starts = [list(start) for start in starts]
+        if self.absorption:
+            lower.append(0.)
+            upper.append(1.)
+            # Fixed-weight fits supply their optimum u when seeding free family weights.
+            for i, start in enumerate(starts):
+                if len(start) < len(lower):
+                    options = [start + [u] for u in (.001, .2, .6, .95)]
+                    starts[i] = min(options, key=lambda p: np.linalg.norm(evaluate(p)))
         best = None
         for start in starts:
             solution = least_squares(evaluate, start, jac=derivative, bounds=(lower, upper), ftol=2e-7, max_nfev=120)
@@ -216,6 +238,10 @@ def search(rings, n_axes, check_cancel):
         fit = _coefficients(ring.iso[None], ring.y) * ring.iso
         null_chi2 += np.sum((fit - ring.y)**2)
     null = Trial((), False, np.array([]), null_chi2, null_chi2 + len(rings)*math.log(points))
+    if rings[0].ring.absorption is not None:
+        null = Hypothesis(rings, (), False).fit([[]])
+        if null is None:
+            raise ValueError("The isotropic film absorption fit failed to converge.")
     trials = {(): null}
     free_count = sum(len(r.families)-1 for r in rings)
     axes = range(n_axes)
@@ -229,10 +255,10 @@ def search(rings, n_axes, check_cancel):
         if fixed is None:
             continue
         chosen = fixed
-        if free_count and points > len(rings) + free_count + 2*size:
+        if free_count and points > len(rings) + free_count + 2*size + int(rings[0].ring.absorption is not None):
             starts = [fixed.x]
             alternate = [math.log(15.), 0.4] if size == 1 else [math.log(8.), 0.4, math.log(36.), 0.5]
-            if max(abs(fixed.x[::2] - alternate[::2])) > 0.7:
+            if max(abs(fixed.x[:2*size:2] - alternate[::2])) > 0.7:
                 starts.append(alternate)
             free = Hypothesis(rings, indices, True).fit(starts)
             if free is not None and free.bic < fixed.bic:

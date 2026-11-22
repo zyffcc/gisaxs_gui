@@ -13,6 +13,7 @@ from src.gimap.shared.geometry.detector_tilt import FlatDetectorError
 
 from ..domain import BadPixels, Corrections, GisaxsCutSettings, GiwaxsSettings, NormalisationUse, Reduction
 from .flat_field import FlatFieldUse
+from .incidence_record import same_measurement_frame, selected_incidence_record
 
 AUTO = "auto"
 MODES = (AUTO, "gisaxs", "giwaxs", "transmission")
@@ -64,16 +65,26 @@ class AnalysisRequest:
     sample_roll_deg: Optional[float] = None
     """Sample roll override. None takes the value in the resolved geometry."""
     sample_roll_measurement: Optional[dict] = field(default=None, hash=False)
+    incidence_measurement: Optional[dict] = field(default=None, hash=False)
+    incidence_locked: bool = False
+    yoneda_critical_deg: Optional[float] = None
+    """Critical angle of the material producing the Yoneda band, independent of film refraction."""
+    yoneda_material: Optional[str] = None
 
     def with_scoped_roll(self) -> AnalysisRequest:
-        """An automatic result belongs only to the frame (or sum) on which it was measured."""
+        """Match frame-specific measurements before applying a request to another frame or sum."""
+        result = self
+        if self.incidence_measurement and not same_measurement_frame(self.incidence_measurement, self):
+            result = replace(self, incidence_measurement=None)
         measured = self.sample_roll_measurement or {}
-        if measured.get("origin") == "automatic":
-            members = [[str(path), index] for path, index in self.summed_frames]
-            if (measured.get("path"), measured.get("frame_index"), measured.get("summed_frames", [])) != (
-                    str(self.path), self.frame_index, members):
-                return replace(self, sample_roll_deg=None, sample_roll_measurement=None)
-        return self
+        if measured.get("origin") == "automatic" and not same_measurement_frame(measured, self):
+            result = replace(result, sample_roll_deg=None, sample_roll_measurement=None)
+        return result
+
+    @property
+    def needs_input_identities(self) -> bool:
+        """A display-only series checks the source when reusing this frame's measured incidence."""
+        return self.with_record or bool(self.incidence_measurement)
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -170,6 +181,10 @@ class FrameAnalysis:
     """Paths and digests of the inputs to the pixel corrections."""
     geometry_files: dict = field(default_factory=dict)
     """Calibration file read for this frame, when its geometry came from a sibling .poni."""
+
+    @property
+    def incidence_measurement(self) -> Optional[dict]:
+        return selected_incidence_record(self.request, self.resolution, self.metadata, self.frame_files, self.correction_files)
 
     @property
     def sample_roll_measurement(self) -> Optional[dict]:
