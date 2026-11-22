@@ -35,6 +35,7 @@ timing run alone used one worker. Each summary written at 7179b85 names the comm
 |---|---|---|---|
 | fit1d's 200 held-out curves | `posterior_recovery_summary.json` | `per_cut/posterior_recovery.json.gz` | `--n 200 --workers 10` |
 | extended set, 600 curves | `posterior_extended_summary.json` | `per_cut/posterior_extended.json.gz` | `--set extended --n 600 --seed0 20261201 --workers 10` |
+| third set, 300 curves, drawn with a new seed after the procedure was frozen, with the automatic analysis's own call (stage `auto`, first level as at commit 6bb1a18) | `posterior_newseed_summary.json` | `per_cut/posterior_newseed.json.gz` | `--n 300 --seed0 20261122 --auto --workers 8` |
 | DWBA on Si, both angles given | `posterior_dwba_tp_summary.json` | `per_cut/posterior_dwba_tp.json.gz` | `--n 200 --workers 10 --scattering dwba --substrate si --cut two_path` |
 | DWBA on Si, q_z given | `posterior_dwba_born_summary.json` | `per_cut/posterior_dwba_born.json.gz` | `--n 200 --workers 10 --scattering dwba --substrate si --cut born` |
 | DWBA on Si, neither given | `posterior_dwba_eia_summary.json` | `per_cut/posterior_dwba_eia.json.gz` | `--n 200 --workers 10 --scattering dwba --substrate si --cut eia` |
@@ -201,3 +202,7 @@ matches one ring or wrong orders. `center_polish.polished_centers` cures this, b
 grazing-incidence images only. Applied to every image (`polished_proposals`, patched in the benchmark only), the
 geometry is found for 213 of 300 and 114 of 150. On the public frame the polish gives 5 matched rings instead of 4 and
 moves the result within its 1σ (JSON: `gimap_polished_for_reference`).
+
+## The third set
+
+`posterior_newseed` was run at commit 6bb1a18 (fitting tree d139e6f5). The fitting code differs from the tree of the other runs (7e68831a) by reporting only: Predict's numbers are the same, which `tests/test_predict_regression.py` checks against `per_cut/posterior_recovery.json.gz`. Its seed (20261122) was chosen after the last change of the procedure, so no change was judged on it. The stage `auto` is the automatic analysis's call as it was then: the first level (q_z = 0), spheres and upright cylinders, one or two populations.
