@@ -15,7 +15,7 @@ run["results"][0]         # one cut: "case" (the truth: composition, level, popu
                           # (the composition chosen): the most probable solution with its values, errors, 68 % and
                           # 95 % intervals, chi2, flags, probability, "in_set" and "alternatives" (the other solutions
                           # with a probability of at least 0.05), seconds
-run["seconds"]            # wall time of the whole run
+run["seconds"]            # wall time of this invocation (the final part for checkpointed runs)
 ```
 
 `tools/benchmarks/posterior_pairs.py` reads these files directly
@@ -29,11 +29,14 @@ run["seconds"]            # wall time of the whole run
 | `posterior_timing.json.gz` | 24 | 7179b85 | tree 7e68831a |
 | `posterior_dwba_tp.json.gz`, `posterior_dwba_born.json.gz`, `posterior_dwba_eia.json.gz` | 200 each | 7179b85 | tree 7e68831a |
 | `posterior_own.json.gz` | 200 | 7179b85 | tree 7e68831a |
+| `posterior_dwba4_si.json.gz`, `posterior_dwba4_si_auto.json.gz` | 200 each | fda067c | tree edf4d396 |
+| `posterior_dwba4_ps100.json.gz`, `posterior_dwba4_ps100_auto.json.gz` | 200 each | fda067c | tree edf4d396 |
 
-The fitting code is the git tree `7e68831a52cf841a56fe05f8cc4e36ee62b41cb7` of `src/gimap/features/fitting/domain`
-(`git rev-parse 2eb0243:src/gimap/features/fitting/domain` and the same at 7179b85 give it): one version of the code
-for every run. The two runs written at 2eb0243 predate the `code` field of the summaries, so their commit and tree
+The fitting tree identifies `src/gimap/features/fitting/domain` at the recorded commit.
+The two runs written at 2eb0243 predate the `code` field of the summaries, so their commit and tree
 are stated here and not added to the result files. The network is `flow_v1` (its SHA-256 is in every summary).
+The four level-4 runs used per-cut checkpoints. Each stage's `seconds` measures that fit, including for resumed draws.
+The `code.source_sha256` in each level-4 summary identifies the benchmark scripts and fitting sources used for those draws.
 
 `evidence_integration_check.json.gz` is not a Predict run: it is everything `../evidence_integration_check.py` computed
 (every parameter point of the 24 solutions, with the scales at the least-squares and at the joint optimum, both runs

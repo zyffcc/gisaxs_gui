@@ -1,0 +1,6399 @@
+{
+ "n_curves": 200,
+ "q_plus_inv_nm": 0.5770662362283495,
+ "runs": {
+  "born": {
+   "overall": {
+    "cuts": 200,
+    "fit": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.89,
+     "truth_mode_listed": 0.93,
+     "seconds": 15.23282615000062,
+     "parameters": {
+      "R": {
+       "n": 300,
+       "median_abs_relative": 0.006069660973651025,
+       "coverage68": 0.6733333333333333,
+       "coverage95": 0.85
+      },
+      "D": {
+       "n": 300,
+       "median_abs_relative": 0.0006857096469374824,
+       "coverage68": 0.8466666666666667,
+       "coverage95": 0.9466666666666667
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 19,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 31,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 0.765,
+     "truth_mode_first": 0.72,
+     "truth_mode_listed": 0.855,
+     "seconds": 69.35759289999987,
+     "parameters": {
+      "R": {
+       "n": 289,
+       "median_abs_relative": 0.008882625218122886,
+       "coverage68": 0.6020761245674741,
+       "coverage95": 0.7716262975778547
+      },
+      "D": {
+       "n": 289,
+       "median_abs_relative": 0.0006136474345368459,
+       "coverage68": 0.8685121107266436,
+       "coverage95": 0.9584775086505191
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 11,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 14,
+        "sphere_to_upright": 3,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 17,
+        "sphere_fraction_of_fitted_uprights": 0.15
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 29,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 26,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "spheres only": {
+    "cuts": 100,
+    "fit": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.83,
+     "truth_mode_listed": 0.88,
+     "seconds": 16.619382749999204,
+     "parameters": {
+      "R": {
+       "n": 150,
+       "median_abs_relative": 0.0070428928799547985,
+       "coverage68": 0.6466666666666666,
+       "coverage95": 0.8333333333333334
+      },
+      "D": {
+       "n": 150,
+       "median_abs_relative": 0.0006474975704047203,
+       "coverage68": 0.8533333333333334,
+       "coverage95": 0.9333333333333333
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 0.7,
+     "truth_mode_first": 0.64,
+     "truth_mode_listed": 0.82,
+     "seconds": 67.18838619999951,
+     "parameters": {
+      "R": {
+       "n": 146,
+       "median_abs_relative": 0.010415141206320366,
+       "coverage68": 0.5547945205479452,
+       "coverage95": 0.7191780821917808
+      },
+      "D": {
+       "n": 146,
+       "median_abs_relative": 0.0005294047435620008,
+       "coverage68": 0.8698630136986302,
+       "coverage95": 0.9315068493150684
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 4,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 14,
+        "sphere_to_upright": 3,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 29,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.98,
+     "truth_mode_listed": 0.98,
+     "seconds": 7.895149599997239,
+     "parameters": {
+      "R": {
+       "n": 50,
+       "median_abs_relative": 0.003550453122674546,
+       "coverage68": 0.74,
+       "coverage95": 0.94
+      },
+      "D": {
+       "n": 50,
+       "median_abs_relative": 0.0004523688160626982,
+       "coverage68": 0.88,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.86,
+     "truth_mode_first": 0.84,
+     "truth_mode_listed": 0.9,
+     "seconds": 47.355290200001036,
+     "parameters": {
+      "R": {
+       "n": 46,
+       "median_abs_relative": 0.0037523616180853425,
+       "coverage68": 0.6739130434782609,
+       "coverage95": 0.9130434782608695
+      },
+      "D": {
+       "n": 46,
+       "median_abs_relative": 0.0004990583509161262,
+       "coverage68": 0.8695652173913043,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 4,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 14,
+        "sphere_to_upright": 3,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 29,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "vc": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 8.511747649998142,
+     "parameters": {
+      "R": {
+       "n": 50,
+       "median_abs_relative": 0.0026345131040862446,
+       "coverage68": 0.74,
+       "coverage95": 0.94
+      },
+      "D": {
+       "n": 50,
+       "median_abs_relative": 0.0006005093652234894,
+       "coverage68": 0.84,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 19,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 31,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.86,
+     "truth_mode_first": 0.86,
+     "truth_mode_listed": 0.86,
+     "seconds": 43.84459450000213,
+     "parameters": {
+      "R": {
+       "n": 43,
+       "median_abs_relative": 0.002314695654361265,
+       "coverage68": 0.6976744186046512,
+       "coverage95": 0.9534883720930233
+      },
+      "D": {
+       "n": 43,
+       "median_abs_relative": 0.0006030597309867325,
+       "coverage68": 0.7674418604651163,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 7,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 17,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 26,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "sphere,sphere": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.68,
+     "truth_mode_listed": 0.78,
+     "seconds": 33.9490179500026,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.011163949743893786,
+       "coverage68": 0.6,
+       "coverage95": 0.78
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0007169110940035139,
+       "coverage68": 0.84,
+       "coverage95": 0.9
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.54,
+     "truth_mode_first": 0.44,
+     "truth_mode_listed": 0.74,
+     "seconds": 95.21984434999831,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.024567987419926662,
+       "coverage68": 0.5,
+       "coverage95": 0.63
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0005412583217501155,
+       "coverage68": 0.87,
+       "coverage95": 0.9
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere,vc": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.9,
+     "truth_mode_listed": 0.96,
+     "seconds": 27.850356850005483,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.01032333815221853,
+       "coverage68": 0.68,
+       "coverage95": 0.83
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0007931777852728805,
+       "coverage68": 0.84,
+       "coverage95": 0.94
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.8,
+     "truth_mode_first": 0.74,
+     "truth_mode_listed": 0.92,
+     "seconds": 88.66749505000189,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.013048127590503611,
+       "coverage68": 0.63,
+       "coverage95": 0.77
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0007901647194346606,
+       "coverage68": 0.91,
+       "coverage95": 0.98
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 0-1.2": {
+    "cuts": 0
+   },
+   "q+R 1.2-1.7": {
+    "cuts": 25,
+    "fit": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 9.82945259999542,
+     "parameters": {
+      "R": {
+       "n": 25,
+       "median_abs_relative": 0.004078659560263098,
+       "coverage68": 0.68,
+       "coverage95": 0.84
+      },
+      "D": {
+       "n": 25,
+       "median_abs_relative": 0.0003993364913759123,
+       "coverage68": 0.92,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 11,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 14,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 0.76,
+     "truth_mode_first": 0.76,
+     "truth_mode_listed": 0.84,
+     "seconds": 40.10865719999856,
+     "parameters": {
+      "R": {
+       "n": 22,
+       "median_abs_relative": 0.004832416731956557,
+       "coverage68": 0.5909090909090909,
+       "coverage95": 0.8181818181818182
+      },
+      "D": {
+       "n": 22,
+       "median_abs_relative": 0.00044141509357886743,
+       "coverage68": 0.8636363636363636,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 3,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 7,
+        "sphere_to_upright": 3,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 12,
+        "sphere_fraction_of_fitted_uprights": 0.2
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 1.7-2.3": {
+    "cuts": 24,
+    "fit": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.9166666666666666,
+     "truth_mode_listed": 0.9166666666666666,
+     "seconds": 6.9081315499970515,
+     "parameters": {
+      "R": {
+       "n": 26,
+       "median_abs_relative": 0.002592414473592819,
+       "coverage68": 0.7692307692307693,
+       "coverage95": 0.9615384615384616
+      },
+      "D": {
+       "n": 26,
+       "median_abs_relative": 0.00047582370089149784,
+       "coverage68": 0.9230769230769231,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 7,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 5,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 4,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 0.875,
+     "truth_mode_first": 0.875,
+     "truth_mode_listed": 0.9166666666666666,
+     "seconds": 33.898515250002674,
+     "parameters": {
+      "R": {
+       "n": 25,
+       "median_abs_relative": 0.00297695786504093,
+       "coverage68": 0.68,
+       "coverage95": 0.88
+      },
+      "D": {
+       "n": 25,
+       "median_abs_relative": 0.0003335710239424916,
+       "coverage68": 0.84,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 1,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 7,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 5,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 3,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "q+R 2.3-inf": {
+    "cuts": 151,
+    "fit": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.8675496688741722,
+     "truth_mode_listed": 0.9205298013245033,
+     "seconds": 23.689296299999114,
+     "parameters": {
+      "R": {
+       "n": 249,
+       "median_abs_relative": 0.007579988910405566,
+       "coverage68": 0.6626506024096386,
+       "coverage95": 0.8393574297188755
+      },
+      "D": {
+       "n": 249,
+       "median_abs_relative": 0.0007242112328575967,
+       "coverage68": 0.8313253012048193,
+       "coverage95": 0.9357429718875502
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 26,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 27,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 0.7483443708609272,
+     "truth_mode_first": 0.6887417218543046,
+     "truth_mode_listed": 0.847682119205298,
+     "seconds": 78.09370380000473,
+     "parameters": {
+      "R": {
+       "n": 242,
+       "median_abs_relative": 0.009960715984068613,
+       "coverage68": 0.5950413223140496,
+       "coverage95": 0.756198347107438
+      },
+      "D": {
+       "n": 242,
+       "median_abs_relative": 0.0006765920235528577,
+       "coverage68": 0.871900826446281,
+       "coverage95": 0.9504132231404959
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 7,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 23,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 23,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   }
+  },
+  "si_l2": {
+   "overall": {
+    "cuts": 200,
+    "fit": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.725,
+     "truth_mode_listed": 0.73,
+     "seconds": 13.668724800001655,
+     "parameters": {
+      "R": {
+       "n": 300,
+       "median_abs_relative": 0.05609417522069532,
+       "coverage68": 0.26,
+       "coverage95": 0.38666666666666666
+      },
+      "D": {
+       "n": 300,
+       "median_abs_relative": 0.0020110421806494028,
+       "coverage68": 0.57,
+       "coverage95": 0.7133333333333334
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 19,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 31,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 0.33,
+     "truth_mode_first": 0.325,
+     "truth_mode_listed": 0.445,
+     "seconds": 43.81097115000375,
+     "parameters": {
+      "R": {
+       "n": 279,
+       "median_abs_relative": 0.07987893272399271,
+       "coverage68": 0.2831541218637993,
+       "coverage95": 0.4050179211469534
+      },
+      "D": {
+       "n": 279,
+       "median_abs_relative": 0.0006577030230077163,
+       "coverage68": 0.7813620071684588,
+       "coverage95": 0.956989247311828
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 21,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 9,
+        "sphere_to_upright": 11,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 17,
+        "sphere_fraction_of_fitted_uprights": 0.39285714285714285
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 16,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 26,
+        "sphere_fraction_of_fitted_uprights": 0.38095238095238093
+       }
+      }
+     }
+    }
+   },
+   "spheres only": {
+    "cuts": 100,
+    "fit": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.63,
+     "truth_mode_listed": 0.64,
+     "seconds": 14.295893450005678,
+     "parameters": {
+      "R": {
+       "n": 150,
+       "median_abs_relative": 0.07576728681919032,
+       "coverage68": 0.12666666666666668,
+       "coverage95": 0.2
+      },
+      "D": {
+       "n": 150,
+       "median_abs_relative": 0.0033110277085737216,
+       "coverage68": 0.48,
+       "coverage95": 0.64
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 0.1,
+     "truth_mode_first": 0.1,
+     "truth_mode_listed": 0.19,
+     "seconds": 42.705512000000454,
+     "parameters": {
+      "R": {
+       "n": 136,
+       "median_abs_relative": 0.10805631979764585,
+       "coverage68": 0.125,
+       "coverage95": 0.20588235294117646
+      },
+      "D": {
+       "n": 136,
+       "median_abs_relative": 0.0005062981941132971,
+       "coverage68": 0.8088235294117647,
+       "coverage95": 0.9632352941176471
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 14,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 9,
+        "sphere_to_upright": 11,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 16,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       }
+      }
+     }
+    }
+   },
+   "sphere": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.8,
+     "truth_mode_listed": 0.8,
+     "seconds": 12.855660249999346,
+     "parameters": {
+      "R": {
+       "n": 50,
+       "median_abs_relative": 0.06611167320751676,
+       "coverage68": 0.04,
+       "coverage95": 0.14
+      },
+      "D": {
+       "n": 50,
+       "median_abs_relative": 0.003412617354071501,
+       "coverage68": 0.58,
+       "coverage95": 0.72
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.18,
+     "truth_mode_first": 0.18,
+     "truth_mode_listed": 0.22,
+     "seconds": 35.51098769999953,
+     "parameters": {
+      "R": {
+       "n": 36,
+       "median_abs_relative": 0.10291526154157143,
+       "coverage68": 0.0,
+       "coverage95": 0.1111111111111111
+      },
+      "D": {
+       "n": 36,
+       "median_abs_relative": 0.0004141867344665817,
+       "coverage68": 0.8888888888888888,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 14,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 9,
+        "sphere_to_upright": 11,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 16,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       }
+      }
+     }
+    }
+   },
+   "vc": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 5.605862199998228,
+     "parameters": {
+      "R": {
+       "n": 50,
+       "median_abs_relative": 0.0026345131040862446,
+       "coverage68": 0.74,
+       "coverage95": 0.94
+      },
+      "D": {
+       "n": 50,
+       "median_abs_relative": 0.0006005093652234894,
+       "coverage68": 0.84,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 19,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 31,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.86,
+     "truth_mode_first": 0.86,
+     "truth_mode_listed": 0.86,
+     "seconds": 26.180516000000353,
+     "parameters": {
+      "R": {
+       "n": 43,
+       "median_abs_relative": 0.002314695654361265,
+       "coverage68": 0.6976744186046512,
+       "coverage95": 0.9534883720930233
+      },
+      "D": {
+       "n": 43,
+       "median_abs_relative": 0.0006030597309867325,
+       "coverage68": 0.7674418604651163,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 7,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 17,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 26,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "sphere,sphere": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.46,
+     "truth_mode_listed": 0.48,
+     "seconds": 20.05459360000168,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.0885968615914684,
+       "coverage68": 0.17,
+       "coverage95": 0.23
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0032846682647669767,
+       "coverage68": 0.43,
+       "coverage95": 0.6
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.02,
+     "truth_mode_first": 0.02,
+     "truth_mode_listed": 0.16,
+     "seconds": 48.74353345000418,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.11318051533086759,
+       "coverage68": 0.17,
+       "coverage95": 0.24
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0005501938809647777,
+       "coverage68": 0.78,
+       "coverage95": 0.95
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere,vc": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.64,
+     "truth_mode_listed": 0.64,
+     "seconds": 17.01923590000297,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.07079513867176446,
+       "coverage68": 0.22,
+       "coverage95": 0.39
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0020232084415567897,
+       "coverage68": 0.57,
+       "coverage95": 0.68
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.26,
+     "truth_mode_first": 0.24,
+     "truth_mode_listed": 0.54,
+     "seconds": 52.77794814998924,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.05966623372032681,
+       "coverage68": 0.32,
+       "coverage95": 0.44
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0008537822818485141,
+       "coverage68": 0.75,
+       "coverage95": 0.93
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 0-1.2": {
+    "cuts": 0
+   },
+   "q+R 1.2-1.7": {
+    "cuts": 25,
+    "fit": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 5.648583200003486,
+     "parameters": {
+      "R": {
+       "n": 25,
+       "median_abs_relative": 0.012803075654444385,
+       "coverage68": 0.4,
+       "coverage95": 0.6
+      },
+      "D": {
+       "n": 25,
+       "median_abs_relative": 0.00031321090255076456,
+       "coverage68": 0.92,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 11,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 14,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 0.84,
+     "truth_mode_first": 0.84,
+     "truth_mode_listed": 0.88,
+     "seconds": 23.90741259999777,
+     "parameters": {
+      "R": {
+       "n": 22,
+       "median_abs_relative": 0.010404936158272482,
+       "coverage68": 0.36363636363636365,
+       "coverage95": 0.6818181818181818
+      },
+      "D": {
+       "n": 22,
+       "median_abs_relative": 0.0004977033656780039,
+       "coverage68": 0.8636363636363636,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 3,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 9,
+        "sphere_to_upright": 1,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 12,
+        "sphere_fraction_of_fitted_uprights": 0.07692307692307693
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 1.7-2.3": {
+    "cuts": 24,
+    "fit": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 5.601273199994466,
+     "parameters": {
+      "R": {
+       "n": 26,
+       "median_abs_relative": 0.008548155533329993,
+       "coverage68": 0.5384615384615384,
+       "coverage95": 0.6538461538461539
+      },
+      "D": {
+       "n": 26,
+       "median_abs_relative": 0.0008831591511093695,
+       "coverage68": 0.7692307692307693,
+       "coverage95": 0.8846153846153846
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 7,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 5,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 4,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 0.3333333333333333,
+     "truth_mode_first": 0.3333333333333333,
+     "truth_mode_listed": 0.4166666666666667,
+     "seconds": 25.88271320000058,
+     "parameters": {
+      "R": {
+       "n": 24,
+       "median_abs_relative": 0.09600616673424439,
+       "coverage68": 0.3333333333333333,
+       "coverage95": 0.4583333333333333
+      },
+      "D": {
+       "n": 24,
+       "median_abs_relative": 0.00033668476036086137,
+       "coverage68": 0.7916666666666666,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 2,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 10,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 5,
+        "sphere_fraction_of_fitted_uprights": 0.6666666666666666
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 3,
+        "sphere_fraction_of_fitted_uprights": 0.4
+       }
+      }
+     }
+    }
+   },
+   "q+R 2.3-inf": {
+    "cuts": 151,
+    "fit": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.6357615894039735,
+     "truth_mode_listed": 0.6423841059602649,
+     "seconds": 14.932206600002246,
+     "parameters": {
+      "R": {
+       "n": 249,
+       "median_abs_relative": 0.07430705237526447,
+       "coverage68": 0.21686746987951808,
+       "coverage95": 0.3373493975903614
+      },
+      "D": {
+       "n": 249,
+       "median_abs_relative": 0.0027436103515542376,
+       "coverage68": 0.5140562248995983,
+       "coverage95": 0.6666666666666666
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 26,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 27,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 0.24503311258278146,
+     "truth_mode_first": 0.23841059602649006,
+     "truth_mode_listed": 0.37748344370860926,
+     "seconds": 47.859855399998196,
+     "parameters": {
+      "R": {
+       "n": 233,
+       "median_abs_relative": 0.08929805413502889,
+       "coverage68": 0.2703862660944206,
+       "coverage95": 0.37339055793991416
+      },
+      "D": {
+       "n": 233,
+       "median_abs_relative": 0.0006754745450957556,
+       "coverage68": 0.7725321888412017,
+       "coverage95": 0.9484978540772532
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 16,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 14,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 23,
+        "sphere_fraction_of_fitted_uprights": 0.3783783783783784
+       }
+      }
+     }
+    }
+   }
+  },
+  "si_l3": {
+   "overall": {
+    "cuts": 200,
+    "fit": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.87,
+     "truth_mode_listed": 0.965,
+     "seconds": 28.556994549999217,
+     "parameters": {
+      "R": {
+       "n": 300,
+       "median_abs_relative": 0.029614002825076757,
+       "coverage68": 0.5733333333333334,
+       "coverage95": 0.7266666666666667
+      },
+      "D": {
+       "n": 300,
+       "median_abs_relative": 0.0005915389743646471,
+       "coverage68": 0.8833333333333333,
+       "coverage95": 0.9933333333333333
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 19,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 31,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 0.695,
+     "truth_mode_first": 0.595,
+     "truth_mode_listed": 0.88,
+     "seconds": 93.63733899999716,
+     "parameters": {
+      "R": {
+       "n": 289,
+       "median_abs_relative": 0.060854277256328304,
+       "coverage68": 0.5570934256055363,
+       "coverage95": 0.6678200692041523
+      },
+      "D": {
+       "n": 289,
+       "median_abs_relative": 0.0005741404958266028,
+       "coverage68": 0.889273356401384,
+       "coverage95": 0.9965397923875432
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 11,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 15,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 2,
+        "upright_to_upright": 16,
+        "sphere_fraction_of_fitted_uprights": 0.23809523809523808
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 22,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 24,
+        "sphere_fraction_of_fitted_uprights": 0.1724137931034483
+       }
+      }
+     }
+    }
+   },
+   "spheres only": {
+    "cuts": 100,
+    "fit": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.78,
+     "truth_mode_listed": 0.96,
+     "seconds": 34.976136650002445,
+     "parameters": {
+      "R": {
+       "n": 150,
+       "median_abs_relative": 0.05168620758485837,
+       "coverage68": 0.5333333333333333,
+       "coverage95": 0.6466666666666666
+      },
+      "D": {
+       "n": 150,
+       "median_abs_relative": 0.0005259568772902901,
+       "coverage68": 0.9,
+       "coverage95": 0.9933333333333333
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 0.66,
+     "truth_mode_first": 0.53,
+     "truth_mode_listed": 0.85,
+     "seconds": 96.08287595000002,
+     "parameters": {
+      "R": {
+       "n": 147,
+       "median_abs_relative": 0.07915896631641872,
+       "coverage68": 0.4965986394557823,
+       "coverage95": 0.5850340136054422
+      },
+      "D": {
+       "n": 147,
+       "median_abs_relative": 0.000516206555707166,
+       "coverage68": 0.9115646258503401,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 3,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 15,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 22,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       }
+      }
+     }
+    }
+   },
+   "sphere": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.94,
+     "truth_mode_listed": 0.98,
+     "seconds": 18.13637210000161,
+     "parameters": {
+      "R": {
+       "n": 50,
+       "median_abs_relative": 0.04325401226184322,
+       "coverage68": 0.38,
+       "coverage95": 0.5
+      },
+      "D": {
+       "n": 50,
+       "median_abs_relative": 0.0004949441184447512,
+       "coverage68": 0.84,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.74,
+     "truth_mode_first": 0.7,
+     "truth_mode_listed": 0.94,
+     "seconds": 54.97775100000217,
+     "parameters": {
+      "R": {
+       "n": 47,
+       "median_abs_relative": 0.060854277256328304,
+       "coverage68": 0.3404255319148936,
+       "coverage95": 0.3829787234042553
+      },
+      "D": {
+       "n": 47,
+       "median_abs_relative": 0.0004328062998918414,
+       "coverage68": 0.8723404255319149,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 3,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 15,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 22,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       }
+      }
+     }
+    }
+   },
+   "vc": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 5.557497800000419,
+     "parameters": {
+      "R": {
+       "n": 50,
+       "median_abs_relative": 0.0026473358003025194,
+       "coverage68": 0.74,
+       "coverage95": 0.94
+      },
+      "D": {
+       "n": 50,
+       "median_abs_relative": 0.0006022582285944988,
+       "coverage68": 0.84,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 19,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 31,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.8,
+     "truth_mode_first": 0.8,
+     "truth_mode_listed": 0.86,
+     "seconds": 45.16249969999626,
+     "parameters": {
+      "R": {
+       "n": 42,
+       "median_abs_relative": 0.0023049102840424496,
+       "coverage68": 0.7857142857142857,
+       "coverage95": 0.9523809523809523
+      },
+      "D": {
+       "n": 42,
+       "median_abs_relative": 0.00059976247233684,
+       "coverage68": 0.7619047619047619,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 8,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 2,
+        "upright_to_upright": 16,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 24,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "sphere,sphere": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.62,
+     "truth_mode_listed": 0.94,
+     "seconds": 80.05299190000005,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.06662297986874666,
+       "coverage68": 0.61,
+       "coverage95": 0.72
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.000545110330380183,
+       "coverage68": 0.93,
+       "coverage95": 0.99
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.58,
+     "truth_mode_first": 0.36,
+     "truth_mode_listed": 0.76,
+     "seconds": 130.63161630000104,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.09255693785947522,
+       "coverage68": 0.57,
+       "coverage95": 0.68
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0005385037522396274,
+       "coverage68": 0.93,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere,vc": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.92,
+     "truth_mode_listed": 0.94,
+     "seconds": 37.85279864999757,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.03272540407631369,
+       "coverage68": 0.55,
+       "coverage95": 0.74
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0008119808662957473,
+       "coverage68": 0.88,
+       "coverage95": 0.99
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.66,
+     "truth_mode_first": 0.52,
+     "truth_mode_listed": 0.96,
+     "seconds": 121.73524779999934,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.06669870601068406,
+       "coverage68": 0.55,
+       "coverage95": 0.67
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0007560441350974445,
+       "coverage68": 0.91,
+       "coverage95": 0.99
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 0-1.2": {
+    "cuts": 0
+   },
+   "q+R 1.2-1.7": {
+    "cuts": 25,
+    "fit": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.92,
+     "truth_mode_listed": 0.96,
+     "seconds": 6.8906401000058395,
+     "parameters": {
+      "R": {
+       "n": 25,
+       "median_abs_relative": 0.01045799949779691,
+       "coverage68": 0.52,
+       "coverage95": 0.72
+      },
+      "D": {
+       "n": 25,
+       "median_abs_relative": 0.0003240138328362008,
+       "coverage68": 0.92,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 11,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 14,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 0.8,
+     "truth_mode_first": 0.76,
+     "truth_mode_listed": 0.84,
+     "seconds": 49.31977659999393,
+     "parameters": {
+      "R": {
+       "n": 23,
+       "median_abs_relative": 0.01045799949779691,
+       "coverage68": 0.6521739130434783,
+       "coverage95": 0.782608695652174
+      },
+      "D": {
+       "n": 23,
+       "median_abs_relative": 0.00026742072299068553,
+       "coverage68": 0.8695652173913043,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 2,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 9,
+        "sphere_to_upright": 1,
+        "upright_to_sphere": 2,
+        "upright_to_upright": 11,
+        "sphere_fraction_of_fitted_uprights": 0.08333333333333333
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 1.7-2.3": {
+    "cuts": 24,
+    "fit": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.875,
+     "truth_mode_listed": 1.0,
+     "seconds": 16.484876649996295,
+     "parameters": {
+      "R": {
+       "n": 26,
+       "median_abs_relative": 0.026348475862034315,
+       "coverage68": 0.5384615384615384,
+       "coverage95": 0.6153846153846154
+      },
+      "D": {
+       "n": 26,
+       "median_abs_relative": 0.000477959532451222,
+       "coverage68": 0.8846153846153846,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 7,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 5,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 4,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 0.6666666666666666,
+     "truth_mode_first": 0.5833333333333334,
+     "truth_mode_listed": 0.9583333333333334,
+     "seconds": 46.43030440000075,
+     "parameters": {
+      "R": {
+       "n": 25,
+       "median_abs_relative": 0.08502585849710598,
+       "coverage68": 0.52,
+       "coverage95": 0.52
+      },
+      "D": {
+       "n": 25,
+       "median_abs_relative": 0.0004169972980923031,
+       "coverage68": 0.8,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 1,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 4,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 5,
+        "sphere_fraction_of_fitted_uprights": 0.4444444444444444
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 1,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 3,
+        "sphere_fraction_of_fitted_uprights": 0.4
+       }
+      }
+     }
+    }
+   },
+   "q+R 2.3-inf": {
+    "cuts": 151,
+    "fit": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.8609271523178808,
+     "truth_mode_listed": 0.9602649006622517,
+     "seconds": 34.55574009999691,
+     "parameters": {
+      "R": {
+       "n": 249,
+       "median_abs_relative": 0.03305503764606077,
+       "coverage68": 0.5823293172690763,
+       "coverage95": 0.7389558232931727
+      },
+      "D": {
+       "n": 249,
+       "median_abs_relative": 0.0006376883219370022,
+       "coverage68": 0.8795180722891566,
+       "coverage95": 0.9919678714859438
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 26,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 27,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 0.6821192052980133,
+     "truth_mode_first": 0.5695364238410596,
+     "truth_mode_listed": 0.8741721854304636,
+     "seconds": 109.84249739999359,
+     "parameters": {
+      "R": {
+       "n": 241,
+       "median_abs_relative": 0.0629918301026069,
+       "coverage68": 0.5518672199170125,
+       "coverage95": 0.6721991701244814
+      },
+      "D": {
+       "n": 241,
+       "median_abs_relative": 0.000625103736786814,
+       "coverage68": 0.9004149377593361,
+       "coverage95": 0.995850622406639
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 8,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 21,
+        "sphere_to_upright": 3,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 21,
+        "sphere_fraction_of_fitted_uprights": 0.125
+       }
+      }
+     }
+    }
+   }
+  },
+  "si_auto2": {
+   "overall": {
+    "cuts": 200,
+    "auto": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 0.305,
+     "truth_mode_first": 0.3,
+     "truth_mode_listed": 0.44,
+     "seconds": 55.1502510499995,
+     "parameters": {
+      "R": {
+       "n": 273,
+       "median_abs_relative": 0.08180576398333972,
+       "coverage68": 0.28205128205128205,
+       "coverage95": 0.3992673992673993
+      },
+      "D": {
+       "n": 273,
+       "median_abs_relative": 0.0006620829863961397,
+       "coverage68": 0.7802197802197802,
+       "coverage95": 0.9560439560439561
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 27,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 8,
+        "sphere_to_upright": 11,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 16,
+        "sphere_fraction_of_fitted_uprights": 0.4074074074074074
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 15,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 23,
+        "sphere_fraction_of_fitted_uprights": 0.39473684210526316
+       }
+      }
+     }
+    }
+   },
+   "spheres only": {
+    "cuts": 100,
+    "auto": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 0.09,
+     "truth_mode_first": 0.09,
+     "truth_mode_listed": 0.19,
+     "seconds": 54.04420115001267,
+     "parameters": {
+      "R": {
+       "n": 134,
+       "median_abs_relative": 0.10805631979764585,
+       "coverage68": 0.12686567164179105,
+       "coverage95": 0.208955223880597
+      },
+      "D": {
+       "n": 134,
+       "median_abs_relative": 0.0005326900219247976,
+       "coverage68": 0.8059701492537313,
+       "coverage95": 0.9626865671641791
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 16,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 8,
+        "sphere_to_upright": 11,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 15,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       }
+      }
+     }
+    }
+   },
+   "sphere": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.16,
+     "truth_mode_first": 0.16,
+     "truth_mode_listed": 0.22,
+     "seconds": 46.88517799999681,
+     "parameters": {
+      "R": {
+       "n": 34,
+       "median_abs_relative": 0.10286733100315543,
+       "coverage68": 0.0,
+       "coverage95": 0.11764705882352941
+      },
+      "D": {
+       "n": 34,
+       "median_abs_relative": 0.0004141867344665817,
+       "coverage68": 0.8823529411764706,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 16,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 8,
+        "sphere_to_upright": 11,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 15,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       }
+      }
+     }
+    }
+   },
+   "vc": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.78,
+     "truth_mode_first": 0.78,
+     "truth_mode_listed": 0.84,
+     "seconds": 39.41382669999439,
+     "parameters": {
+      "R": {
+       "n": 39,
+       "median_abs_relative": 0.002314695654361265,
+       "coverage68": 0.717948717948718,
+       "coverage95": 0.9487179487179487
+      },
+      "D": {
+       "n": 39,
+       "median_abs_relative": 0.0006030597309867325,
+       "coverage68": 0.7692307692307693,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 11,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 16,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 23,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "sphere,sphere": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.02,
+     "truth_mode_first": 0.02,
+     "truth_mode_listed": 0.16,
+     "seconds": 59.207615500010434,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.11318051533086759,
+       "coverage68": 0.17,
+       "coverage95": 0.24
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0005501938809647777,
+       "coverage68": 0.78,
+       "coverage95": 0.95
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere,vc": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.26,
+     "truth_mode_first": 0.24,
+     "truth_mode_listed": 0.54,
+     "seconds": 65.70836259999487,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.05966623372032681,
+       "coverage68": 0.32,
+       "coverage95": 0.44
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0008537822818485141,
+       "coverage68": 0.75,
+       "coverage95": 0.93
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 0-1.2": {
+    "cuts": 0
+   },
+   "q+R 1.2-1.7": {
+    "cuts": 25,
+    "auto": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 0.8,
+     "truth_mode_first": 0.8,
+     "truth_mode_listed": 0.88,
+     "seconds": 28.34119790000841,
+     "parameters": {
+      "R": {
+       "n": 21,
+       "median_abs_relative": 0.01036016553132757,
+       "coverage68": 0.38095238095238093,
+       "coverage95": 0.7142857142857143
+      },
+      "D": {
+       "n": 21,
+       "median_abs_relative": 0.0006620829863961397,
+       "coverage68": 0.8571428571428571,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 4,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 8,
+        "sphere_to_upright": 1,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 12,
+        "sphere_fraction_of_fitted_uprights": 0.07692307692307693
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 1.7-2.3": {
+    "cuts": 24,
+    "auto": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 0.2916666666666667,
+     "truth_mode_first": 0.2916666666666667,
+     "truth_mode_listed": 0.375,
+     "seconds": 34.99799370000255,
+     "parameters": {
+      "R": {
+       "n": 23,
+       "median_abs_relative": 0.09643475977301719,
+       "coverage68": 0.30434782608695654,
+       "coverage95": 0.43478260869565216
+      },
+      "D": {
+       "n": 23,
+       "median_abs_relative": 0.0002748727130057471,
+       "coverage68": 0.8260869565217391,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 3,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 10,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 4,
+        "sphere_fraction_of_fitted_uprights": 0.7142857142857143
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 3,
+        "sphere_fraction_of_fitted_uprights": 0.4
+       }
+      }
+     }
+    }
+   },
+   "q+R 2.3-inf": {
+    "cuts": 151,
+    "auto": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 0.2251655629139073,
+     "truth_mode_first": 0.2185430463576159,
+     "truth_mode_listed": 0.37748344370860926,
+     "seconds": 58.70556289999513,
+     "parameters": {
+      "R": {
+       "n": 229,
+       "median_abs_relative": 0.0923403285507185,
+       "coverage68": 0.27074235807860264,
+       "coverage95": 0.36681222707423583
+      },
+      "D": {
+       "n": 229,
+       "median_abs_relative": 0.0006789063774426118,
+       "coverage68": 0.7685589519650655,
+       "coverage95": 0.9475982532751092
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 20,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 13,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 20,
+        "sphere_fraction_of_fitted_uprights": 0.3939393939393939
+       }
+      }
+     }
+    }
+   }
+  },
+  "si_l4": {
+   "overall": {
+    "cuts": 200,
+    "fit": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.955,
+     "truth_mode_listed": 0.975,
+     "seconds": 9.517421549999199,
+     "parameters": {
+      "R": {
+       "n": 300,
+       "median_abs_relative": 0.0055063488284546325,
+       "coverage68": 0.72,
+       "coverage95": 0.9033333333333333
+      },
+      "D": {
+       "n": 300,
+       "median_abs_relative": 0.0006004252998317305,
+       "coverage68": 0.88,
+       "coverage95": 0.99
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 19,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 31,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 0.715,
+     "truth_mode_first": 0.69,
+     "truth_mode_listed": 0.905,
+     "seconds": 57.742105800000445,
+     "parameters": {
+      "R": {
+       "n": 288,
+       "median_abs_relative": 0.012642711283009367,
+       "coverage68": 0.6006944444444444,
+       "coverage95": 0.7847222222222222
+      },
+      "D": {
+       "n": 288,
+       "median_abs_relative": 0.0006095487657874488,
+       "coverage68": 0.8819444444444444,
+       "coverage95": 0.9861111111111112
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 12,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 14,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 16,
+        "sphere_fraction_of_fitted_uprights": 0.23809523809523808
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 26,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 25,
+        "sphere_fraction_of_fitted_uprights": 0.07407407407407407
+       }
+      }
+     }
+    }
+   },
+   "spheres only": {
+    "cuts": 100,
+    "fit": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.92,
+     "truth_mode_listed": 0.95,
+     "seconds": 7.617887550001797,
+     "parameters": {
+      "R": {
+       "n": 150,
+       "median_abs_relative": 0.0069206912767396656,
+       "coverage68": 0.6733333333333333,
+       "coverage95": 0.8666666666666667
+      },
+      "D": {
+       "n": 150,
+       "median_abs_relative": 0.000585231772919359,
+       "coverage68": 0.9,
+       "coverage95": 0.9866666666666667
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 0.67,
+     "truth_mode_first": 0.62,
+     "truth_mode_listed": 0.87,
+     "seconds": 55.13293734999979,
+     "parameters": {
+      "R": {
+       "n": 147,
+       "median_abs_relative": 0.017210648355227676,
+       "coverage68": 0.5850340136054422,
+       "coverage95": 0.7346938775510204
+      },
+      "D": {
+       "n": 147,
+       "median_abs_relative": 0.00064593968667781,
+       "coverage68": 0.9115646258503401,
+       "coverage95": 0.9863945578231292
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 3,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 14,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 26,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       }
+      }
+     }
+    }
+   },
+   "sphere": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 4.013293949999024,
+     "parameters": {
+      "R": {
+       "n": 50,
+       "median_abs_relative": 0.004007863297052883,
+       "coverage68": 0.76,
+       "coverage95": 0.98
+      },
+      "D": {
+       "n": 50,
+       "median_abs_relative": 0.0005819111839849844,
+       "coverage68": 0.88,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.8,
+     "truth_mode_first": 0.8,
+     "truth_mode_listed": 0.94,
+     "seconds": 44.14048465000019,
+     "parameters": {
+      "R": {
+       "n": 47,
+       "median_abs_relative": 0.004401810672634676,
+       "coverage68": 0.6170212765957447,
+       "coverage95": 0.851063829787234
+      },
+      "D": {
+       "n": 47,
+       "median_abs_relative": 0.0006350478037282503,
+       "coverage68": 0.8936170212765957,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 3,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 14,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 26,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       }
+      }
+     }
+    }
+   },
+   "vc": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 5.579498550000153,
+     "parameters": {
+      "R": {
+       "n": 50,
+       "median_abs_relative": 0.002610468486006934,
+       "coverage68": 0.74,
+       "coverage95": 1.0
+      },
+      "D": {
+       "n": 50,
+       "median_abs_relative": 0.0006209703975940117,
+       "coverage68": 0.84,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 19,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 31,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.82,
+     "truth_mode_first": 0.82,
+     "truth_mode_listed": 0.88,
+     "seconds": 52.54277219999949,
+     "parameters": {
+      "R": {
+       "n": 41,
+       "median_abs_relative": 0.0023255152200603035,
+       "coverage68": 0.7073170731707317,
+       "coverage95": 1.0
+      },
+      "D": {
+       "n": 41,
+       "median_abs_relative": 0.0005980201302429045,
+       "coverage68": 0.8048780487804879,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 9,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 16,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 25,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "sphere,sphere": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.84,
+     "truth_mode_listed": 0.9,
+     "seconds": 18.922770399998626,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.014539393832981529,
+       "coverage68": 0.63,
+       "coverage95": 0.81
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0005856697859124016,
+       "coverage68": 0.91,
+       "coverage95": 0.98
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.54,
+     "truth_mode_first": 0.44,
+     "truth_mode_listed": 0.8,
+     "seconds": 63.868977250000626,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.032836391337870474,
+       "coverage68": 0.57,
+       "coverage95": 0.68
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0006621227458065704,
+       "coverage68": 0.92,
+       "coverage95": 0.98
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere,vc": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.98,
+     "truth_mode_listed": 1.0,
+     "seconds": 17.465000150001742,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.007981402541948457,
+       "coverage68": 0.78,
+       "coverage95": 0.91
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0006399246624144705,
+       "coverage68": 0.87,
+       "coverage95": 0.99
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.7,
+     "truth_mode_first": 0.7,
+     "truth_mode_listed": 1.0,
+     "seconds": 65.54328739999801,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.01579445400276186,
+       "coverage68": 0.58,
+       "coverage95": 0.77
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0005768504515042405,
+       "coverage68": 0.87,
+       "coverage95": 0.98
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 0-1.2": {
+    "cuts": 0
+   },
+   "q+R 1.2-1.7": {
+    "cuts": 25,
+    "fit": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 4.370716199999151,
+     "parameters": {
+      "R": {
+       "n": 25,
+       "median_abs_relative": 0.0036610150312290646,
+       "coverage68": 0.72,
+       "coverage95": 0.96
+      },
+      "D": {
+       "n": 25,
+       "median_abs_relative": 0.0006347890612846685,
+       "coverage68": 0.92,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 11,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 14,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 0.8,
+     "truth_mode_first": 0.8,
+     "truth_mode_listed": 0.88,
+     "seconds": 54.558445499998925,
+     "parameters": {
+      "R": {
+       "n": 22,
+       "median_abs_relative": 0.0033972852462487713,
+       "coverage68": 0.6363636363636364,
+       "coverage95": 0.9090909090909091
+      },
+      "D": {
+       "n": 22,
+       "median_abs_relative": 0.0005423516107527782,
+       "coverage68": 0.9090909090909091,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 3,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 8,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 12,
+        "sphere_fraction_of_fitted_uprights": 0.14285714285714285
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 1.7-2.3": {
+    "cuts": 24,
+    "fit": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 4.342877649998627,
+     "parameters": {
+      "R": {
+       "n": 26,
+       "median_abs_relative": 0.0036415554999817967,
+       "coverage68": 0.6538461538461539,
+       "coverage95": 0.9615384615384616
+      },
+      "D": {
+       "n": 26,
+       "median_abs_relative": 0.00040263525688633006,
+       "coverage68": 0.8846153846153846,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 7,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 5,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 4,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 0.75,
+     "truth_mode_first": 0.75,
+     "truth_mode_listed": 0.9166666666666666,
+     "seconds": 42.63855750000084,
+     "parameters": {
+      "R": {
+       "n": 24,
+       "median_abs_relative": 0.004218607757533854,
+       "coverage68": 0.5416666666666666,
+       "coverage95": 0.7916666666666666
+      },
+      "D": {
+       "n": 24,
+       "median_abs_relative": 0.0003599569438953454,
+       "coverage68": 0.9166666666666666,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 2,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 3,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 4,
+        "sphere_fraction_of_fitted_uprights": 0.42857142857142855
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 4,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 3,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "q+R 2.3-inf": {
+    "cuts": 151,
+    "fit": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.9403973509933775,
+     "truth_mode_listed": 0.9668874172185431,
+     "seconds": 12.705151799997111,
+     "parameters": {
+      "R": {
+       "n": 249,
+       "median_abs_relative": 0.0066268545335483875,
+       "coverage68": 0.7269076305220884,
+       "coverage95": 0.891566265060241
+      },
+      "D": {
+       "n": 249,
+       "median_abs_relative": 0.0006043408721545518,
+       "coverage68": 0.8755020080321285,
+       "coverage95": 0.9879518072289156
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 26,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 27,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 0.695364238410596,
+     "truth_mode_first": 0.6622516556291391,
+     "truth_mode_listed": 0.9072847682119205,
+     "seconds": 61.88199160000295,
+     "parameters": {
+      "R": {
+       "n": 242,
+       "median_abs_relative": 0.014634391677450065,
+       "coverage68": 0.6033057851239669,
+       "coverage95": 0.7727272727272727
+      },
+      "D": {
+       "n": 242,
+       "median_abs_relative": 0.0006507352914172371,
+       "coverage68": 0.8760330578512396,
+       "coverage95": 0.9834710743801653
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 7,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 22,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 22,
+        "sphere_fraction_of_fitted_uprights": 0.08333333333333333
+       }
+      }
+     }
+    }
+   }
+  },
+  "ps100_l4": {
+   "overall": {
+    "cuts": 200,
+    "fit": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.955,
+     "truth_mode_listed": 0.97,
+     "seconds": 8.891440899999452,
+     "parameters": {
+      "R": {
+       "n": 300,
+       "median_abs_relative": 0.005345392193904619,
+       "coverage68": 0.7666666666666667,
+       "coverage95": 0.9366666666666666
+      },
+      "D": {
+       "n": 300,
+       "median_abs_relative": 0.0006304554787472383,
+       "coverage68": 0.89,
+       "coverage95": 0.9966666666666667
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 19,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 31,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 0.75,
+     "truth_mode_first": 0.72,
+     "truth_mode_listed": 0.91,
+     "seconds": 53.7850939000009,
+     "parameters": {
+      "R": {
+       "n": 286,
+       "median_abs_relative": 0.008172423051048927,
+       "coverage68": 0.6433566433566433,
+       "coverage95": 0.8356643356643356
+      },
+      "D": {
+       "n": 286,
+       "median_abs_relative": 0.0005873510260159254,
+       "coverage68": 0.8811188811188811,
+       "coverage95": 0.9895104895104895
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 14,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 12,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 16,
+        "sphere_fraction_of_fitted_uprights": 0.23809523809523808
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 29,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 24,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "spheres only": {
+    "cuts": 100,
+    "fit": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.92,
+     "truth_mode_listed": 0.94,
+     "seconds": 8.636965100000452,
+     "parameters": {
+      "R": {
+       "n": 150,
+       "median_abs_relative": 0.006839252462619239,
+       "coverage68": 0.7666666666666667,
+       "coverage95": 0.92
+      },
+      "D": {
+       "n": 150,
+       "median_abs_relative": 0.0006323244014515561,
+       "coverage68": 0.8866666666666667,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 0.72,
+     "truth_mode_first": 0.67,
+     "truth_mode_listed": 0.88,
+     "seconds": 52.796423449999565,
+     "parameters": {
+      "R": {
+       "n": 146,
+       "median_abs_relative": 0.008788029822549337,
+       "coverage68": 0.6232876712328768,
+       "coverage95": 0.7945205479452054
+      },
+      "D": {
+       "n": 146,
+       "median_abs_relative": 0.0005665877198335334,
+       "coverage68": 0.8972602739726028,
+       "coverage95": 0.9863013698630136
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 4,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 12,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 29,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 3.780865249999806,
+     "parameters": {
+      "R": {
+       "n": 50,
+       "median_abs_relative": 0.0036984904578419298,
+       "coverage68": 0.76,
+       "coverage95": 0.96
+      },
+      "D": {
+       "n": 50,
+       "median_abs_relative": 0.0005103382333713213,
+       "coverage68": 0.86,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 18,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 32,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.82,
+     "truth_mode_first": 0.82,
+     "truth_mode_listed": 0.94,
+     "seconds": 52.796423449999565,
+     "parameters": {
+      "R": {
+       "n": 46,
+       "median_abs_relative": 0.003935823632745694,
+       "coverage68": 0.6739130434782609,
+       "coverage95": 0.8695652173913043
+      },
+      "D": {
+       "n": 46,
+       "median_abs_relative": 0.0004757842360121334,
+       "coverage68": 0.9130434782608695,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 4,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 12,
+        "sphere_to_upright": 5,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 29,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "vc": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 5.340392700001075,
+     "parameters": {
+      "R": {
+       "n": 50,
+       "median_abs_relative": 0.002610468486006934,
+       "coverage68": 0.74,
+       "coverage95": 1.0
+      },
+      "D": {
+       "n": 50,
+       "median_abs_relative": 0.0006209703975940117,
+       "coverage68": 0.84,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 19,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 31,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.8,
+     "truth_mode_first": 0.8,
+     "truth_mode_listed": 0.88,
+     "seconds": 56.82388564999928,
+     "parameters": {
+      "R": {
+       "n": 40,
+       "median_abs_relative": 0.002530661505904197,
+       "coverage68": 0.7,
+       "coverage95": 1.0
+      },
+      "D": {
+       "n": 40,
+       "median_abs_relative": 0.0005714890013291951,
+       "coverage68": 0.8,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 10,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 16,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 24,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "sphere,sphere": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.84,
+     "truth_mode_listed": 0.88,
+     "seconds": 17.749045450000267,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.010574044414880801,
+       "coverage68": 0.77,
+       "coverage95": 0.9
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0006447197032208307,
+       "coverage68": 0.9,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.62,
+     "truth_mode_first": 0.52,
+     "truth_mode_listed": 0.82,
+     "seconds": 52.32183735000035,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.016049521052144522,
+       "coverage68": 0.6,
+       "coverage95": 0.76
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0005871421590149528,
+       "coverage68": 0.89,
+       "coverage95": 0.98
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere,vc": {
+    "cuts": 50,
+    "fit": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.98,
+     "truth_mode_listed": 1.0,
+     "seconds": 14.580090499999642,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.008284907651467832,
+       "coverage68": 0.78,
+       "coverage95": 0.93
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0006259662780340736,
+       "coverage68": 0.92,
+       "coverage95": 0.99
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.76,
+     "truth_mode_first": 0.74,
+     "truth_mode_listed": 1.0,
+     "seconds": 50.546983700000055,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.012956926047018702,
+       "coverage68": 0.65,
+       "coverage95": 0.83
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0006238997808258873,
+       "coverage68": 0.89,
+       "coverage95": 0.99
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 0-1.2": {
+    "cuts": 0
+   },
+   "q+R 1.2-1.7": {
+    "cuts": 25,
+    "fit": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 1.0,
+     "truth_mode_listed": 1.0,
+     "seconds": 4.300101999999242,
+     "parameters": {
+      "R": {
+       "n": 25,
+       "median_abs_relative": 0.002803442782393528,
+       "coverage68": 0.76,
+       "coverage95": 0.96
+      },
+      "D": {
+       "n": 25,
+       "median_abs_relative": 0.00045672608208646714,
+       "coverage68": 0.92,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 11,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 14,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 0.8,
+     "truth_mode_first": 0.8,
+     "truth_mode_listed": 0.88,
+     "seconds": 44.936390000000756,
+     "parameters": {
+      "R": {
+       "n": 22,
+       "median_abs_relative": 0.002791573710689499,
+       "coverage68": 0.6818181818181818,
+       "coverage95": 0.9090909090909091
+      },
+      "D": {
+       "n": 22,
+       "median_abs_relative": 0.0004723979426122238,
+       "coverage68": 0.9090909090909091,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 3,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 8,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 12,
+        "sphere_fraction_of_fitted_uprights": 0.14285714285714285
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 1.7-2.3": {
+    "cuts": 24,
+    "fit": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.9166666666666666,
+     "truth_mode_listed": 0.9166666666666666,
+     "seconds": 3.9657334499988792,
+     "parameters": {
+      "R": {
+       "n": 26,
+       "median_abs_relative": 0.003441627535126557,
+       "coverage68": 0.8076923076923077,
+       "coverage95": 0.9230769230769231
+      },
+      "D": {
+       "n": 26,
+       "median_abs_relative": 0.0006473202757154572,
+       "coverage68": 0.8461538461538461,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 7,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 5,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 4,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 0.7083333333333334,
+     "truth_mode_first": 0.7083333333333334,
+     "truth_mode_listed": 0.875,
+     "seconds": 52.796423449999565,
+     "parameters": {
+      "R": {
+       "n": 24,
+       "median_abs_relative": 0.005035600116508443,
+       "coverage68": 0.6666666666666666,
+       "coverage95": 0.7916666666666666
+      },
+      "D": {
+       "n": 24,
+       "median_abs_relative": 0.00033398676104962055,
+       "coverage68": 0.875,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 2,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 4,
+        "sphere_to_upright": 3,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 4,
+        "sphere_fraction_of_fitted_uprights": 0.42857142857142855
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 3,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "q+R 2.3-inf": {
+    "cuts": 151,
+    "fit": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 1.0,
+     "truth_mode_first": 0.9536423841059603,
+     "truth_mode_listed": 0.9735099337748344,
+     "seconds": 10.643857099999877,
+     "parameters": {
+      "R": {
+       "n": 249,
+       "median_abs_relative": 0.006662147448574185,
+       "coverage68": 0.7630522088353414,
+       "coverage95": 0.9357429718875502
+      },
+      "D": {
+       "n": 249,
+       "median_abs_relative": 0.0006368372024059266,
+       "coverage68": 0.891566265060241,
+       "coverage95": 0.9959839357429718
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 26,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 27,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    },
+    "choose": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 0.7483443708609272,
+     "truth_mode_first": 0.7086092715231788,
+     "truth_mode_listed": 0.9205298013245033,
+     "seconds": 56.05907660000048,
+     "parameters": {
+      "R": {
+       "n": 240,
+       "median_abs_relative": 0.009525173438297174,
+       "coverage68": 0.6375,
+       "coverage95": 0.8333333333333334
+      },
+      "D": {
+       "n": 240,
+       "median_abs_relative": 0.0006027751664093306,
+       "coverage68": 0.8791666666666667,
+       "coverage95": 0.9875
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 9,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 23,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 21,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   }
+  },
+  "si_auto4": {
+   "overall": {
+    "cuts": 200,
+    "auto": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 0.695,
+     "truth_mode_first": 0.67,
+     "truth_mode_listed": 0.89,
+     "seconds": 37.986959699999716,
+     "parameters": {
+      "R": {
+       "n": 283,
+       "median_abs_relative": 0.012832535987309712,
+       "coverage68": 0.5971731448763251,
+       "coverage95": 0.784452296819788
+      },
+      "D": {
+       "n": 283,
+       "median_abs_relative": 0.0006067211228045766,
+       "coverage68": 0.8833922261484098,
+       "coverage95": 0.9858657243816255
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 17,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 14,
+        "sphere_to_upright": 4,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 15,
+        "sphere_fraction_of_fitted_uprights": 0.21052631578947367
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 25,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 23,
+        "sphere_fraction_of_fitted_uprights": 0.08
+       }
+      }
+     }
+    }
+   },
+   "spheres only": {
+    "cuts": 100,
+    "auto": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 0.66,
+     "truth_mode_first": 0.61,
+     "truth_mode_listed": 0.86,
+     "seconds": 39.17035440000018,
+     "parameters": {
+      "R": {
+       "n": 145,
+       "median_abs_relative": 0.017210648355227676,
+       "coverage68": 0.5862068965517241,
+       "coverage95": 0.7379310344827587
+      },
+      "D": {
+       "n": 145,
+       "median_abs_relative": 0.00064593968667781,
+       "coverage68": 0.9103448275862069,
+       "coverage95": 0.9862068965517241
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 5,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 14,
+        "sphere_to_upright": 4,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 25,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       }
+      }
+     }
+    }
+   },
+   "sphere": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.78,
+     "truth_mode_first": 0.78,
+     "truth_mode_listed": 0.92,
+     "seconds": 31.99773950000099,
+     "parameters": {
+      "R": {
+       "n": 45,
+       "median_abs_relative": 0.004377237634660691,
+       "coverage68": 0.6222222222222222,
+       "coverage95": 0.8666666666666667
+      },
+      "D": {
+       "n": 45,
+       "median_abs_relative": 0.0006350478037282503,
+       "coverage68": 0.8888888888888888,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 5,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 14,
+        "sphere_to_upright": 4,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 25,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       }
+      }
+     }
+    }
+   },
+   "vc": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.76,
+     "truth_mode_first": 0.76,
+     "truth_mode_listed": 0.84,
+     "seconds": 36.910195850000036,
+     "parameters": {
+      "R": {
+       "n": 38,
+       "median_abs_relative": 0.0025104523402352252,
+       "coverage68": 0.6842105263157895,
+       "coverage95": 1.0
+      },
+      "D": {
+       "n": 38,
+       "median_abs_relative": 0.0005268430260749746,
+       "coverage68": 0.8157894736842105,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 12,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 15,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 23,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "sphere,sphere": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.54,
+     "truth_mode_first": 0.44,
+     "truth_mode_listed": 0.8,
+     "seconds": 43.80661969999892,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.032836391337870474,
+       "coverage68": 0.57,
+       "coverage95": 0.68
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0006621227458065704,
+       "coverage68": 0.92,
+       "coverage95": 0.98
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere,vc": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.7,
+     "truth_mode_first": 0.7,
+     "truth_mode_listed": 1.0,
+     "seconds": 38.13556060000019,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.01579445400276186,
+       "coverage68": 0.58,
+       "coverage95": 0.77
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0005768504515042405,
+       "coverage68": 0.87,
+       "coverage95": 0.98
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 0-1.2": {
+    "cuts": 0
+   },
+   "q+R 1.2-1.7": {
+    "cuts": 25,
+    "auto": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 0.76,
+     "truth_mode_first": 0.76,
+     "truth_mode_listed": 0.88,
+     "seconds": 39.81914549999965,
+     "parameters": {
+      "R": {
+       "n": 20,
+       "median_abs_relative": 0.0033972852462487713,
+       "coverage68": 0.65,
+       "coverage95": 0.95
+      },
+      "D": {
+       "n": 20,
+       "median_abs_relative": 0.0005423516107527782,
+       "coverage68": 0.95,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 5,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 8,
+        "sphere_to_upright": 1,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 11,
+        "sphere_fraction_of_fitted_uprights": 0.08333333333333333
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 1.7-2.3": {
+    "cuts": 24,
+    "auto": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 0.75,
+     "truth_mode_first": 0.75,
+     "truth_mode_listed": 0.875,
+     "seconds": 31.333289350000086,
+     "parameters": {
+      "R": {
+       "n": 24,
+       "median_abs_relative": 0.004218607757533854,
+       "coverage68": 0.5416666666666666,
+       "coverage95": 0.7916666666666666
+      },
+      "D": {
+       "n": 24,
+       "median_abs_relative": 0.0003599569438953454,
+       "coverage68": 0.9166666666666666,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 2,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 3,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 4,
+        "sphere_fraction_of_fitted_uprights": 0.42857142857142855
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 4,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 3,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "q+R 2.3-inf": {
+    "cuts": 151,
+    "auto": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 0.6754966887417219,
+     "truth_mode_first": 0.6423841059602649,
+     "truth_mode_listed": 0.8940397350993378,
+     "seconds": 40.46759849999944,
+     "parameters": {
+      "R": {
+       "n": 239,
+       "median_abs_relative": 0.015137065235406255,
+       "coverage68": 0.5983263598326359,
+       "coverage95": 0.7698744769874477
+      },
+      "D": {
+       "n": 239,
+       "median_abs_relative": 0.0006434107406787515,
+       "coverage68": 0.8744769874476988,
+       "coverage95": 0.9832635983263598
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 10,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 21,
+        "sphere_to_upright": 2,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 20,
+        "sphere_fraction_of_fitted_uprights": 0.09090909090909091
+       }
+      }
+     }
+    }
+   }
+  },
+  "ps100_auto4": {
+   "overall": {
+    "cuts": 200,
+    "auto": {
+     "n_ok": 200,
+     "n_failed": 0,
+     "composition_right": 0.74,
+     "truth_mode_first": 0.71,
+     "truth_mode_listed": 0.895,
+     "seconds": 39.68568530000039,
+     "parameters": {
+      "R": {
+       "n": 283,
+       "median_abs_relative": 0.0082623920188718,
+       "coverage68": 0.6431095406360424,
+       "coverage95": 0.8374558303886925
+      },
+      "D": {
+       "n": 283,
+       "median_abs_relative": 0.0005895744389927682,
+       "coverage68": 0.8833922261484098,
+       "coverage95": 0.9893992932862191
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 17,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 12,
+        "sphere_to_upright": 4,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 15,
+        "sphere_fraction_of_fitted_uprights": 0.21052631578947367
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 29,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 23,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "spheres only": {
+    "cuts": 100,
+    "auto": {
+     "n_ok": 100,
+     "n_failed": 0,
+     "composition_right": 0.72,
+     "truth_mode_first": 0.67,
+     "truth_mode_listed": 0.87,
+     "seconds": 39.18102930000077,
+     "parameters": {
+      "R": {
+       "n": 145,
+       "median_abs_relative": 0.008681285005176731,
+       "coverage68": 0.6275862068965518,
+       "coverage95": 0.8
+      },
+      "D": {
+       "n": 145,
+       "median_abs_relative": 0.0005700988046524191,
+       "coverage68": 0.896551724137931,
+       "coverage95": 0.9862068965517241
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 5,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 12,
+        "sphere_to_upright": 4,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 29,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.82,
+     "truth_mode_first": 0.82,
+     "truth_mode_listed": 0.92,
+     "seconds": 35.66943434999985,
+     "parameters": {
+      "R": {
+       "n": 45,
+       "median_abs_relative": 0.0035393532822004525,
+       "coverage68": 0.6888888888888889,
+       "coverage95": 0.8888888888888888
+      },
+      "D": {
+       "n": 45,
+       "median_abs_relative": 0.0005257369113687016,
+       "coverage68": 0.9111111111111111,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 5,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 12,
+        "sphere_to_upright": 4,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": 1.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 29,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "vc": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.76,
+     "truth_mode_first": 0.76,
+     "truth_mode_listed": 0.84,
+     "seconds": 41.43627175000165,
+     "parameters": {
+      "R": {
+       "n": 38,
+       "median_abs_relative": 0.0025104523402352252,
+       "coverage68": 0.6842105263157895,
+       "coverage95": 1.0
+      },
+      "D": {
+       "n": 38,
+       "median_abs_relative": 0.0005268430260749746,
+       "coverage68": 0.8157894736842105,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 12,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 15,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 23,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "sphere,sphere": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.62,
+     "truth_mode_first": 0.52,
+     "truth_mode_listed": 0.82,
+     "seconds": 44.262172450000435,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.016049521052144522,
+       "coverage68": 0.6,
+       "coverage95": 0.76
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0005871421590149528,
+       "coverage68": 0.89,
+       "coverage95": 0.98
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "sphere,vc": {
+    "cuts": 50,
+    "auto": {
+     "n_ok": 50,
+     "n_failed": 0,
+     "composition_right": 0.76,
+     "truth_mode_first": 0.74,
+     "truth_mode_listed": 1.0,
+     "seconds": 40.01728795000099,
+     "parameters": {
+      "R": {
+       "n": 100,
+       "median_abs_relative": 0.012956926047018702,
+       "coverage68": 0.65,
+       "coverage95": 0.83
+      },
+      "D": {
+       "n": 100,
+       "median_abs_relative": 0.0006238997808258873,
+       "coverage68": 0.89,
+       "coverage95": 0.99
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 0,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 0-1.2": {
+    "cuts": 0
+   },
+   "q+R 1.2-1.7": {
+    "cuts": 25,
+    "auto": {
+     "n_ok": 25,
+     "n_failed": 0,
+     "composition_right": 0.76,
+     "truth_mode_first": 0.76,
+     "truth_mode_listed": 0.84,
+     "seconds": 34.72010450000016,
+     "parameters": {
+      "R": {
+       "n": 20,
+       "median_abs_relative": 0.002791573710689499,
+       "coverage68": 0.7,
+       "coverage95": 0.95
+      },
+      "D": {
+       "n": 20,
+       "median_abs_relative": 0.0004723979426122238,
+       "coverage68": 0.95,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 5,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 8,
+        "sphere_to_upright": 1,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 11,
+        "sphere_fraction_of_fitted_uprights": 0.08333333333333333
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       }
+      }
+     }
+    }
+   },
+   "q+R 1.7-2.3": {
+    "cuts": 24,
+    "auto": {
+     "n_ok": 24,
+     "n_failed": 0,
+     "composition_right": 0.7083333333333334,
+     "truth_mode_first": 0.7083333333333334,
+     "truth_mode_listed": 0.8333333333333334,
+     "seconds": 34.88952569999856,
+     "parameters": {
+      "R": {
+       "n": 24,
+       "median_abs_relative": 0.005035600116508443,
+       "coverage68": 0.6666666666666666,
+       "coverage95": 0.7916666666666666
+      },
+      "D": {
+       "n": 24,
+       "median_abs_relative": 0.00033398676104962055,
+       "coverage68": 0.875,
+       "coverage95": 1.0
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 2,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 4,
+        "sphere_to_upright": 3,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 4,
+        "sphere_fraction_of_fitted_uprights": 0.42857142857142855
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 6,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 3,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   },
+   "q+R 2.3-inf": {
+    "cuts": 151,
+    "auto": {
+     "n_ok": 151,
+     "n_failed": 0,
+     "composition_right": 0.7417218543046358,
+     "truth_mode_first": 0.7019867549668874,
+     "truth_mode_listed": 0.9139072847682119,
+     "seconds": 43.029827000000296,
+     "parameters": {
+      "R": {
+       "n": 239,
+       "median_abs_relative": 0.009644961539649,
+       "coverage68": 0.6359832635983264,
+       "coverage95": 0.8326359832635983
+      },
+      "D": {
+       "n": 239,
+       "median_abs_relative": 0.0006081744346937423,
+       "coverage68": 0.8786610878661087,
+       "coverage95": 0.9874476987447699
+      }
+     },
+     "shape_confusion": {
+      "population_count_errors": {
+       "single_to_multiple": 10,
+       "multiple_to_single": 0,
+       "other": 0
+      },
+      "single_population": {
+       "fitted_q+R<=2": {
+        "sphere_to_sphere": 0,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 0,
+        "sphere_fraction_of_fitted_uprights": null
+       },
+       "fitted_q+R>2": {
+        "sphere_to_sphere": 23,
+        "sphere_to_upright": 0,
+        "upright_to_sphere": 0,
+        "upright_to_upright": 20,
+        "sphere_fraction_of_fitted_uprights": 0.0
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "known_composition_populations": {
+  "born": {
+   "sphere": {
+    "overall": {
+     "R": {
+      "n": 200,
+      "median_abs_relative": 0.006519972722322798,
+      "coverage68": 0.67,
+      "coverage95": 0.835
+     },
+     "D": {
+      "n": 200,
+      "median_abs_relative": 0.0006214749504873662,
+      "coverage68": 0.865,
+      "coverage95": 0.935
+     }
+    },
+    "q+R 0-1.2": {
+     "R": {
+      "n": 10,
+      "median_abs_relative": 0.006020822450501451,
+      "coverage68": 0.7,
+      "coverage95": 0.9
+     },
+     "D": {
+      "n": 10,
+      "median_abs_relative": 0.0002931898229168728,
+      "coverage68": 1.0,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.2-1.7": {
+     "R": {
+      "n": 45,
+      "median_abs_relative": 0.004078659560263098,
+      "coverage68": 0.8,
+      "coverage95": 0.9333333333333333
+     },
+     "D": {
+      "n": 45,
+      "median_abs_relative": 0.0006715395073875197,
+      "coverage68": 0.9555555555555556,
+      "coverage95": 0.9777777777777777
+     }
+    },
+    "q+R 1.7-2.3": {
+     "R": {
+      "n": 42,
+      "median_abs_relative": 0.005231795874068024,
+      "coverage68": 0.6666666666666666,
+      "coverage95": 0.8333333333333334
+     },
+     "D": {
+      "n": 42,
+      "median_abs_relative": 0.0005455734026473813,
+      "coverage68": 0.8095238095238095,
+      "coverage95": 0.8809523809523809
+     }
+    },
+    "q+R 2.3-3.5": {
+     "R": {
+      "n": 58,
+      "median_abs_relative": 0.007412215903584984,
+      "coverage68": 0.7068965517241379,
+      "coverage95": 0.9137931034482759
+     },
+     "D": {
+      "n": 58,
+      "median_abs_relative": 0.0006312454572520165,
+      "coverage68": 0.896551724137931,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 3.5-inf": {
+     "R": {
+      "n": 45,
+      "median_abs_relative": 0.0546013509871186,
+      "coverage68": 0.4888888888888889,
+      "coverage95": 0.6222222222222222
+     },
+     "D": {
+      "n": 45,
+      "median_abs_relative": 0.0006903525099204444,
+      "coverage68": 0.7555555555555555,
+      "coverage95": 0.8444444444444444
+     }
+    }
+   },
+   "vc": {
+    "overall": {
+     "R": {
+      "n": 100,
+      "median_abs_relative": 0.005548132436190956,
+      "coverage68": 0.68,
+      "coverage95": 0.88
+     },
+     "D": {
+      "n": 100,
+      "median_abs_relative": 0.0007961547490095144,
+      "coverage68": 0.81,
+      "coverage95": 0.97
+     }
+    },
+    "q+R 0-1.2": {
+     "R": {
+      "n": 7,
+      "median_abs_relative": 0.01487643426294738,
+      "coverage68": 0.5714285714285714,
+      "coverage95": 0.8571428571428571
+     },
+     "D": {
+      "n": 7,
+      "median_abs_relative": 0.0007876480061351776,
+      "coverage68": 1.0,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.2-1.7": {
+     "R": {
+      "n": 22,
+      "median_abs_relative": 0.002888310870947819,
+      "coverage68": 0.6818181818181818,
+      "coverage95": 0.8181818181818182
+     },
+     "D": {
+      "n": 22,
+      "median_abs_relative": 0.0008711111150386808,
+      "coverage68": 0.7272727272727273,
+      "coverage95": 0.9090909090909091
+     }
+    },
+    "q+R 1.7-2.3": {
+     "R": {
+      "n": 16,
+      "median_abs_relative": 0.003589799448826536,
+      "coverage68": 0.6875,
+      "coverage95": 0.875
+     },
+     "D": {
+      "n": 16,
+      "median_abs_relative": 0.00087829134573425,
+      "coverage68": 0.75,
+      "coverage95": 0.9375
+     }
+    },
+    "q+R 2.3-3.5": {
+     "R": {
+      "n": 24,
+      "median_abs_relative": 0.009820625471590572,
+      "coverage68": 0.6666666666666666,
+      "coverage95": 0.9166666666666666
+     },
+     "D": {
+      "n": 24,
+      "median_abs_relative": 0.0004981637445734544,
+      "coverage68": 0.8333333333333334,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 3.5-inf": {
+     "R": {
+      "n": 31,
+      "median_abs_relative": 0.006041235278533952,
+      "coverage68": 0.7096774193548387,
+      "coverage95": 0.9032258064516129
+     },
+     "D": {
+      "n": 31,
+      "median_abs_relative": 0.0008612680331561151,
+      "coverage68": 0.8387096774193549,
+      "coverage95": 1.0
+     }
+    }
+   }
+  },
+  "si_l2": {
+   "sphere": {
+    "overall": {
+     "R": {
+      "n": 200,
+      "median_abs_relative": 0.0680230871522845,
+      "coverage68": 0.12,
+      "coverage95": 0.195
+     },
+     "D": {
+      "n": 200,
+      "median_abs_relative": 0.0028085101766339715,
+      "coverage68": 0.49,
+      "coverage95": 0.635
+     }
+    },
+    "q+R 0-1.2": {
+     "R": {
+      "n": 10,
+      "median_abs_relative": 0.01602850614588952,
+      "coverage68": 0.6,
+      "coverage95": 0.8
+     },
+     "D": {
+      "n": 10,
+      "median_abs_relative": 0.0007836545824130292,
+      "coverage68": 0.9,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.2-1.7": {
+     "R": {
+      "n": 45,
+      "median_abs_relative": 0.022111645025779336,
+      "coverage68": 0.17777777777777778,
+      "coverage95": 0.35555555555555557
+     },
+     "D": {
+      "n": 45,
+      "median_abs_relative": 0.000968767653356073,
+      "coverage68": 0.7111111111111111,
+      "coverage95": 0.8444444444444444
+     }
+    },
+    "q+R 1.7-2.3": {
+     "R": {
+      "n": 42,
+      "median_abs_relative": 0.0404346722674333,
+      "coverage68": 0.14285714285714285,
+      "coverage95": 0.23809523809523808
+     },
+     "D": {
+      "n": 42,
+      "median_abs_relative": 0.0030098353511580633,
+      "coverage68": 0.5,
+      "coverage95": 0.5714285714285714
+     }
+    },
+    "q+R 2.3-3.5": {
+     "R": {
+      "n": 58,
+      "median_abs_relative": 0.10981779878880704,
+      "coverage68": 0.06896551724137931,
+      "coverage95": 0.08620689655172414
+     },
+     "D": {
+      "n": 58,
+      "median_abs_relative": 0.004057156444493226,
+      "coverage68": 0.43103448275862066,
+      "coverage95": 0.6551724137931034
+     }
+    },
+    "q+R 3.5-inf": {
+     "R": {
+      "n": 45,
+      "median_abs_relative": 0.4024001782137536,
+      "coverage68": 0.0,
+      "coverage95": 0.0
+     },
+     "D": {
+      "n": 45,
+      "median_abs_relative": 0.012275246867671896,
+      "coverage68": 0.24444444444444444,
+      "coverage95": 0.37777777777777777
+     }
+    }
+   },
+   "vc": {
+    "overall": {
+     "R": {
+      "n": 100,
+      "median_abs_relative": 0.009761154681648176,
+      "coverage68": 0.54,
+      "coverage95": 0.77
+     },
+     "D": {
+      "n": 100,
+      "median_abs_relative": 0.0010604988092798306,
+      "coverage68": 0.73,
+      "coverage95": 0.87
+     }
+    },
+    "q+R 0-1.2": {
+     "R": {
+      "n": 7,
+      "median_abs_relative": 0.011792198904800322,
+      "coverage68": 0.5714285714285714,
+      "coverage95": 0.8571428571428571
+     },
+     "D": {
+      "n": 7,
+      "median_abs_relative": 0.0006612767169531519,
+      "coverage68": 0.8571428571428571,
+      "coverage95": 0.8571428571428571
+     }
+    },
+    "q+R 1.2-1.7": {
+     "R": {
+      "n": 22,
+      "median_abs_relative": 0.01162639121983089,
+      "coverage68": 0.5,
+      "coverage95": 0.5909090909090909
+     },
+     "D": {
+      "n": 22,
+      "median_abs_relative": 0.0009937105644853839,
+      "coverage68": 0.7272727272727273,
+      "coverage95": 0.9090909090909091
+     }
+    },
+    "q+R 1.7-2.3": {
+     "R": {
+      "n": 16,
+      "median_abs_relative": 0.003589799448826536,
+      "coverage68": 0.625,
+      "coverage95": 0.8125
+     },
+     "D": {
+      "n": 16,
+      "median_abs_relative": 0.0021160314971310767,
+      "coverage68": 0.5625,
+      "coverage95": 0.6875
+     }
+    },
+    "q+R 2.3-3.5": {
+     "R": {
+      "n": 24,
+      "median_abs_relative": 0.009070991290592634,
+      "coverage68": 0.5416666666666666,
+      "coverage95": 0.8333333333333334
+     },
+     "D": {
+      "n": 24,
+      "median_abs_relative": 0.0005714117036439426,
+      "coverage68": 0.7916666666666666,
+      "coverage95": 0.9583333333333334
+     }
+    },
+    "q+R 3.5-inf": {
+     "R": {
+      "n": 31,
+      "median_abs_relative": 0.0151314372554604,
+      "coverage68": 0.5161290322580645,
+      "coverage95": 0.8064516129032258
+     },
+     "D": {
+      "n": 31,
+      "median_abs_relative": 0.001383982637173764,
+      "coverage68": 0.7419354838709677,
+      "coverage95": 0.8709677419354839
+     }
+    }
+   }
+  },
+  "si_l3": {
+   "sphere": {
+    "overall": {
+     "R": {
+      "n": 200,
+      "median_abs_relative": 0.04660597102483521,
+      "coverage68": 0.515,
+      "coverage95": 0.645
+     },
+     "D": {
+      "n": 200,
+      "median_abs_relative": 0.0005259568772902901,
+      "coverage68": 0.9,
+      "coverage95": 0.995
+     }
+    },
+    "q+R 0-1.2": {
+     "R": {
+      "n": 10,
+      "median_abs_relative": 0.029430425635412205,
+      "coverage68": 0.9,
+      "coverage95": 1.0
+     },
+     "D": {
+      "n": 10,
+      "median_abs_relative": 0.00027665231343371177,
+      "coverage68": 1.0,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.2-1.7": {
+     "R": {
+      "n": 45,
+      "median_abs_relative": 0.023475002126627342,
+      "coverage68": 0.6,
+      "coverage95": 0.7111111111111111
+     },
+     "D": {
+      "n": 45,
+      "median_abs_relative": 0.00041655018985919945,
+      "coverage68": 0.9777777777777777,
+      "coverage95": 0.9777777777777777
+     }
+    },
+    "q+R 1.7-2.3": {
+     "R": {
+      "n": 42,
+      "median_abs_relative": 0.03978323315581744,
+      "coverage68": 0.35714285714285715,
+      "coverage95": 0.5238095238095238
+     },
+     "D": {
+      "n": 42,
+      "median_abs_relative": 0.0003665635144866064,
+      "coverage68": 0.9285714285714286,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 2.3-3.5": {
+     "R": {
+      "n": 58,
+      "median_abs_relative": 0.06695041150429043,
+      "coverage68": 0.4827586206896552,
+      "coverage95": 0.603448275862069
+     },
+     "D": {
+      "n": 58,
+      "median_abs_relative": 0.0009340180237377149,
+      "coverage68": 0.7758620689655172,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 3.5-inf": {
+     "R": {
+      "n": 45,
+      "median_abs_relative": 0.0696352852123635,
+      "coverage68": 0.5333333333333333,
+      "coverage95": 0.6666666666666666
+     },
+     "D": {
+      "n": 45,
+      "median_abs_relative": 0.0006759081151317403,
+      "coverage68": 0.9333333333333333,
+      "coverage95": 1.0
+     }
+    }
+   },
+   "vc": {
+    "overall": {
+     "R": {
+      "n": 100,
+      "median_abs_relative": 0.00548868505148381,
+      "coverage68": 0.69,
+      "coverage95": 0.89
+     },
+     "D": {
+      "n": 100,
+      "median_abs_relative": 0.0008032025105703111,
+      "coverage68": 0.85,
+      "coverage95": 0.99
+     }
+    },
+    "q+R 0-1.2": {
+     "R": {
+      "n": 7,
+      "median_abs_relative": 0.01976023747389699,
+      "coverage68": 0.5714285714285714,
+      "coverage95": 0.7142857142857143
+     },
+     "D": {
+      "n": 7,
+      "median_abs_relative": 0.0010616603812765302,
+      "coverage68": 1.0,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.2-1.7": {
+     "R": {
+      "n": 22,
+      "median_abs_relative": 0.002701619151637691,
+      "coverage68": 0.7272727272727273,
+      "coverage95": 0.8181818181818182
+     },
+     "D": {
+      "n": 22,
+      "median_abs_relative": 0.0010091108259252524,
+      "coverage68": 0.8181818181818182,
+      "coverage95": 0.9545454545454546
+     }
+    },
+    "q+R 1.7-2.3": {
+     "R": {
+      "n": 16,
+      "median_abs_relative": 0.0029135322402197295,
+      "coverage68": 0.875,
+      "coverage95": 0.9375
+     },
+     "D": {
+      "n": 16,
+      "median_abs_relative": 0.0005764370152845366,
+      "coverage68": 0.75,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 2.3-3.5": {
+     "R": {
+      "n": 24,
+      "median_abs_relative": 0.012068634203046047,
+      "coverage68": 0.5833333333333334,
+      "coverage95": 0.875
+     },
+     "D": {
+      "n": 24,
+      "median_abs_relative": 0.0005737429252312687,
+      "coverage68": 0.875,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 3.5-inf": {
+     "R": {
+      "n": 31,
+      "median_abs_relative": 0.008158777766524405,
+      "coverage68": 0.6774193548387096,
+      "coverage95": 0.967741935483871
+     },
+     "D": {
+      "n": 31,
+      "median_abs_relative": 0.0009214212586643455,
+      "coverage68": 0.8709677419354839,
+      "coverage95": 1.0
+     }
+    }
+   }
+  },
+  "si_l4": {
+   "sphere": {
+    "overall": {
+     "R": {
+      "n": 200,
+      "median_abs_relative": 0.006613550862248518,
+      "coverage68": 0.705,
+      "coverage95": 0.88
+     },
+     "D": {
+      "n": 200,
+      "median_abs_relative": 0.0005497800062129743,
+      "coverage68": 0.895,
+      "coverage95": 0.99
+     }
+    },
+    "q+R 0-1.2": {
+     "R": {
+      "n": 10,
+      "median_abs_relative": 0.008195286823824588,
+      "coverage68": 0.6,
+      "coverage95": 0.9
+     },
+     "D": {
+      "n": 10,
+      "median_abs_relative": 0.00044205584214007665,
+      "coverage68": 0.9,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.2-1.7": {
+     "R": {
+      "n": 45,
+      "median_abs_relative": 0.004244585568084602,
+      "coverage68": 0.7777777777777778,
+      "coverage95": 0.9555555555555556
+     },
+     "D": {
+      "n": 45,
+      "median_abs_relative": 0.00045719549458222986,
+      "coverage68": 0.9777777777777777,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.7-2.3": {
+     "R": {
+      "n": 42,
+      "median_abs_relative": 0.003231110356290534,
+      "coverage68": 0.7380952380952381,
+      "coverage95": 0.9285714285714286
+     },
+     "D": {
+      "n": 42,
+      "median_abs_relative": 0.00040914496057242733,
+      "coverage68": 0.9523809523809523,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 2.3-3.5": {
+     "R": {
+      "n": 58,
+      "median_abs_relative": 0.01265893162807935,
+      "coverage68": 0.6551724137931034,
+      "coverage95": 0.8448275862068966
+     },
+     "D": {
+      "n": 58,
+      "median_abs_relative": 0.0006668979832790689,
+      "coverage68": 0.7931034482758621,
+      "coverage95": 0.9827586206896551
+     }
+    },
+    "q+R 3.5-inf": {
+     "R": {
+      "n": 45,
+      "median_abs_relative": 0.019340534834473733,
+      "coverage68": 0.6888888888888889,
+      "coverage95": 0.8
+     },
+     "D": {
+      "n": 45,
+      "median_abs_relative": 0.0006427893423953668,
+      "coverage68": 0.8888888888888888,
+      "coverage95": 0.9777777777777777
+     }
+    }
+   },
+   "vc": {
+    "overall": {
+     "R": {
+      "n": 100,
+      "median_abs_relative": 0.004862147139331141,
+      "coverage68": 0.75,
+      "coverage95": 0.95
+     },
+     "D": {
+      "n": 100,
+      "median_abs_relative": 0.0007592973595909047,
+      "coverage68": 0.85,
+      "coverage95": 0.99
+     }
+    },
+    "q+R 0-1.2": {
+     "R": {
+      "n": 7,
+      "median_abs_relative": 0.01367245462302824,
+      "coverage68": 0.8571428571428571,
+      "coverage95": 1.0
+     },
+     "D": {
+      "n": 7,
+      "median_abs_relative": 0.0005243528890609417,
+      "coverage68": 1.0,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.2-1.7": {
+     "R": {
+      "n": 22,
+      "median_abs_relative": 0.0026428919080707103,
+      "coverage68": 0.7272727272727273,
+      "coverage95": 0.9545454545454546
+     },
+     "D": {
+      "n": 22,
+      "median_abs_relative": 0.00085924913675961,
+      "coverage68": 0.8636363636363636,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.7-2.3": {
+     "R": {
+      "n": 16,
+      "median_abs_relative": 0.0021377095634323995,
+      "coverage68": 0.6875,
+      "coverage95": 0.9375
+     },
+     "D": {
+      "n": 16,
+      "median_abs_relative": 0.0007687359117458104,
+      "coverage68": 0.8125,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 2.3-3.5": {
+     "R": {
+      "n": 24,
+      "median_abs_relative": 0.009516663544720416,
+      "coverage68": 0.7083333333333334,
+      "coverage95": 0.9583333333333334
+     },
+     "D": {
+      "n": 24,
+      "median_abs_relative": 0.0006717655378295495,
+      "coverage68": 0.8333333333333334,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 3.5-inf": {
+     "R": {
+      "n": 31,
+      "median_abs_relative": 0.0060412351850749335,
+      "coverage68": 0.8064516129032258,
+      "coverage95": 0.9354838709677419
+     },
+     "D": {
+      "n": 31,
+      "median_abs_relative": 0.0008750524685114947,
+      "coverage68": 0.8387096774193549,
+      "coverage95": 0.967741935483871
+     }
+    }
+   }
+  },
+  "ps100_l4": {
+   "sphere": {
+    "overall": {
+     "R": {
+      "n": 200,
+      "median_abs_relative": 0.006201284865861689,
+      "coverage68": 0.765,
+      "coverage95": 0.93
+     },
+     "D": {
+      "n": 200,
+      "median_abs_relative": 0.0006063118332922945,
+      "coverage68": 0.9,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 0-1.2": {
+     "R": {
+      "n": 10,
+      "median_abs_relative": 0.0076361750858069954,
+      "coverage68": 0.9,
+      "coverage95": 1.0
+     },
+     "D": {
+      "n": 10,
+      "median_abs_relative": 0.0004874308425751872,
+      "coverage68": 1.0,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.2-1.7": {
+     "R": {
+      "n": 45,
+      "median_abs_relative": 0.004866618548821866,
+      "coverage68": 0.8666666666666667,
+      "coverage95": 0.9555555555555556
+     },
+     "D": {
+      "n": 45,
+      "median_abs_relative": 0.0004408724456383961,
+      "coverage68": 0.9333333333333333,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.7-2.3": {
+     "R": {
+      "n": 42,
+      "median_abs_relative": 0.004002982156882606,
+      "coverage68": 0.7619047619047619,
+      "coverage95": 0.9047619047619048
+     },
+     "D": {
+      "n": 42,
+      "median_abs_relative": 0.0005190567308716587,
+      "coverage68": 0.9285714285714286,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 2.3-3.5": {
+     "R": {
+      "n": 58,
+      "median_abs_relative": 0.011911440610891388,
+      "coverage68": 0.7068965517241379,
+      "coverage95": 0.9310344827586207
+     },
+     "D": {
+      "n": 58,
+      "median_abs_relative": 0.0006964409269962779,
+      "coverage68": 0.8103448275862069,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 3.5-inf": {
+     "R": {
+      "n": 45,
+      "median_abs_relative": 0.007039618861624075,
+      "coverage68": 0.7111111111111111,
+      "coverage95": 0.9111111111111111
+     },
+     "D": {
+      "n": 45,
+      "median_abs_relative": 0.0008462759765685002,
+      "coverage68": 0.9333333333333333,
+      "coverage95": 1.0
+     }
+    }
+   },
+   "vc": {
+    "overall": {
+     "R": {
+      "n": 100,
+      "median_abs_relative": 0.005244067733289726,
+      "coverage68": 0.77,
+      "coverage95": 0.95
+     },
+     "D": {
+      "n": 100,
+      "median_abs_relative": 0.0006814492402044681,
+      "coverage68": 0.87,
+      "coverage95": 0.99
+     }
+    },
+    "q+R 0-1.2": {
+     "R": {
+      "n": 7,
+      "median_abs_relative": 0.014593468599916726,
+      "coverage68": 0.8571428571428571,
+      "coverage95": 1.0
+     },
+     "D": {
+      "n": 7,
+      "median_abs_relative": 0.00033978625779362837,
+      "coverage68": 1.0,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.2-1.7": {
+     "R": {
+      "n": 22,
+      "median_abs_relative": 0.002658634244510627,
+      "coverage68": 0.7727272727272727,
+      "coverage95": 1.0
+     },
+     "D": {
+      "n": 22,
+      "median_abs_relative": 0.0006598316185806308,
+      "coverage68": 0.9090909090909091,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 1.7-2.3": {
+     "R": {
+      "n": 16,
+      "median_abs_relative": 0.002916111197513116,
+      "coverage68": 0.75,
+      "coverage95": 0.875
+     },
+     "D": {
+      "n": 16,
+      "median_abs_relative": 0.0006950840204528741,
+      "coverage68": 0.8125,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 2.3-3.5": {
+     "R": {
+      "n": 24,
+      "median_abs_relative": 0.010296002571360818,
+      "coverage68": 0.7083333333333334,
+      "coverage95": 0.9166666666666666
+     },
+     "D": {
+      "n": 24,
+      "median_abs_relative": 0.0006717655378295495,
+      "coverage68": 0.8333333333333334,
+      "coverage95": 1.0
+     }
+    },
+    "q+R 3.5-inf": {
+     "R": {
+      "n": 31,
+      "median_abs_relative": 0.008015458010870447,
+      "coverage68": 0.8064516129032258,
+      "coverage95": 0.967741935483871
+     },
+     "D": {
+      "n": 31,
+      "median_abs_relative": 0.0007916137964343317,
+      "coverage68": 0.8709677419354839,
+      "coverage95": 0.967741935483871
+     }
+    }
+   }
+  }
+ }
+}
