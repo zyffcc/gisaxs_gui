@@ -269,6 +269,9 @@ class IndexingView:
         layout.addLayout(buttons)
         self.pole_plot = CurvePlot("", tab, log_y=False, log_x=None, sides=False)
         self.pole_plot.setObjectName("analyzePolePlot")
+        # Keep the vertical axis readable when the coverage notes wrap below the plot.
+        self.pole_plot.setMinimumHeight(240)
+        self.pole_plot.legend.anchor((0, 0), (0, 0), offset=(10, 10))
         self.pole_plot.set_labels("χ (°)", "N(χ) ∝ crystallites per degree")
         layout.addWidget(self.pole_plot, 1)
         self.result_label = QLabel(tab)

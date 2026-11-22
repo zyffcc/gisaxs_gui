@@ -388,7 +388,7 @@ def test_the_public_giwaxs_frame_still_runs_giwaxs_without_a_technique(tmp_path:
     options = PipelineOptions(calibration=str(folder / "LaB6_2021_12_DESY_P08.poni"), incidence_deg=0.075)
     [report] = analyse_frames([str(folder / "S121_MAI_A2_00841.tif")], options, tmp_path, saved_profiles=False)
     assert report["ok"] and report["procedure"] == "giwaxs"
-    assert {item["item"] for item in report["needs_attention"]} == {"pole figure"}
+    assert {item["item"] for item in report["needs_attention"]} == {"pole figure", "orientation factor"}
     assert _decisions(report, "technique")[0]["why"] == DETECTED
     assert (tmp_path / "S121_MAI_A2_00841" / "report.md").is_file()
     assert _snapshot(folder) == before

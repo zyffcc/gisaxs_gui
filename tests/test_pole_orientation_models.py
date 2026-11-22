@@ -145,7 +145,18 @@ def test_measured_error_and_range_use_same_cap_even_when_pole_fit_fails():
     fit = fit_pole_figure(profile, chi_max=cap)
     assert fit.record()["herman_measured"] == pytest.approx(direct.herman)
     assert fit.record()["herman_measured_err"] == pytest.approx(direct.herman_err)
+    assert fit.record()["herman_isotropic"] == pytest.approx(direct.herman_isotropic)
+    assert fit.herman_isotropic == pytest.approx(np.average(
+        (3 * np.cos(np.radians(chi[mask]))**2 - 1) / 2., weights=np.sin(np.radians(chi[mask]))))
     assert fit.weighted_coverage == pytest.approx(direct.weighted_coverage)
+    result = orientation_systematics({1.: (chi, value, error)}, 3., background_sigma=0.,
+                                     nominal_fit=fit, chi_max=cap)
+    scenario = result["scenarios"][0]
+    assert scenario["horizon_gap_deg"] == (80, 90)
+    assert scenario["horizon_band_density"] == pytest.approx(2.)
+    full = np.radians(chi)
+    filled = np.average((3. * np.cos(full)**2 - 1.) / 2., weights=np.sin(full))
+    assert scenario["coverage_factors"]["horizon gap continued"] == pytest.approx(filled)
     # Only three bins, enough for a measured ratio and its error but insufficient for a pole fit.
     failed = fit_pole_figure(profile, chi_max=3.)
     assert not failed.ok and failed.measured_moment[1] > 0.
@@ -169,8 +180,8 @@ def test_no_scenario_uses_a_model_fill_when_the_nominal_pole_is_not_determined(n
     result = orientation_systematics({k: curve for k in (.5, 1., 2.)}, 1., nominal_fit=nominal)
     assert not result["model_fill_allowed"]
     assert all(s["model_fill"] is None and s["wedge_sigma"] is None for s in result["scenarios"])
-    measured = [s["measured"] for s in result["scenarios"]]
-    assert result["range"] == [min(measured), max(measured)]
+    factors = [f for s in result["scenarios"] for f in s["coverage_factors"].values()]
+    assert result["range"] == [min(factors), max(factors)]
 
 
 def test_a_poor_scenario_fit_keeps_only_its_measured_moment(monkeypatch):
@@ -185,6 +196,7 @@ def test_a_poor_scenario_fit_keeps_only_its_measured_moment(monkeypatch):
     monkeypatch.setattr(pole_systematics, "fit_pole_figure", lambda *args, **kwargs: poor)
     result = orientation_systematics({k: curve for k in (.5, 1., 2.)}, 2., background_sigma=0., nominal_fit=nominal)
     assert result["model_fill_allowed"] and result["range"][1] == pytest.approx(.21)
+    assert result["range_sources"]["max"]["scenario"] == "fitted low-angle wedge + 1σ"
     assert [s["model_fill"] for s in result["scenarios"]] == [None, .2, None]
     assert result["scenarios"][0]["quality_reasons"] == ["reduced χ² exceeds 5"]
 
@@ -215,11 +227,57 @@ def test_an_attenuated_horizon_is_excluded_from_both_moments_and_pole_fits():
     assert scenarios[0.]["horizon_excluded_deg"] is None
     assert scenarios[.05]["measured"] == pytest.approx(expected)
     assert scenarios[.10]["horizon_excluded_deg"] == (83, 88)
-    assert result["range"][0] == pytest.approx(scenarios[0.]["measured"])
-    assert result["range"][1] == pytest.approx(scenarios[.10]["measured"])
+    assert result["range"][0] < scenarios[0.]["measured"]
+    assert result["range"][1] >= scenarios[.10]["measured"]
 
     # The measured sector ends well short of the exit cut. Weak bins at a detector edge stay measured.
     keep = angle < 80.
     y = np.where(angle[keep] > 77., background + 1., background + 100.)
     cropped = fold_profile(chi[keep], y, np.ones_like(y), background, horizon_chi_deg=horizon)
     assert cropped.horizon_excluded_deg is None and cropped.measured.sum() == 80
+
+
+@pytest.mark.parametrize("hidden_peak", [False, True], ids=["attenuated_horizon", "hidden_high_angle_peak"])
+def test_coverage_scenarios_bracket_the_full_ring_factor(hidden_peak):
+    chi = np.arange(.5, 90., 1.)
+    radians = np.radians(chi)
+    true_density = np.where(chi < 40., 220., 100.)
+    observed = true_density.copy()
+    if hidden_peak:
+        # A peak at 87° lies wholly beyond the detector. Its total weight is
+        # between the empty-wedge and constant-density continuations.
+        true_density[chi >= 84.] = 175. * np.exp(-.5 * ((chi[chi >= 84.] - 87.) / 0.9)**2)
+    else:
+        observed[78:84] *= np.linspace(.65, .12, 6)
+    expected = np.average((3 * np.cos(radians)**2 - 1.) / 2., weights=true_density * np.sin(radians))
+    curve = chi[:84], observed[:84], np.ones(84)
+    result = orientation_systematics({m: curve for m in (.5, 1., 2.)}, 0., background_sigma=0.,
+                                     nominal_fit=PoleFit(False, models.GAUSSIAN))
+    low, high = result["range"]
+    assert low - 1e-12 <= expected <= high
+    scenario = result["scenarios"][0]
+    assert scenario["measured"] > expected + .03
+    assert scenario["horizon_gap_deg"] == (84, 90)
+    assert scenario["attenuated_deg"] == (None if hidden_peak else (78, 84))
+    if hidden_peak:
+        assert low < expected < high
+        assert result["range_sources"]["min"]["scenario"] == "horizon gap continued"
+    else:
+        assert low == pytest.approx(expected)
+        assert result["range_sources"]["min"]["scenario"] == "attenuated bins and horizon gap continued"
+        assert result["range_sources"]["max"]["scenario"] == "attenuated bins removed, horizon gap empty"
+
+
+def test_low_angle_continuation_uses_density_and_leaves_an_internal_gap_empty():
+    chi = np.arange(.5, 90., 1.)
+    density = np.where(chi < 25., 200., 90.)
+    measured = (chi > 10.) & ((chi < 43.) | (chi > 51.))
+    curve = chi[measured], density[measured], np.ones(measured.sum())
+    result = orientation_systematics({1.: curve}, 0., nominal_fit=PoleFit(False, models.GAUSSIAN))
+    filled = measured | (chi < 10.)
+    radians = np.radians(chi[filled])
+    expected = np.average((3 * np.cos(radians)**2 - 1.) / 2., weights=density[filled] * np.sin(radians))
+    scenario = result["scenarios"][0]
+    assert scenario["low_angle_band_deg"] == (10, 20)
+    assert scenario["coverage_factors"]["low-angle wedge continued"] == pytest.approx(expected)
+    assert scenario["attenuated_deg"] is None

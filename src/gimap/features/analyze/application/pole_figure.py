@@ -15,6 +15,7 @@ from typing import Optional
 
 import numpy as np
 
+from ....shared.orientation_notes import measured_f_text, orientation_notes
 from ..domain.crystal import GAUSSIAN, MAIER_SAUPE, MODELS, PoleFit, fit_pole_figure, fold_profile
 from ..domain.crystal.pole_figure import CHI_MAX
 from ..domain.crystal.pole_systematics import orientation_systematics
@@ -143,6 +144,11 @@ def pole_figure_csv(result: PoleFigure, header: Optional[dict] = None) -> str:
     for key, value in (header or {}).items():
         lines.append(f"# {key}: {value}")
     lines.append("# pole figure: " + json.dumps(_plain(result.record()), ensure_ascii=False, sort_keys=True))
+    measured, sigma, _ = fit.measured_moment
+    if measured is not None:
+        summary = measured_f_text(measured, sigma, result.systematics.get("range"), isotropic=fit.herman_isotropic)
+        lines.append("# pole figure summary: measured f = " + summary)
+        lines.extend("# " + note for note in orientation_notes(result.systematics, result.systematics))
     lines.append("# columns: chi_deg  N  sigma  measured  model")
     if profile is None:
         return "\n".join(lines) + "\n"

@@ -280,7 +280,7 @@ def test_a_peak_at_the_end_of_the_data_builds_no_ring_size_or_series() -> None:
     assert [marker["reliable"] for marker in peak_markers(report)] == [True, True, False]
 
 
-def test_a_ring_line_gives_f_its_uncertainty_and_f_iso_with_the_same_decimals() -> None:
+def test_a_ring_line_gives_f_its_uncertainty_and_the_same_coverage_reference() -> None:
     from src.gimap.features.assistant.application.pipeline_report import pipeline_markdown
     from src.gimap.features.assistant.domain import herman_decimals, signed
 
@@ -292,8 +292,8 @@ def test_a_ring_line_gives_f_its_uncertainty_and_f_iso_with_the_same_decimals() 
     full = {**ring, "q": 1.989, "coverage": 1.0, "herman_isotropic": 0.0, "herman_excess": 0.13921}
     text = pipeline_markdown({"ok": True, "procedure": "giwaxs", "peaks": [], "rings": [ring, full], "decisions": [],
                               "steps": [], "geometry": {"distance_mm": 811.8}})
-    assert "- q ≈ 0.9972 Å⁻¹, |χ| coverage 0.97: f = 0.139 ± 0.00270 (stat) — oriented" in text
-    assert "coverage 1.00: f = 0.139 ± 0.00270 (stat)" in text
+    assert "coverage 0.97: f = 0.139 ± 0.00270 (stat), f_iso = −0.00136 — oriented" in text
+    assert "coverage 1.00: f = 0.139 ± 0.00270 (stat), f_iso = 0.00" in text
     assert "f − f_iso =" not in text
     # The note of a ring with a missing wedge: f_iso with those decimals and the Unicode minus (it read f = -0.00).
     ring = _ring(lambda chi: np.ones_like(chi))

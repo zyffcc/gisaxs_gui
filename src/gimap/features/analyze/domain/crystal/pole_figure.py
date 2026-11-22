@@ -114,6 +114,14 @@ class PoleFit:
         return measured_hermans(p.chi[keep], p.value[keep], p.sigma[keep])
 
     @property
+    def herman_isotropic(self):
+        """The same measured-bin moment for a constant pole density, including the selected χ limit."""
+        if self.profile is None:
+            return None
+        chi = self.profile.chi[self.measured_bins]
+        return measured_hermans(chi, np.sin(np.radians(chi)))[0]
+
+    @property
     def quality_reasons(self) -> tuple[str, ...]:
         reasons = []
         if not self.ok or not self.converged:
@@ -140,6 +148,7 @@ class PoleFit:
             "coverage": None if profile is None else float(self.measured_bins.mean()),
             "weighted_coverage": self.weighted_coverage,
             "herman_measured": self.measured_moment[0], "herman_measured_err": self.measured_moment[1],
+            "herman_isotropic": self.herman_isotropic,
             "background": None if profile is None else profile.background,
             "lorentz_input": None if profile is None else profile.lorentz_input,
         }

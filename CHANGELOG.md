@@ -16,6 +16,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   and uncertain radius intervals above 1.7 at level 3. Fit details compare the point spacing at the intensity
   maximum with the linear validation grid and flag cuts with fewer than 80 or more than 400 points.
   Joint vertical fits compare heights from two exit-angle ranges and report the dilute-layer and independent-height assumptions.
+- **GIWAXS orientation** reports measured Hermans f beside its same-coverage isotropic reference f_iso. The systematic range includes empty and continued edge gaps and tests attenuation near the horizon. Reports name the scenarios at both limits and flag rings whose range is wider than 0.05. The Pole Figure tool, CSV headers and JSON records include the reference and limits.
 
 - **Fit Several Curves Together** starts vertical cuts at twice the substrate critical angle. Set the limit to zero
   to use the full cut. The report flags likely height underestimation in dense or high-Z layers when the vertical

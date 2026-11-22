@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import Optional
 
 from src.gimap.app.presentation.i18n import translate
-from src.gimap.shared.orientation_notes import orientation_notes
+from src.gimap.shared.orientation_notes import coverage_warning, measured_f_text, orientation_notes
 
 from ..application.calibration_report import calibration_rms
-from ..application.pipeline_phases import measured_f_text, pole_estimate
+from ..application.pipeline_phases import pole_estimate
 from ..application import BILLING_SUBSCRIPTION, GOALS, RunOutcome
 
 STATUS_COLORS = {"done": "#2e7d32", "partial": "#ef6c00", "not_available": "#c62828"}
@@ -133,12 +133,19 @@ def _ring_tables(results, language) -> str:
     def label(template):
         return (translate(template, "zh") or template) if language == "中文" else template
 
+    def format_text(template, **values):
+        return label(template).format(**values)
+
     parts = []
     for ring in results.rings:
         low, high = ring.q_window
         title = f"<h4>Ring q = {_n(low)}–{_n(high)} Å⁻¹</h4>"
         parts.append(title)
         pole = ring.pole_figure
+        systematics = pole.get("systematics") or {}
+        warning = coverage_warning(systematics, format_text)
+        if ring.herman is not None and warning:
+            parts.append("<p><strong>" + _e(warning) + "</strong></p>")
         reasons = ", ".join(label(reason) for reason in pole.get("quality_reasons") or ())
         if reasons:
             parts.append("<p>" + _e(label("Pole fit not determined ({reasons}).").format(reasons=reasons)) + "</p>")
@@ -152,14 +159,13 @@ def _ring_tables(results, language) -> str:
             selection = label("Excluded αf < {angle}°. Polarisation {factor}.").format(
                 angle=f"{settings['min_exit_deg']:g}", factor=label("off") if factor is None else f"{factor:g}")
             parts.append("<p>" + _e(selection) + "</p>")
-        notes = orientation_notes(settings, pole.get("systematics") or {},
-                                  lambda template, **values: label(template).format(**values))
+        notes = orientation_notes(settings, systematics, format_text)
         parts.extend("<p>" + _e(note) + "</p>" for note in notes)
         if ring.reason:
             parts.append(f"<p>{_e(ring.reason)}</p>")
             continue
-        limits = (pole.get("systematics") or {}).get("range")
-        moment = (measured_f_text(ring.herman, ring.herman_err, limits, stat_label=label("stat"))
+        moment = (measured_f_text(ring.herman, ring.herman_err, systematics.get("range"),
+                                  stat_label=label("stat"), isotropic=ring.herman_isotropic)
                   if ring.herman is not None else "–")
         maxima = "; ".join(
             f"|χ| = {_n(item['chi'], 3)}° (FWHM {_n(item['fwhm'], 3)}°)" for item in ring.maxima

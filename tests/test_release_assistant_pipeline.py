@@ -361,7 +361,7 @@ def test_the_command_line_distinguishes_the_calibration_notice_from_poor_pole_fi
 
     import json
     record = json.loads((out / "P3HT_00012" / "report.json").read_text(encoding="utf-8"))
-    assert {item["item"] for item in record["needs_attention"]} == {"pole figure"}
+    assert {item["item"] for item in record["needs_attention"]} == {"pole figure", "orientation factor"}
     assert code == gimap_agent.EXIT_QUESTIONS
     assert printed.startswith("# GIWAXS — batch") and "P3HT_00012.tif | needs input" in printed
     note = next(line for line in printed.splitlines() if line.startswith("Calibration found by the automatic search"))

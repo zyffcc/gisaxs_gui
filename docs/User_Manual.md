@@ -122,8 +122,8 @@ open, until you go back to the profile's αi (section 4.1).
   is out-of-plane (OOP) or in-plane (IP). Here you find peaks near q = 0.90, 1.00, 1.41, 1.99 and
   2.22 Å⁻¹. The data's README names 0.899 Å⁻¹ as PbI₂ (001) and 0.999 Å⁻¹ as MAPbI₃ (110).
   To compare candidate reflections, give the phases in **Phases** (section 5.9).
-- For the three rings with the largest peak area and no warning, read the measured Hermans f with its statistical
-  error and systematic range alongside the pole fit and the position of the intensity maximum.
+- For the three rings with the largest peak area and no warning, compare the measured Hermans f with f_iso, the
+  value for an isotropic ring over the same angles. Each ring gives the statistical error, systematic range, pole fit and position of the intensity maximum.
 - **Checks** identifies shadows and angular gaps, including the missing wedge next to qz.
 - **Geometry**: the profile, distance, beam centre, wavelength and αi used.
 
@@ -1674,14 +1674,16 @@ off.
 
 For each analysed ring the report gives the exit-angle exclusion and polarisation. Ring I(χ) and its uncertainties
 use only measured pixels. A radial curve with mirror filling can therefore use a different error model.
-The measured Hermans f appears
-with its statistical error and a systematic range. After the exit-angle cut, GIMaP leaves out contiguous horizon
+The measured Hermans f appears as f ± statistical error [systematic range], beside the isotropic reference f_iso for the same bins. After the exit-angle cut, GIMaP leaves out contiguous horizon
 bins at or below 5% of the ring's median net intensity and reports their |χ| interval. The range tests this
 intensity cut at off, 5% and 10%, and the exit-angle threshold at half, one and twice its nominal value.
-It varies the background by one fitted standard error, or by 20% when that error is unavailable. If the
-nominal pole fit is undetermined, only measured ±χ partners contribute and the low-|χ| wedge stays empty.
-Otherwise, determined fits also contribute a model fill with its propagated standard error.
-**Needs attention** gives the reason for an undetermined fit.
+It varies the background by one fitted standard error, or by 20% when that error is unavailable. Each selection tests leaving
+the horizon gap empty or filling it at the mean density of a neighboring 10° band. A contiguous tail below 75% of the
+preceding band's mean is also tested with its bins removed or replaced. A separate scenario fills the wedge near 0°
+from the first measured band. Determined pole fits can also contribute a low-angle wedge fill with its propagated error.
+The report names the scenario at each limit. When the limits differ by more than 0.05, the ring headline and **Needs attention**
+say that the measured χ range does not determine the orientation factor. The command-line `azimuthal_last_ring.csv` header records
+the factors and limits for the analysed ring matching that curve.
 
 ![Results of the automatic analysis of a GIWAXS frame](manual_images/en/07_giwaxs_results.png)
 
@@ -2130,7 +2132,8 @@ cone at χ0. **Gaussian mosaic + isotropic** describes Gaussian angular spread a
 angle to the preferred axis. The last two average over all azimuths of the tilted axis. Under **Direction**,
 fix χ0 along the normal or in the sample plane, enter its value, or fit it.
 
-Compare f from the measured bins with f from the full fitted distribution, including the missing wedge.
+Read f and its same-bin isotropic reference f_iso together. The limits below identify which assumptions about the missing angles
+and attenuation give the smallest and largest f. Compare these with f from the full fitted distribution, including the missing wedge.
 The plot shows the measured points and the fit. The results give the oriented fraction 1 − φ, FWHM, χ0, 2D
 order and reduced χ². The oriented fraction is conditional on the background b. A fit is marked
 *not determined* if it fails to converge, reduced χ² exceeds 5, a fitted parameter reaches a bound, or
@@ -2141,7 +2144,7 @@ The report also shows any weak |χ| interval excluded next to the exit-angle cut
 
 **Export…** writes the pole figure as CSV (`<frame>_pole_figure.csv`, in
 `gimap_analysis/` next to the data by default) and `<frame>_indexing.json` beside it: the phases (with the CIF and its
-SHA-256), the reflection table, the settings and the fit.
+SHA-256), the reflection table, the settings and the fit. The CSV header and JSON record include measured f, f_iso and the scenarios at the systematic limits.
 
 **In the automatic analysis.** With phases shown (or `--phase FILE.cif` on the command line, repeated for several),
 **Run Automatic Analysis** assigns each peak to the nearest reflection within max(3σ, FWHM/2): the **Peaks** table of
@@ -3910,7 +3913,7 @@ experiment (chapter 13).
   halos (FWHM above 15 % of q) get none.
 - The Hermans factor assumes a film that is isotropic in its plane and weighs each |χ| by sin χ. It is
   given only when at least 80 % of that weight is measured. Read its statistical error alongside the range from
-  varying the exit angle, horizon intensity threshold, background and missing-wedge fill. A pole fit extrapolates into unmeasured angles.
+  varying the exit angle, horizon intensity threshold, background and assumed densities in the attenuated and unmeasured edge bins. A pole fit extrapolates into unmeasured angles.
   Check its reported quality before interpreting the oriented fraction (section 5.9).
 - Regions far below the diffuse background at the same q (under 20 %: a shadow, an absorber, an
   insensitive detector area) count as unmeasured, and a sector lying in one is not compared. Intensity
@@ -4241,7 +4244,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The automatic Yoneda search and horizontal cut average detector rows.** Analyze warns when the horizon varies by more than half a row across the frame. | Add a horizontal band in q for a constant exit angle. Mirror filling needs a measured partner on the other side. It cannot recover the missing wedge. |
 | **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**, the most prominent; the window has no setting for more. The others are left out of the peak table, the sector comparison, the rings and the series hints; *Decisions* says how many candidates there were (section 5.5). | Run `tools/gimap_agent.py auto … --max-peaks N` (section 10.7), or ask the AI to run `find_peaks` with `max_peaks`, when you need the full list. |
 | **Kinematic q omits film refraction.** Near the critical angle the shift in q_z can be of order k·sin αi. A transmitted-channel correction can leave a second ring from the reflected beam. | Check the q axis in the report. Apply the film critical angle when known and quote geometry uncertainty separately from peak-fit errors. |
-| **Missing-wedge intensities require extrapolation.** An exit-angle cut also removes some in-plane orientations. | Check angular coverage, the systematic range of measured f and the pole fit's quality (section 5.9). |
+| **Missing-wedge intensities require extrapolation.** An unseen peak stronger than the edge band can put f outside the reported range. | Check f_iso, the scenarios at the systematic limits and the pole fit's quality (section 5.9). |
 | **NeXus/HDF5 files not written by the Lambda server are now read as stored** (earlier versions transposed and flipped them). A geometry or mask made on such a file with an earlier version no longer fits it (section 5.1). | Check the beam centre and masks of such data; calibrate again if needed. |
 | **Flat-field errors treat the measured flat mean as fixed.** A unit-mean response map lacks the acquisition count scale needed to estimate Poisson noise. | Supply the uniform exposure in counts or ADU. Curves using the same reference share uncertainty (section 5.2). |
 | **The normalisation divides the frame after the background and dark frame are subtracted** in the frame's own units. Transmission and thickness are entered by the user (section 5.2). | Set the background's **Scale** (and the **Dark scale**) to the ratio of exposure times or monitors of the frame and the background. |

@@ -46,7 +46,7 @@ from .models import (
 from .calibration_tools import CalibrationToolsMixin
 from .operation_tools import OperationToolsMixin
 from .operations import OPERATION_TOOLS
-from .pipeline_phases import fit_ring_pole, measured_f_text
+from .pipeline_phases import fit_ring_pole, ring_step_summary
 from .pipeline_progress import FrameChanged
 from .ports import AnalysisWorkbench, Chooser, Confirmer, CurveFitter, FileExplorer, GeometryCalibrator, ResultStore
 from .tool_specs import FINAL, WRITE, tool_specs
@@ -501,11 +501,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
                 payload["analysed"] = (
                     f"no peak at q = {q_center:g} Å⁻¹ in this frame: the nearest feature, at {peak.q:.4g} Å⁻¹, was analysed"
                 )
-        verdict = "pole fit not determined" if pole.get("quality_reasons") else result.reason or result.texture
-        summary = f"q = {center:.3g}: {verdict}"
-        if result.herman is not None:
-            limits = (pole.get("systematics") or {}).get("range")
-            summary += f", f = {measured_f_text(result.herman, result.herman_err, limits)}"
+        summary = ring_step_summary(center, result)
         if peak is not None and caveat(peak):
             summary += f" ({caveat(peak).split(':')[0]})"
         return self._ok(payload, summary)

@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import QHeaderView, QSizePolicy, QTableWidget, QTableWidget
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.app.presentation.theme import theme_manager
-from src.gimap.shared.orientation_notes import orientation_notes
+from src.gimap.shared.orientation_notes import coverage_warning, orientation_notes
 
 from ..application import herman_texts
 from ..application.pipeline_phases import pole_estimate
@@ -236,7 +236,7 @@ def ring_summary(ring: dict) -> tuple[str, str]:
     details = [words(text) for text in (ring.get("reason"), ring.get("texture"), *(ring.get("notes") or ())) if text]
     details.extend(orientation_notes(ring.get("orientation_settings") or {}, pole.get("systematics") or {}, trf))
     if pole:
-        if reasons and ring.get("herman") is None:
+        if reasons and (ring.get("herman") is None or coverage_warning(pole.get("systematics") or {})):
             headline += "\n" + trf("Pole fit not determined ({reasons}).", reasons=reasons)
         if pole.get("ok"):
             headline += "\n" + trf("Pole f = {f}, oriented fraction = {fraction}. 1 − φ is conditional on the background b.",
@@ -249,6 +249,9 @@ def _measured_summary(ring: dict, reasons: str) -> str:
     texture = words(ring.get("texture"))
     texts = herman_texts(ring, stat_label=tr("stat"))
     if texts is not None:
+        warning = coverage_warning((ring.get("pole_figure") or {}).get("systematics") or {}, trf)
+        if warning:
+            return trf("Ring q ≈ {q} Å⁻¹: {reason}", q=q, reason=warning) + "\n" + trf("Measured f = {value}", value=texts["f"])
         if reasons:
             return trf("Ring q ≈ {q} Å⁻¹: pole fit not determined ({reasons}). Measured f = {f}",
                        q=q, reasons=reasons, f=texts["f"])

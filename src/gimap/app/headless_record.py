@@ -92,6 +92,21 @@ def csv_text(text: str) -> str:
     return export_text(str(text).replace("Å⁻¹", "A^-1"))
 
 
+def _ring_csv_header(curve, rings):
+    """Identify the analysed q window before attaching its moments to the exported I(χ)."""
+    from math import isclose
+
+    window = curve.get("region", {}).get("q_window") or ()
+    for ring in reversed(rings):
+        saved = ring.get("q_window") or ()
+        if len(window) == len(saved) == 2 and all(isclose(a, b, rel_tol=1e-12) for a, b in zip(window, saved)):
+            keys = ("q_window", "herman", "herman_err", "herman_isotropic", "herman_systematic_range")
+            record = {key: ring.get(key) for key in keys}
+            record["range_sources"] = ((ring.get("pole_figure") or {}).get("systematics") or {}).get("range_sources")
+            return "\nring orientation: " + json.dumps(record, ensure_ascii=True)
+    return ""
+
+
 def write_outputs(
     session, report: dict, folder: Path, *, options: Optional[dict] = None, created: Optional[str] = None,
     language: str = ENGLISH, curve_format: str = "csv",
@@ -114,10 +129,11 @@ def write_outputs(
         if curve is None or len(curve["x"]) == 0 or (curve_format == "nxcansas" and key in in_nxcansas):
             continue
         name = "azimuthal_last_ring.csv" if key == "azimuthal" else f"{key}.csv"
+        ring_header = _ring_csv_header(curve, report.get("rings") or ()) if key == "azimuthal" else ""
         with open(folder / name, "w", encoding="utf-8", newline="\n") as stream:
             np.savetxt(
                 stream, np.column_stack([curve["x"], curve["y"], curve["sigma"]]), delimiter=",",
-                header=csv_text(f"{provenance}\n{curve['x_label']}, I, sigma"), comments="# ",
+                header=csv_text(f"{provenance}{ring_header}\n{curve['x_label']}, I, sigma"), comments="# ",
             )
         written.append(folder / name)
     written += _write_fit(((report.get("gisaxs") or {}).get("fit")), folder, provenance)
