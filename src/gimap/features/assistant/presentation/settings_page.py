@@ -35,7 +35,9 @@ from src.gimap.app.presentation.i18n import tr
 
 from . import preferences
 from .code_section import ROW_SPACING, ClaudeCodeSection
-from .provider_section import PLAIN_TEXT_KEYS, ProviderSection
+from .provider_section import KEY_STORAGE, ProviderSection
+from .service_notice import allow_requests
+from ..application.providers import anthropic_service
 from .services import AssistantServices
 
 
@@ -204,7 +206,7 @@ class AssistantSettingsPage(QWidget):
         test_row.addWidget(self.test_button)
         test_row.addWidget(self.test_label, 1)
         form.addRow("", test_row)
-        form.addRow(_muted(tr(PLAIN_TEXT_KEYS), box))
+        form.addRow(_muted(tr(KEY_STORAGE), box))
         return box
 
     def _remember_standing(self) -> None:
@@ -246,11 +248,17 @@ class AssistantSettingsPage(QWidget):
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
-            self.services.delete_key()
+            try:
+                self.services.delete_key()
+            except OSError as exc:
+                QMessageBox.warning(self, tr("Claude API Key"), str(exc))
+                return
             self._sync_source()
             self.test_label.setText(tr("Key removed."))
 
     def _test(self) -> None:
+        if not allow_requests(self, self.settings, anthropic_service()):
+            return
         self._remember_model()
         model = str(preferences.read(self.settings, "model"))
         effort = str(preferences.read(self.settings, "effort"))

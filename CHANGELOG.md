@@ -12,6 +12,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- The README and User Manual give the command that reproduces the paper's GALAXI Yoneda cut and Predict
+  solutions. Desktop CI checks Python 3.10 and 3.11 and reads NXcanSAS exports with SasView's loader.
+  Two Predict fits are checked against the archived numerical results. The AI assistant asks before
+  sending data to a service, records the provider and model, and uses the OS credential store when available.
 - **GIWAXS ring orientation** uses polarisation-corrected pixel means and an exit-angle cut. Reports give measured Hermans f with a statistical error and systematic range, fitted f and the background-dependent oriented fraction. Poor pole fits are flagged. Tilted-axis models average over azimuth. Lorentz weighting is available for peak areas, with an exclusion band around the plane of incidence. Phase assignments identify the q convention, Δq, Δd/d, ambiguous matches and unassigned peaks.
 
 - **Fitting ▸ In-situ series.** Inspect each Predict choice, its rank and its probability in the results table,
@@ -1234,9 +1238,9 @@ hold.
 - Run records do not hold everything needed to repeat a run (masks are counted, not stored as pixel lists).
   Sputter, 1D Predict, AI and CLI records now identify the software version; Predict parameters uses a fixed seed.
 
-- **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`,
-  `assistant_provider_keys.json`). On a shared computer, set the key as an environment variable instead, or
-  **Remove** it after use.
+- **API keys saved without an OS credential store** are kept in plain text in the user data folder
+  (`claude_api_key.txt`, `assistant_provider_keys.json`). On a shared computer, use the provider's
+  environment variable or **Remove** the saved key after use.
 - **GIMaP's detector is flat and perpendicular to the beam**: a `.poni` tilt (and `Rot3`, and its `orientation`
   entry) is left out, and Geometry Calibration fits no tilt. On a tilted detector |q| is off away from the beam (up
   to 6.3 % on the Xeuss example); the error is now computed and reported, not corrected. For exact q reduce such

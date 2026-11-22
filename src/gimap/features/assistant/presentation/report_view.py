@@ -262,6 +262,8 @@ def report_html(
         f"{_e(outcome.model or 'model')} · {usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens:,} "
         f"input and {usage.output_tokens:,} output tokens"
     )
+    if results.provider:
+        footer = f"{_e(results.provider)} · {footer}"
     if outcome.billing == BILLING_SUBSCRIPTION:
         footer += " · your Claude plan" + (f" (≈ ${cost:.2f} at API prices)" if cost is not None else "")
     elif cost is not None:

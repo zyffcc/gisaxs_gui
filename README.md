@@ -46,7 +46,9 @@ right.*
   Predict for many curves.
 - **AI assistant** (optional): **Tools ▸ Process with AI…** lets an AI (Claude, DeepSeek, Qwen, OpenAI or a
   local model) run the Analyze tools on the frame shown while you watch; each change comes back as a card
-  you can preview, apply or undo. Nothing else in GIMaP needs AI or an account.
+  you can preview, apply or undo. Before the first request to a service, GIMaP names it and asks
+  permission to send frame information and results. The saved report identifies the provider and model.
+  Automatic analysis runs locally without an AI account.
 - **Command line and MCP**: `tools/gimap_agent.py` runs the automatic analysis without the window and
   serves the analysis tools to agents over MCP (see [Command Line and MCP](#command-line-and-mcp)).
 - **Labs** (experimental): 2D Prediction runs trained TensorFlow modules on GISAXS frames (no trained model
@@ -101,7 +103,7 @@ To update a clone, double-click `Update_GIMaP.bat` (see
 
 ### From source with pip
 
-Python 3.10 or 3.11:
+GIMaP requires Python >=3.10 and is tested on 3.10 and 3.11. From the source folder, run
 
 ```powershell
 cd gisaxs_gui
@@ -302,6 +304,22 @@ Read the playbooks ([GIWAXS](docs/agents/giwaxs-playbook.md), [GISAXS](docs/agen
 before relying on the numbers: they say which default decisions may not fit your question.
 `python tools/gimap_agent.py auto --help` lists every option.
 
+### Worked example · GALAXI GISAXS
+
+Run this command from the source folder to reproduce the Yoneda cut and Predict solutions in Fig. 4.
+It uses the public GALAXI frame, its calibration and the reported incidence angle of 0.463°.
+
+```sh
+python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.tif --calibration tests/data/external/gisaxs_galaxi/galaxi_bornagain.poni --incidence-deg 0.463 --out fig4
+```
+
+The run took 1 min 41 s on the Windows test machine. Open `fig4/galaxi_data/report.md`.
+`horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
+gives the best fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists three solutions with
+probabilities of about 0.39, 0.32 and 0.30. Exit code 2 means that the report asks you to choose a
+model. The same folder contains `qmap.png` and `report.json`. The run summaries are
+`fig4/summary.md` and `fig4/summary.json`.
+
 ## How to cite
 
 If you publish results obtained with GIMaP, please cite it and name the version you used. The metadata
@@ -322,7 +340,7 @@ Where you rely on a method or a data set that GIMaP builds on, cite it as well: 
   packages include Python. Each release must pass the platform checks and clean-machine package
   acceptance in [the release guide](docs/releasing.md); see the release notes for completed acceptance.
   BornAgain is optional on macOS. **Linux**: from source; the test suite runs on Ubuntu 24.04 in CI.
-- **Python** 3.10 or 3.11 to run from source.
+- **Python** >=3.10 to run from source, tested on 3.10 and 3.11.
 - **Screen**: 1280 × 720 or larger (the smallest window is 1024 × 640). GIMaP follows the display scaling of
   the operating system; **View ▸ Font Size** changes the text size.
 - **Disk**: about 2 GB for the Python environment.

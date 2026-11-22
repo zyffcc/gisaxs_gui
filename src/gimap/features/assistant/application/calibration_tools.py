@@ -559,6 +559,8 @@ class CalibrationToolsMixin:
     def _tool_use_geometry(self, source: str, **arguments) -> ToolOutcome:
         values, origin = self._geometry_values({"source": source, **arguments})
         source = profile_source(self.actor, origin, arguments.get("path") or values.get("source_image"))  # with its path
+        if self.results.provider:
+            source += f" ({self.results.provider} · {self.results.model})"
         status = self.workbench.use_geometry(values, arguments.get("profile_name"), source)
         self.results.geometry_used = {**values, "source": origin}
         self.results.status = status

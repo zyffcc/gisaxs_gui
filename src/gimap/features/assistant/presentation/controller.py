@@ -55,6 +55,8 @@ from .panel import AssistantPanel
 from .provider_section import chosen_provider, describe_provider
 from .report_view import report_html, report_title
 from .services import AssistantServices
+from .service_notice import allow_requests
+from ..application.providers import anthropic_service, provider_service
 from .settings_page import AssistantSettingsPage
 from .start_dialog import AssistantStartDialog
 
@@ -149,6 +151,8 @@ class AssistantController(QObject):
         self._goals: Optional[AnalysisGoals] = None
         self._frame: Optional[str] = None
         self._model = ""
+        self._provider = ""
+        self._backend = ""
         self._started = 0.0
         self.outcome: Optional[RunOutcome] = None
         self._operation_tools: Optional[ToolCatalog] = None
@@ -277,6 +281,14 @@ class AssistantController(QObject):
     def run(self, goals: AnalysisGoals, status: Optional[dict] = None) -> bool:
         if self.running():
             return False
+        backend = self.backend()
+        if backend == BACKEND_PROVIDER:
+            key, _model, url = chosen_provider(self.settings)
+            service = provider_service(key, url)
+        else:
+            service = anthropic_service() if backend == BACKEND_API else "Anthropic"
+        if not allow_requests(self.window, self.settings, service):
+            return False
         try:
             brain, model, task_type = self._brain()
         except LlmError as exc:
@@ -304,6 +316,7 @@ class AssistantController(QObject):
             fitter=self.services.fitter,
             chooser=GuiChooser(self._bridge, self.window, cancelled=cancelled),
             max_turns=int(preferences.read(self.settings, "max_turns")),
+            provider=service,
         )
         panel = self.show_panel()
         worker.stepStarted.connect(panel.step_started)
@@ -314,6 +327,7 @@ class AssistantController(QObject):
         worker.usageChanged.connect(self._usage)
         worker.finished.connect(lambda outcome, source=worker: self._finished(outcome, source))
         self._worker, self._goals, self._model = worker, goals, model
+        self._provider, self._backend = service, backend
         self._frame = status.get("path")
         self.outcome = None
         self._started = time.monotonic()
@@ -387,6 +401,9 @@ class AssistantController(QObject):
         if source is not None and source is not self._worker:
             return  # a late signal of an earlier run
         elapsed = time.monotonic() - self._started
+        if not outcome.results.provider:  # an unexpected exception before the first reply
+            outcome.results.provider = self._provider
+            outcome.results.model = outcome.model = self._model
         self.outcome = outcome
         self._thread = None
         if self.panel is not None:
@@ -447,8 +464,8 @@ class AssistantController(QObject):
             "software_version": SOFTWARE,
             "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "frame": self._frame,
-            "model": outcome.model or self._model,
-            "brain": self.backend(),
+            **outcome.results.model_record(),
+            "brain": self._backend,
             "billing": outcome.billing,
             "cost_usd": self._cost(outcome),
             "state": outcome.state,

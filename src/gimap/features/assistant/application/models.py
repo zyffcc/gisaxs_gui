@@ -161,6 +161,8 @@ class StepRecord:
     seconds: float = 0.0
     result: Any = None
     """The JSON-able result the model saw."""
+    model: str = ""
+    """The model that requested this tool call (the opening status check is local)."""
 
 
 @dataclass(frozen=True)
@@ -203,6 +205,12 @@ class RunResults:
     gisaxs: dict = field(default_factory=dict)
     """GISAXS findings: ``symmetry``, ``halves`` (a ``HalvesChoice``), ``spacing``, ``fit`` (solutions)."""
     report: Optional[AssistantReport] = None
+    provider: str = ""
+    model: str = ""
+
+    def model_record(self) -> dict:
+        """The responding model for this result. Local automatic analysis has no model service."""
+        return {"provider": self.provider, "model": self.model} if self.provider else {}
 
 
 @dataclass

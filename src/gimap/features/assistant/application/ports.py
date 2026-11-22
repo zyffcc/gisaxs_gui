@@ -16,6 +16,7 @@ class AssistantLlm(Protocol):
     """
 
     model: str
+    provider: str
 
     def respond(
         self,
@@ -75,7 +76,7 @@ class AnalysisWorkbench(Protocol):
 
     def show(self, view: Optional[str] = None, lower_profile: Optional[str] = None) -> None: ...
 
-    def export_curves(self) -> list[str]: ...
+    def export_curves(self, extra_metadata: Optional[dict] = None) -> list[str]: ...
 
     def preview_png(self, max_size: int = 900) -> Optional[bytes]: ...
 
@@ -241,6 +242,7 @@ class AgentRuntime(Protocol):
     """
 
     model: str
+    resolved_model: str
 
     def run(
         self,

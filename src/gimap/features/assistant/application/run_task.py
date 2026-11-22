@@ -55,7 +55,8 @@ class Silent:
 
 def run_step(catalog: ToolCatalog, call: ToolCall, steps: list[StepRecord], events) -> ToolOutcome:
     """Run one tool call, record it as the next step and report it to ``events``."""
-    step = StepRecord(index=len(steps) + 1, tool=call.name, arguments=clean(call.input or {}))
+    step = StepRecord(index=len(steps) + 1, tool=call.name, arguments=clean(call.input or {}),
+                      model=catalog.results.model if steps else "")
     steps.append(step)
     events.step_started(step)
     started = time.perf_counter()
@@ -83,8 +84,10 @@ class RunAssistantTask:
         fitter: Optional[CurveFitter] = None,
         max_turns: int = DEFAULT_MAX_TURNS,
         retry_delays: Sequence[float] = RETRY_DELAYS_S,
+        provider: Optional[str] = None,
     ):
         self.llm = llm
+        self.provider = provider or llm.provider
         self.retry_delays = tuple(float(delay) for delay in retry_delays)
         self.workbench = workbench
         self.confirmer = confirmer
@@ -97,7 +100,7 @@ class RunAssistantTask:
         self.max_turns = max(1, int(max_turns))
 
     def __call__(self, goals: AnalysisGoals, *, cancelled: Callable[[], bool] = lambda: False) -> RunOutcome:
-        results = RunResults()
+        results = RunResults(provider=self.provider, model=self.llm.model)
         catalog = ToolCatalog(
             self.workbench, goals, results, confirmer=self.confirmer, store=self.store,
             explorer=self.explorer, calibrator=self.calibrator, chooser=self.chooser, fitter=self.fitter,
@@ -120,6 +123,7 @@ class RunAssistantTask:
                 state, message = (RUN_CANCELLED, "Stopped by the user.") if cancelled() else (RUN_FAILED, exc.message)
                 break
             usage = usage + turn.usage
+            results.model = turn.model or results.model
             self.events.usage(turn.usage, usage)
             if turn.text.strip():
                 self.events.model_text(turn.text.strip())
@@ -160,7 +164,7 @@ class RunAssistantTask:
                 break
         if goals.permission == PERMISSION_PREVIEW:
             catalog.restore_run_changes()  # the person applies what they want from the cards
-        return RunOutcome(state, message, steps, results, usage, model=getattr(self.llm, "model", ""), transcript=messages)
+        return RunOutcome(state, message, steps, results, usage, model=results.model, transcript=messages)
 
     def _respond(self, tools: list[dict], messages: list[dict], cancelled: Callable[[], bool]):
         """One model turn; overload, rate-limit and network errors are retried after a pause."""

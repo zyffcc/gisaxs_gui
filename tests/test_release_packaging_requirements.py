@@ -107,7 +107,11 @@ def code():
                 tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
             except (OSError, SyntaxError):
                 continue
-            imported.update(_imports(tree))
+            modules = _imports(tree)
+            if path.relative_to(ROOT).as_posix() == "src/gimap/features/assistant/infrastructure/system_keys.py":
+                # Use an existing OS credential store when its adapter is present on the machine.
+                modules -= {"keyring", "win32ctypes"}
+            imported.update(modules)
     return imported - set(sys.stdlib_module_names), own
 
 

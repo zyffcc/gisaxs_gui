@@ -511,8 +511,8 @@ class AnalyzeAutomation(IndexingAutomationMixin):  # set_phases, assign_peaks, p
         analysis = self._page.view_model.state.analysis
         return None if analysis is None else analysis_metadata(analysis)
 
-    def export_current(self) -> list[str]:
-        written = self._page.view_model.export()
+    def export_current(self, extra_metadata: Optional[dict] = None) -> list[str]:
+        written = self._page.view_model.export(extra_metadata=extra_metadata)
         self._page._status(exported_text(written), "ok")
         return [str(path) for path in written]
 

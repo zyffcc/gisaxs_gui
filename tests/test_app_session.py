@@ -287,17 +287,20 @@ def test_a_notice_from_before_keeps_off_a_newer_status_line() -> None:
 
     _app()
     page = QWidget()
-    page.resize(900, 300)
     status = QLabel("Ready", page)
-    status.setGeometry(16, 275, 860, 22)
+    error = ("Could not analyse the frame: frame_0001.tif is not a detector image GIMaP can read "
+             "(CBF, TIFF, EDF or NeXus).")
+    # Leave too little space for the full notice beside the error, on every platform's font.
+    status_width = status.fontMetrics().horizontalAdvance(error) + 8
+    page.resize(16 + status_width + 160, 300)
+    status.setGeometry(16, 275, status_width, 22)
     page.show()
     try:
         notice = show_toast(page, "Nothing opened: drop detector frames, a folder of them or a project", level="warning")
         _settle(0.05)
         old_width = notice.width()
         status.setProperty("level", "error")  # (as a page's status line says an error)
-        status.setText("Could not analyse the frame: frame_0001.tif is not a detector image GIMaP can read "
-                       "(CBF, TIFF, EDF or NeXus).")
+        status.setText(error)
         _settle(0.6)  # the row looks again
         text_end = status.x() + status.fontMetrics().horizontalAdvance(status.text())
         assert notice not in visible_toasts(page) or (notice.x() >= text_end and notice.width() < old_width)

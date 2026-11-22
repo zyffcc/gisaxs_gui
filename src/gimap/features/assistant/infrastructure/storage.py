@@ -7,9 +7,11 @@ from src.gimap.shared.version import SOFTWARE
 import json
 import os
 import tempfile
-import time
+from datetime import datetime
 from pathlib import Path
 from typing import Mapping, Optional
+
+from .system_keys import system_credentials
 
 KEY_FILE = "claude_api_key.txt"
 PROVIDER_KEYS_FILE = "assistant_provider_keys.json"
@@ -31,7 +33,7 @@ def _atomic_write(path: Path, text: str) -> Path:
 
 
 class ApiKeyStore:
-    """An API key saved in the user data folder (plain text, readable by this user only).
+    """An API key in the OS credential store or the user data folder.
 
     The environment variable ANTHROPIC_API_KEY or an ``ant auth login`` profile
     work without it; a key saved here is used in preference to them.
@@ -39,8 +41,16 @@ class ApiKeyStore:
 
     def __init__(self, data_dir: Optional[str | Path]):
         self.path = Path(data_dir) / KEY_FILE if data_dir is not None else None
+        self.system = system_credentials(data_dir)
 
     def load(self) -> Optional[str]:
+        if self.system is not None:
+            try:
+                key = self.system.read("anthropic")
+            except OSError:
+                key = None  # the credential store may be locked; a file or environment key still works
+            if key:
+                return key
         if self.path is None or not self.path.is_file():
             return None
         key = self.path.read_text(encoding="utf-8").strip()
@@ -49,6 +59,10 @@ class ApiKeyStore:
     def save(self, key: str) -> None:
         if self.path is None:
             raise OSError("There is no user data folder to save the key in.")
+        if self.system is not None:
+            self.system.write("anthropic", key.strip())
+            self.path.unlink(missing_ok=True)
+            return
         _atomic_write(self.path, key.strip() + "\n")
         try:
             os.chmod(self.path, 0o600)
@@ -56,8 +70,9 @@ class ApiKeyStore:
             pass
 
     def delete(self) -> bool:
+        removed = self.system.delete("anthropic") if self.system is not None else False
         if self.path is None or not self.path.is_file():
-            return False
+            return removed
         self.path.unlink()
         return True
 
@@ -75,7 +90,7 @@ class ApiKeyStore:
 
 
 class ProviderKeyStore:
-    """API keys of the other AI providers, one per provider, in the user data folder (this user only).
+    """API keys of the other AI providers in the OS credential store or the user data folder.
 
     A provider's usual environment variable (``DEEPSEEK_API_KEY`` …) works without a saved key;
     a saved key takes precedence.
@@ -84,6 +99,7 @@ class ProviderKeyStore:
     def __init__(self, data_dir: Optional[str | Path], environ: Optional[Mapping[str, str]] = None):
         self.path = Path(data_dir) / PROVIDER_KEYS_FILE if data_dir is not None else None
         self._environ = os.environ if environ is None else environ
+        self.system = system_credentials(data_dir)
 
     def _all(self) -> dict:
         if self.path is None or not self.path.is_file():
@@ -95,6 +111,13 @@ class ProviderKeyStore:
         return data if isinstance(data, dict) else {}
 
     def saved(self, provider: str) -> Optional[str]:
+        if self.system is not None:
+            try:
+                key = self.system.read(provider)
+            except OSError:
+                key = None
+            if key:
+                return key
         key = str(self._all().get(provider) or "").strip()
         return key or None
 
@@ -112,6 +135,10 @@ class ProviderKeyStore:
     def save(self, provider: str, key: str) -> None:
         if self.path is None:
             raise OSError("There is no user data folder to save the key in.")
+        if self.system is not None:
+            self.system.write(provider, key.strip())
+            self._remove_file_key(provider)
+            return
         data = self._all()
         data[provider] = key.strip()
         _atomic_write(self.path, json.dumps(data, indent=1) + "\n")
@@ -121,6 +148,10 @@ class ProviderKeyStore:
             pass
 
     def delete(self, provider: str) -> bool:
+        removed = self.system.delete(provider) if self.system is not None else False
+        return self._remove_file_key(provider) or removed
+
+    def _remove_file_key(self, provider: str) -> bool:
         data = self._all()
         if provider not in data or self.path is None:
             return False
@@ -146,7 +177,7 @@ class JsonResultStore:
         """Keep the full record of a run (steps, results, transcript) for later review."""
         if self.data_dir is None:
             return None
-        stamp = time.strftime("%Y%m%d-%H%M%S")
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         stem = Path(str(record.get("frame") or "frame")).stem or "frame"
         path = self.data_dir / RUNS_FOLDER / f"{stamp}_{stem}.json"
         record = {**record, "software_version": SOFTWARE}
