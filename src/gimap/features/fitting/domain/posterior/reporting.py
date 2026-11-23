@@ -15,8 +15,8 @@ VALIDATION_SPACING = 0.005
 """Spacing in nm⁻¹ between the 397 points at 0.02–2 nm⁻¹."""
 
 QZR_COVERAGE = 1.2
-"""Physics and Methods §9.13, sphere coverage table (posterior_dwba_pairs.json): 18–33 % at 1.2–1.7
-on DWBA cuts fitted at levels 2 and 1 respectively. Applied conservatively to random-cylinder radii too."""
+"""Physics and Methods §9.13 (posterior_r15_dwba_pairs.json): the 68 % intervals hold 24 % and 20 % at
+1.2–1.7 on DWBA cuts fitted at levels 2 and 1. Applied conservatively to random-cylinder radii too."""
 QZR_FAILURE = 2.0
 """Approximate onset of level-2 failure in the same DWBA comparison (bins 1.7–2.3 and 2.3–3.5)."""
 QZR_TWO_PATH_COVERAGE = 1.7

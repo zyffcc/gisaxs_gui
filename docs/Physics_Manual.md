@@ -3196,7 +3196,7 @@ index and need no such approximation, so GIMaP says when it matters:
   the fit still evaluates the effective interface at q_z = 0.
 - For a sphere or random cylinder on a reflected-beam cut fitted at level 1 or 2, `qzR_cov:R_n` marks the intervals
   as not calibrated above q₊R = 1.2: on simulated DWBA cuts at q₊R 1.2–1.7, the 68 % intervals held the true radius
-  in only 18–33 % of cases. Level 2 adds `qzR_fail:R_n` above 2, where its model error becomes strong: use level 3 or
+  in only 20–24 % of cases. Level 2 adds `qzR_fail:R_n` above 2, where its model error becomes strong: use level 3 or
   a four-term DWBA fit. Level 3 raises `qzR_cov:R_n` above q₊R = 1.7. These sphere thresholds also apply to random
   cylinders, as a precaution.
 - At levels 2–4, an upright cylinder with fitted q₊R > 2 receives `cyl_sphere:R_n`: its radial profile can fit the
