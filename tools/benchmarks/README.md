@@ -81,32 +81,55 @@ published `--table TABLE.tex --numbers MACROS.tex`. The SEM reference JSON suppl
 nonzero exit status. Unstamped historical runs report an unknown producing commit.
 `--strict-provenance` also fails when a computational run lacks that commit.
 
+## Short checks of composition evidence and MCMC
+
+The paired runs at `98b2a00a` and `f1628f3e` use the same six synthetic cuts, network and seeds.
+Run `python tools/benchmarks/evidence_integration_check.py --indices 0,1,4,5,8,13 --points 8 --samples 16384 --posterior-samples 4096 --out evidence_short`
+with one BLAS thread. For the original composition total, sum the unrestricted evidence estimates
+of all retained starts before the display cutoff. The corrected total comes directly from Predict.
+The joint-amplitude check uses a separate single-start estimate on both revisions.
+All eleven integration points met the check's convergence criterion for 23 of 24 cut/composition
+pairs before the correction and 22 of 24 afterwards. Joint integration reversed none of the 18
+comparisons against the true composition in either run. The median correction in log evidence
+for the true composition was +0.417 before and +0.403 after.
+
+`python tools/benchmarks/mcmc_check.py` ran two ensembles for 4,000 steps per walker on both revisions.
+The Gaussian control converged on both. The manual-fit and Predict checks started from the prior and
+their ensembles disagreed on both revisions. The saved record includes their split R̂ estimates and
+the per-composition integration results. [Paired short-check results](predict_composition_checks.json)
+
 ## Tests
 
 On the Windows release-check machine, `python -m pytest --collect-only -q` collected **4322 tests**.
 Five tests skipped for missing optional Python packages. One reads an NXcanSAS export with SasView
 (`sasdata`), and four compare detector orientations with `pyFAI`. A separate test skipped because
 the `h5clear` executable was missing. Run `python -m pytest -q tests/test_predict_regression.py` for the
-five-cut Predict regression (72 s on the Windows test machine). In `per_cut/posterior_recovery.json.gz`
-it checks known-composition fits 184 and 167 and composition choice 176. It also checks automatic level-2
-fit 89 in `per_cut/posterior_newseed_auto2.json.gz` and known-composition fit 208 in `per_cut/posterior_newseed.json.gz`.
+five-cut Predict regression. The synthetic inputs and fit settings come from three historical records
+in `per_cut/`. The test replays known-composition fits 184 and 167 and composition choice 176 from
+`posterior_recovery.json.gz`, automatic level-2 fit 89 from `posterior_newseed_auto2.json.gz`, and
+known-composition fit 208 from `posterior_newseed.json.gz`.
 
-The archive was produced on Windows with Python 3.10.18 and one BLAS thread per fit. On that platform
-and Python version the test requires exact agreement for every archived numerical field except run time.
-Elsewhere it checks the compositions, allows an absolute difference of 0.05 in each solution probability (Windows with Python 3.11 moved one of two competing solutions by 0.031),
-and checks every fitted population value and posterior median at a relative tolerance of 0.01 and every 68% and
-95% interval endpoint at 0.02 (Ubuntu CI differs by up to 0.16% in a fitted value); the least-squares standard
-errors, which differ by up to 45% at a bound, are compared on the archive platform only. This includes the
-populations in the reported alternative solutions.
-The diagnostic comparison across platforms covers `bic`, `low_ess`, `model_error`, `qzR_*` and `cyl_sphere`,
-including the population identified by each flag. The first archive predates the sphere warning at
-q_z R > 2, which now applies to fits 184 and 167. Refinement near a bound can change which bound,
-correlation and unconstrained-parameter flags appear.
+`tests/data/ml1d/predict_regression.json` contains the five expected outputs, the fitting-code commit
+and the runtime versions. After committing a numerical change, regenerate this file from the repository
+root on Windows with Python 3.10.18 using `python tests/test_predict_regression.py --refresh`. The command
+runs each selected stage in a fresh process with one BLAS thread and verifies the network SHA-256 from
+the original run.
 
-The tolerances follow these differences. With the release wheels on Ubuntu and Python 3.11,
-the upper 95% endpoint for the second population's radius spread in cut 167 was 0.30541181.
-The archived endpoint is 0.30579296, a relative difference of 0.001246. In cut 184, the
-standard error of the spacing spread differed by 5.69% between the two runs.
+At fitting commit `f1628f3e`, all five leading compositions match their historical results. The
+shared bounds and floor-weighted refits change the fitted values, effective sample sizes and intervals.
+Cut 167 now passes the pooled sampling check for its supplied composition. Its leading solution takes
+0.99924 of the mass (previously 0.55095 under BIC). The leading composition on automatic cut 89 has
+probability 0.87457 (previously 0.87093). The leading weights for 184, 176 and 208 remain 1.
+
+Windows with Python 3.10.18 checks every archived numerical field exactly, including alternative solutions.
+Run time is omitted. Other platforms check the composition, comparison branch and number of alternatives
+exactly. They compare the leading solution weight and composition weights to 0.05 absolute, the leading
+fitted population values and posterior medians to 0.01 relative, and interval endpoints to 0.02 relative.
+The portable flags are `bic`, `low_ess`, `model_error`, `qzR_*` and `cyl_sphere`, including the
+population each flag identifies. On the historical references, a competing solution weight differed by
+0.031 on Windows with Python 3.11. On Ubuntu a fitted value differed by 0.16% and a least-squares standard
+error near a bound by up to 45%. Least-squares errors and alternative population values are compared on
+the archive platform only.
 
 `python -m pytest -q tests/test_reproduce_automatic.py` runs the public P08 and GALAXI examples through automatic analysis, then replays their JSON exports from copies of the original inputs. The P08 reference uses the notebook incidence as input and applies the measured incidence with zero sample roll. It assigns 11 of 12 peaks. The MAPbI₃ orientation fails the residual check and the single-ring PbI₂ fit passes. The resolved MAPbI₃ reflections (202 and 404) give only one independent constraint on the tetragonal cell. The single PbI₂ peak also leaves its cell undetermined. A second P08 run checks replay with `--assume-fibre-normal` enabled.
 
@@ -178,7 +201,7 @@ For spheres in the two-path DWBA comparison (`si_tp_new`), 68 % interval coverag
 48 % in the q₊R bins 1.2–1.7, 1.7–2.3 and 2.3–3.5. Predict therefore raises `qzR_cov` above 1.7 at
 level 3 (`reporting.QZR_TWO_PATH_COVERAGE`). The frequent sphere/cylinder confusion in the DWBA comparison motivates a separate shape warning:
 at levels 2 and 3 an upright cylinder above q₊R = 2 (`reporting.QZR_UPRIGHT_SPHERE`) gets `cyl_sphere`, including fits without a height.
-The public GALAXI worked example gives q₊R = 3.10 for the 5.94 nm upright cylinder.
+The public GALAXI worked example gives q₊R = 3.13 for the 5.98 nm upright cylinder.
 
 `history/` holds the summaries of earlier code and of removed methods; they are not the paper's numbers
 (`history/README.md`). A new run writes `NAME_summary.json` here and `results/NAME.json` (not committed); files named
@@ -207,24 +230,27 @@ On an 80-point synthetic half-step grid with equal source variances, using margi
 alone understates the fitted constant's interval width by 13.3%. The row-sum approximation
 agrees within 0.1% with the variance calculated using the full covariance.
 
-| Level-2 fit (sphere with paracrystal + upright cylinder) | Linear interpolation of σ | Corrected fit weights |
+| Historical level-2 fit (sphere with paracrystal + upright cylinder) | Linear interpolation of σ | Corrected fit weights |
 |---|---:|---:|
 | Best-fit R₁, R₂ (nm) | 3.2771, 5.9900 | 3.3392, 5.9413 |
 | Best-fit spacing D₁ (nm) | 48.9128 | 49.6790 |
 | Reduced χ² | 1.048 | 1.051 |
 | Reported 68% interval on D₁ (nm) | [36.83, 59.97] | [27.05, 91.25] |
 
-The earlier run assigned probability 0.9996 to this composition. Sampling in the corrected
-run triggered the BIC fallback. The two reported modes of this composition have BIC weights
-0.6540 and 0.3443 (composition weight 0.9983). The corrected run uses the least-squares
-errors for the reported D₁ interval. Its diagnostic sampling summary gives a median of
-48.21 nm and 16th and 84th percentiles of 36.62 and 60.92 nm.
+The earlier run assigned probability 0.9996 to this composition. With corrected interpolation
+weights the historical fit triggered BIC. Its two reported modes had BIC weights of 0.6540 and
+0.3443 (composition weight 0.9983). The D₁ interval in the table used least-squares errors.
+
+Repeating the corrected-weight fit at `f1628f3e` gives pooled evidence probability 0.9995 for
+this composition. Its two reported solutions have probabilities 0.5126 and 0.4869. The leading
+fit gives R₁ = 3.2781 nm, R₂ = 5.9831 nm, D₁ = 48.7974 nm and reduced χ² = 1.048. Its posterior
+median for D₁ is 52.83 nm and its 68% interval is [37.78, 78.21] nm.
 
 The public replay regression also fits the positive arm alone. For this control the test masks
 columns 0–499 of the same frame. The negative arm then reaches only 0.0436 Å⁻¹ and the positive
 arm reaches 0.179 Å⁻¹. The procedure keeps the calibrated centre because the mask prevents a
-symmetry refinement. Evidence sampling gives mode probabilities 0.4467, 0.4110 and 0.1423.
-All three modes have the same composition, so its probability among the retained compositions is 1.
+symmetry refinement. At `f1628f3e` evidence sampling gives mode probabilities 0.5654 and 0.4346.
+Both modes have the same composition, whose probability among the retained compositions is 1.
 
 ## Four-term DWBA on a known substrate
 
@@ -450,7 +476,7 @@ To read the archived level-4 parameter and timing results, use the four bundled 
 | `fit1d_recovery.py` | how well *Predict parameters (fit1d)* (removed in 0.2.0; a copy of the kit in `GISAXS1D_KIT_HOME`) recovered known parameters on the 200 curves of `recovery_cases.py` (Physics and Methods, section 9.12); with `--set extended` on 1200 curves of `heldout_cases.py` | `history/fit1d_recovery_summary.json`, `history/fit1d_heldout_summary.json` (a new run writes beside the script) |
 | `posterior_recovery.py` | how well *Predict parameters* (the proposal network, its posterior and refinement) recovers known parameters on fit1d's 200 held-out curves (`--set legacy-first`) or on curves of `heldout_cases.py` (`--set legacy-extended`; 600 in the paper's run): errors, coverage of the 68 %/95 % intervals, how often the most probable solution is in the truth's mode, the composition chosen, time per curve on one core (Physics and Methods, section 9.13); `--truth own` draws the same cases in Predict's own model (the coverage when the model is exact), `--model-error-floor`, `--explored`, `--moves`, `--moved-solutions`, `--per-count` and `--widths` set those steps, `--constant module.NAME=value` any other constant of `refine` or `infer`; `--scattering dwba` draws the same curves with the four DWBA terms (`--substrate si` or `ps100`, 100 nm polystyrene on Si); `--cut` says what Predict is given of the cut: `born` its q₊ = k_i + k_f (the Born term at it; the default), `two_path` both angles (spheres with the exit-reflected path at q₋ = k_i − k_f and a free effective reflection coefficient), `dwba` both angles and the substrate optics (four fixed paths), `eia` nothing (the effective interface). `--stages auto --auto-level 4` runs automatic analysis with these known optics | `posterior_*_summary.json` and `per_cut/` (*The runs the paper quotes*, above); earlier runs in `history/` |
 | `posterior_pairs.py` | pairs runs of `posterior_recovery.py` on the same cases that differ in the truth's physics or Predict's geometry: errors of R and D by q₊R for spheres and upright cylinders, composition and truth's mode by the largest sphere's q₊R, whether χ²/N marks the spheres that are off (Physics and Methods 9.13, *The waves the surface reflects*). `--by-cut` compares the largest true q₊R, true composition, parameters, intervals, timing and single-population shape substitutions, checking the draws match | `posterior_dwba4_pairs.json`, `posterior_dwba_pairs.json`; earlier ones in `history/` |
-| `evidence_integration_check.py` | Predict's evidence, the scales integrated by Laplace at their least-squares values after the model error's spline coefficients (8 B-splines, a partition of unity, so a constant in them trades against every scale), against the scales and the coefficients integrated together (adaptive importance sampling, each value checked by a second run), on six one-population cuts of the first benchmark set (both halves) with four compositions each (the truth, without its paracrystal, the other family, two populations): the difference at the refined solution, at τ/2 and 2τ and at 40 draws of each solution's posterior, and what it changes in each solution's evidence and in the log Bayes factors against the truth (statistics referee, round 5, S7 ii). The joint integral is larger by 0.3–1.8 for the true composition (it grows with τ, spread 0.3–1.0 within a posterior); the log Bayes factors of the compositions that describe the curve change by −0.9 to +1.7 (+5.6 for one at χ²/N 1.5), those of compositions far off by +24 to +1350 in their favour, and no ranking changes | `evidence_integration_check.json` |
+| `evidence_integration_check.py` | The historical check compared Predict's Laplace approximation for the scales with joint integration of the scales and eight spline coefficients. It used six one-population cuts and four candidate compositions per cut. It evaluated the difference at the refined solution, at half and double its model-error amplitude τ, and at 40 posterior draws. Joint integration increased the true composition's **log evidence** by 0.3–1.8. Log Bayes factors against the truth changed by −0.9 to +1.7 among compositions describing the curve (+5.6 for one at χ²/N = 1.5) and by +24 to +1350 for poor fits. All rankings were preserved. | `evidence_integration_check.json` |
 | `summary_tables.py` | prints the tables of Physics and Methods 9.13 and 10.3 and of the model card from the stored summaries (`--lang zh` for the Chinese headers, `--only recovery extended sensitivity own dwba pairs timing v5 large card`); computes nothing again | – |
 | `search_baseline.py` | the baseline without a network: Fitting's *Search the ranges, then refine* from its default values on the same 200 held-out curves, the true composition given (median error of R 2.8 % / 6.7 %, 90th percentile 81 % / 136 %, about 10 s per curve; Predict parameters 0.5 % / 0.7 % and 10 % / 14 %, `posterior_recovery_summary.json`) | `search_baseline_summary.json` |
 | `heldout_cases.py` | one to three populations, with LMA or DA. The historical extended set shared draws with the first and third sets. | – |
@@ -733,7 +759,7 @@ give the seed, fitted geometry, uncertainties and coverage counts.
 
 ## The third set
 
-`posterior_newseed` was run at commit 6bb1a18 (fitting tree d139e6f5). The fitting code differs from the tree of the other runs (7e68831a) in its reporting. The five-cut regression above checks the archived numerical results from three runs. The seed (20261122) was chosen after the last change of the procedure, so no change was judged on it. The stage `auto` in this archive is the automatic analysis's call as it was then: the first level (q_z = 0), spheres and upright cylinders, one or two populations.
+`posterior_newseed` was run at commit 6bb1a18 (fitting tree d139e6f5). The fitting code differs from the tree of the other runs (7e68831a) in its reporting. The five-cut regression above reuses inputs from three runs. The seed (20261122) was chosen after the last change of the procedure, so no change was judged on it. The stage `auto` in this archive is the automatic analysis's call as it was then: the first level (q_z = 0), spheres and upright cylinders, one or two populations.
 `posterior_newseed_auto2` repeats the stage `auto` on the same 300 cuts after automatic analysis began fitting at the second level when it knows both angles (commit f73d9c8). The leading solution recovers the unordered particle families in 75 % of the cuts (27 % at the first level). The median error of R is 0.8 % (13 %) among cuts with matching population count.
 
 `posterior_dwba_auto2` (commit 9c90e6a): with DWBA truth the automatic analysis's call chooses the true composition in 31 % of the cuts; by the largest q_zR of a cut: 80 % (median |ΔR/R| 1 %) at 1.2–1.7, 29 % (10 %) at 1.7–2.3 and 23 % (9 %) above 2.3; cuts of spheres alone 9 %, of cylinders alone 78 %. The q_zR flags of Predict mark the solutions above these limits.

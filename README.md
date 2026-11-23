@@ -319,10 +319,11 @@ python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.t
 ```
 
 Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
-At q_z = 0.5226 nm⁻¹ the 5.94 nm upright cylinder has q_z·R = 3.10. The report flags it as a possible
+At q_z = 0.5226 nm⁻¹ the 5.98 nm upright cylinder has q_z·R = 3.13. The report flags it as a possible
 sphere (`cyl_sphere:R_2`). BornAgain's reference model uses spheres of radius 5.75 nm.
 The fit uses 596 points. At the measured intensity maximum their spacing is 0.00466 nm⁻¹,
-or 0.93 times the validation spacing. On the archive platform the fit used its BIC fallback. The two reported solutions have BIC weights of 0.6540 and 0.3443 and the same composition.
+or 0.93 times the validation spacing. The sphere with a paracrystal and the upright cylinder together
+have composition probability 0.9995. Their two reported solutions have probabilities 0.5126 and 0.4869.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
 gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
 the candidate solutions and their probabilities. Exit code 2 means that an item needs attention in the report.

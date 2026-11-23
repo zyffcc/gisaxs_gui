@@ -2726,7 +2726,10 @@ refines below χ²ᵣ 2, the ranges are searched for the two best compositions; 
 the solutions within a BIC of 20 of the best (at most four), which gives their probabilities and intervals.
 
 The network searches the whole range of each value it proposes. The solution retains the geometry and any
-upright-cylinder height distributions supplied for level 4. **Refine** afterwards keeps the values you fix.
+upright-cylinder height distributions supplied for level 4. Batch solutions also store the fitted model,
+including its resolution and parameter bounds, so opening one in Fitting reproduces its curve.
+A fixed value or a narrower range in the receiving Model can change the transferred curve.
+**Refine** afterwards keeps the values you fix.
 
 **Reading the result**
 
@@ -4076,11 +4079,11 @@ python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.t
 ```
 
 Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
-At q_z = 0.5226 nm⁻¹ the 5.94 nm upright cylinder has q_z·R = 3.10. *Needs attention* identifies it as
+At q_z = 0.5226 nm⁻¹ the 5.98 nm upright cylinder has q_z·R = 3.13. *Needs attention* identifies it as
 a possible sphere (`cyl_sphere:R_2`). The BornAgain reference uses spheres of radius 5.75 nm.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
 gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
-the candidate solutions and their weights. On the archive platform this run used BIC weights of 0.6540 and 0.3443 for two solutions of the same composition. In `fit_curve.csv`, `sigma` gives the pointwise standard error and `fit_sigma` includes the correlation between points that share interpolated measurements. Exit code 2 means that an item needs attention in the report.
+the candidate solutions and their weights. On the archive platform the leading composition had evidence probability 0.9995, divided between two solutions with weights 0.5126 and 0.4869. In `fit_curve.csv`, `sigma` gives the pointwise standard error and `fit_sigma` includes the correlation between points that share interpolated measurements. Exit code 2 means that an item needs attention in the report.
 The same folder contains `qmap.png` and `report.json`. The run summaries are
 `fig4/summary.md` and `fig4/summary.json`.
 

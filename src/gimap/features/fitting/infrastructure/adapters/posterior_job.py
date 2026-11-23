@@ -271,8 +271,8 @@ def solution_row(solution, item, render_q, points=None) -> dict:
     return dict(
         workflow="native_v5", physics_backend="cut_model", law=model.components[0].law if components else None,
         best_source="posterior", side=item["side"], combination=" + ".join(c["type"] for c in components),
-        composition=solution.name, components=components,
-        **({"model": record["model"], "substrate": model.substrate.to_dict(),
+        composition=solution.name, components=components, model=record["model"],
+        **({"substrate": model.substrate.to_dict(),
             "scattering": f"four-term DWBA on {model.substrate.label}"} if model.substrate is not None else {}),
         global_params=dict(background=float(g["background"].value), resolution_amplitude=float(g["res_amplitude"].value),
                            sigma_Res=float(g["res_width"].value), nu_Res=float(g["res_exponent"].value),

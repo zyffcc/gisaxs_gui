@@ -4018,7 +4018,14 @@ R̂. The verdict is *converged* when the kept steps n per ensemble are at least 
 below 1.05. The estimated effective sample count is 2Wn/τ. A ⚠ marks a value whose 68 % interval does not overlap
 the reference. Agreement between ensembles can still miss a mode that neither visited.
 
-**Checks of the earlier single-ensemble sampler** (`tools/benchmarks/mcmc_check.json`): on a correlated Gaussian in four dimensions (16 walkers, 4000 steps)
+**Short two-ensemble check.** With 4000 steps per ensemble, the four-dimensional Gaussian converged both
+before and after the composition and substrate corrections. Its largest marginal quantile error was 0.062σ.
+On the synthetic sphere cut, the manual-fit check reached a maximum R̂ of 1984 and the Predict check reached
+60.0 in both runs. The ensembles failed to converge in both checks, so their quantiles cannot validate the
+intervals. This benchmark initializes both checks from the prior. The separate, single-start importance estimate
+for the Predict comparison had 234.30 effective samples in both versions. [Before and after results](../tools/benchmarks/predict_composition_checks.json)
+
+**Checks of the earlier single-ensemble sampler** (`tools/benchmarks/mcmc_check.json` at commit `73035836`): on a correlated Gaussian in four dimensions (16 walkers, 4000 steps)
 every quantile within 0.11 σ of the exact one; on a synthetic sphere cut (R = 4 nm, σR/R = 0.2, Poisson noise, 120
 points), the check of a Refine fit of R and σR/R against the same posterior integrated on a 241 × 241 grid: the 2.5,
 16, 50, 84 and 97.5 % quantiles within 0.05 σ (R: 68 % interval 3.952–4.000 nm against 3.952–3.999 nm; the fit's

@@ -68,7 +68,7 @@ def _tools(header, fitter):
     tools.cancelled = lambda: False
     tools._ok = lambda data, summary: data
     q = np.linspace(.02, .2, 80)
-    tools._fit_input = lambda side: ("positive", q, 1 / q**2, 1 / q, "positive half")
+    tools._horizontal = lambda: SimpleNamespace(x=q, y=1 / q**2, sigma=1 / q, pixels=np.ones_like(q))
     tools.fitter = fitter
     return tools
 

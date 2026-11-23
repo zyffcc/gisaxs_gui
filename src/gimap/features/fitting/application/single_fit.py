@@ -323,8 +323,10 @@ def cut_model_solution(row: Mapping) -> FitModel:
     for item in row.get("components") or ():
         p = item["params"]
         family = CUT_MODEL_FAMILIES[str(item["type"])]
-        component = new_component(family, radius=float(p["R"]), distance=float(p["D"]),
-                                  structure=bool(item.get("structure_factor", True)), law=row.get("law", "number_gauss"))
+        distance = p.get("D")
+        component = new_component(family, radius=float(p["R"]), distance=None if distance is None else float(distance),
+                                  structure=bool(item.get("structure_factor", distance is not None)),
+                                  law=row.get("law", "number_gauss"))
         params = dict(component.params)
         for key in ("sigma_R", "h", "sigma_h", "sigma_nn"):
             if key in params and p.get(key) is not None:
@@ -352,7 +354,7 @@ def model_from_solution(row: Mapping, base: Optional[FitModel] = None) -> tuple[
     if row.get("physics_backend") == "cut_model":
         proposed = cut_model_solution(row)
         model = constrain_proposal(proposed, base) if base is not None else proposed
-        if proposed.substrate is not None:
+        if proposed.substrate is not None or proposed.predict_level is not None:
             model = replace(model, globals={**model.globals, **{key: proposed.globals[key] for key in GRAZING}})
         return model, solution_deviation(model, row)
     converted = native_solution_mapping(row)
