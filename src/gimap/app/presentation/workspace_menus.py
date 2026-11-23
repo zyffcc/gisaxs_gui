@@ -112,7 +112,7 @@ ANALYZE_MENU = (
     )),
     Submenu("analyze_tools", "Tools", "Tools for working with analysis records", (
         Entry("analyze_reproduce", "&Reproduce from Record…",
-              "Repeat a recorded reduction or fit and compare the numerical results"),
+              "Repeat a recorded reduction, fit or automatic analysis and compare the results"),
     )),
     SEPARATOR,
     Entry("analyze_clear", "C&lear Frame List",

@@ -38,7 +38,7 @@ def curve():
     pos, neg = q > 0, q < 0
     order = np.argsort(-q[neg])
     m = mean_of_halves((q[pos], I[pos], s[pos]), (-q[neg][order], I[neg][order], s[neg][order]), grid="positive")
-    return m.q, m.intensity, m.sigma
+    return m.q, m.intensity, m.fit_sigma(np.ones(m.q.size, dtype=bool))
 
 
 def run(job):

@@ -117,7 +117,7 @@ of 0.501 ± 0.012° and uses the latter. To reproduce results at the notebook an
 
 Select a peak and open **Fit details** to see the points it was fitted to, the Gaussian and its
 background, and the errors. A peak selected for ring analysis can still have a poor Gaussian fit.
-The warnings row lists this and any overlap, edge or bin-width flags recorded for the peak. **Save Report…** keeps everything as a web page or Markdown. Switch the
+The warnings row lists this and any overlap, edge or bin-width flags recorded for the peak. **Save Report…** offers a web page, Markdown and, for a completed analysis, a replayable JSON record. Switch the
 image to **q map** or **Cake** to see the rings in q; **Sources** shows which pixels each curve uses.
 
 ![GIWAXS results](manual_images/en/07_giwaxs_results.png)
@@ -315,8 +315,7 @@ uses its own `.gimap` environment and would set one up beside yours.
 installs GIMaP with the packages of `requirements.txt` and adds the command `gimap`. `gimap` starts GIMaP;
 `gimap frame_0001.cbf scan_folder sample.gimap` also opens what it names (frames and folders in Analyze, a
 project as a project); `gimap --version` prints the version and `gimap --help` the options. `python main.py`
-takes the same arguments. Install it editable (`-e`), as shown: the manuals, icons and example data stay in the
-checkout, which a plain `pip install .` does not copy.
+takes the same arguments. A wheel installation (`python -m pip install .` from a tagged checkout) includes the illustrated English and Chinese manuals, detector catalogue and Predict weights. For the public frames under **Help ▸ Example Data**, use `python -m pip install -e .` and keep the checkout. The examples remain in `tests/data/external/`. The package declares Python 3.10 or later. CI tests Python 3.10 and 3.11.
 
 The trained network of **Predict parameters** and 1D Predict is in the Git repository (about 13 MB, section 6.4),
 so a checkout runs everything, including Predict parameters (chapter 6). On macOS, BornAgain is installed
@@ -1804,9 +1803,8 @@ checks**. When αi is missing from both the setup and the frame measurement, the
 
 **Whose results.** The results belong to the frame they were run on. While a run lasts, the file
 list is locked. When you show another frame, the Results step says which frame the results are
-from; they come back with that frame. **Save Report…** writes a web page with the pictures (`.html`,
-opens in any browser) or the text as Markdown (`.md`); the save dialog starts next to the data.
-Both carry a section **Mask** and a section **Record**: the GIMaP version, the input file with its
+from; they come back with that frame. Under **Save Report…**, choose **Replayable report** (`.json`) to repeat the analysis later. To read the results, save a web page with pictures (`.html`) or Markdown (`.md`).
+Both readable formats carry a section **Mask** and a section **Record**: the GIMaP version, the input file with its
 SHA-256, the calibration file with its path and SHA-256 when the run took the geometry from one, the
 instrument profile with its source (a profile made from a file names that file's path), and the
 corrections (background, gap guard, bad pixels, intensity corrections).
@@ -4060,7 +4058,7 @@ experiment (chapter 13).
 ### 10.7 Without the window
 
 **Worked example (GALAXI GISAXS).**
-Run this command from the source folder to reproduce the Yoneda cut and level-2 fit in Fig. 4.
+Run this command from the source folder to repeat the Fig. 4 analysis with covariance-aware fit weights.
 It uses the public GALAXI frame, its calibration and the reported incidence angle of 0.463°.
 
 ```sh
@@ -4068,11 +4066,11 @@ python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.t
 ```
 
 Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
-At q_z = 0.5226 nm⁻¹ the 5.99 nm upright cylinder has q_z·R = 3.13. *Needs attention* identifies it as
+At q_z = 0.5226 nm⁻¹ the 5.94 nm upright cylinder has q_z·R = 3.10. *Needs attention* identifies it as
 a possible sphere (`cyl_sphere:R_2`). The BornAgain reference uses spheres of radius 5.75 nm.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
 gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
-the candidate solutions and their probabilities. Exit code 2 means that an item needs attention in the report.
+the candidate solutions and their weights. On the archive platform this run used BIC weights of 0.6540 and 0.3443 for two solutions of the same composition. In `fit_curve.csv`, `sigma` gives the pointwise standard error and `fit_sigma` includes the correlation between points that share interpolated measurements. Exit code 2 means that an item needs attention in the report.
 The same folder contains `qmap.png` and `report.json`. The run summaries are
 `fig4/summary.md` and `fig4/summary.json`.
 
@@ -4270,7 +4268,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Analyze ▸ **Export New Frames While Watching** | as Export, for each new frame | `gimap_analysis/` next to the frame; when it cannot be written, a folder you choose once (kept for the session); with none, the export is switched off and the status line says why | as Export |
 | Analyze ▸ **Save Settings…**; Mask step ▸ **Save…**; Regions ▸ **Add ▸ Save Cuts…** | `analyze_settings.json`; `masks.json` or a mask image (section 5.2); `cuts.json` | dialog in `gimap_analysis/` | JSON recipes are self-describing. Mask images have a companion `<filename>.json`. |
 | Run Automatic Analysis ▸ Peaks ▸ **Save Peak Table…** | `<stem>_peaks.csv` | the folder proposed by the save dialog | source, settings and phase assignment in the CSV header |
-| Run Automatic Analysis ▸ **Save Report…** | `<stem>_report.html` (with pictures) or `.md` | the folder you chose last in this session for frames of the same folder, else `gimap_analysis/` if it exists, else next to the frame | the report itself (no JSON) |
+| Run Automatic Analysis ▸ **Save Report…** | `.html` (with pictures), `.md`, or a replayable `.json` for a completed run | the folder you chose last in this session for frames of the same folder, else `gimap_analysis/` if it exists, else next to the frame | select JSON for replay |
 | Process with AI ▸ **Save Report…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | as above | the JSON |
 | Process with AI (automatic) | a record of every run; missing analyses | user data folder: `assistant_runs/`, `assistant_feature_requests.jsonl` | — |
 | Process with AI, when the AI exports | the curves as Export, and `<stem>_assistant.json` | `gimap_analysis/` next to the data | `<stem>_analysis.json`, `<stem>_assistant.json` |
@@ -4314,6 +4312,8 @@ earlier versions may not ([Physics and Methods, section 14.5](Physics_Manual.md#
 ```text
 gimap reproduce example_analysis.json --out check
 ```
+
+For a completed automatic analysis, select its exported JSON in the same dialog or run `gimap reproduce report.json --out check`. Replay reads the original frames, repeats the angle measurements and the reduction, then repeats the structural analysis with the recorded settings. With phase CIFs it compares GIWAXS assignments, orientation verdicts and parameters, and cell refinement. For a GISAXS fit it compares each reported solution and its probability or BIC weight. Open `reproduced_report.json` for the new values and `comparison.json` for agreement by section.
 
 Without `--out`, the command creates `<record stem>_reproduced/` beside the JSON. Use a fresh destination for each comparison. The folder contains the newly calculated CSV columns and `comparison.json`. Batch results have numbered subfolders. **identical** means every recorded numerical column matches bit for bit, including uncertainties and pixel counts where present. **different** gives the largest relative difference in each column. The command exits with 0 for identical values, 2 for a difference and 1 for an error.
 

@@ -38,14 +38,16 @@ def file_reference(path: str | Path) -> dict:
     return file_record(Path(path).resolve())
 
 
-def verified_path(reference: dict, record_dir: Path) -> Path:
-    """Verify the recorded file, or its same-named copy beside the record when the original is absent."""
+def verified_path(reference: dict, record_dir: Path, *, installed: Path | None = None) -> Path:
+    """Check the original, a same-named copy beside the record or an installed model of that name."""
     path = record_dir / reference["path"]
     original = path
     if not path.is_file():
         # The exporting and receiving machines need not use the same path separator.
         name = PureWindowsPath(reference["path"]).name
         copy = record_dir / name
+        if not copy.is_file() and installed is not None and installed.name == name:
+            copy = installed
         if not name or not copy.is_file():
             raise ValueError(f"Missing referenced file: {path}")
         path = copy

@@ -65,6 +65,10 @@ class GuiWorkbench:
             self._check_frame(path or "")  # "": no frame open any more
         return status
 
+    def automatic_state(self, initial):
+        snapshot = getattr(self._automation, "automatic_state", None)
+        return self._call(snapshot, initial) if snapshot else None
+
     def set_mode(self, mode: str) -> dict:
         # A switch the procedure makes for the person is not saved as their mode in Analyze.
         return self._apply(lambda done: self._automation.set_mode(mode, done, remember=False))

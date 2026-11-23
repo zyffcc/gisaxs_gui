@@ -15,6 +15,7 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -196,6 +197,7 @@ def two_of_one_name(tmp_path_factory):
     """The public GALAXI frame under one name in two folders, analysed as one batch (with an invented fit)."""
     from src.gimap.app.headless_assistant import analyse_frames
     from src.gimap.features.fitting import bootstrap
+    from tools.gimap_agent import _notes_and_source
 
     root = tmp_path_factory.mktemp("same_name")
     frames = []
@@ -203,14 +205,17 @@ def two_of_one_name(tmp_path_factory):
         (root / name).mkdir()
         frames.append(str(shutil.copy(GALAXI / "galaxi_data.tif", root / name / "galaxi_data.tif")))
     poni = GALAXI / "galaxi_bornagain.poni"
+    notes_file = root / "observations.txt"
+    notes_file.write_bytes("第二次曝光\r\nfilm annealed\r\n".encode("utf-8"))
+    notes, source = _notes_and_source(SimpleNamespace(notes="sample B7", notes_file=notes_file))
     given = {"command": "auto", "frames": [str(root / "*" / "galaxi_data.tif")], "calibration": str(poni),
-             "notes": "sample B7, annealed", "notes_text": "sample B7, annealed"}
+             "notes": "sample B7", "notes_file": str(notes_file), "notes_text": notes}
     patch = pytest.MonkeyPatch()
     patch.setattr(bootstrap, "create_curve_fit", lambda: Fitter())
     out = root / "out"
 
     def run(**extra):
-        options = PipelineOptions(calibration=str(poni), incidence_deg=0.2, notes=given["notes"])
+        options = PipelineOptions(calibration=str(poni), incidence_deg=0.2, notes=notes, notes_source=source)
         return analyse_frames(frames, options, out, saved_profiles=False, record=given,
                               found=("Pattern x: 2 file(s) matched.",), **extra)
 
@@ -250,6 +255,9 @@ def test_the_record_identifies_the_inputs_the_options_and_the_fit(two_of_one_nam
     assert report["software_version"] == SOFTWARE
     assert report["created"].endswith("+00:00") and len(report["created"]) == len("2026-01-02T03:04:05+00:00")
     assert report["options"] == two_of_one_name["given"]  # as given: the pattern, the notes
+    notes_file = Path(report["options"]["notes_file"])
+    assert report["reproduction"]["inputs"][str(notes_file)]["sha256"] == _sha256(notes_file)
+    assert report["reproduction"]["options"]["notes"] == "sample B7\n第二次曝光\nfilm annealed\n"
     assert report["inputs"]["frame"] == [
         {"file": "galaxi_data.tif", "path": frames[0], "bytes": Path(frames[0]).stat().st_size, "sha256": digest}]
     assert report["inputs"]["calibration"] == {

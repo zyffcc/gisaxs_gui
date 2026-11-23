@@ -37,8 +37,9 @@ from .presentation.help_dialogs import ask_example_folder, plain_text, system_su
 from .presentation.i18n import tr, trf
 from .presentation.menu_bar import GITHUB_URL, ISSUES_URL
 from src.gimap.shared.version import APP_NAME, __version__
+from src.gimap.shared.resources import RESOURCE_ROOT
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = RESOURCE_ROOT
 EXAMPLES_FOLDER = ROOT / "tests" / "data" / "external"
 """The public examples (``manifest.json`` names each one's frame; ``README.md`` their sources and licences)."""
 CITATION_FILE = ROOT / "CITATION.cff"
@@ -244,9 +245,10 @@ class HelpCommands:
         try:
             example_frame(key)
         except FileNotFoundError:
-            warn(self.window, tr("Example Data"),
-                 trf("The example data are not in this installation of GIMaP (looked in {folder}).",
-                     folder=str(EXAMPLES_FOLDER)))
+            missing = trf("The example data are not in this installation of GIMaP (looked in {folder}).",
+                          folder=str(EXAMPLES_FOLDER))
+            instructions = tr("To use the examples, run this command in the source checkout for this release.")
+            warn(self.window, tr("Example Data"), f"{missing}\n\n{instructions}\npython -m pip install -e .")
             return None
         chosen = ask_example_folder(self.window, name, str(self.default_folder(key)))
         if not chosen:

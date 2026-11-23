@@ -5,6 +5,7 @@ A new feature adds its table here, not in ``zh.py`` (which is near the size limi
 from .zh_absolute_scale import ABSOLUTE_SCALE_ZH
 from .zh_analyze_numbers import ANALYZE_NUMBERS_ZH
 from .zh_app_session import APP_SESSION_ZH
+from .zh_automatic_replay import AUTOMATIC_REPLAY_ZH
 from .zh_assistant_service import ASSISTANT_SERVICE_ZH
 from .zh_calibration_residuals import CALIBRATION_RESIDUALS_ZH
 from .zh_calibration_rings import CALIBRATION_RINGS_ZH
@@ -15,6 +16,7 @@ from .zh_cell_orientation import CELL_ORIENTATION_ZH
 from .zh_coverage_report import COVERAGE_REPORT_ZH
 from .zh_crystal_orientation import CRYSTAL_ORIENTATION_ZH
 from .zh_crystal_film import STRINGS as CRYSTAL_FILM_ZH
+from .zh_example_install import EXAMPLE_INSTALL_ZH
 from .zh_refracted_film import REFRACTED_FILM_ZH
 from .zh_fit_data import FIT_DATA_ZH
 from .zh_fitting_numbers import FITTING_NUMBERS_ZH
@@ -56,6 +58,7 @@ from .zh_sample_roll import SAMPLE_ROLL_ZH
 from .zh_frame_incidence import FRAME_INCIDENCE_ZH
 from .zh_series_chain import SERIES_CHAIN_ZH
 from .zh_series_selection import SERIES_SELECTION_ZH
+from .zh_signed_cut import SIGNED_CUT_ZH
 from .zh_texture_populations import TEXTURE_POPULATIONS_ZH
 from .zh_usability_analyze import USABILITY_ANALYZE_ZH
 from .zh_usability_calibration import USABILITY_CALIBRATION_ZH
@@ -64,6 +67,7 @@ from .zh_usability_giwaxs import USABILITY_GIWAXS_ZH
 from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 
 FEATURES_ZH = {
+    **EXAMPLE_INSTALL_ZH,
     **PREDICT_SUBSTRATE_ZH,
     **ANALYZE_NUMBERS_ZH, **FITTING_NUMBERS_ZH, **REPORT_NUMBERS_ZH,
     **CELL_REFINEMENT_ZH, **CELL_ORIENTATION_ZH, **CELL_SERIES_ZH,
@@ -80,6 +84,7 @@ FEATURES_ZH = {
     **PREDICT_SAMPLING_ZH,
     **VERTICAL_CONSISTENCY_ZH,
     **GISAXS_FIT_LEVEL_ZH,
+    **SIGNED_CUT_ZH,
     **ASSISTANT_SERVICE_ZH,
     **CALIBRATION_RESIDUALS_ZH,
     **CALIBRATION_RINGS_ZH,
@@ -91,7 +96,7 @@ FEATURES_ZH = {
     **RING_ASSIGNMENT_ZH, **ORIENTATION_REDUCTION_ZH, **ORIENTATION_REPORT_ZH, **SERIES_SELECTION_ZH,
     **REDUCTION_ERRORS_ZH, **HORIZON_SELECTION_ZH, **REPRODUCTION_ZH, **JOINT_HEIGHT_ZH,
     **COVERAGE_REPORT_ZH, **POLE_REFERENCE_ZH, **CRYSTAL_ORIENTATION_ZH, **TEXTURE_POPULATIONS_ZH,
-    **CRYSTAL_FILM_ZH, **REFRACTED_FILM_ZH,
+    **CRYSTAL_FILM_ZH, **REFRACTED_FILM_ZH, **AUTOMATIC_REPLAY_ZH,
 }
 
 __all__ = ["FEATURES_ZH"]

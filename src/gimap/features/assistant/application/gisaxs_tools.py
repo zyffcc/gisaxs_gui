@@ -11,8 +11,9 @@ import math
 from typing import Optional
 
 from src.gimap.shared import fit_names
+from src.gimap.shared.signed_cut import prepare_cut
 
-from ..domain import Profile, choose_halves, find_peaks, fit_curve, spacing_from_peaks
+from ..domain import Profile, choose_halves, find_peaks, spacing_from_peaks
 from ..domain.substrate_optics import substrate_record
 from .gisaxs_choice import bounds_text, chance, probability, rivals, sizes
 from .models import ToolInputError, ToolOutcome
@@ -260,11 +261,13 @@ class GisaxsToolsMixin:
         if side is None:
             choice = self.results.gisaxs.get("halves") or choose_halves(curve.x, curve.y, curve.pixels)
             side = choice.fit_side
-        return (side, *fit_curve(curve.x, curve.y, curve.sigma, curve.pixels, side))
+        return side, prepare_cut(curve.x, curve.y, curve.sigma, curve.pixels, side)
 
     def _tool_in_plane_spacing(self, side: Optional[str] = None, min_points: int = SPACING_MIN_POINTS,
                                background_window: Optional[float] = None) -> ToolOutcome:
-        side, x, y, sigma, note = self._fit_input(side)
+        side, prepared = self._fit_input(side)
+        x, y, note = prepared.q, prepared.intensity, prepared.note
+        _, sigma = prepared.errors_or_estimate()
         search = find_peaks(Profile.of(x, y, sigma), background_window=background_window or SPACING_WINDOW)
         spacing = spacing_from_peaks(search.peaks, q_min=max(1, int(min_points)) * float(search.step or 0.0))
         record = None if spacing is None else {
@@ -284,7 +287,9 @@ class GisaxsToolsMixin:
     def _tool_fit_horizontal_cut(self, side: Optional[str] = None, components=None, substrate=None) -> ToolOutcome:
         if self.fitter is None:
             raise ToolInputError("No curve fitter is available in this session: use Send to Fitting in the GUI.")
-        side, x, y, sigma, note = self._fit_input(side)
+        side, prepared = self._fit_input(side)
+        x, y, note = prepared.q, prepared.intensity, prepared.note
+        marginal, sigma = prepared.errors_or_estimate()
         status = self.results.status or {}
         cut = cut_qz(status)
         surface = {}
@@ -339,9 +344,13 @@ class GisaxsToolsMixin:
             "best_curve": _curve(rows[0]),  # the reported (most probable) solution's curve: fit_curve.csv's I_fit
             "curves": [_curve(row) for row in rows],
             "native": [_native(row) for row in rows],
-            "data": {"q_inv_angstrom": x.tolist(), "intensity": y.tolist(), "sigma": sigma.tolist()},
+            "data": {"q_inv_angstrom": x.tolist(), "intensity": y.tolist(), "sigma": marginal.tolist(),
+                     "fit_sigma": sigma.tolist()},
         }
         head = solutions[0]
+        plan = rows[0].get("reproduction")
+        if plan:
+            self.results.gisaxs["prediction"] = {key: plan[key] for key in ("options", "weights", "network_record")}
         by_bic = fit_names.weight_key(head) == "bic_weight"
         lead = "highest BIC weight" if by_bic else "most probable"
         summary = f"{lead}: {_brief(head)}" + (f" ({bounds_text(head)})" if bounds_text(head) else "")

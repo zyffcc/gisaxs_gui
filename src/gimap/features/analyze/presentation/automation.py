@@ -495,6 +495,11 @@ class AnalyzeAutomation(IndexingAutomationMixin, SampleRollAutomationMixin):
         analysis = self._page.view_model.state.analysis
         return None if analysis is None else analysis_metadata(analysis)
 
+    def automatic_state(self, initial):
+        from .automation_state import automatic_state
+
+        return automatic_state(self._page, initial=initial)
+
     def export_current(self, extra_metadata: Optional[dict] = None) -> list[str]:
         written = self._page.view_model.export(extra_metadata=extra_metadata)
         self._page._status(exported_text(written), "ok")

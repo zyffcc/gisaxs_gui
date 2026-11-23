@@ -172,7 +172,7 @@ def choose_halves(
     return HalvesChoice(
         "mean", "mean",
         f"Both halves are usable (points in {coverage['negative']:.0%} and {coverage['positive']:.0%} of their "
-        f"|qy| ranges) and {agree}: they are averaged where both exist, which halves the noise{extend}.",
+        f"|qy| ranges) and {agree}: they are averaged where both exist{extend}.",
         coverage, reach, mismatch,
     )
 
@@ -217,6 +217,56 @@ def _measured_around(at: np.ndarray, half: np.ndarray) -> np.ndarray:
 
 
 @dataclass(frozen=True)
+class _SharedEndpoints:
+    """Nonzero contributions (interpolation weight times source σ) of the resampled half."""
+
+    row: np.ndarray
+    source: np.ndarray
+    contribution: np.ndarray
+
+    def errors(self, sigma, keep, valid, group=1):
+        """Return marginal and fit σ after selection and optional inverse-variance binning.
+
+        With W the folding and binning operator, C = W diag(s²) Wᵀ. The fit takes a diagonal
+        covariance with entries sum_j C_ij. Its excess over C is positive semidefinite because
+        every off-diagonal C_ij is nonnegative. No dense covariance is allocated.
+        """
+        sigma = sigma[keep]
+        length = sigma.size // group * group
+        index = np.full(keep.size, -1, dtype=np.intp)
+        index[np.flatnonzero(keep)[:length]] = np.arange(length)
+        selected = (index[self.row] >= 0) & valid[self.row] & np.isfinite(self.contribution)
+        row = index[self.row[selected]]
+        source = self.source[selected]
+        value = self.contribution[selected]
+        if group > 1:
+            weight = 1.0 / sigma[:length].reshape(-1, group)**2
+            total = weight.sum(axis=1)
+            value = value * (weight / total[:, None]).ravel()[row]
+            row = row // group
+            # Combine repeated endpoints *within* a merged row before calculating its variance.
+            independent = np.bincount(row, value**2, minlength=total.size)
+            pairs, inverse = np.unique(np.column_stack((row, source)), axis=0, return_inverse=True)
+            row, source = pairs.T
+            value = np.bincount(inverse.ravel(), value)
+            variance = 1.0 / total + (np.bincount(row, value**2, minlength=total.size) - independent)
+            sigma = np.sqrt(variance)
+        column_sum = np.bincount(source, value)
+        off_diagonal = np.bincount(row, value * (column_sum[source] - value), minlength=sigma.size)
+        return sigma, np.where(off_diagonal > 0, np.hypot(sigma, np.sqrt(off_diagonal)), sigma)
+
+
+def _interpolation(at, grid):
+    """Endpoints and fractions for np.interp, including its constant extension and repeated knots."""
+    right = np.searchsorted(grid, at, side="right")
+    left = np.maximum(right - 1, 0)
+    right = np.minimum(right, grid.size - 1)
+    width = grid[right] - grid[left]
+    fraction = np.divide(at - grid[left], width, out=np.zeros_like(at), where=width > 0)
+    return left, right, fraction
+
+
+@dataclass(frozen=True)
 class HalvesMean:
     """The mean of the two halves of a cut on |q| (ascending)."""
 
@@ -226,6 +276,14 @@ class HalvesMean:
     """½·√(σ₊² + σ₋²) of a mean, the half's own σ elsewhere; ``None`` when a half has no σ."""
     halves: np.ndarray
     """Per point: 2 — the mean of both halves; 1 — the q > 0 half alone; −1 — the q < 0 half alone."""
+    endpoints: Optional[_SharedEndpoints] = None
+
+    def fit_sigma(self, keep):
+        """Diagonal fit σ after excluding unused rows from the covariance."""
+        if self.endpoints is None:
+            return None if self.sigma is None else self.sigma[keep]
+        valid = np.isfinite(self.sigma) & (self.sigma > 0)
+        return self.endpoints.errors(self.sigma, keep, valid)[1]
 
     @property
     def averaged(self) -> int:
@@ -244,7 +302,7 @@ def mean_of_halves(positive, negative, *, grid: Optional[str] = None) -> HalvesM
     One half gives the |q| of the result: ``grid`` (``positive`` / ``negative``), else the one with more
     points (the q > 0 half when they have as many) — and always that one when the half asked for has
     fewer than two points (nothing can be interpolated to one point). A point of it is averaged with the
-    other half — interpolated between its two neighbours there, σ likewise — only where the other half
+    other half — interpolated between its two neighbours, with independent source variances — only where the other half
     has measured points on both sides without a hole between them (``HOLE_STEPS``), or a point at the same
     |q|. Elsewhere it stays as measured, and the points of the other half that lie in a hole of this
     one, before its first or beyond its last point are added as they are — never a point at a |q| this
@@ -261,20 +319,32 @@ def mean_of_halves(positive, negative, *, grid: Optional[str] = None) -> HalvesM
     q, y, s = (None if part is None else np.asarray(part, dtype=float) for part in first)
     other_q, other_y, other_s = (None if part is None else np.asarray(part, dtype=float) for part in second)
     both = _measured_around(q, other_q)
+    alone = ~_measured_around(other_q, q)  # the other half where this one has no points
+    combined_q = np.concatenate([q, other_q[alone]])
+    order = np.argsort(combined_q, kind="stable")
+    endpoints = None
     intensity = y.copy()
     sigma = None if s is None or (other_s is None and other_q.size) else s.copy()
     if both.any():
         intensity[both] = 0.5 * (y[both] + np.interp(q[both], other_q, other_y))
         if sigma is not None:
-            sigma[both] = 0.5 * np.hypot(s[both], np.interp(q[both], other_q, other_s))
-    alone = ~_measured_around(other_q, q)  # the other half where this one has no points
+            left, right, t = _interpolation(q[both], other_q)
+            # A source bin can also be retained alone at an edge or in a gap.
+            source = np.concatenate([left, right, np.flatnonzero(alone)])
+            weight = np.concatenate([0.5 * (1 - t), 0.5 * t, np.ones(alone.sum())])
+            row = np.concatenate([np.flatnonzero(both), np.flatnonzero(both),
+                                  np.arange(q.size, combined_q.size)])
+            use = weight > 0  # an unused endpoint can have missing σ
+            row, source = row[use], source[use]
+            value = weight[use] * np.abs(other_s[source])
+            endpoints = _SharedEndpoints(np.argsort(order)[row], source, value)
+            other_var = np.bincount(row, value**2, minlength=combined_q.size)
+            sigma[both] = np.hypot(0.5 * s[both], np.sqrt(other_var[:q.size][both]))
     halves = np.concatenate([np.where(both, 2, sign), np.full(int(alone.sum()), -sign)]).astype(np.int8)
-    q = np.concatenate([q, other_q[alone]])
-    order = np.argsort(q, kind="stable")
     intensity = np.concatenate([intensity, other_y[alone]])[order]
     if sigma is not None and alone.any():
         sigma = np.concatenate([sigma, other_s[alone]])
-    return HalvesMean(q[order], intensity, None if sigma is None else sigma[order], halves[order])
+    return HalvesMean(combined_q[order], intensity, None if sigma is None else sigma[order], halves[order], endpoints)
 
 
 # -- the curve of a fit ---------------------------------------------------------------------------
@@ -320,10 +390,17 @@ class PreparedCut:
     """Points from one half alone, before merging."""
     merged: int = 1
     """How many neighbouring points make one point of the fit (1: none were merged)."""
+    marginal_sigma: Optional[np.ndarray] = None
+    """Pointwise errors when folding shares source bins. ``sigma`` gives the fit errors."""
 
     @property
     def points(self) -> int:
         return int(self.q.size)
+
+    def errors_or_estimate(self):
+        """Marginal and fit σ for automatic analysis, which uses 10 % of |I| without supplied σ."""
+        fit = self.sigma if self.sigma is not None else 0.1 * np.abs(self.intensity) + 1e-30
+        return (fit if self.marginal_sigma is None else self.marginal_sigma), fit
 
 
 def prepare_cut(q, intensity, sigma, pixels, side: str, *, max_points: int = MAX_FIT_POINTS,
@@ -399,10 +476,16 @@ def prepare_cut(q, intensity, sigma, pixels, side: str, *, max_points: int = MAX
         s = np.where(np.isfinite(s) & (s > 0), s, np.nan)
         fallback = np.nanmedian(s / np.maximum(y, 1e-30)) if np.isfinite(s).any() else 0.1
         s = np.where(np.isfinite(s), s, np.abs(y) * (fallback if np.isfinite(fallback) else 0.1) + 1e-30)
+    unmerged_sigma = s
     x, y, s, group = merge_points(x, y, s, max_points)
+    marginal_sigma = None
+    if mean is not None and mean.endpoints is not None:
+        # The historical fallback assigns an independent relative error to an unusable point.
+        valid = np.isfinite(mean.sigma) & (mean.sigma > 0)
+        marginal_sigma, s = mean.endpoints.errors(unmerged_sigma, np.ones(mean.q.size, dtype=bool), valid, group)
     if group > 1:
         notes.append(f"{group} neighbouring points merged ({x.size} points for the fit)")
-    return PreparedCut(x, y, s, "; ".join(notes), used, averaged, single, group)
+    return PreparedCut(x, y, s, "; ".join(notes), used, averaged, single, group, marginal_sigma)
 
 
 def fit_curve(
@@ -417,7 +500,7 @@ def fit_curve(
     """(|qy|, I, σ, note) of the half (or the mean of both) a fit uses, at most ``max_points`` points:
     ``prepare_cut`` with a σ for every point (10 % of I when the cut has none)."""
     cut = prepare_cut(q, intensity, sigma, pixels, side, max_points=max_points)
-    s = cut.sigma if cut.sigma is not None else 0.1 * np.abs(cut.intensity) + 1e-30
+    _, s = cut.errors_or_estimate()
     return cut.q, cut.intensity, s, cut.note
 
 

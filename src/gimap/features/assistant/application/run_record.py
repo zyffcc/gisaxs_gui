@@ -124,9 +124,10 @@ def input_files(report: dict, record: Optional[dict]) -> dict:
         if path and str(path) not in seen:
             seen.append(str(path))
     corrections = record.get("corrections") or {}
+    calibration = report.get("calibration") or {}
     return {
         "frame": [file_record(path) for path in seen],
-        "calibration": _existing((report.get("calibration") or {}).get("source_image")),
+        "calibration": _existing(calibration.get("calibration_file") or calibration.get("source_image")),
         "mask": _existing(corrections.get("mask_path")),
         "mask_sources": [file_record(source) for source in corrections.get("mask_sources") or ()],
         "background": _existing(corrections.get("background_path")),

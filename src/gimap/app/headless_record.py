@@ -40,7 +40,7 @@ CURVES = ("radial", "in_plane", "out_of_plane", "azimuthal", "horizontal", "vert
 CURVE_FORMATS = ("csv", "nxcansas", "both")
 """How the command line writes the curves (``--curve-format``): CSV files, one NXcanSAS file, or both."""
 NXCANSAS_FILE = "curves_nxcansas.h5"
-SUMMARY_LEAVES_OUT = ("tables", "analysis_record", "options")
+SUMMARY_LEAVES_OUT = ("tables", "analysis_record", "options", "reproduction")
 """Parts of a frame's report that stay in its own report.json (``options`` is the summary's own)."""
 MADE_BY_THE_RUN = "automatic analysis:"
 """How the source of an instrument profile begins when the automatic analysis chose its geometry."""

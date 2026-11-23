@@ -567,6 +567,7 @@ def test_an_example_missing_from_the_installation_is_said(commands, monkeypatch,
     monkeypatch.setattr(help_commands, "ask_example_folder", lambda *_args: pytest.fail("asked although missing"))
     assert commands.open_example("saxs_agbh_pyfai") is None
     assert commands.said and commands.said[0][0] == "warn" and "not in this installation" in commands.said[0][2]
+    assert "python -m pip install -e ." in commands.said[0][2]
 
 
 def test_the_folder_dialog_proposes_the_default_folder(monkeypatch) -> None:

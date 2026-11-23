@@ -5,6 +5,7 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 ## 0.2.0 — unreleased (pre-release)
 
 - The recovery benchmarks can generate an independent 300-cut set, audit reused draws, and report composition reliability separately for evidence and BIC. They also provide whole-cut coverage intervals, a grid-independent simulated beam tail, and a row-by-row check of the archived validation table.
+- Automatic-analysis reports can be replayed from the original frames through GIWAXS phase assignment, orientation and cell refinement, or GISAXS Predict fitting. Averaging signed cuts now accounts for the variance of interpolated bins. Wheel installations include the illustrated manuals and the calibration detector catalogue.
 
 - A CBF frame still opens when a neighbouring scan folder disappears during the search for beam energy.
 

@@ -108,6 +108,8 @@ the upper 95% endpoint for the second population's radius spread in cut 167 was 
 The archived endpoint is 0.30579296, a relative difference of 0.001246. In cut 184, the
 standard error of the spacing spread differed by 5.69% between the two runs.
 
+`python -m pytest -q tests/test_reproduce_automatic.py` runs the public P08 and GALAXI examples through automatic analysis, then replays their JSON exports from copies of the original inputs. The fixed structural results in `tests/data/automatic_replay/` include the file hashes. P08 assigns 11 of 12 peaks. The MAPbI₃ orientation fails the residual check, the single-ring PbI₂ fit passes, and only MAPbI₃ has enough peaks to refine its cell. On the archive platform the regression checks the selected structural fields bit for bit. On other platforms it checks assignments and verdicts exactly, probabilities and BIC weights to 0.05 absolute, fitted parameters to 1% and interval endpoints to 2%. The replay command itself always reports exact agreement or differences.
+
 ## The runs the paper quotes
 
 The recovery numbers of *Predict parameters* in the GIMaP paper, in Physics and Methods 9.13 and in the network's
@@ -174,11 +176,53 @@ For spheres in the two-path DWBA comparison (`si_tp_new`), 68 % interval coverag
 48 % in the q₊R bins 1.2–1.7, 1.7–2.3 and 2.3–3.5. Predict therefore raises `qzR_cov` above 1.7 at
 level 3 (`reporting.QZR_TWO_PATH_COVERAGE`). The frequent sphere/cylinder confusion in the DWBA comparison motivates a separate shape warning:
 at levels 2 and 3 an upright cylinder above q₊R = 2 (`reporting.QZR_UPRIGHT_SPHERE`) gets `cyl_sphere`, including fits without a height.
-The public GALAXI worked example gives q₊R = 3.13 for the 5.99 nm upright cylinder.
+The public GALAXI worked example gives q₊R = 3.10 for the 5.94 nm upright cylinder.
 
 `history/` holds the summaries of earlier code and of removed methods; they are not the paper's numbers
 (`history/README.md`). A new run writes `NAME_summary.json` here and `results/NAME.json` (not committed); files named
 `*_new_summary.json` are left out of the repository.
+
+## GALAXI automatic analysis and interpolation errors
+
+From the source checkout, with one BLAS thread and a fresh `GIMAP_HOME`, run
+
+```sh
+python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.tif --calibration tests/data/external/gisaxs_galaxi/galaxi_bornagain.poni --incidence-deg 0.463 --out galaxi_auto
+```
+
+The comparison run used the same command at commit `7604ae3b` with a separate output folder.
+The calibrated, symmetry-centred Yoneda cut contains 598 points on |qᵧ|. Across the 369 points
+that average both arms, using squared interpolation weights reduces the marginal σ by a median
+13.19% compared with interpolating σ linearly. The other 229 marginal errors and all q and I
+values match the earlier run. The 367 adjacent pairs of averaged points have a median covariance
+of 0.2044 in squared intensity units and a median correlation of 0.1635 (range 0.0959–0.2243).
+
+`fit_curve.csv` gives the marginal `sigma` and the effective `fit_sigma` passed to Predict.
+For independent input bins and folding matrix W, C = W diag(s²) Wᵀ. Using the row sums of
+C for the diagonal fit variance increases σ by a median 15.19% over the corrected marginal
+errors on the averaged points. The median ratio of fit σ to the old σ is 1.00010.
+On an 80-point synthetic half-step grid with equal source variances, using marginal errors
+alone understates the fitted constant's interval width by 13.3%. The row-sum approximation
+agrees within 0.1% with the variance calculated using the full covariance.
+
+| Level-2 fit (sphere with paracrystal + upright cylinder) | Linear interpolation of σ | Corrected fit weights |
+|---|---:|---:|
+| Best-fit R₁, R₂ (nm) | 3.2771, 5.9900 | 3.3392, 5.9413 |
+| Best-fit spacing D₁ (nm) | 48.9128 | 49.6790 |
+| Reduced χ² | 1.048 | 1.051 |
+| Reported 68% interval on D₁ (nm) | [36.83, 59.97] | [27.05, 91.25] |
+
+The earlier run assigned probability 0.9996 to this composition. Sampling in the corrected
+run triggered the BIC fallback. The two reported modes of this composition have BIC weights
+0.6540 and 0.3443 (composition weight 0.9983). The corrected run uses the least-squares
+errors for the reported D₁ interval. Its diagnostic sampling summary gives a median of
+48.21 nm and 16th and 84th percentiles of 36.62 and 60.92 nm.
+
+The public replay regression also fits the positive arm alone. For this control the test masks
+columns 0–499 of the same frame. The negative arm then reaches only 0.0436 Å⁻¹ and the positive
+arm reaches 0.179 Å⁻¹. The procedure keeps the calibrated centre because the mask prevents a
+symmetry refinement. Evidence sampling gives mode probabilities 0.4467, 0.4110 and 0.1423.
+All three modes have the same composition, so its probability among the retained compositions is 1.
 
 ## Four-term DWBA on a known substrate
 

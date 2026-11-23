@@ -23,6 +23,7 @@ from src.gimap.shared.detector_io import (
 )
 from src.gimap.app import SettingsRepository
 from src.gimap.shared.file_paths import normalize_path
+from src.gimap.shared.resources import RESOURCE_ROOT
 
 from ...application.errors import (
     AmbiguousImageDatasetError,
@@ -146,8 +147,7 @@ class JsonDetectorCatalogAdapter:
     """从现有 config/detectors.json 读取 detector definitions。"""
 
     def __init__(self, path: str | Path | None = None):
-        project_root = Path(__file__).resolve().parents[6]
-        self.path = Path(path) if path is not None else project_root / "config" / "detectors.json"
+        self.path = Path(path) if path is not None else RESOURCE_ROOT / "config" / "detectors.json"
 
     def load(self) -> dict[str, dict[str, Any]]:
         try:

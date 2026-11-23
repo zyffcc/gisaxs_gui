@@ -4,8 +4,8 @@ solutions from the other fitting methods, and what is exported.
 * ``prepare_curve``: a curve with signed q (a horizontal GISAXS cut) becomes the points that are
   fitted — both halves on |q|, their mean (``shared/signed_cut.mean_of_halves``: where the other half
   has measured points; in a hole of it, and where one half reaches further, the measured half alone),
-  or one half — with σ carried along (σ of a mean: ½·√(σ₊² + σ₋²)); then the fitting range and the
-  points left out. ``prepare_points`` also says what the points are made of.
+  or one half. The file weights include covariance from source bins shared by selected interpolated
+  points. ``prepare_points`` also says what the points are made of.
 * ``model_from_solution``: a solution of Predict parameters (a row of 1D Predict or of Analyze, ``native_v5``)
   as a model, and how closely the model reproduces its curve.
 * ``export_table`` / ``fit_record``: the points, the model and its terms, the residuals; and the
@@ -275,7 +275,10 @@ def prepare_points(curve: Curve, side: str = "mean", q_range: Optional[tuple] = 
         keep = (q >= low) & (q <= high)
     left_out = left_out_points(q, excluded) & keep if len(excluded) else np.zeros(q.shape, dtype=bool)
     keep &= ~left_out
-    data = FitData.prepare(q[keep], intensity[keep], None if sigma is None else sigma[keep],
+    selected_sigma = None if sigma is None else sigma[keep]
+    if halves is not None and weighting == "file":
+        selected_sigma = mean.fit_sigma(keep)
+    data = FitData.prepare(q[keep], intensity[keep], selected_sigma,
                            weighting=weighting, dq=dq[keep] if resolution == "file" else None)
     averaged = 0
     if halves is not None:

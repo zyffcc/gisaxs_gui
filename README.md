@@ -131,9 +131,12 @@ python main.py
 ```
 
 `python main.py` also opens what it is given (`python main.py frame_0001.cbf scan_folder sample.gimap`) and
-`python main.py --version` prints the version. `python -m pip install -e .` installs the same with a `gimap` command
-(`gimap --version`, `gimap FILE_OR_FOLDER …`); keep it editable (`-e`): the manuals, icons and example data stay in
-the checkout.
+`python main.py --version` prints the version. Run `python -m pip install .` from the tagged source checkout
+to install a wheel with the `gimap` command, the English and Chinese illustrated manuals, the calibration
+detector catalogue, the icons and the Predict network. You can then run `gimap FILE_OR_FOLDER …` or
+`gimap reproduce RECORD.json` from any directory. For **Help ▸ Example Data** and the worked examples below,
+run `python -m pip install -e .` in the tagged checkout and keep that folder. The public example frames and
+their calibrations stay in `tests/data/external/` to keep the wheel small.
 
 To check an installation quickly, run `python tools/offscreen_smoke.py`: it starts the whole program without a
 window in a temporary user data folder, checks that its six pages are there and prints
@@ -308,7 +311,7 @@ before relying on the numbers: they say which default decisions may not fit your
 
 ### Worked example · GALAXI GISAXS
 
-Run this command from the source folder to reproduce the Yoneda cut and level-2 fit in Fig. 4.
+Run this command from the source folder to repeat the Fig. 4 analysis with covariance-aware fit weights.
 It uses the public GALAXI frame, its calibration and the reported incidence angle of 0.463°.
 
 ```sh
@@ -316,10 +319,10 @@ python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.t
 ```
 
 Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
-At q_z = 0.5226 nm⁻¹ the 5.99 nm upright cylinder has q_z·R = 3.13. The report flags it as a possible
+At q_z = 0.5226 nm⁻¹ the 5.94 nm upright cylinder has q_z·R = 3.10. The report flags it as a possible
 sphere (`cyl_sphere:R_2`). BornAgain's reference model uses spheres of radius 5.75 nm.
 The fit uses 596 points. At the measured intensity maximum their spacing is 0.00466 nm⁻¹,
-or 0.93 times the validation spacing. This run compared the solutions by evidence.
+or 0.93 times the validation spacing. On the archive platform the fit used its BIC fallback. The two reported solutions have BIC weights of 0.6540 and 0.3443 and the same composition.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
 gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
 the candidate solutions and their probabilities. Exit code 2 means that an item needs attention in the report.
@@ -349,11 +352,16 @@ Where you rely on a method or a data set that GIMaP builds on, cite it as well: 
 - **Python** >=3.10 to run from source, tested on 3.10 and 3.11.
 - **Screen**: 1280 × 720 or larger (the smallest window is 1024 × 640). GIMaP follows the display scaling of
   the operating system; **View ▸ Font Size** changes the text size.
-- **Disk**: about 2 GB for the Python environment.
+- **Disk**: the core wheel measured 37 MiB on Windows x64 with Python 3.10.18.
+  Its fresh virtual environment occupied 609 MiB, counting installed file sizes and excluding
+  the base interpreter and pip cache. The environment with all optional packages needs about 2 GB.
 - **Memory and speed**: reducing one frame in Analyze takes 0.06 s for a Pilatus 1M GISAXS frame and 0.7 s for a
   2048 × 2048 GIWAXS frame (the first frame of a detector 0.13 s and 1.0 s), and the process then holds about
   0.2 GB and 0.6 GB (`tools/benchmarks/analyze_speed.py`, a 32-thread desktop CPU). The window, Batch Export of
   long series and Sputter's analysis need more.
+  In the fresh core installation, replaying the public GALAXI horizontal cut from the command line
+  reached 169 MiB of process-tree resident memory (sampled every 20 ms). Run
+  `python tools/check_wheel.py` to repeat the install, disk measurement and headless replay.
 - **CPU**: everything runs on the CPU. GPU TensorFlow setups are not configured by this repository and must
   be installed separately if required.
 

@@ -34,13 +34,14 @@ from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices, QTextDocument
 from PyQt5.QtWidgets import QWidget
 
+from src.gimap.shared.resources import RESOURCE_ROOT
+
 from .app_dialogs import warn
 from .help_code import document_html, protect_fences
 from .help_page import documentation_page
 from .i18n import current_language, tr, trf
 
-ROOT = Path(__file__).resolve().parents[4]
-"""The program folder (a source checkout, or the folder of the Windows package)."""
+ROOT = RESOURCE_ROOT
 DOCS = ROOT / "docs"
 USER_MANUAL = DOCS / "User_Manual.md"
 USER_MANUAL_ZH = DOCS / "User_Manual_zh.md"
