@@ -3,10 +3,10 @@ chained batch fit does), Predict parameters is asked only where that chain break
 starts every frame from the result of the frame after it and keeps whichever of the two fits is better.
 
 * **Where the chain breaks** (``chain_break``): the frame's fit failed or did not converge, a new stage of the series
-  begins, or χ²ᵣ jumped: more than ``CHI2_JUMP`` times the frame before's and above ``CHI2_JUMP_LEAST``. A value at a
+  begins, or χ²ᵣ exceeds ``CHI2_JUMP_LEAST`` and ``CHI2_JUMP`` times the χ²ᵣ of either the preceding fit or the
+  last chain start in this pass. Each break starts a new comparison from the fit kept there. A value at a
   bound of its range (a nuisance term: beam tail, background, resolution; or any other), a value the curve does not
-  determine and a poor fit are flagged (``frame_flags``) but do not break the chain: the next frame still starts from
-  this one, so the series keeps the smooth course of its data. Where the chain breaks the frame is fitted again by
+  determine and a poor fit are flagged separately (``frame_flags``). Where the chain breaks the frame is fitted again by
   Predict parameters (its method unchanged: the page's network, with the particles of the start model), and the better
   of the two fits is kept (``better``).
 * **Which solution of Predict** (``restart_solution``): of the solutions at least 1/``PREDICT_FACTOR`` as probable as
@@ -52,7 +52,8 @@ FAILED_BREAK = "the fit failed ({why})"
 NOT_CONVERGED_BREAK = "the fit did not converge"
 STAGE_BREAK = "a new stage begins"
 JUMP_BREAK = "χ²ᵣ jumped from {before} to {after}"
-BREAKS = (FAILED_BREAK, NOT_CONVERGED_BREAK, STAGE_BREAK, JUMP_BREAK)
+DRIFT_BREAK = "χ²ᵣ rose from {before} at frame {frame} to {after}"
+BREAKS = (FAILED_BREAK, NOT_CONVERGED_BREAK, STAGE_BREAK, JUMP_BREAK, DRIFT_BREAK)
 """The reasons a chain breaks (English templates, numbers filled in with 3 significant digits: the record keeps them,
 the page translates them)."""
 PREDICT_FACTOR = 10.0
@@ -70,6 +71,14 @@ def _converged(frame: Optional[FrameFit]) -> bool:
     return frame is not None and frame.fitted and frame.result.converged
 
 
+def _chain_reference(frame: FrameFit, fit_pass: str) -> tuple[int, Optional[float]]:
+    """A kept fit from the other pass starts a new chain when followed in this direction."""
+    if frame.chain_reference_frame is not None and (not fit_pass or frame.fit_pass == fit_pass):
+        return frame.chain_reference_frame, frame.chain_reference_chi2
+    chi2 = frame.result.chi2_reduced if frame.fitted else None
+    return frame.index + 1, chi2 if chi2 is not None and math.isfinite(chi2) else None
+
+
 def chain_break(frame: FrameFit, previous: Optional[FrameFit], *, new_stage: bool = False) -> str:
     """Why the chain breaks at ``frame`` (module docstring; English), or ``""`` when it holds. A frame stopped by the
     person is no break: nothing is fitted again."""
@@ -83,8 +92,12 @@ def chain_break(frame: FrameFit, previous: Optional[FrameFit], *, new_stage: boo
         return STAGE_BREAK
     if _converged(previous):  # (a value at a bound, an undetermined value or a poor fit: flagged, no break)
         before, after = previous.result.chi2_reduced, frame.result.chi2_reduced
-        if math.isfinite(before) and math.isfinite(after) and after > CHI2_JUMP * before and after > CHI2_JUMP_LEAST:
-            return JUMP_BREAK.format(before=f"{before:.3g}", after=f"{after:.3g}")
+        if math.isfinite(after) and after > CHI2_JUMP_LEAST:
+            if math.isfinite(before) and after > CHI2_JUMP * before:
+                return JUMP_BREAK.format(before=f"{before:.3g}", after=f"{after:.3g}")
+            number, reference = _chain_reference(previous, frame.fit_pass)
+            if frame.start_from != "single" and reference is not None and after > CHI2_JUMP * reference:
+                return DRIFT_BREAK.format(before=f"{reference:.3g}", frame=number, after=f"{after:.3g}")
     return ""
 
 
@@ -133,8 +146,15 @@ def chained_fit(index: int, path: str, curve, start: FitModel, single: FitModel,
     frame = replace(fit_frame(index, path, curve, start, settings, stop), start_from=origin, fit_pass=fit_pass,
                     start_frame=previous.index + 1 if follows else 0)
     why = chain_break(frame, previous, new_stage=new_stage)
-    if not why or (predict is None and solutions is None) or (stop is not None and stop()) or not frame.points:
-        return replace(frame, chain=why)
+    if why and (predict is not None or solutions is not None) and frame.points and not (stop and stop()):
+        frame = _retry(frame, curve, single, settings, previous, why, stop, predict, solutions)
+    reference = previous if follows and not why else frame
+    number, chi2 = _chain_reference(reference, fit_pass)
+    return replace(frame, chain=why, chain_reference_frame=number, chain_reference_chi2=chi2)
+
+
+def _retry(frame, curve, single, settings, previous, why, stop, predict, solutions):
+    """Try Predict once for this break and retain the better fit and the attempt record."""
     called, choice, rule = False, None, ""
     prediction = None
 
@@ -147,22 +167,22 @@ def chained_fit(index: int, path: str, curve, start: FitModel, single: FitModel,
         prediction = getattr(solution, "reproduction", None)
         return predicted_start(solution)
 
-    again = fit_frame(index, path, curve, single, replace(settings, method="predict"), stop, try_predict)
+    again = fit_frame(frame.index, frame.path, curve, single, replace(settings, method="predict"), stop, try_predict)
     if stop and stop():
-        attempts = (PredictAttempt(fit_pass, why, choice, False, again.error or "stopped"),) if called else ()
-        return replace(frame, chain=why, predict_attempts=attempts)
+        attempts = (PredictAttempt(frame.fit_pass, why, choice, False, again.error or "stopped"),) if called else ()
+        return replace(frame, predict_attempts=attempts)
     if again.fitted:
         proposal = again.result.model
         if (proposal.weighting != single.weighting or proposal.resolution_mode != single.resolution_mode
                 or [c.law for c in proposal.components] != [c.law for c in single.components]):
             # Compare χ² on the same points, with the chosen weights and smearing. Predict remains a separate fit.
-            again = fit_frame(index, path, curve, manual_chain_start(proposal, single),
+            again = fit_frame(frame.index, frame.path, curve, manual_chain_start(proposal, single),
                               replace(settings, method="local"), stop)
             with_prediction({"reproduction": again.reproduction}, {"reproduction": prediction}, None)
-    again = replace(again, start_from="predict", fit_pass=fit_pass, start_frame=0, predict_choice=rule, selection=choice)
+    again = replace(again, start_from="predict", fit_pass=frame.fit_pass, start_frame=0, predict_choice=rule, selection=choice)
     kept = better(frame, again)
-    attempts = (PredictAttempt(fit_pass, why, choice, kept is again, again.error),) if called else ()
-    return replace(kept, chain=why, predict_attempts=attempts)
+    attempts = (PredictAttempt(frame.fit_pass, why, choice, kept is again, again.error),) if called else ()
+    return replace(kept, predict_attempts=attempts)
 
 
 def keep_pass_attempts(kept, first, second):

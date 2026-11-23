@@ -4447,11 +4447,13 @@ errors (§9.8). For Predict, the trend shows the median and central 68% interval
 When the network and the manual fit use different size laws, weights or resolution, the network supplies a
 starting point for a local fit under the manual settings. The two candidate fits are ranked on the same objective.
 
-Fitting ▸ In-situ series ▸ *Previous result, Predict at chain breaks* refines every frame from the converged result of the frame before (as *The previous frame's result*). The chain **breaks** at a frame whose fit failed or did not converge, at the first frame of a new stage, or where χ²ᵣ jumps:
+Fitting ▸ In-situ series ▸ *Previous result, Predict at chain breaks* refines every frame from the converged result of the frame before (as *The previous frame's result*). The chain **breaks** if the fit fails or does not converge, a new stage begins, or χ²ᵣ satisfies Eq. (11.65).
 
 ```text
-χ²ᵣ(i) > 3 · χ²ᵣ(i − 1)   and   χ²ᵣ(i) > 2                                                          (11.65)
+χ²ᵣ(i) > 2   and   [χ²ᵣ(i) > 3 · χ²ᵣ(p)   or   χ²ᵣ(i) > 3 · χ²ᵣ(s)]                      (11.65)
 ```
+
+Here p is the preceding frame in the direction of the fit, and s is the most recent chain start (the first frame, a frame started from Single, or the frame of a break), using the χ²ᵣ of the fit kept there.
 
 Bounds, undetermined values and poor fits (χ²ᵣ > 10) are flagged separately. At a break, Predict proposes a restart with the particles of the starting model. The chained fit and the restarted fit are compared on the same objective. A converged fit takes precedence, then a completed fit, then the lower χ²ᵣ. Ties retain the original fit. The optional backward pass repeats this comparison using the next frame as the starting point.
 

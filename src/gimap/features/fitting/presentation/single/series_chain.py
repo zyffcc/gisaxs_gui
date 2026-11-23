@@ -1,8 +1,8 @@
 """The chained fit of the In-situ series page (``application/series_chain``) and two more ways to save its results.
 
 * **The previous result; Predict parameters where the chain breaks** (Start step): every frame is refined from the
-  result of the frame before it; where that chain breaks (a failed or unconverged fit, a new stage, a jump of χ²ᵣ;
-  never a value at a bound) the frame is fitted again by Predict parameters (the page's ``predict_solutions``,
+  result of the frame before it; where that chain breaks (a failed or unconverged fit, a new stage, a jump or drift
+  in χ²ᵣ) the frame is fitted again by Predict parameters (the page's ``predict_solutions``,
   unchanged), from the solution closest to the frame before among the probable ones, and the better fit is kept. A
   model Predict parameters cannot take (no particle, more than three) is refined only.
 * **The Started from column** of the table says where each frame's kept fit started: “continued from frame n”, “restarted

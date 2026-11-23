@@ -6,6 +6,7 @@ and models told apart) and into the results database; Fit New Frames in Fitting�
 from __future__ import annotations
 
 import csv
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -69,6 +70,8 @@ def test_a_chained_series_asks_predict_only_where_the_chain_breaks_and_saves_its
         assert rows[3]["start_from"] == "predict" and "chain broke" in rows[3]["flags"]
         assert rows[3]["predict_choice"].startswith("the closest to frame ") and rows[2]["start_frame"] in ("2", "4")
         assert {row["fit_pass"] for row in rows} <= {"forward", "backward"}
+        assert int(rows[3]["chain_reference_frame"]) == 4
+        assert float(rows[3]["chain_reference_chi2"]) == pytest.approx(jump.result.chi2_reduced)
 
         written = series.save_fits_nxcansas(tmp_path / "out" / "fits.h5")
         curves = read_nxcansas(written)
@@ -82,6 +85,58 @@ def test_a_chained_series_asks_predict_only_where_the_chain_breaks_and_saves_its
         assert len(stored) == 5 and stored[3].start_from == "predict"
         assert stored[3].values["1_Sphere_R_nm"] == pytest.approx(9.0, rel=0.05)
         assert any(flag.startswith("chain broke") for flag in stored[3].flags)
+
+        state = series.series_results_state()
+        series.restore_series_results(state)
+        assert series.fits[3].chain_reference_frame == 4
+        assert series.fits[3].chain_reference_chi2 == jump.result.chi2_reduced
+        assert "last chain start" in series.selection_summary.text()
+        report = series.save_report(tmp_path / "out" / "report.md").read_text(encoding="utf-8")
+        assert "Drift also breaks the chain when χ²ᵣ exceeds 2 and 3 times" in report
+        assert any("Predict restart kept" in line and line.endswith(f"| 4 | {jump.result.chi2_reduced:.6g} |")
+                   for line in report.splitlines())
+        for frame in state["frames"]:
+            del frame["chain_reference_frame"], frame["chain_reference_chi2"]
+        del state["settings"]["chain_drift_recorded"]
+        series.restore_series_results(state)
+        assert len(series.fits) == len(RADII) and series.fits[3].chain == jump.chain
+        assert all(f.chain_reference_frame is None and f.chain_reference_chi2 is None for f in series.fits.values())
+        assert "the previous χ²ᵣ" in series.selection_summary.text()
+        older = tmp_path / "out" / "older.csv"
+        series.save_table(older)
+        record = json.loads(older.with_suffix(".json").read_text(encoding="utf-8"))
+        assert "chain_reference_ratio_above" not in record["series_policy"]["chain_breaks"]
+    finally:
+        series.dispose()
+        single.dispose()
+
+
+def test_chain_starts_from_single_after_a_frame_has_no_fit(tmp_path, monkeypatch):
+    from src.gimap.features.fitting.application import series_chain
+    from src.gimap.features.fitting.application.series_fit import FrameFit
+
+    single, series = _pages()
+    try:
+        folder = _series(tmp_path, RADII[:3])
+        single.open_curve(folder / "run_00001_fit_input.dat")
+        single.set_model(_model(5.2))
+        assert _open_series(series, folder)
+        fit_frame = series_chain.fit_frame
+
+        def fit(index, path, *args):
+            if index == 1:
+                return FrameFit(index, path, error="too few points in the fitting range")
+            return fit_frame(index, path, *args)
+
+        monkeypatch.setattr(series_chain, "fit_frame", fit)
+        series.start_chain.setChecked(True)
+        series.skip_odd_check.setChecked(False)
+        series.start()
+        _wait(series)
+        failed, following = series.fits[1], series.fits[2]
+        assert failed.chain and failed.chain_reference_frame == 2 and failed.chain_reference_chi2 is None
+        assert following.start_from == "single" and following.chain_reference_frame == 3
+        assert following.chain_reference_chi2 == following.result.chi2_reduced
     finally:
         series.dispose()
         single.dispose()
@@ -122,8 +177,6 @@ def _wait_listed(series) -> None:
 
 
 def test_the_trend_is_drawn_against_time_when_the_curves_say_when_they_were_measured(tmp_path) -> None:
-    import json
-
     import numpy as np
 
     from src.gimap.features.fitting.application.single_fit import evaluate

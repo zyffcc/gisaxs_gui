@@ -58,9 +58,13 @@ def selection_summary(settings):
     if rule == "unrecorded":
         return tr("This project did not record Predict solution probabilities or its selection distance.")
     chain = policy["chain_breaks"]
-    reason = (trf("fit failure, non-convergence, new stage, or χ²ᵣ above {floor} and {ratio}× the previous χ²ᵣ",
-                  floor=f"{chain['chi2_reduced_above']:g}", ratio=f"{chain['chi2_ratio_above']:g}")
-              if chain else tr("not chained"))
+    reason = tr("not chained")
+    if chain:
+        template = ("fit failure, non-convergence, a new stage, or χ²ᵣ above {floor} and {ratio}× its value at "
+                    "either the previous frame in this pass or the last chain start"
+                    if "chain_reference_ratio_above" in chain else
+                    "fit failure, non-convergence, new stage, or χ²ᵣ above {floor} and {ratio}× the previous χ²ᵣ")
+        reason = trf(template, floor=f"{chain['chi2_reduced_above']:g}", ratio=f"{chain['chi2_ratio_above']:g}")
     if rule == "closest":
         choice = trf("closest eligible solution (p ≥ {fraction} p max)", fraction=f"{selection['min_relative_probability']:g}")
     elif rule == "HMM":

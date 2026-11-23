@@ -12,6 +12,8 @@ def series_policy(settings) -> dict:
     chained = settings.start == CHAIN and settings.method != "predict"
     breaks = ({"failed": True, "not_converged": True, "new_stage": True,
                "chi2_ratio_above": CHI2_JUMP, "chi2_reduced_above": CHI2_JUMP_LEAST} if chained else None)
+    if chained and settings.chain_drift_recorded:
+        breaks["chain_reference_ratio_above"] = CHI2_JUMP
     if not settings.selection_recorded and (chained or settings.method == "predict"):
         selection = {"rule": "unrecorded"}
     elif settings.method == "predict" and settings.smooth:

@@ -66,6 +66,8 @@ class SeriesSettings:
     smooth_scale: float = DEFAULT_SCALE
     selection_recorded: bool = True
     """False for saved fits from before series selection provenance was recorded."""
+    chain_drift_recorded: bool = True
+    """Older projects used only the neighbouring frame for the χ²ᵣ break rule."""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "side", fit_halves(self.side))
@@ -127,6 +129,10 @@ class FrameFit:
     reproduction: Optional[dict] = None
     acquisition: Optional[dict] = None
     """Detector time fields from the curve used for this fit."""
+    chain_reference_frame: Optional[int] = None
+    """Frame number (from 1) of this chain's most recent start or break in the kept pass."""
+    chain_reference_chi2: Optional[float] = None
+    """Reduced χ² of the fit kept at that frame, when available."""
 
     @property
     def ok(self) -> bool:
@@ -341,7 +347,8 @@ def parameter_columns(model: FitModel) -> list[tuple[tuple, str]]:
 
 
 MADE_OF_COLUMNS = ("points", "halves_used")
-FLAG_COLUMNS = ("flags", "start_from", "start_frame", "chain_break", "predict_choice", "fit_pass")
+FLAG_COLUMNS = ("flags", "start_from", "start_frame", "chain_break", "predict_choice", "fit_pass",
+                "chain_reference_frame", "chain_reference_chi2")
 
 
 def file_name(path, folder=None) -> str:
@@ -403,7 +410,8 @@ def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = Fal
     rows = []
     for frame in sorted(frames, key=lambda item: item.index):
         tail = [flags_text(frame), frame.start_from, frame.start_frame or "", frame.chain, frame.predict_choice,
-                frame.fit_pass] if flags else []
+                frame.fit_pass, frame.chain_reference_frame or "",
+                "" if frame.chain_reference_chi2 is None else frame.chain_reference_chi2] if flags else []
         if with_choices:
             tail = decision_cells(frame) + tail
         row = [frame.index + 1, file_name(frame.path, folder)]
@@ -468,6 +476,9 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
                        "q_unit": frame.q_unit, "q_unit_from": frame.q_unit_from,
                        **({"acquisition": frame.acquisition} if frame.acquisition else {}),
                        **({"elapsed_time_s": elapsed[frame.index]} if frame.index in elapsed else {}),
+                       **({"chain_reference_frame": frame.chain_reference_frame,
+                           "chain_reference_chi2": frame.chain_reference_chi2}
+                          if frame.chain_reference_frame is not None else {}),
                        **frame_decisions(frame),
                        **{key: value for key, value in (("start_from", frame.start_from),
                                                         ("start_frame", frame.start_frame), ("chain_break", frame.chain),

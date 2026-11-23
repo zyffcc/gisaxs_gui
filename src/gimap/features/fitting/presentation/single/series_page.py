@@ -384,9 +384,9 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
         frame = self._chain_kept(frame)  # (the backward pass keeps the better of a frame's two fits)
         self.fits[frame.index] = frame
         self._frames_done += 1
-        if frame.ok:
+        if frame.ok or frame.chain:
             self._previous = frame
-            self._unsaved = self._unsaved or frame.fitted  # where a stopped fit was is no result to save
+        self._unsaved = self._unsaved or frame.fitted  # where a stopped fit was is no result to save
         self._curves[frame.index] = curve
         self._show_result_row(frame)
         self._set_item(frame.index)

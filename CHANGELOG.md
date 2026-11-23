@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- Chained in-situ fits also retry a frame with **Predict parameters** when χ²ᵣ rises gradually above 2 and exceeds three times its value at the start of the current chain. The fit kept at that frame sets the new reference.
+
 - Automatic GISAXS analysis asks you to choose a particle model only when another composition has a probability or BIC weight of at least 0.2. For two probable solutions of the same model, it reports agreement within their 68 % intervals or identifies the parameter to check.
 
 - **Predict parameters** pools all starts when estimating a composition's evidence. The BIC fallback compares the best fit of each composition with the model-error floor included. Refinement and sampling use the same resolution, shape bounds and substrate model, including the level-3 reflection disk and the finite Born transfer for random cylinders at levels 2 and 4.

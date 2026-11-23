@@ -39,6 +39,10 @@ def series_report(record: dict) -> str:
         lines.append("A failed fit, an unconverged fit or a new stage breaks the chain. A rise in χ²ᵣ also "
                      f"breaks it when χ²ᵣ exceeds both {breaks['chi2_ratio_above']:g} times the preceding fit's "
                      f"value and {breaks['chi2_reduced_above']:g}.")
+        if "chain_reference_ratio_above" in breaks:
+            lines.append(f"Drift also breaks the chain when χ²ᵣ exceeds {breaks['chi2_reduced_above']:g} and "
+                         f"{breaks['chain_reference_ratio_above']:g} times its value at the last chain start. "
+                         "The fit kept at each break sets the new reference.")
     else:
         lines.append("Chain restarts were disabled.")
     if choice["rule"] == "closest":
@@ -57,25 +61,29 @@ def series_report(record: dict) -> str:
         lines.append("This fit uses no Predict solution selection.")
     if settings["backward_pass"]:
         lines.append("The settings requested a backward pass.")
+    reference_headers = (("Chain reference frame", "Chain reference χ²ᵣ")
+                         if breaks and "chain_reference_ratio_above" in breaks else ())
     lines.extend(["", "## Frames", "",
                   "Rank starts at 1. The single-frame probabilities are the evidence weights from Predict. "
                   "The 68% intervals describe parameters within the selected solution. "
                   "They exclude uncertainty about which solution to choose.", "",
                   _row("Frame", "File", "Fit state", "Pass", "Fit or restart", "Break or error", "Rule",
-                       "Rank", "Kept or proposed p", "Maximum frame p", "Smoothed p"),
-                  "|---|---|---|---|---|---|---|---:|---:|---:|---:|"])
+                       "Rank", "Kept or proposed p", "Maximum frame p", "Smoothed p", *reference_headers),
+                  "|---|---|---|---|---|---|---|---:|---:|---:|---:|" + "---:|" * len(reference_headers)])
     for frame in record["per_frame"]:
         attempts = frame.get("predict_attempts", [])
+        reference = (frame.get("chain_reference_frame"), frame.get("chain_reference_chi2")) if reference_headers else ()
         if not any(a["kept"] for a in attempts):
             cells = _choice_cells(frame.get("selected_solution"))
             if cells[0] is None:
                 cells[0] = frame.get("predict_choice")
             lines.append(_row(frame["frame"], frame["file"], frame["state"], frame.get("fit_pass"),
                               frame.get("start_from"), frame.get("chain_break") or frame.get("reason"),
-                              *cells))
+                              *cells, *reference))
         for attempt in attempts:
             notes = " · ".join(filter(None, (attempt["chain_break"], attempt.get("error"))))
             lines.append(_row(frame["frame"], frame["file"], frame["state"], attempt["fit_pass"],
                               "Predict restart kept" if attempt["kept"] else "Predict restart discarded",
-                              notes, *_choice_cells(attempt.get("choice"))))
+                              notes, *_choice_cells(attempt.get("choice")),
+                              *(reference if attempt["kept"] else (None,) * len(reference))))
     return "\n".join(lines) + "\n"

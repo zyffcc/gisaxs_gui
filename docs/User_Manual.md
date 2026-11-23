@@ -2939,14 +2939,14 @@ current frame finish before pausing. Completed results stay available.
   - **The model in Single analysis** — every frame independent of the others.
   - **The previous result; the Single model at each new stage** — follows the sample within a stage and starts
     afresh where the curves change course.
-  - **Previous result, Predict at chain breaks** — each frame from the result of the frame
-    before; where that chain breaks (the fit failed or did not converge, a new stage begins, or χ²ᵣ is more than 3
-    times the frame before's and above 2), Predict parameters (section 6.4, its method unchanged) fits the frame
-    again with the particles of Single's model, from its solution closest to the frame before among those at least
-    a tenth as probable as the most probable one, and the better fit is kept. If the manual size law, weights or resolution differ, Refine uses the network values as a
+  - **Previous result, Predict at chain breaks** — each frame starts from the preceding fit, and Predict parameters
+    (section 6.4) retries the frame if the fit fails or does not converge, a new stage begins, or χ²ᵣ exceeds 2 and
+    is more than 3 times its value at either the preceding frame or the start of the current chain.
+    Predict uses the particles of Single's model, choosing the closest solution to the preceding frame among those
+    at least a tenth as probable as the most probable one, and the better fit sets the reference χ²ᵣ for the new chain.
+    If the manual size law, weights or resolution differ, Refine uses the network values as a
     starting point and applies the manual settings before comparing the two fits. A value at a bound (the beam tail, the
-    background or any other), a value the curve does not determine and a poor fit are flagged but do not break the
-    chain, so a series whose curves change smoothly stays smooth. A model with
+    background or any other), a value the curve does not determine and a poor fit are flagged separately. A model with
     no particle or more than three is refined only (the Run Log says so).
 - **Refine again in a backward pass**: once every frame is done, from the last but one to the first, each frame is refined from
   the result of the frame after it, and the better of its two fits is kept — a sample whose first frames are hard to
@@ -3001,8 +3001,9 @@ current frame finish before pausing. Completed results stay available.
   value and its error) with a JSON record next to it: the start model, the halves and where they came from, range,
   left-out points, method, every frame's state, reason and the unit its q was read in (`q_unit`, `q_unit_from`;
   `q_unit_of_files` is the setting for files without one), the poor fits (χ²ᵣ above 10) and which curves or frames
-  were listed. The table ends with `flags`, `start_from` (previous, next, single or predict), `start_frame`,
-  `chain_break`, `predict_choice` and `fit_pass`, and the record says the start and the backward pass.
+  were listed. The table includes `flags`, `start_from` (previous, next, single or predict), `start_frame`,
+  `chain_break`, `predict_choice`, `fit_pass`, `chain_reference_frame` and `chain_reference_chi2`. The record also
+  gives the start method and whether a backward pass was requested.
   For frames with predictions, the CSV includes the selected rank, single-frame probabilities, reference and smoothed
   probability. The JSON stores the selection policy, all HMM state probabilities in rank order and the outcome of
   each chained restart. **Save ▸ Series report…** writes these frame decisions and the chain-break thresholds as

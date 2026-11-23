@@ -130,7 +130,7 @@ def settings_to_dict(settings: SeriesSettings) -> dict:
             "excluded": sorted(float(v) for v in settings.excluded), "method": settings.method, "start": settings.start,
             "resolve_edges": bool(settings.resolve_edges), "follow": bool(settings.follow),
             "backward": bool(settings.backward), "smooth": bool(settings.smooth), "smooth_scale": settings.smooth_scale,
-            "selection_recorded": settings.selection_recorded}
+            "selection_recorded": settings.selection_recorded, "chain_drift_recorded": settings.chain_drift_recorded}
 
 
 def settings_from_dict(data: dict) -> SeriesSettings:
@@ -142,7 +142,8 @@ def settings_from_dict(data: dict) -> SeriesSettings:
                           resolve_edges=bool(data.get("resolve_edges", True)), follow=bool(data.get("follow", True)),
                           backward=bool(data.get("backward", False)), smooth=bool(data.get("smooth", False)),
                           smooth_scale=float(data.get("smooth_scale", DEFAULT_SCALE)),
-                          selection_recorded=bool(data.get("selection_recorded", False)))
+                          selection_recorded=bool(data.get("selection_recorded", False)),
+                          chain_drift_recorded=bool(data.get("chain_drift_recorded", False)))
 
 
 __all__ = ["STATE_SCHEMA", "frame_from_dict", "frame_to_dict", "number", "path_key", "path_of", "read_number",

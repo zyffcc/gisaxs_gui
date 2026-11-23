@@ -64,6 +64,65 @@ def test_a_chain_holds_while_the_fit_follows_and_breaks_where_chi2_jumps_or_a_fi
     assert next_start(second, _model(5.2), settings) is second.result.model  # a chain starts from the result before
 
 
+@pytest.mark.parametrize("predict_chi2", [2.4, 5.0])
+def test_slow_drift_retries_predict_and_resets_the_reference_to_the_kept_fit(monkeypatch, predict_chi2):
+    from src.gimap.features.fitting.application import series_chain
+
+    settings = SeriesSettings(start="chain")
+    single = _model(5.2)
+    curve = _curve(5.0)
+    template = fit_frame(0, "sample.dat", curve, single, settings)
+    chi2 = [1.2, 2.5, 3.0, 3.9, 4.1]
+    asked = []
+
+    def fit(index, path, curve, start, settings, stop, predict=None):
+        value = chi2[index]
+        if predict is not None:
+            predict(curve, start)
+            asked.append(index)
+            value = predict_chi2
+        return replace(template, index=index, path=path, result=replace(template.result, chi2_reduced=value))
+
+    monkeypatch.setattr(series_chain, "fit_frame", fit)
+    frames = []
+    for index in range(len(chi2)):
+        previous = frames[-1] if frames else None
+        start = previous.result.model if previous else single
+        frames.append(chained_fit(index, f"frame{index + 1}.dat", curve, start, single, settings, previous,
+                                  predict=lambda data, model: model))
+
+    reason = "χ²ᵣ rose from 1.2 at frame 1 to 3.9"
+    assert asked == [3]
+    assert [frame.chain for frame in frames] == ["", "", "", reason, ""]
+    assert frames[3].start_from == ("predict" if predict_chi2 < 3.9 else "previous")
+    kept_chi2 = min(3.9, predict_chi2)
+    assert frames[3].result.chi2_reduced == kept_chi2
+    assert [(f.chain_reference_frame, f.chain_reference_chi2) for f in frames] == (
+        [(1, 1.2)] * 3 + [(4, kept_chi2)] * 2)
+
+    # The backward pass begins from the last kept fit. Starting again from Single also sets a new reference.
+    backward = chained_fit(3, frames[3].path, curve, frames[4].result.model, single, settings, frames[4],
+                           fit_pass=BACKWARD)
+    assert (backward.start_from, backward.chain_reference_frame, backward.chain_reference_chi2) == ("next", 5, 4.1)
+    continued = chained_fit(2, frames[2].path, curve, backward.result.model, single, settings, backward,
+                            fit_pass=BACKWARD)
+    assert (continued.start_frame, continued.chain_reference_frame, continued.chain_reference_chi2) == (4, 5, 4.1)
+    restarted = chained_fit(1, frames[1].path, curve, single, single, settings, continued, fit_pass=BACKWARD)
+    assert (restarted.start_from, restarted.chain_reference_frame, restarted.chain_reference_chi2) == ("single", 2, 2.5)
+
+
+@pytest.mark.parametrize(("reference", "before", "after", "reason"), [
+    (0.4, 1.3, 1.9, ""), (0.4, 1.3, 2.0, ""), (1.0, 2.5, 3.0, ""),
+    (1.23456, 3.2, 4.56789, "χ²ᵣ rose from 1.23 at frame 4 to 4.57"),
+    (1.0, 1.5, 5.0, "χ²ᵣ jumped from 1.5 to 5"),
+])
+def test_drift_requires_both_strict_thresholds_and_a_jump_takes_precedence(reference, before, after, reason):
+    previous = FrameFit(5, "previous.dat", result=SimpleNamespace(chi2_reduced=before, converged=True, stopped=False),
+                        chain_reference_frame=4, chain_reference_chi2=reference)
+    current = FrameFit(6, "current.dat", result=SimpleNamespace(chi2_reduced=after, converged=True, stopped=False))
+    assert chain_break(current, previous) == reason
+
+
 def test_a_value_at_a_bound_an_undetermined_value_or_a_poor_fit_does_not_break_the_chain():
     settings = SeriesSettings(start="chain")
     first = fit_frame(0, "a.dat", _curve(5.0), _model(5.2), settings)
@@ -152,21 +211,33 @@ def test_the_flags_name_failures_bounds_breaks_and_the_backward_pass():
 
 def test_the_saved_table_and_record_carry_the_flags_and_the_frames_round_trip(tmp_path):
     settings = SeriesSettings(start="chain", backward=True)
-    frames = [replace(fit_frame(index, f"run_{index + 1}.dat", _curve(5.0 + 0.2 * index, index), _model(5.2), settings),
-                      start_from="previous", fit_pass="forward") for index in range(3)]
+    frames = [fit_frame(index, f"run_{index + 1}.dat", _curve(5.0 + 0.2 * index, index), _model(5.2), settings)
+              for index in range(3)]
+    reference = frames[0].result.chi2_reduced
+    frames = [replace(frame, start_from="previous" if frame.index else "single", start_frame=frame.index,
+                      fit_pass="forward", chain_reference_frame=1, chain_reference_chi2=reference) for frame in frames]
     frames.append(FrameFit(3, "run_4.dat", error="the curve could not be read"))
     header, rows = series_table(frames, _model(5.2), details=True, flags=True)
     count = len(FLAG_COLUMNS)
     assert header[-count:] == list(FLAG_COLUMNS) and all(len(row) == len(header) for row in rows)
-    assert rows[3][-count].startswith("failed") and rows[0][-count + 1:] == ["previous", "", "", "", "forward"]
+    assert rows[3][-count].startswith("failed")
+    flags = dict(zip(FLAG_COLUMNS, rows[1][-count:]))
+    assert flags["start_from"] == "previous" and flags["start_frame"] == 1 and flags["fit_pass"] == "forward"
+    assert flags["chain_break"] == flags["predict_choice"] == ""
+    assert flags["chain_reference_frame"] == 1 and flags["chain_reference_chi2"] == reference
     plain, _rows = series_table(frames, _model(5.2), details=True)
     assert plain == header[:-count]  # without ``flags`` the table is as before
     record = series_record(_model(5.2), settings, "folder", "*.dat", frames)
     assert record["settings"]["start"] == "chain" and record["settings"]["backward_pass"] is True
-    assert record["per_frame"][0]["start_from"] == "previous" and record["per_frame"][0]["fit_pass"] == "forward"
+    kept = record["per_frame"][1]
+    assert kept["start_from"] == "previous" and kept["fit_pass"] == "forward"
+    assert kept["chain_reference_frame"] == 1 and kept["chain_reference_chi2"] == reference
+    rules = record["series_policy"]["chain_breaks"]
+    assert rules["chain_reference_ratio_above"] == rules["chi2_ratio_above"] == 3 and rules["chi2_reduced_above"] == 2
     again = frame_from_dict(frame_to_dict(replace(frames[1], start_frame=1, predict_choice="the most probable")))
     assert (again.start_from, again.fit_pass, again.start_frame, again.predict_choice) == (
         "previous", "forward", 1, "the most probable")
+    assert (again.chain_reference_frame, again.chain_reference_chi2) == (1, reference)
     assert settings_from_dict(settings_to_dict(settings)).backward is True
 
 

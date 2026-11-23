@@ -14,6 +14,7 @@ from .zh_cell_refinement import CELL_REFINEMENT_ZH
 from .zh_cell_sensitivity import CELL_SENSITIVITY_ZH
 from .zh_cell_series import CELL_SERIES_ZH
 from .zh_cell_orientation import CELL_ORIENTATION_ZH
+from .zh_chain_drift import CHAIN_DRIFT_ZH
 from .zh_coverage_report import COVERAGE_REPORT_ZH
 from .zh_crystal_orientation import CRYSTAL_ORIENTATION_ZH
 from .zh_crystal_film import STRINGS as CRYSTAL_FILM_ZH
@@ -72,6 +73,7 @@ from .zh_usability_giwaxs import USABILITY_GIWAXS_ZH
 from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 
 FEATURES_ZH = {
+    **CHAIN_DRIFT_ZH,
     **EXAMPLE_INSTALL_ZH,
     **PHASE_GEOMETRY_ZH,
     **CELL_SENSITIVITY_ZH,

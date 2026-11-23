@@ -337,8 +337,9 @@ class FitSeriesView:
         self.start_chain = QRadioButton("Previous result, Predict at chain breaks", page)
         self.start_chain.setObjectName("fitSeriesStartChain")
         self.start_chain.setToolTip(
-            "Retry with Predict after a failure, non-convergence, a new stage, or χ²ᵣ above both 2 and 3× the "
-            "previous value. Keep the better fit.")
+            "Retry with Predict after a failed or unconverged fit or at the start of a new stage. Also retry if χ²ᵣ is "
+            "above 2 and exceeds 3× its value at either the previous frame in this pass or the last chain start. "
+            "Keep the better fit.")
         for index, button in enumerate((self.start_previous, self.start_same, self.start_stages, self.start_chain)):
             self.start_group.addButton(button, index)
             layout.addWidget(button)

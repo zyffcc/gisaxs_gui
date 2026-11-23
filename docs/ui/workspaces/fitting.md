@@ -284,8 +284,8 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   previous frame**（默认勾选；起点为 Single 的模型、或新阶段的第一帧时不跟随）：在概率至少为最可能解的 `CLOSE_ENOUGH` = 0.2 倍的解里，
   取尺寸和间距（ln R、ln D 之差，按半径对应各群）与上一帧最接近的一个（`closest`）；明显更可能的解仍被采用。记录
   `settings.method` = `predict`、`settings.follow`。
-- **链式拟合**（`application/series_chain.py`，页面 `single/series_chain.py`）：链只在拟合失败或未收敛、新阶段、χ²ᵣ 跳变处断开
-  （`chain_break`）；参数在边界（光束拖尾、背景或其他）、未确定的值和拟合差只标记。断开处 `chained_fit(solutions=…)` 取页面的
+- **链式拟合**（`application/series_chain.py`，页面 `single/series_chain.py`）在拟合失败或未收敛、进入新阶段，或本帧 χ²ᵣ 大于 2
+  且超过沿拟合方向的前一帧或当前链起始帧 χ²ᵣ 的 3 倍时断开（`chain_break`）。参数在边界（光束拖尾、背景或其他）、未确定的值和拟合差只标记。断开处 `chained_fit(solutions=…)` 取页面的
   `predict_solutions()`（Predict 的全部解，方法不变），`restart_solution` 在概率不低于最可能解 1/`PREDICT_FACTOR`（10）的解中取
   `solution_distance`（共有自由值在上一帧范围中位置之差的 RMS）最小的一个，规则写进 `FrameFit.predict_choice`；`start_frame` 是接续的帧。
   表格的 **Started from** 列（`single/start_texts.py`）写 “continued from frame n” / “restarted from Predict (why)”，悬停给出规则；

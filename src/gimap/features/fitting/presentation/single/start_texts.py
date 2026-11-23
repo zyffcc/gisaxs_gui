@@ -32,9 +32,8 @@ PREDICTED = "Predict parameters"
 """Predict each frame: every frame from a solution of Predict parameters (no chain)."""
 CHOSEN = "Predict's solution: {rule}"
 START = "Started from"
-START_TIP = ("Where the frame's kept fit started: the result of frame n (the frame before; the frame after in the "
-             "backward pass), Predict parameters where the chain broke (a failed or unconverged fit, a new stage, a "
-             "jump of χ²ᵣ), or the model of Single analysis")
+START_TIP = ("The kept fit started from the neighboring frame, Predict parameters, or the model in Single analysis. "
+             "A failed or unconverged fit, a new stage, or a jump or gradual rise in χ²ᵣ can break the chain.")
 TEXTS = (CONTINUED, CONTINUED_BACKWARD, CONTINUED_BEFORE, CONTINUED_AFTER, FROM_SINGLE, RESTARTED, BROKE, PREDICTED,
          CHOSEN, START, START_TIP, *BREAKS, *CHOICES)
 """Every English text of this module, and the templates it translates (the Chinese table has them all)."""
