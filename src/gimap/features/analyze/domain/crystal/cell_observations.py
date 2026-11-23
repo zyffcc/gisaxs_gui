@@ -39,7 +39,7 @@ class Refraction:
             raise ValueError("Refraction requires a positive wavevector and physical grazing angles.")
 
 
-AMBIGUOUS = "No single reflection family dominates this peak."
+AMBIGUOUS = "Several reflection families share this peak window."
 CROSS_PHASE = "Reflections from more than one phase lie in the assignment window."
 TENTATIVE = "The indexing assignment is tentative because the phase symmetry is unknown."
 INVALID_PEAK = "The peak needs a finite positive centre and standard error."
@@ -67,16 +67,11 @@ def _components(candidate, rings):
     return (ReflectionFamily(hkl, candidate.intensity, (hkl,)),) if len(hkl) == 3 else ()
 
 
-def _family(choices, with_atoms, rings):
+def _family(choices, rings):
     components = [_components(candidate, rings) for candidate in choices]
     if not all(components):
         return None
-    ranked = sorted((family for group in components for family in group), key=lambda f: -f.intensity)
-    if len(ranked) == 1:
-        return ranked[0]
-    if with_atoms and all(f.intensity > 0 for f in ranked) and ranked[0].intensity >= 3 * sum(f.intensity for f in ranked[1:]):
-        return ranked[0]
-    return None
+    return components[0][0] if len(components) == 1 and len(components[0]) == 1 else None
 
 
 def _candidate(record):
@@ -113,7 +108,7 @@ def select_peaks(phase_name, assignments, *, with_atoms=False, rings=()):
         elif not _valid_centre(item.q, item.q_err):
             reason = INVALID_PEAK
         else:
-            family = _family(choices, with_atoms, rings)
+            family = _family(choices, rings)
             if family is None:
                 reason = AMBIGUOUS
             else:

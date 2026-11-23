@@ -25,10 +25,13 @@ def _measurement_text(measured, kind):
                  estimate=_estimate_text(measured.get("symmetry")))]
     method = measured.get("method")
     if measured.get("deg") is not None:
-        names = {"combined": "Combined estimate", "horizon": "Horizon estimate", "symmetry": "Symmetry estimate"}
+        names = {"combined": "Combined estimate", "horizon": "Horizon estimate", "symmetry": "Symmetry estimate",
+                 "fibre assumption": "Roll assuming a surface-normal fibre axis"}
         lines.append(f"{tr(names.get(method, 'Estimate'))}  {_estimate_text(measured)}")
         if measured.get("origin") == "automatic" and not measured.get("significant"):
             lines.append(tr("Below the automatic threshold."))
+    elif method == "unsupported fibre tilt":
+        lines.append(tr("The rings show a fibre tilt without an independently resolved surface tilt."))
     elif method == "disagreement":
         lines.append(tr("Estimates disagree. Current roll retained."))
     else:

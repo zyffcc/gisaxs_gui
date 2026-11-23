@@ -117,7 +117,7 @@ of 0.501 ± 0.012° and uses the latter. To reproduce results at the notebook an
 
 Select a peak and open **Fit details** to see the points it was fitted to, the Gaussian and its
 background, and the errors. A peak selected for ring analysis can still have a poor Gaussian fit.
-The warnings row lists this and any overlap, edge or bin-width flags recorded for the peak. **Save Report…** keeps everything as a web page or Markdown. Switch the
+The warnings row lists this and any overlap, edge or bin-width flags recorded for the peak. **Save Report…** offers a web page, Markdown and, for a completed analysis, a replayable JSON record. Switch the
 image to **q map** or **Cake** to see the rings in q; **Sources** shows which pixels each curve uses.
 
 ![GIWAXS results](manual_images/en/07_giwaxs_results.png)
@@ -315,8 +315,7 @@ uses its own `.gimap` environment and would set one up beside yours.
 installs GIMaP with the packages of `requirements.txt` and adds the command `gimap`. `gimap` starts GIMaP;
 `gimap frame_0001.cbf scan_folder sample.gimap` also opens what it names (frames and folders in Analyze, a
 project as a project); `gimap --version` prints the version and `gimap --help` the options. `python main.py`
-takes the same arguments. Install it editable (`-e`), as shown: the manuals, icons and example data stay in the
-checkout, which a plain `pip install .` does not copy.
+takes the same arguments. A wheel installation (`python -m pip install .` from a tagged checkout) includes the illustrated English and Chinese manuals, detector catalogue and Predict weights. For the public frames under **Help ▸ Example Data**, use `python -m pip install -e .` and keep the checkout. The examples remain in `tests/data/external/`. The package declares Python 3.10 or later. CI tests Python 3.10 and 3.11.
 
 The trained network of **Predict parameters** and 1D Predict is in the Git repository (about 13 MB, section 6.4),
 so a checkout runs everything, including Predict parameters (chapter 6). On macOS, BornAgain is installed
@@ -772,11 +771,11 @@ profile's own value.
 How a profile is chosen and what each override replaces is in
 [Physics and Methods, section 1.4](Physics_Manual.md#14-where-the-geometry-of-a-frame-comes-from).
 
-**Sample roll ψ.** Click ψ beside αi in the command bar to open **Geometry**. Enter the roll in degrees, or click **Measure from frame**. A positive angle tilts the sample normal toward lab right. The panel shows the horizon estimate and its uncertainty alongside the ring-symmetry estimate (the specular rod for GISAXS). It applies the combined estimate when the two agree, or the single available estimate. Disagreement leaves the current setting in place. Right-click the angle and choose **Use profile roll** to restore the profile value. On narrow screens, open the Geometry step directly. Check the detector calibration, particularly rot3, before interpreting ψ as a sample alignment.
+**Sample roll ψ.** Click ψ beside αi in the command bar to open **Geometry**. Enter the roll in degrees, or click **Measure from frame**. A positive angle tilts the sample normal toward lab right. The panel shows the horizon estimate and its uncertainty alongside the ring-symmetry estimate (the specular rod for GISAXS). A shadow edge, Yoneda band or specular rod supplies a surface direction. The panel keeps a tilt seen only in the rings as a fibre measurement. A significant ring tilt needs a consistent edge that independently resolves the surface tilt. Disagreement leaves the current setting in place. Right-click the angle and choose **Use profile roll** to restore the profile value. On narrow screens, open the Geometry step directly. Check the detector calibration, particularly rot3, before interpreting ψ as a sample alignment.
 
-The angle you enter or accept is saved with the Analyze setup. **Run Automatic Analysis** uses a roll entered in Analyze or on the command line, including zero. It also keeps a nonzero roll from the resolved instrument profile or PONI. Otherwise it measures the selected frame or frame sum and applies the estimate when |ψ| reaches three standard errors. The analysis JSON records ψ and the available estimates. **Export .poni…** includes them as GIMaP comments alongside the standard pyFAI detector geometry. On the command line, `--sample-roll-deg 0` reproduces the zero-roll reduction.
+The angle you enter or accept is saved with the Analyze setup. **Run Automatic Analysis** uses a roll entered in Analyze or on the command line, including zero. It also keeps a nonzero roll from the resolved instrument profile or PONI. Otherwise it measures the selected frame or frame sum and applies the estimate when |ψ| reaches three standard errors. The analysis JSON records ψ and the available estimates. **Export .poni…** includes them as GIMaP comments alongside the standard pyFAI detector geometry. Use `--sample-roll-deg 0` for a zero-roll reduction. If the fibre axis is independently known to be the surface normal, `--assume-fibre-normal` allows its symmetry to supply ψ. The report records that assumption.
 
-**Incidence angle from the frame.** The same **Measure from frame** button measures αi on the selected exposure or frame sum. Check the calibrated direct-beam position first. The panel shows which features were visible, the angle from each one and its uncertainty. A narrow specular spot gives half its angular separation from the direct beam. In GISAXS, use **Yoneda critical angle** to identify the film or substrate giving the band. Choose Si, SiO₂, plate glass or Au to calculate αc at the frame wavelength, or select **Enter angle** and supply a known αc. **From film** uses the film critical angle set for refraction when available. The material choice and manual entry leave the q-refraction setting unchanged.
+**Incidence angle from the frame.** The same **Measure from frame** button measures αi on the selected exposure or frame sum. Check the calibrated direct-beam position first. The panel shows which features were visible, the angle from each one and its uncertainty. A narrow specular spot gives half its angular separation from the direct beam. When one feature supplies at least 90% of the inverse-variance weight, the panel and report identify it. The report also gives the feature positions and the shadow intercept measured near the direct beam. In GISAXS, use **Yoneda critical angle** to identify the film or substrate giving the band. Choose Si, SiO₂, plate glass or Au to calculate αc at the frame wavelength, or select **Enter angle** and supply a known αc. **From film** uses the film critical angle set for refraction when available. The material choice and manual entry leave the q-refraction setting unchanged.
 
 **Run Automatic Analysis** compares the result with the nominal αi. If no positive angle was supplied, it uses the resolved frame measurement. If the difference exceeds three standard errors of the frame measurement, it reports both values and uses the measured one. Otherwise it retains the nominal value. Select **Keep entered αi** to use the nominal value even when the two disagree. On the command line, use `--keep-incidence` to retain the nominal angle. Specify the band material with `--yoneda-material Si` or its critical angle with `--yoneda-critical-deg`. The analysis record and saved setup retain the component estimates, calibration, frame or sum, reference and selection. A measurement belongs to the frame and calibration used to obtain it.
 
@@ -954,6 +953,9 @@ Start page (*Calibrate the detector*).
    WAXS mosaics more room. The horizontal divider can be dragged.
    With three rings the engine checks how the fit changes when each ring is left out. If any pair of rings
    gives an unstable joint fit, the tilt 1σ in the tooltip comes from the covariance of the full fit.
+   The beam-centre and distance errors then use the larger of the covariance error and the ring-to-ring
+   error with tilt fixed. Each 1σ is one estimated standard error. Physics and Methods §3.3 gives the
+   measured coverage of these errors for the geometry returned by the automatic line-position check.
 8. To adjust the result by hand, press **Manual refine**: drag the centre marker, edit the
    centre/distance values, or pair a detected ring with a theoretical peak (**Fit selected ring**).
    **Reset to fitted** goes back to the fitted solution and **Finish manual** closes the panel. The
@@ -1804,9 +1806,8 @@ checks**. When αi is missing from both the setup and the frame measurement, the
 
 **Whose results.** The results belong to the frame they were run on. While a run lasts, the file
 list is locked. When you show another frame, the Results step says which frame the results are
-from; they come back with that frame. **Save Report…** writes a web page with the pictures (`.html`,
-opens in any browser) or the text as Markdown (`.md`); the save dialog starts next to the data.
-Both carry a section **Mask** and a section **Record**: the GIMaP version, the input file with its
+from; they come back with that frame. Under **Save Report…**, choose **Replayable report** (`.json`) to repeat the analysis later. To read the results, save a web page with pictures (`.html`) or Markdown (`.md`).
+Both readable formats carry a section **Mask** and a section **Record**: the GIMaP version, the input file with its
 SHA-256, the calibration file with its path and SHA-256 when the run took the geometry from one, the
 instrument profile with its source (a profile made from a file names that file's path), and the
 corrections (background, gap guard, bad pixels, intensity corrections).
@@ -2142,6 +2143,8 @@ written in the corner of the image. **Overlay** sets **q max** (3 Å⁻¹), the 
 for refraction in the film**, with **αc of the film** (0: the αc of the refraction correction, section 5.2) and
 **Also the reflected channel (DWBA)**.
 
+**Selected Phase** and the assignment report list the occupied atoms per unit cell after symmetry expansion, the CIF sum formula and Z. A difference is flagged, including when the diffraction model lists only part of the bulk composition. The optical calculation uses the complete sum formula and Z when both are usable.
+
 What is drawn:
 
 - a fibre phase: a dot at (±q∥, qz) of every reflection on the **q map**, at its pixel on the **Detector** and at
@@ -2193,7 +2196,7 @@ direction, the fit can test a single fibre axis at one or two widths.
 To set the window for one ring, move the purple band over its peak before fitting. If the band spans several
 detected peaks, each keeps its own window. Automatic analysis calculates its ring windows from the radial peaks.
 When the CIF composition and scattering factors give the film's optical constants at the measurement wavelength,
-the model averages transmission and attenuation of the refracted waves over the measured pixels in each bin.
+the model sorts each measured pixel by its pole angle inside the film and averages transmission and attenuation using its external ray. The selected radial window stays on the displayed q map.
 Unknown thickness uses the thick-film limit. The fit accounts for any film correction applied to the frame
 and admits measured bins down to the horizon. A minimum exit angle set by
 the user and **Fit up to χ** still apply. When the optical constants are unavailable, the usual exit-angle limit
@@ -2208,7 +2211,7 @@ gives the fitted substrate-parallel plane (h k l), mosaic FWHM in degrees, and p
 that phase. The ± values are statistical standard errors. The component percentages sum to **Total oriented**.
 **Near-random** marks a component whose inclusion has weak support or whose weak angular modulation leaves its fraction poorly separated from random material. The panel pools these crystallites under **isotropic including near-random**. Only resolved components have a plane label. The exported JSON records the fitted width, fraction uncertainty and change in BIC when the component is replaced with random material.
 Check ΔBIC and the reduced χ² for the joint fit and the displayed ring.
-When the orientation is undetermined, the listed planes, widths and fractions describe the trial fit.
+When the orientation is undetermined, all listed planes, widths and fractions are conditional on the preferred candidate. A broad fraction below three standard errors with absolute correlation above 0.99 with the isotropic fraction is pooled in a two-population fit.
 The crystal Hermans factor describes the fitted distribution of fibre axes. The measured ring f describes that
 ring over its measured angles. The panel gives δ and β when film optics are available.
 **Export…** writes the selected ring and its component curves to `<frame>_crystal_orientation.csv`
@@ -2227,13 +2230,13 @@ Transmitted and reflected channels can split a ring above the film critical angl
 Each analysed ring also gets a pole-figure fit next to its Hermans f. The
 formulas are in [Physics and Methods 7.10 and 7.11](Physics_Manual.md#710-reflection-overlay-and-phase-assignment).
 
-**Unit Cell.** After loading the reference phases, open **Unit Cell**. Select a phase to see its free lattice parameters in Å or degrees, volume in Å³, one-standard-error uncertainties, and relative changes against the CIF. The reference retains the original CIF values if you edit the trial cell for indexing. For a hand-entered phase, the typed cell supplies the reference. The table lists measured q, the residual for each accepted reflection, and reasons for exclusions. A rank-deficient phase shows the reason the cell could not be determined. With film αc set in the reduction or enabled in the overlay, the refinement uses transmitted-channel q.
+**Unit Cell.** After loading the reference phases, open **Unit Cell**. Select a phase to see its free lattice parameters in Å or degrees, volume in Å³, one-standard-error uncertainties, and relative changes against the CIF. The reference retains the original CIF values if you edit the trial cell for indexing. For a hand-entered phase, the typed cell supplies the reference. After fitting, the program updates the expected reflection positions and checks the assignments again. It excludes overlapping families because texture can change their relative intensities. The table lists measured q, the residual for each accepted reflection and reasons for exclusions. The results give the fitted q zero shift and its standard error, the range from omitting each accepted centre, and the effect of repeating the reduction with and without film refraction. Strain errors include the reference uncertainties supplied in the CIF. A rank-deficient phase shows the reason the cell could not be determined. With film αc set in the reduction or enabled in the overlay, the refinement uses transmitted-channel q.
 
-For a fibre-textured sample, fit **Crystal orientation (from phase)** in **Pole Figure**, then return to **Unit Cell**. If one fibre axis is determined and the measured sectors constrain both projections, the tab also shows in-plane and out-of-plane strain. **Export Cell…** writes the results for all visible phases, full covariance, residuals, settings, frame source and CIF references to `<frame>_cells.json`. Automatic analysis with phases includes the same estimates under **Refined unit cells** and `cell_refinement` in the report JSON.
+For a fibre-textured sample, fit **Crystal orientation (from phase)** in **Pole Figure**, then return to **Unit Cell**. If one fibre axis is determined and the measured sectors constrain both projections, the tab also shows in-plane and out-of-plane strain, with the CIF uncertainties propagated through both projections. **Export Cell…** writes the results for all visible phases, full covariance, residuals, settings, frame source and CIF references to `<frame>_cells.json`. Automatic analysis with phases includes the same estimates under **Refined unit cells** and `cell_refinement` in the report JSON.
 
-![Refined MAPbI₃ cell and measured P08 peak residuals](manual_images/en/07d_cell_refinement.png)
+![Only the 202 and 404 harmonics remain for MAPbI₃ on the public P08 frame. The separate lattice parameters are undetermined.](manual_images/en/07d_cell_refinement.png)
 
-**Refine Series…** starts tracking the indexed peaks over the range and stride selected in Analyze’s series controls. Each point uses one detector frame. Choose the phase and **Cell parameter** to plot a, c or another free parameter together with volume and 1σ bars. The horizontal axis uses elapsed seconds from timestamps or an estimate from the recorded exposure or frame interval. Without timing it uses frame number. Missing or insufficient peaks leave gaps. **Export Table…** writes one CSV row per frame and phase plus a JSON record of sources, settings, tracks and residuals. See [Physics and Methods §7.12](Physics_Manual.md#712-unit-cell-refinement-from-indexed-peaks).
+**Refine Series…** starts tracking the indexed peaks over the range and stride selected in Analyze’s series controls. Each point uses one detector frame. Choose the phase and **Cell parameter** to plot a, c or another free parameter together with volume and 1σ bars. The horizontal axis uses elapsed seconds from timestamps or an estimate from the recorded exposure or frame interval. Without timing it uses frame number. The program checks each tracked peak for overlap at that frame’s provisional metric. Missing or insufficient independent peaks leave gaps. **Export Table…** writes one CSV row per frame and phase plus a JSON record of sources, settings, tracks and residuals. See [Physics and Methods §7.12](Physics_Manual.md#712-unit-cell-refinement-from-indexed-peaks).
 
 ![Lattice parameter and volume across a synthetic detector series](manual_images/en/07e_cell_series.png)
 
@@ -2723,12 +2726,20 @@ refines below χ²ᵣ 2, the ranges are searched for the two best compositions; 
 the solutions within a BIC of 20 of the best (at most four), which gives their probabilities and intervals.
 
 The network searches the whole range of each value it proposes. The solution retains the geometry and any
-upright-cylinder height distributions supplied for level 4. **Refine** afterwards keeps the values you fix.
+upright-cylinder height distributions supplied for level 4. Batch solutions also store the fitted model,
+including its resolution and parameter bounds, so opening one in Fitting reproduces its curve.
+A fixed value or a narrower range in the receiving Model can change the transferred curve.
+**Refine** afterwards keeps the values you fix.
 
 **Reading the result**
 
 - The solutions go to **Results ▸ Other solutions**, with the highest weight first. Each shows χ²ᵣ and its probability **p** or **BIC weight**. The
-  highest-ranked solution is in Model, and **Method** turns to **Refine the values in Model**. The probabilities compare the
+  highest-ranked solution is in Model, and **Method** turns to **Refine the values in Model**. Predict groups
+  solutions by particle family and paracrystal status in order of increasing radius. Predict pools the samples
+  from all starts of each composition and estimates its evidence once. Each solution receives the share of the
+  composition weight carried by its proposal's samples, including solutions below the display cutoff.
+  If sampling fails, the lowest BIC from the fits with the model-error floor sets each composition's weight.
+  Relative BIC within that composition divides the weight among its solutions. The probabilities compare the
   compositions tried and the distinct solutions of each: a solution with p 0.6 next to one with 0.4 means that the
   curve does not decide between them. With two or three populations this is common: another R of one population at
   the same D, or the paracrystals of two populations exchanged, can describe the curve as well; Predict tries these
@@ -2755,7 +2766,9 @@ upright-cylinder height distributions supplied for level 4. **Refine** afterward
   (effective interface) and level 2 (Born at q_z) flag sphere and random-cylinder radii above q_z·R = 1.2
   (`qzR_cov`). In the simulated DWBA sphere benchmark, nominal 68 % coverage was only 18–33 % at 1.2–1.7.
   Level 2 adds `qzR_fail` above 2. Use both angles for level 3 or fit the four-term DWBA with a known substrate.
-  Level 4 evaluates the reflected paths directly and omits the Born-approximation flags.
+  At level 3, spheres have a fitted reflection coefficient with |r| ≤ 1. At level 4, sphere amplitudes
+  include all four paths. Random cylinders use the orientation average at the finite Born transfer q₊ in
+  both sampling and refinement at levels 2 and 4. At levels 1 and 3 their vertical transfer is zero.
   Level 3 flags interval coverage above 1.7. The level-1 `qzR` radius-bias flag also starts above 1.7.
   At levels 2–4, an upright cylinder with fitted q₊R > 2 may stand for a sphere of similar radius (`cyl_sphere`).
   This shape ambiguity also occurred in the level-4 benchmark with a known Si substrate.
@@ -4060,7 +4073,7 @@ experiment (chapter 13).
 ### 10.7 Without the window
 
 **Worked example (GALAXI GISAXS).**
-Run this command from the source folder to reproduce the Yoneda cut and level-2 fit in Fig. 4.
+Run this command from the source folder to repeat the Fig. 4 analysis with covariance-aware fit weights.
 It uses the public GALAXI frame, its calibration and the reported incidence angle of 0.463°.
 
 ```sh
@@ -4068,11 +4081,11 @@ python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.t
 ```
 
 Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
-At q_z = 0.5226 nm⁻¹ the 5.99 nm upright cylinder has q_z·R = 3.13. *Needs attention* identifies it as
+At q_z = 0.5226 nm⁻¹ the 5.98 nm upright cylinder has q_z·R = 3.13. *Needs attention* identifies it as
 a possible sphere (`cyl_sphere:R_2`). The BornAgain reference uses spheres of radius 5.75 nm.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
 gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
-the candidate solutions and their probabilities. Exit code 2 means that an item needs attention in the report.
+the candidate solutions and their weights. On the archive platform the leading composition had evidence probability 0.9995, divided between two solutions with weights 0.5126 and 0.4869. In `fit_curve.csv`, `sigma` gives the pointwise standard error and `fit_sigma` includes the correlation between points that share interpolated measurements. Exit code 2 means that an item needs attention in the report.
 The same folder contains `qmap.png` and `report.json`. The run summaries are
 `fig4/summary.md` and `fig4/summary.json`.
 
@@ -4270,7 +4283,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Analyze ▸ **Export New Frames While Watching** | as Export, for each new frame | `gimap_analysis/` next to the frame; when it cannot be written, a folder you choose once (kept for the session); with none, the export is switched off and the status line says why | as Export |
 | Analyze ▸ **Save Settings…**; Mask step ▸ **Save…**; Regions ▸ **Add ▸ Save Cuts…** | `analyze_settings.json`; `masks.json` or a mask image (section 5.2); `cuts.json` | dialog in `gimap_analysis/` | JSON recipes are self-describing. Mask images have a companion `<filename>.json`. |
 | Run Automatic Analysis ▸ Peaks ▸ **Save Peak Table…** | `<stem>_peaks.csv` | the folder proposed by the save dialog | source, settings and phase assignment in the CSV header |
-| Run Automatic Analysis ▸ **Save Report…** | `<stem>_report.html` (with pictures) or `.md` | the folder you chose last in this session for frames of the same folder, else `gimap_analysis/` if it exists, else next to the frame | the report itself (no JSON) |
+| Run Automatic Analysis ▸ **Save Report…** | `.html` (with pictures), `.md`, or a replayable `.json` for a completed run | the folder you chose last in this session for frames of the same folder, else `gimap_analysis/` if it exists, else next to the frame | select JSON for replay |
 | Process with AI ▸ **Save Report…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | as above | the JSON |
 | Process with AI (automatic) | a record of every run; missing analyses | user data folder: `assistant_runs/`, `assistant_feature_requests.jsonl` | — |
 | Process with AI, when the AI exports | the curves as Export, and `<stem>_assistant.json` | `gimap_analysis/` next to the data | `<stem>_analysis.json`, `<stem>_assistant.json` |
@@ -4314,6 +4327,8 @@ earlier versions may not ([Physics and Methods, section 14.5](Physics_Manual.md#
 ```text
 gimap reproduce example_analysis.json --out check
 ```
+
+For a completed automatic analysis, select its exported JSON in the same dialog or run `gimap reproduce report.json --out check`. Replay reads the original frames, repeats the angle measurements and the reduction, then repeats the structural analysis with the recorded settings. If you used `--assume-fibre-normal`, replay uses the same assumption when it measures sample roll. With phase CIFs it compares GIWAXS assignments, orientation verdicts and parameters, and cell refinement, including the reason a cell was withheld. For a GISAXS fit it compares each reported solution and its probability or BIC weight. Open `reproduced_report.json` for the new values and `comparison.json` for agreement by section.
 
 Without `--out`, the command creates `<record stem>_reproduced/` beside the JSON. Use a fresh destination for each comparison. The folder contains the newly calculated CSV columns and `comparison.json`. Batch results have numbered subfolders. **identical** means every recorded numerical column matches bit for bit, including uncertainties and pixel counts where present. **different** gives the largest relative difference in each column. The command exits with 0 for identical values, 2 for a difference and 1 for an error.
 
@@ -4382,13 +4397,13 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 
 | Limitation | What to do |
 |---|---|
-| A shared q-scale error shifts the refined cell and can mimic strain. The cell errors condition on the calibration, CIF and chosen indices. | Check the calibrant and sample distance before interpreting a strain. Inspect the peak residuals and compare the measured ring sequence with the proposed indices (§5.9). |
+| A shared q-scale error shifts the refined cell and can mimic strain. The cell errors condition on the calibration and chosen indices. | Check the calibrant and sample distance before interpreting a strain. Inspect the peak residuals and compare the measured ring sequence with the proposed indices (§5.9). |
 | A frame can lack a clear shadow edge, specular spot or identifiable Yoneda band. On P08 the shadow alone is consistent with both the published and the spot-derived angles. | Check the direct-beam calibration and the individual angle estimates. Use a known reference and **Keep entered αi** when a feature has another plausible assignment. |
 | **A film transmission model cannot reproduce a shadow that differs on the two sides of a ring.** The public P08 MAPbI₃ example shows this near the horizon (§5.9). | Measure incidence and roll before comparing signed sectors and checking the q window on the frame. Read the reported χ and size of the largest residual for a poorly fitted ring. Report a quantitative oriented fraction only when the model describes the measured profiles. |
 | **The rows of a Series map carry no σ.** The timeline's χ² takes the noise of each x column from the series itself, and a Series map recorded in the results database holds x and I only (section 5.6). | Read the timeline as a distance in units of the frame-to-frame noise, not as a goodness of fit; for σ of every point, use Batch Export ▸ Each frame: its curves, with error bars. |
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
-| **Geometry Calibration 1σ depends on the number of contributing rings.** For example, in simulated AgBh frames with four to six matched rings, distance and rot2 lay within their reported 1σ in 56.5 % of frames. The estimate excludes systematic errors shared by every ring. | Check the ring overlays and the measured coverage by parameter and ring count in Physics and Methods 3.3. |
+| **Geometry Calibration 1σ depends on the contributing rings.** Coverage of one estimated standard error varies by parameter and matched-ring count. Common shifts of every ring also affect accuracy. | Check the ring overlays. Physics and Methods §3.3 gives the measured coverage and tilt accuracy of the geometry returned by the line-position check. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only. A calibration found by the automatic search may belong to another experiment.** Even matching detector dimensions cannot establish which run produced a calibration (section 4.2). | Check the file named in the report and the distance in **Geometry**. Supply the calibration or name it in the notes. Remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
 | **Powder rings leave rot3 undetermined.** They constrain tilt weakly at SAXS distances (±0.2° on the public silver behenate frame). With seven or more matched rings in simulated frames, the 1σ estimates for beam x and rot1 covered the true values less often than expected. | See Physics and Methods 3.3 for measured coverage. Use a wide-angle standard for rot1 and rot2. Check rot3 on a GISAXS ridge and the horizon in **Geometry ▸ Check rot3**. GIMaP reads flat-detector `.poni` orientations 1–4 (section 4.2). |
@@ -4416,7 +4431,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The substrate table holds Si, SiO₂, plate glass and Au from 4.9 to 30 keV.** Level 4 assumes smooth interfaces and particles surrounded by air. | For a known oxide or polymer film, enter its thickness, δ and β under **Top layer** (section 6.4). For a substrate outside the table, enter its δ and β. |
 | **The posterior check (MCMC) is slow for random cylinders.** A random cylinder takes 15–200 ms per evaluation. A check takes hours. Independent ensembles can both miss a distant mode (section 6.2). | Compare other modes through Predict's other solutions. |
 | **Predict parameters can give slightly different fits across platforms.** For the same cut, solution probabilities, interval endpoints, standard errors and flags for parameters near a bound can differ between numerical library builds. | To reproduce an archived fit, record the operating system and Python, NumPy and SciPy versions along with the cut and settings. |
-| **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; four-term DWBA with a known substrate and both angles; spheres with two paths and a free reflection coefficient r when the substrate is unknown and Model has both angles, else at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, other shapes) can give a composition a high probability that it does not deserve. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with an unknown substrate and both angles R is off by about 6 % (median; P90 19–40 %) and the composition right in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7 and select level 4 when the substrate is known; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
+| **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; four-term DWBA with a known substrate and both angles; spheres with two paths and a free reflection coefficient r when the substrate is unknown and Model has both angles, else at the Born term of the cut's q_z or the effective interface). Simulated curves of independent models provide known parameters for checking recovery. In the paper’s measured Au comparison, halving the published SEM diameters gives an independent radius scale and population spread. For the measured GALAXI Ag frame, the reference radius comes from a BornAgain model of buried spheres (section 1.3 and Physics and Methods, section 9.10). Roughness or shapes outside the model can give the wrong composition a high weight. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with an unknown substrate and both angles R is off by about 6 % (median; P90 19–40 %) and the leading solution has the true unordered families in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7 and select level 4 when the substrate is known; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
 | **Older reduction or fit records may lack a reproduction recipe.** | Export a fresh record from the original inputs and settings. Section 12 describes replay for records with a `reproduction` block. |
 | Without a supported credential-store adapter, saved API keys are kept in plain text in the user data folder (section 10.1). Anyone with read access to those files can read the keys. | On a shared computer, use the provider's environment variable or **Remove** the saved key after use. |
 | **Sputter ▸ Analyze reads Cu with networks trained for Cu on two polymer films (a homopolymer and a block copolymer)**. | For Cu on another substrate, choose **Polymer** for a polymer film and compare the model image with the measured one before using the values. |

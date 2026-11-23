@@ -18,12 +18,12 @@ Part 2 is the definition of what GIMaP minimises and which σ it reports (``RESI
 
 Part 3 (``--part coverage``, code in ``calibration_coverage.py``, no pyFAI needed): AgBh frames simulated on the
 Pilatus 1M (its module gaps from the public frame) with a known direct beam, distance 1.5-3 m, rot1 and rot2 drawn
-in ±3°, λ chosen so that 3 to 9 rings lie on the detector, Gaussian rings (2×2 sub-pixels, intensity falling with
+independently in ±3°, λ chosen for a target of 3 to 9 rings, Gaussian rings (2×2 sub-pixels, intensity falling with
 the order and varying with azimuth) on a falling background with Poisson noise, a beam stop and its arm. The pixels'
 2θ come from pyFAI's formula (``shared.geometry.detector_tilt.tilted_rays``), not from the ``lab_rays`` path GIMaP
 fits with. GIMaP's engine calibrates each frame (standard and energy given, a distance estimate within ±15 %); the
-coverage of its reported 1σ (and of s²(JᵀJ)⁻¹ on the same ring points, for comparison) is counted by the number of
-matched rings. Each frame is calibrated by the shipped engine, which polishes beam-centre proposals for both
+coverage of the geometry returned after the line-position check (and of s²(JᵀJ)⁻¹ on its own ring points)
+is counted by the number of matched rings. Each frame is calibrated by the shipped engine, which polishes beam-centre proposals for both
 transmission and grazing-incidence images.
 
 usage: python tools/benchmarks/calibration_check.py [--part real|coverage|all] [--cases 300] [--workers 4]
@@ -44,6 +44,8 @@ import io  # noqa: E402
 import json  # noqa: E402
 import logging  # noqa: E402
 import math  # noqa: E402
+import shlex  # noqa: E402
+import subprocess  # noqa: E402
 import sys  # noqa: E402
 import time  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -364,19 +366,25 @@ def main() -> None:
     workers = max(1, min(4, a.workers))
     out = json.loads(a.json.read_text(encoding="utf-8")) if a.json.exists() else {}
     out["residual_definition"] = RESIDUAL_DEFINITION
-    command = "python tools/benchmarks/calibration_check.py " + " ".join(sys.argv[1:])
+    command = shlex.join(["python", "tools/benchmarks/calibration_check.py", *sys.argv[1:]])
+    if a.part != "summarize":
+        provenance = {"command": command, "commit": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()}
     if a.part in ("real", "all"):
-        out["real_frame"] = {"command": command, **real_frame()}
+        out["real_frame"] = {**provenance, **real_frame()}
         print(json.dumps({k: out["real_frame"][k] for k in ("compare_gimap_convention", "rms_residual_px")}, indent=1))
     path = frames_file(a.json)
     frames = json.loads(gzip.decompress(path.read_bytes())) if path.exists() else {}
     if a.part in ("coverage", "all"):
         meta, records = coverage(a.cases, workers, a.seed)
-        frames["main"] = {"meta": {"command": command, **meta}, "frames": records}
+        frames["main"] = {"meta": {**provenance, **meta}, "frames": records}
     if a.part in ("coverage", "three", "all"):
         meta, records = three_ring_set(a.three_ring_cases, workers, a.seed + 1_000_000)
-        frames["three_ring_set"] = {"meta": {"command": command, **meta}, "frames": records}
+        frames["three_ring_set"] = {"meta": {**provenance, **meta}, "frames": records}
     if a.part != "real" and frames:
+        if any("fit" in row["as_shipped"] and "returned_index" not in row["as_shipped"]
+               for group in frames.values() for row in group["frames"]):
+            ap.error("this archive predates scoring the returned geometry; regenerate with --part coverage")
         path.parent.mkdir(exist_ok=True)
         path.write_bytes(gzip.compress(json.dumps(frames, default=float).encode("utf-8"), mtime=0))
         out["coverage"] = {"frames_file": path.relative_to(a.json.parent).as_posix()}

@@ -1,0 +1,4062 @@
+{
+  "synthetic": [
+    {
+      "phase": "MAPbI3_tetragonal",
+      "truth": {
+        "axis": [
+          1,
+          1,
+          0
+        ],
+        "fwhm_deg": [
+          16.0
+        ],
+        "fractions": [
+          0.62
+        ],
+        "fraction_iso": 0.38,
+        "exit_transmission": false,
+        "film_index": null
+      },
+      "trials": 32,
+      "successes": {
+        "axis": 32,
+        "includes_true_axis": 32,
+        "determined": 29,
+        "correct_and_determined": 29,
+        "width_within_1sigma": [
+          21
+        ],
+        "fraction_within_1sigma": [
+          20
+        ],
+        "fraction_iso": 20
+      },
+      "first_seed": 41027,
+      "fits": [
+        {
+          "seed": 41027,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.902634472931837,
+              "fwhm_err_deg": 0.03914675068449506,
+              "fraction": 0.6214840704858504,
+              "fraction_err": 0.001766573864561003,
+              "delta_bic_vs_isotropic_replacement": 115649.20610306841,
+              "replacement_delta_chi2_per_bin": 481.9173640871462,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37851592951414964,
+          "reduced_chi2": 0.8845705509164213,
+          "fraction_iso_err": 0.001766573864561003,
+          "delta_bic": 133.32842872582373,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41028,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.96744895785936,
+              "fwhm_err_deg": 0.03950211514985245,
+              "fraction": 0.6204919316898178,
+              "fraction_err": 0.0017769282704413103,
+              "delta_bic_vs_isotropic_replacement": 114809.88530397274,
+              "replacement_delta_chi2_per_bin": 478.42019409091426,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37950806831018224,
+          "reduced_chi2": 0.9869266171969368,
+          "fraction_iso_err": 0.0017769282704413103,
+          "delta_bic": 108.8146006231355,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41029,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.98181627439241,
+              "fwhm_err_deg": 0.03923592567661753,
+              "fraction": 0.6239008356407689,
+              "fraction_err": 0.0017711443222114573,
+              "delta_bic_vs_isotropic_replacement": 116622.0434760693,
+              "replacement_delta_chi2_per_bin": 485.9708531413166,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3760991643592311,
+          "reduced_chi2": 0.8340593286917909,
+          "fraction_iso_err": 0.0017711443222114573,
+          "delta_bic": 102.3668828295356,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41030,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.004566031453503,
+              "fwhm_err_deg": 0.040956151791559425,
+              "fraction": 0.6222458139037601,
+              "fraction_err": 0.0018408051529375641,
+              "delta_bic_vs_isotropic_replacement": 115525.47756365911,
+              "replacement_delta_chi2_per_bin": 481.4018285062741,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3777541860962399,
+          "reduced_chi2": 1.0740066527517125,
+          "fraction_iso_err": 0.0018408051529375641,
+          "delta_bic": 112.71912265109239,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41031,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.017431441115303,
+              "fwhm_err_deg": 0.04134220388687708,
+              "fraction": 0.6232056557109842,
+              "fraction_err": 0.0018632327454719585,
+              "delta_bic_vs_isotropic_replacement": 115475.32886959949,
+              "replacement_delta_chi2_per_bin": 481.192875614359,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3767943442890158,
+          "reduced_chi2": 1.0986510849064515,
+          "fraction_iso_err": 0.0018632327454719585,
+          "delta_bic": 170.63697944562597,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41032,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.988996653064635,
+              "fwhm_err_deg": 0.03954688489981695,
+              "fraction": 0.6199837274117301,
+              "fraction_err": 0.0017765302091983146,
+              "delta_bic_vs_isotropic_replacement": 114884.0512118143,
+              "replacement_delta_chi2_per_bin": 478.72921870692073,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38001627258826987,
+          "reduced_chi2": 0.9602226789173064,
+          "fraction_iso_err": 0.0017765302091983146,
+          "delta_bic": 99.50457126281802,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41033,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.02993984657102,
+              "fwhm_err_deg": 0.039688567938482466,
+              "fraction": 0.6210810392046286,
+              "fraction_err": 0.0017821193573894644,
+              "delta_bic_vs_isotropic_replacement": 114525.28119325914,
+              "replacement_delta_chi2_per_bin": 477.2343436296076,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37891896079537135,
+          "reduced_chi2": 0.902529706991251,
+          "fraction_iso_err": 0.0017821193573894644,
+          "delta_bic": 125.46696793685331,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41034,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.992532348248977,
+              "fwhm_err_deg": 0.039557776580872686,
+              "fraction": 0.6211190794660633,
+              "fraction_err": 0.00180691051690989,
+              "delta_bic_vs_isotropic_replacement": 109380.01605719543,
+              "replacement_delta_chi2_per_bin": 455.70439491395314,
+              "fraction_isotropic_correlation": -0.8728229599919243,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [
+            {
+              "fwhm_deg": 5.775097729043887,
+              "fwhm_err_deg": 0.8906017162519049,
+              "fraction": 0.0034063152775426595,
+              "fraction_err": 0.0009575164616702715,
+              "delta_bic_vs_isotropic_replacement": 1.9371631436454209,
+              "replacement_delta_chi2_per_bin": 0.053743504126372584,
+              "fraction_isotropic_correlation": -0.3896453633587816,
+              "reason": "isotropic replacement within 6 BIC units"
+            }
+          ],
+          "fraction_iso": 0.37888092053393674,
+          "reduced_chi2": 0.8710035350258878,
+          "fraction_iso_err": 0.00180691051690989,
+          "delta_bic": 1.9371631436454209,
+          "determined": false,
+          "parameter_status": "conditional on the preferred candidate",
+          "reasons": [
+            "the competing orientation is within 6 BIC units or unavailable"
+          ]
+        },
+        {
+          "seed": 41035,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.801454865701382,
+              "fwhm_err_deg": 0.06963213128933426,
+              "fraction": 0.6155891666586695,
+              "fraction_err": 0.003753649437240542,
+              "delta_bic_vs_isotropic_replacement": 60265.06125237858,
+              "replacement_delta_chi2_per_bin": 251.05874989388292,
+              "fraction_isotropic_correlation": -0.15801010356440337,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [
+            {
+              "fwhm_deg": 9.193047682555244,
+              "fwhm_err_deg": 1.6979077148429909,
+              "fraction": 0.01109352404857496,
+              "fraction_err": 0.003955150441234999,
+              "delta_bic_vs_isotropic_replacement": 0.739829426182439,
+              "replacement_delta_chi2_per_bin": 0.04875461363694325,
+              "fraction_isotropic_correlation": -0.34897770198274614,
+              "reason": "isotropic replacement within 6 BIC units"
+            }
+          ],
+          "fraction_iso": 0.3844108333413305,
+          "reduced_chi2": 1.0423397437220063,
+          "fraction_iso_err": 0.003753649437240542,
+          "delta_bic": 0.739829426182439,
+          "determined": false,
+          "parameter_status": "conditional on the preferred candidate",
+          "reasons": [
+            "the competing orientation is within 6 BIC units or unavailable"
+          ]
+        },
+        {
+          "seed": 41036,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.980721426280592,
+              "fwhm_err_deg": 0.03962760733762665,
+              "fraction": 0.6216336240804314,
+              "fraction_err": 0.0017834593425458648,
+              "delta_bic_vs_isotropic_replacement": 115493.44064182378,
+              "replacement_delta_chi2_per_bin": 481.26834133196024,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3783663759195686,
+          "reduced_chi2": 1.0107479309710363,
+          "fraction_iso_err": 0.0017834593425458648,
+          "delta_bic": 99.51565879020632,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41037,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.040750425077746,
+              "fwhm_err_deg": 0.04065563374787835,
+              "fraction": 0.6214273176679574,
+              "fraction_err": 0.001826605603812742,
+              "delta_bic_vs_isotropic_replacement": 114996.12382924299,
+              "replacement_delta_chi2_per_bin": 479.196187946207,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37857268233204255,
+          "reduced_chi2": 1.0503009285956468,
+          "fraction_iso_err": 0.001826605603812742,
+          "delta_bic": 112.37956868904894,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41038,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.060629138067615,
+              "fwhm_err_deg": 0.041690694362757644,
+              "fraction": 0.6237086639940582,
+              "fraction_err": 0.0018761441311233712,
+              "delta_bic_vs_isotropic_replacement": 114788.78570282536,
+              "replacement_delta_chi2_per_bin": 478.33227908613355,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3762913360059418,
+          "reduced_chi2": 1.0993428434800447,
+          "fraction_iso_err": 0.0018761441311233712,
+          "delta_bic": 129.31414842072365,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41039,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.974664687763953,
+              "fwhm_err_deg": 0.039832767058786404,
+              "fraction": 0.6207593836214551,
+              "fraction_err": 0.0017888591220913733,
+              "delta_bic_vs_isotropic_replacement": 115779.07226647351,
+              "replacement_delta_chi2_per_bin": 482.4584731013341,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37924061637854484,
+          "reduced_chi2": 1.0203294018855484,
+          "fraction_iso_err": 0.0017888591220913733,
+          "delta_bic": 115.25560996472626,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41040,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.047651195970126,
+              "fwhm_err_deg": 0.03975321503992234,
+              "fraction": 0.6192008392564599,
+              "fraction_err": 0.001778968267418614,
+              "delta_bic_vs_isotropic_replacement": 114379.06332847603,
+              "replacement_delta_chi2_per_bin": 476.6251025263446,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3807991607435401,
+          "reduced_chi2": 0.8492207303232896,
+          "fraction_iso_err": 0.001778968267418614,
+          "delta_bic": 109.61284603020817,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41041,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.021281018177405,
+              "fwhm_err_deg": 0.03964763986734887,
+              "fraction": 0.6203213581302005,
+              "fraction_err": 0.0017817782087849248,
+              "delta_bic_vs_isotropic_replacement": 114834.14517455659,
+              "replacement_delta_chi2_per_bin": 478.5212768850136,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3796786418697995,
+          "reduced_chi2": 0.9886555770968316,
+          "fraction_iso_err": 0.0017817782087849248,
+          "delta_bic": 85.81265152286858,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41042,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.017782166705175,
+              "fwhm_err_deg": 0.03965955816420081,
+              "fraction": 0.6199015883783568,
+              "fraction_err": 0.0017777300211896767,
+              "delta_bic_vs_isotropic_replacement": 114509.27679250564,
+              "replacement_delta_chi2_per_bin": 477.16765862646804,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38009841162164315,
+          "reduced_chi2": 0.97728408144535,
+          "fraction_iso_err": 0.0017777300211896767,
+          "delta_bic": 119.75447105439139,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41043,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.011273433539603,
+              "fwhm_err_deg": 0.039912136077613285,
+              "fraction": 0.6210642228266636,
+              "fraction_err": 0.0017974780578529919,
+              "delta_bic_vs_isotropic_replacement": 114779.89539187498,
+              "replacement_delta_chi2_per_bin": 478.29523612384025,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3789357771733363,
+          "reduced_chi2": 1.015104864634452,
+          "fraction_iso_err": 0.0017974780578529919,
+          "delta_bic": 137.3810785876879,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41044,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.07257822380813,
+              "fwhm_err_deg": 0.041609515966002666,
+              "fraction": 0.6232404932644642,
+              "fraction_err": 0.0018717001223895724,
+              "delta_bic_vs_isotropic_replacement": 115535.14342216235,
+              "replacement_delta_chi2_per_bin": 481.4421029167043,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3767595067355358,
+          "reduced_chi2": 1.1010948083278567,
+          "fraction_iso_err": 0.0018717001223895724,
+          "delta_bic": 137.5653054312806,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41045,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.955184421423688,
+              "fwhm_err_deg": 0.0392385733092437,
+              "fraction": 0.6214954398152772,
+              "fraction_err": 0.0017690674831810618,
+              "delta_bic_vs_isotropic_replacement": 115591.66198613869,
+              "replacement_delta_chi2_per_bin": 481.67759693327235,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3785045601847228,
+          "reduced_chi2": 0.9661092127205221,
+          "fraction_iso_err": 0.0017690674831810618,
+          "delta_bic": 131.9665811650149,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41046,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.023760044931098,
+              "fwhm_err_deg": 0.03956951129677975,
+              "fraction": 0.6220280042024493,
+              "fraction_err": 0.0017792579703349398,
+              "delta_bic_vs_isotropic_replacement": 115834.0016888015,
+              "replacement_delta_chi2_per_bin": 482.6873456943674,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37797199579755064,
+          "reduced_chi2": 1.002937250949383,
+          "fraction_iso_err": 0.0017792579703349398,
+          "delta_bic": 95.74851646888231,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41047,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.983172426251912,
+              "fwhm_err_deg": 0.0444815555783112,
+              "fraction": 0.6202303737002824,
+              "fraction_err": 0.001900869178786788,
+              "delta_bic_vs_isotropic_replacement": 107638.56078141327,
+              "replacement_delta_chi2_per_bin": 448.44833126486077,
+              "fraction_isotropic_correlation": -0.09085086072088193,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [
+            {
+              "fwhm_deg": 18.711690988416116,
+              "fwhm_err_deg": 6.9092437652911105,
+              "fraction": 0.009242454231388177,
+              "fraction_err": 0.005682551746144254,
+              "delta_bic_vs_isotropic_replacement": 0.03797079766428624,
+              "replacement_delta_chi2_per_bin": 0.0458302026847844,
+              "fraction_isotropic_correlation": -0.9428821689287988,
+              "reason": "isotropic replacement within 6 BIC units"
+            }
+          ],
+          "fraction_iso": 0.37976962629971756,
+          "reduced_chi2": 1.0816330311053342,
+          "fraction_iso_err": 0.001900869178786788,
+          "delta_bic": 0.03797079766428624,
+          "determined": false,
+          "parameter_status": "conditional on the preferred candidate",
+          "reasons": [
+            "the competing orientation is within 6 BIC units or unavailable"
+          ]
+        },
+        {
+          "seed": 41048,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.096891153455363,
+              "fwhm_err_deg": 0.0401777471403813,
+              "fraction": 0.6225960258733172,
+              "fraction_err": 0.0018026238863997606,
+              "delta_bic_vs_isotropic_replacement": 115287.60723455646,
+              "replacement_delta_chi2_per_bin": 480.4107021350131,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37740397412668286,
+          "reduced_chi2": 1.0222228526243031,
+          "fraction_iso_err": 0.0018026238863997606,
+          "delta_bic": 136.37178748109642,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41049,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.960010871716891,
+              "fwhm_err_deg": 0.03955308729522943,
+              "fraction": 0.6182321020515795,
+              "fraction_err": 0.001773395901590731,
+              "delta_bic_vs_isotropic_replacement": 115370.0271025966,
+              "replacement_delta_chi2_per_bin": 480.75411825184705,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3817678979484204,
+          "reduced_chi2": 1.0040784654469497,
+          "fraction_iso_err": 0.001773395901590731,
+          "delta_bic": 148.99771559666624,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41050,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.976121730433912,
+              "fwhm_err_deg": 0.03949176449131538,
+              "fraction": 0.621252234017764,
+              "fraction_err": 0.0017774999254646308,
+              "delta_bic_vs_isotropic_replacement": 115155.9767294208,
+              "replacement_delta_chi2_per_bin": 479.8622416969478,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3787477659822361,
+          "reduced_chi2": 1.002196860762211,
+          "fraction_iso_err": 0.0017774999254646308,
+          "delta_bic": 83.22948934142681,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41051,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.0613938884583,
+              "fwhm_err_deg": 0.039512494081501474,
+              "fraction": 0.6227503792028206,
+              "fraction_err": 0.0017765885725897267,
+              "delta_bic_vs_isotropic_replacement": 115855.34042325651,
+              "replacement_delta_chi2_per_bin": 482.77625708793,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37724962079717933,
+          "reduced_chi2": 0.952541471001085,
+          "fraction_iso_err": 0.0017765885725897267,
+          "delta_bic": 122.97867476585236,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41052,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.007493335374058,
+              "fwhm_err_deg": 0.039460265359697023,
+              "fraction": 0.6226595403145154,
+              "fraction_err": 0.001776606067423415,
+              "delta_bic_vs_isotropic_replacement": 115344.03772835787,
+              "replacement_delta_chi2_per_bin": 480.645829192519,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3773404596854846,
+          "reduced_chi2": 0.9506327640176558,
+          "fraction_iso_err": 0.001776606067423415,
+          "delta_bic": 114.30110316085498,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41053,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.958913251012426,
+              "fwhm_err_deg": 0.03935700134581172,
+              "fraction": 0.6204448499549398,
+              "fraction_err": 0.00176731773497376,
+              "delta_bic_vs_isotropic_replacement": 115489.10266401134,
+              "replacement_delta_chi2_per_bin": 481.2502664244085,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3795551500450603,
+          "reduced_chi2": 0.9122417525880862,
+          "fraction_iso_err": 0.00176731773497376,
+          "delta_bic": 129.52779986585503,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41054,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.002044109283812,
+              "fwhm_err_deg": 0.040924635775654784,
+              "fraction": 0.6189675812801343,
+              "fraction_err": 0.0018350997860866248,
+              "delta_bic_vs_isotropic_replacement": 114938.71977845105,
+              "replacement_delta_chi2_per_bin": 478.95700440124057,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38103241871986576,
+          "reduced_chi2": 1.0671636280507029,
+          "fraction_iso_err": 0.0018350997860866248,
+          "delta_bic": 130.2035627287931,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41055,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.019847223329275,
+              "fwhm_err_deg": 0.039708264120768985,
+              "fraction": 0.6196326225354959,
+              "fraction_err": 0.0017797159652118675,
+              "delta_bic_vs_isotropic_replacement": 114436.54740625239,
+              "replacement_delta_chi2_per_bin": 476.86461951707946,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3803673774645041,
+          "reduced_chi2": 0.8877377093753358,
+          "fraction_iso_err": 0.0017797159652118675,
+          "delta_bic": 120.8960121652168,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41056,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.039525548592206,
+              "fwhm_err_deg": 0.04183945546845053,
+              "fraction": 0.6221410474809603,
+              "fraction_err": 0.001881272752015027,
+              "delta_bic_vs_isotropic_replacement": 114861.96268946712,
+              "replacement_delta_chi2_per_bin": 478.63718319714087,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3778589525190396,
+          "reduced_chi2": 1.1138101421817372,
+          "fraction_iso_err": 0.001881272752015027,
+          "delta_bic": 98.08426936435694,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41057,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 15.998162788853753,
+              "fwhm_err_deg": 0.04202250212908462,
+              "fraction": 0.6203315663273832,
+              "fraction_err": 0.0018872375035372637,
+              "delta_bic_vs_isotropic_replacement": 114923.05257855481,
+              "replacement_delta_chi2_per_bin": 478.8917244016729,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37966843367261677,
+          "reduced_chi2": 1.129490742152441,
+          "fraction_iso_err": 0.0018872375035372637,
+          "delta_bic": 144.10325845315833,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41058,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 16.034834204760195,
+              "fwhm_err_deg": 0.03942834189689205,
+              "fraction": 0.624260047766232,
+              "fraction_err": 0.001776777334836782,
+              "delta_bic_vs_isotropic_replacement": 115537.49112572799,
+              "replacement_delta_chi2_per_bin": 481.45188501489446,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.375739952233768,
+          "reduced_chi2": 0.9848137057197188,
+          "fraction_iso_err": 0.001776777334836782,
+          "delta_bic": 125.63170428722736,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        }
+      ]
+    },
+    {
+      "phase": "PbI2",
+      "truth": {
+        "axis": [
+          0,
+          0,
+          1
+        ],
+        "fwhm_deg": [
+          22.0
+        ],
+        "fractions": [
+          0.71
+        ],
+        "fraction_iso": 0.29,
+        "exit_transmission": false,
+        "film_index": null
+      },
+      "trials": 32,
+      "successes": {
+        "axis": 31,
+        "includes_true_axis": 32,
+        "determined": 31,
+        "correct_and_determined": 30,
+        "width_within_1sigma": [
+          21
+        ],
+        "fraction_within_1sigma": [
+          17
+        ],
+        "fraction_iso": 17
+      },
+      "first_seed": 41027,
+      "fits": [
+        {
+          "seed": 41027,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.9065976691883,
+              "fwhm_err_deg": 0.03174417573003714,
+              "fraction": 0.71039875803602,
+              "fraction_err": 0.0012699270593076618,
+              "delta_bic_vs_isotropic_replacement": 296602.8366751456,
+              "replacement_delta_chi2_per_bin": 1241.0618811809602,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2896012419639799,
+          "reduced_chi2": 0.9175284784541818,
+          "fraction_iso_err": 0.0012699270593076618,
+          "delta_bic": 274799.33826920786,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41028,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.021863311935395,
+              "fwhm_err_deg": 0.03208743275953026,
+              "fraction": 0.712038123832369,
+              "fraction_err": 0.001278831818916571,
+              "delta_bic_vs_isotropic_replacement": 296359.4112467591,
+              "replacement_delta_chi2_per_bin": 1240.0433647441967,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.287961876167631,
+          "reduced_chi2": 1.0089151779837964,
+          "fraction_iso_err": 0.001278831818916571,
+          "delta_bic": 274139.67562087264,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41029,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.981088947516582,
+              "fwhm_err_deg": 0.031745079452526505,
+              "fraction": 0.7117613344474082,
+              "fraction_err": 0.0012714490271490476,
+              "delta_bic_vs_isotropic_replacement": 297568.2746007884,
+              "replacement_delta_chi2_per_bin": 1245.1013704095913,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2882386655525918,
+          "reduced_chi2": 0.9344727180562153,
+          "fraction_iso_err": 0.0012714490271490476,
+          "delta_bic": 275447.4715423874,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41030,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.025387607453556,
+              "fwhm_err_deg": 0.03313184243188809,
+              "fraction": 0.7104219474666835,
+              "fraction_err": 0.0013206845137973908,
+              "delta_bic_vs_isotropic_replacement": 296281.32586094755,
+              "replacement_delta_chi2_per_bin": 1239.7166476487505,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2895780525333164,
+          "reduced_chi2": 1.076310681912135,
+          "fraction_iso_err": 0.0013206845137973908,
+          "delta_bic": 274187.0964646371,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41031,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.98930818933694,
+              "fwhm_err_deg": 0.034666290099641506,
+              "fraction": 0.7121635608370653,
+              "fraction_err": 0.001383307583799518,
+              "delta_bic_vs_isotropic_replacement": 296951.32224028325,
+              "replacement_delta_chi2_per_bin": 1242.5199797798623,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2878364391629347,
+          "reduced_chi2": 1.184530357430118,
+          "fraction_iso_err": 0.001383307583799518,
+          "delta_bic": 275259.16072515264,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41032,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.03756158415103,
+              "fwhm_err_deg": 0.03264768303345305,
+              "fraction": 0.7121010560092242,
+              "fraction_err": 0.001300432499993043,
+              "delta_bic_vs_isotropic_replacement": 296737.34620703,
+              "replacement_delta_chi2_per_bin": 1241.6246825695978,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2878989439907757,
+          "reduced_chi2": 1.0448884984179732,
+          "fraction_iso_err": 0.001300432499993043,
+          "delta_bic": 274543.37760147057,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41033,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.039281099768854,
+              "fwhm_err_deg": 0.03196146305498961,
+              "fraction": 0.712192021138004,
+              "fraction_err": 0.001274853722026918,
+              "delta_bic_vs_isotropic_replacement": 296148.57168517396,
+              "replacement_delta_chi2_per_bin": 1239.1611908463508,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2878079788619961,
+          "reduced_chi2": 0.9292002435806929,
+          "fraction_iso_err": 0.001274853722026918,
+          "delta_bic": 274478.4458102375,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41034,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.94871808429084,
+              "fwhm_err_deg": 0.031753985236162297,
+              "fraction": 0.7118778691623074,
+              "fraction_err": 0.001271752511461826,
+              "delta_bic_vs_isotropic_replacement": 297121.3467177585,
+              "replacement_delta_chi2_per_bin": 1243.2313792672064,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.28812213083769256,
+          "reduced_chi2": 0.9898222561921913,
+          "fraction_iso_err": 0.001271752511461826,
+          "delta_bic": 275109.70339099923,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41035,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ],
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.02864814361124,
+              "fwhm_err_deg": 0.03983496282532861,
+              "fraction": 0.7046513674372883,
+              "fraction_err": 0.0020152266763012933,
+              "delta_bic_vs_isotropic_replacement": 14.84233388078269,
+              "replacement_delta_chi2_per_bin": 0.10792996227885239,
+              "fraction_isotropic_correlation": -0.4367559996673224,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "fwhm_deg": 6.266970196364012,
+              "fwhm_err_deg": 0.7006739817736081,
+              "fraction": 0.009450649020461431,
+              "fraction_err": 0.0018607255825825086,
+              "delta_bic_vs_isotropic_replacement": 14.84233388078269,
+              "replacement_delta_chi2_per_bin": 0.10792996227885239,
+              "fraction_isotropic_correlation": -0.22536424278868233,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.28589798354225027,
+          "reduced_chi2": 1.0011218386484986,
+          "fraction_iso_err": 0.0012995033535204642,
+          "delta_bic": 14.84233388078269,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41036,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.977246456536417,
+              "fwhm_err_deg": 0.031856148571506156,
+              "fraction": 0.7105738203405174,
+              "fraction_err": 0.0012745523530682083,
+              "delta_bic_vs_isotropic_replacement": 296366.9768931112,
+              "replacement_delta_chi2_per_bin": 1240.075020168264,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.28942617965948264,
+          "reduced_chi2": 0.9806702914630425,
+          "fraction_iso_err": 0.0012745523530682083,
+          "delta_bic": 274532.13448223245,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41037,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.979633346295696,
+              "fwhm_err_deg": 0.03258628162108993,
+              "fraction": 0.7087883967928602,
+              "fraction_err": 0.0013022635479105597,
+              "delta_bic_vs_isotropic_replacement": 294949.1358032681,
+              "replacement_delta_chi2_per_bin": 1234.1426306710127,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2912116032071398,
+          "reduced_chi2": 1.04199016007121,
+          "fraction_iso_err": 0.0013022635479105597,
+          "delta_bic": 273194.6645811856,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41038,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.023630535211442,
+              "fwhm_err_deg": 0.032429635548954346,
+              "fraction": 0.7142972726597291,
+              "fraction_err": 0.0012947378887571605,
+              "delta_bic_vs_isotropic_replacement": 296156.93260370323,
+              "replacement_delta_chi2_per_bin": 1239.1961737690672,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2857027273402709,
+          "reduced_chi2": 1.0320998612812022,
+          "fraction_iso_err": 0.0012947378887571605,
+          "delta_bic": 274099.1934018527,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41039,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.953877156803777,
+              "fwhm_err_deg": 0.03382771710883769,
+              "fraction": 0.7101640357148107,
+              "fraction_err": 0.001352226333696487,
+              "delta_bic_vs_isotropic_replacement": 296836.85785087245,
+              "replacement_delta_chi2_per_bin": 1242.0410492802357,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2898359642851893,
+          "reduced_chi2": 1.1299369377928372,
+          "fraction_iso_err": 0.001352226333696487,
+          "delta_bic": 274870.83639790124,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41040,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.02266797385741,
+              "fwhm_err_deg": 0.03193518247863484,
+              "fraction": 0.7097488882491702,
+              "fraction_err": 0.0012747973525500651,
+              "delta_bic_vs_isotropic_replacement": 296307.369717174,
+              "replacement_delta_chi2_per_bin": 1239.825617758485,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.29025111175082985,
+          "reduced_chi2": 0.9884054360858335,
+          "fraction_iso_err": 0.0012747973525500651,
+          "delta_bic": 274549.14855944144,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41041,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.031661887983308,
+              "fwhm_err_deg": 0.033799394833174484,
+              "fraction": 0.7111554916679201,
+              "fraction_err": 0.0013496698497824757,
+              "delta_bic_vs_isotropic_replacement": 295888.9612317935,
+              "replacement_delta_chi2_per_bin": 1238.074954639738,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2888445083320799,
+          "reduced_chi2": 1.1185617809709594,
+          "fraction_iso_err": 0.0013496698497824757,
+          "delta_bic": 274019.9120656348,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41042,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.05402969054226,
+              "fwhm_err_deg": 0.03196397266872109,
+              "fraction": 0.7136046410477637,
+              "fraction_err": 0.0012734377853587146,
+              "delta_bic_vs_isotropic_replacement": 297285.97273229266,
+              "replacement_delta_chi2_per_bin": 1243.9201910435002,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2863953589522363,
+          "reduced_chi2": 0.9654777243742266,
+          "fraction_iso_err": 0.0012734377853587146,
+          "delta_bic": 275278.2794805232,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41043,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.979870420409593,
+              "fwhm_err_deg": 0.031927882824544784,
+              "fraction": 0.7089455470048547,
+              "fraction_err": 0.0012750051886883625,
+              "delta_bic_vs_isotropic_replacement": 295402.6225854486,
+              "replacement_delta_chi2_per_bin": 1236.0400649060775,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.29105445299514526,
+          "reduced_chi2": 0.9386259213094565,
+          "fraction_iso_err": 0.0012750051886883625,
+          "delta_bic": 273566.4344328316,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41044,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.01248976887784,
+              "fwhm_err_deg": 0.03263398864578809,
+              "fraction": 0.7122993773470443,
+              "fraction_err": 0.0013058410420001213,
+              "delta_bic_vs_isotropic_replacement": 297240.5226592018,
+              "replacement_delta_chi2_per_bin": 1243.7300233736642,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.28770062265295565,
+          "reduced_chi2": 1.0516379240303941,
+          "fraction_iso_err": 0.0013058410420001213,
+          "delta_bic": 275501.3179733605,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41045,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.931396811924202,
+              "fwhm_err_deg": 0.03172778259158747,
+              "fraction": 0.7104300125384143,
+              "fraction_err": 0.0012701095993390564,
+              "delta_bic_vs_isotropic_replacement": 297288.29963472724,
+              "replacement_delta_chi2_per_bin": 1243.9299270369502,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2895699874615857,
+          "reduced_chi2": 0.9878693892127759,
+          "fraction_iso_err": 0.0012701095993390564,
+          "delta_bic": 275298.2399931443,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41046,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.977726353364048,
+              "fwhm_err_deg": 0.03214676166172223,
+              "fraction": 0.7103192090615005,
+              "fraction_err": 0.0012855735179299898,
+              "delta_bic_vs_isotropic_replacement": 297022.776117044,
+              "replacement_delta_chi2_per_bin": 1242.8189499755142,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.28968079093849947,
+          "reduced_chi2": 1.0213065237065397,
+          "fraction_iso_err": 0.0012855735179299898,
+          "delta_bic": 274697.26736757427,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41047,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.983835501060312,
+              "fwhm_err_deg": 0.03228884393038005,
+              "fraction": 0.7079982971002214,
+              "fraction_err": 0.0012744925562051693,
+              "delta_bic_vs_isotropic_replacement": 296832.6678763312,
+              "replacement_delta_chi2_per_bin": 1242.0235180060042,
+              "fraction_isotropic_correlation": -0.6002595373518489,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [
+            {
+              "fwhm_deg": 16.29533353712984,
+              "fwhm_err_deg": 5.791424905401664,
+              "fraction": 0.004363777379286706,
+              "fraction_err": 0.0016300384632694166,
+              "delta_bic_vs_isotropic_replacement": 0.4328073327080233,
+              "replacement_delta_chi2_per_bin": 0.04763905621996246,
+              "fraction_isotropic_correlation": -0.7803437456657323,
+              "reason": "isotropic replacement within 6 BIC units"
+            }
+          ],
+          "fraction_iso": 0.29200170289977856,
+          "reduced_chi2": 0.9808843433108226,
+          "fraction_iso_err": 0.0012744925562051693,
+          "delta_bic": 0.4328073327080233,
+          "determined": false,
+          "parameter_status": "conditional on the preferred candidate",
+          "reasons": [
+            "the competing orientation is within 6 BIC units or unavailable"
+          ]
+        },
+        {
+          "seed": 41048,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.98809784785673,
+              "fwhm_err_deg": 0.03309072332711076,
+              "fraction": 0.7101812024525522,
+              "fraction_err": 0.0013238752986150443,
+              "delta_bic_vs_isotropic_replacement": 296861.8187735358,
+              "replacement_delta_chi2_per_bin": 1242.1454882871953,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2898187975474477,
+          "reduced_chi2": 1.0830105979918976,
+          "fraction_iso_err": 0.0013238752986150443,
+          "delta_bic": 275274.3851507359,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41049,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.001803948999168,
+              "fwhm_err_deg": 0.03301626232226261,
+              "fraction": 0.7087149101649459,
+              "fraction_err": 0.0013171128831773876,
+              "delta_bic_vs_isotropic_replacement": 296813.1912922116,
+              "replacement_delta_chi2_per_bin": 1241.9420260222405,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.291285089835054,
+          "reduced_chi2": 1.0703907444069714,
+          "fraction_iso_err": 0.0013171128831773876,
+          "delta_bic": 274975.2621240505,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41050,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.98591667441478,
+              "fwhm_err_deg": 0.03180522861690876,
+              "fraction": 0.7122408501091437,
+              "fraction_err": 0.0012702371248477361,
+              "delta_bic_vs_isotropic_replacement": 297276.1267830767,
+              "replacement_delta_chi2_per_bin": 1243.878994603266,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2877591498908563,
+          "reduced_chi2": 0.9546861964625178,
+          "fraction_iso_err": 0.0012702371248477361,
+          "delta_bic": 275015.3818441056,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41051,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.950933684082283,
+              "fwhm_err_deg": 0.03173249550493907,
+              "fraction": 0.7102311621688437,
+              "fraction_err": 0.0012697166478550655,
+              "delta_bic_vs_isotropic_replacement": 297620.3993544576,
+              "replacement_delta_chi2_per_bin": 1245.319465613228,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.28976883783115626,
+          "reduced_chi2": 0.8742037383775251,
+          "fraction_iso_err": 0.0012697166478550655,
+          "delta_bic": 275994.9948933183,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41052,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.980373327016665,
+              "fwhm_err_deg": 0.03188968425672947,
+              "fraction": 0.7102600089951603,
+              "fraction_err": 0.0012721408153650447,
+              "delta_bic_vs_isotropic_replacement": 296314.51861499867,
+              "replacement_delta_chi2_per_bin": 1239.855529464864,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.28973999100483977,
+          "reduced_chi2": 0.9769522381202191,
+          "fraction_iso_err": 0.0012721408153650447,
+          "delta_bic": 274107.0356516838,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41053,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.95440246872363,
+              "fwhm_err_deg": 0.031852940407385226,
+              "fraction": 0.7103705571422005,
+              "fraction_err": 0.0012722834170166267,
+              "delta_bic_vs_isotropic_replacement": 296870.5839653712,
+              "replacement_delta_chi2_per_bin": 1242.182162730021,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.28962944285779946,
+          "reduced_chi2": 0.9362228323354199,
+          "fraction_iso_err": 0.0012722834170166267,
+          "delta_bic": 274910.66092815984,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41054,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.011814742082333,
+              "fwhm_err_deg": 0.03184631208064465,
+              "fraction": 0.7103110629336281,
+              "fraction_err": 0.0012734872295516605,
+              "delta_bic_vs_isotropic_replacement": 296660.4001517018,
+              "replacement_delta_chi2_per_bin": 1241.302732547304,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2896889370663719,
+          "reduced_chi2": 0.9745429911227815,
+          "fraction_iso_err": 0.0012734872295516605,
+          "delta_bic": 274914.1759743365,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41055,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.987753539159197,
+              "fwhm_err_deg": 0.03189675452510529,
+              "fraction": 0.7099800828019796,
+              "fraction_err": 0.0012739993050343839,
+              "delta_bic_vs_isotropic_replacement": 295815.0338243306,
+              "replacement_delta_chi2_per_bin": 1237.7656349432405,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2900199171980204,
+          "reduced_chi2": 0.8888114826933807,
+          "fraction_iso_err": 0.0012739993050343839,
+          "delta_bic": 273866.4236877501,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41056,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.024870331327353,
+              "fwhm_err_deg": 0.03421450877754066,
+              "fraction": 0.7129221193322085,
+              "fraction_err": 0.0013661805571521302,
+              "delta_bic_vs_isotropic_replacement": 296554.5189539268,
+              "replacement_delta_chi2_per_bin": 1240.859714983392,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2870778806677915,
+          "reduced_chi2": 1.1519090776338994,
+          "fraction_iso_err": 0.0013661805571521302,
+          "delta_bic": 274643.4970571304,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41057,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 22.017295456309018,
+              "fwhm_err_deg": 0.03310667328597737,
+              "fraction": 0.7124496734978308,
+              "fraction_err": 0.0013217784441630403,
+              "delta_bic_vs_isotropic_replacement": 297310.0107852266,
+              "replacement_delta_chi2_per_bin": 1244.0207686708386,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.28755032650216916,
+          "reduced_chi2": 1.0791885573772122,
+          "fraction_iso_err": 0.0013217784441630403,
+          "delta_bic": 275397.28159184573,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41058,
+          "axes": [
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 21.946341793455513,
+              "fwhm_err_deg": 0.03167999940655609,
+              "fraction": 0.7130849910773784,
+              "fraction_err": 0.0012697866834116198,
+              "delta_bic_vs_isotropic_replacement": 297795.94473990874,
+              "replacement_delta_chi2_per_bin": 1246.0539651339438,
+              "fraction_isotropic_correlation": -1.0,
+              "axis": [
+                0,
+                0,
+                1
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.2869150089226215,
+          "reduced_chi2": 0.9541293084735202,
+          "fraction_iso_err": 0.0012697866834116198,
+          "delta_bic": 275993.1677251001,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        }
+      ]
+    },
+    {
+      "phase": "MAPbI3 sharp + broad",
+      "truth": {
+        "axis": [
+          1,
+          1,
+          0
+        ],
+        "fwhm_deg": [
+          8.0,
+          36.0
+        ],
+        "fractions": [
+          0.186,
+          0.434
+        ],
+        "fraction_iso": 0.38,
+        "exit_transmission": true,
+        "film_index": {
+          "delta": 4.2e-06,
+          "beta": 3.1e-07
+        }
+      },
+      "trials": 32,
+      "successes": {
+        "axis": 32,
+        "includes_true_axis": 32,
+        "determined": 32,
+        "correct_and_determined": 32,
+        "width_within_1sigma": [
+          16,
+          17
+        ],
+        "fraction_within_1sigma": [
+          20,
+          21
+        ],
+        "fraction_iso": 22
+      },
+      "first_seed": 41027,
+      "fits": [
+        {
+          "seed": 41027,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.917252165671236,
+              "fwhm_err_deg": 0.38177808898690624,
+              "fraction": 0.42544562553340665,
+              "fraction_err": 0.006199146327734148,
+              "delta_bic_vs_isotropic_replacement": 8421.327939027035,
+              "replacement_delta_chi2_per_bin": 34.46858033842806,
+              "fraction_isotropic_correlation": -0.9710203430207213,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.108949461977154,
+              "fwhm_err_deg": 0.05710226804319395,
+              "fraction": 0.18999592246674182,
+              "fraction_err": 0.0016640145642353894,
+              "delta_bic_vs_isotropic_replacement": 8421.327939027035,
+              "replacement_delta_chi2_per_bin": 34.46858033842806,
+              "fraction_isotropic_correlation": -0.45525194522558476,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38455845199985145,
+          "reduced_chi2": 0.8898828520983133,
+          "fraction_iso_err": 0.006777043060843922,
+          "delta_bic": 95.90230953578819,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41028,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.20351586523719,
+              "fwhm_err_deg": 0.3905160560728727,
+              "fraction": 0.4345084611178553,
+              "fraction_err": 0.0065396735514754644,
+              "delta_bic_vs_isotropic_replacement": 8576.206281361932,
+              "replacement_delta_chi2_per_bin": 35.10332764307929,
+              "fraction_isotropic_correlation": -0.9733546765855094,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.999606991094407,
+              "fwhm_err_deg": 0.05730925000204042,
+              "fraction": 0.18784719881168394,
+              "fraction_err": 0.0016777832888545722,
+              "delta_bic_vs_isotropic_replacement": 8576.206281361932,
+              "replacement_delta_chi2_per_bin": 35.10332764307929,
+              "fraction_isotropic_correlation": -0.44849479247738866,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37764434007046077,
+          "reduced_chi2": 1.0479681707021626,
+          "fraction_iso_err": 0.007117898902628073,
+          "delta_bic": 81.58063819541053,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41029,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.25395739620839,
+              "fwhm_err_deg": 0.35671834899963983,
+              "fraction": 0.42325434487780306,
+              "fraction_err": 0.005759644467747404,
+              "delta_bic_vs_isotropic_replacement": 8422.68345490378,
+              "replacement_delta_chi2_per_bin": 34.47413573136554,
+              "fraction_isotropic_correlation": -0.9664156996497254,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.988629818885757,
+              "fwhm_err_deg": 0.05658710093272553,
+              "fraction": 0.1869350451383269,
+              "fraction_err": 0.0016542389790652557,
+              "delta_bic_vs_isotropic_replacement": 8422.68345490378,
+              "replacement_delta_chi2_per_bin": 34.47413573136554,
+              "fraction_isotropic_correlation": -0.446561044857694,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38981060998387,
+          "reduced_chi2": 0.8460133077508993,
+          "fraction_iso_err": 0.0063049295249674835,
+          "delta_bic": 70.5161698110627,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41030,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.856923595844634,
+              "fwhm_err_deg": 0.3801729662465515,
+              "fraction": 0.4337257626729485,
+              "fraction_err": 0.00632785314757708,
+              "delta_bic_vs_isotropic_replacement": 8531.972526030597,
+              "replacement_delta_chi2_per_bin": 34.92204176057381,
+              "fraction_isotropic_correlation": -0.97088135742252,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.003608860844086,
+              "fwhm_err_deg": 0.0584235031875177,
+              "fraction": 0.1859225977447251,
+              "fraction_err": 0.0016954500298857354,
+              "delta_bic_vs_isotropic_replacement": 8531.972526030597,
+              "replacement_delta_chi2_per_bin": 34.92204176057381,
+              "fraction_isotropic_correlation": -0.4478628335035334,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38035163958232643,
+          "reduced_chi2": 1.0592787418578435,
+          "fraction_iso_err": 0.006902923707938277,
+          "delta_bic": 80.09957784262156,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41031,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.66791509327565,
+              "fwhm_err_deg": 0.4046768602932028,
+              "fraction": 0.431875349504649,
+              "fraction_err": 0.006670169832970718,
+              "delta_bic_vs_isotropic_replacement": 8356.906096529383,
+              "replacement_delta_chi2_per_bin": 34.204556393765564,
+              "fraction_isotropic_correlation": -0.9695025211619227,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.033932697075715,
+              "fwhm_err_deg": 0.06307453549117233,
+              "fraction": 0.18730874378105275,
+              "fraction_err": 0.0018309293603684144,
+              "delta_bic_vs_isotropic_replacement": 8356.906096529383,
+              "replacement_delta_chi2_per_bin": 34.204556393765564,
+              "fraction_isotropic_correlation": -0.4503662340916997,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3808159067142982,
+          "reduced_chi2": 1.2177225978491268,
+          "fraction_iso_err": 0.0072913352305603585,
+          "delta_bic": 101.83455419329232,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41032,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.11254637171324,
+              "fwhm_err_deg": 0.3753514038398356,
+              "fraction": 0.4348368304673748,
+              "fraction_err": 0.006309669023435574,
+              "delta_bic_vs_isotropic_replacement": 8700.340183118762,
+              "replacement_delta_chi2_per_bin": 35.61207314208269,
+              "fraction_isotropic_correlation": -0.9729670669219228,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.924294770837025,
+              "fwhm_err_deg": 0.05496681497201787,
+              "fraction": 0.1876073678057722,
+              "fraction_err": 0.0016263859394620723,
+              "delta_bic_vs_isotropic_replacement": 8700.340183118762,
+              "replacement_delta_chi2_per_bin": 35.61207314208269,
+              "fraction_isotropic_correlation": -0.44413121819861845,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37755580172685305,
+          "reduced_chi2": 0.9887343675583183,
+          "fraction_iso_err": 0.006861428931534619,
+          "delta_bic": 89.26072045604371,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41033,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.241993000058756,
+              "fwhm_err_deg": 0.37629584786578923,
+              "fraction": 0.4412775800924253,
+              "fraction_err": 0.006407242487244451,
+              "delta_bic_vs_isotropic_replacement": 8639.38019082263,
+              "replacement_delta_chi2_per_bin": 35.362237108082155,
+              "fraction_isotropic_correlation": -0.9735317201530238,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.981991052522426,
+              "fwhm_err_deg": 0.05643653197311355,
+              "fraction": 0.185276399826319,
+              "fraction_err": 0.0016359027836993212,
+              "delta_bic_vs_isotropic_replacement": 8639.38019082263,
+              "replacement_delta_chi2_per_bin": 35.362237108082155,
+              "fraction_isotropic_correlation": -0.44575359218307575,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37344602008125577,
+          "reduced_chi2": 0.8447797633016193,
+          "fraction_iso_err": 0.006966863342340895,
+          "delta_bic": 85.17339712824258,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41034,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.19362737553264,
+              "fwhm_err_deg": 0.35991029596505564,
+              "fraction": 0.42158244800936656,
+              "fraction_err": 0.005756150118618316,
+              "delta_bic_vs_isotropic_replacement": 7976.736228386927,
+              "replacement_delta_chi2_per_bin": 32.64648316367353,
+              "fraction_isotropic_correlation": -0.9659249679458568,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.024299760720927,
+              "fwhm_err_deg": 0.05829197886278137,
+              "fraction": 0.18339872561566906,
+              "fraction_err": 0.0016682884920449369,
+              "delta_bic_vs_isotropic_replacement": 7976.736228386927,
+              "replacement_delta_chi2_per_bin": 32.64648316367353,
+              "fraction_isotropic_correlation": -0.45001135422380045,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.39501882637496427,
+          "reduced_chi2": 0.8868735375280847,
+          "fraction_iso_err": 0.006310757882359062,
+          "delta_bic": 107.86365351207414,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41035,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.97669545832172,
+              "fwhm_err_deg": 0.38250927230064646,
+              "fraction": 0.43674241244277645,
+              "fraction_err": 0.006416058409810416,
+              "delta_bic_vs_isotropic_replacement": 8912.66284087938,
+              "replacement_delta_chi2_per_bin": 36.48224796897047,
+              "fraction_isotropic_correlation": -0.9715489691449557,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.999685380579338,
+              "fwhm_err_deg": 0.0573395634819797,
+              "fraction": 0.1899144522330205,
+              "fraction_err": 0.0016994767655115898,
+              "delta_bic_vs_isotropic_replacement": 8912.66284087938,
+              "replacement_delta_chi2_per_bin": 36.48224796897047,
+              "fraction_isotropic_correlation": -0.4477861140021609,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37334313532420305,
+          "reduced_chi2": 1.0624882625262904,
+          "fraction_iso_err": 0.0069945170306905296,
+          "delta_bic": 89.62982676753796,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41036,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.78669232773302,
+              "fwhm_err_deg": 0.37300705458038064,
+              "fraction": 0.42636093786559615,
+              "fraction_err": 0.006102134632679245,
+              "delta_bic_vs_isotropic_replacement": 8462.938667811419,
+              "replacement_delta_chi2_per_bin": 34.63911611213456,
+              "fraction_isotropic_correlation": -0.9704409579651379,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.019460310144153,
+              "fwhm_err_deg": 0.056328569146170265,
+              "fraction": 0.18784504417252718,
+              "fraction_err": 0.0016474924165029979,
+              "delta_bic_vs_isotropic_replacement": 8462.938667811419,
+              "replacement_delta_chi2_per_bin": 34.63911611213456,
+              "fraction_isotropic_correlation": -0.44828155390026825,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38579401796187673,
+          "reduced_chi2": 0.9836909122952349,
+          "fraction_iso_err": 0.006660301839078363,
+          "delta_bic": 74.83448886090025,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41037,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.82610212560933,
+              "fwhm_err_deg": 0.37529551936680033,
+              "fraction": 0.43286660224093726,
+              "fraction_err": 0.006252562404178708,
+              "delta_bic_vs_isotropic_replacement": 8526.031555253143,
+              "replacement_delta_chi2_per_bin": 34.897693519682605,
+              "fraction_isotropic_correlation": -0.9708323630481992,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.946050231658318,
+              "fwhm_err_deg": 0.05726485715245651,
+              "fraction": 0.185468570190632,
+              "fraction_err": 0.0016732696133694655,
+              "delta_bic_vs_isotropic_replacement": 8526.031555253143,
+              "replacement_delta_chi2_per_bin": 34.897693519682605,
+              "fraction_isotropic_correlation": -0.44422232418395974,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38166482756843073,
+          "reduced_chi2": 1.0450561501449986,
+          "fraction_iso_err": 0.006813493650592525,
+          "delta_bic": 92.37673376280048,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41038,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.76036791906511,
+              "fwhm_err_deg": 0.3809812212819865,
+              "fraction": 0.43653962395719986,
+              "fraction_err": 0.006425018538528078,
+              "delta_bic_vs_isotropic_replacement": 8680.855210367547,
+              "replacement_delta_chi2_per_bin": 35.532216696380985,
+              "fraction_isotropic_correlation": -0.9705412104150815,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.863489089239996,
+              "fwhm_err_deg": 0.0585294289732227,
+              "fraction": 0.18440713169465367,
+              "fraction_err": 0.0017227407713847885,
+              "delta_bic_vs_isotropic_replacement": 8680.855210367547,
+              "replacement_delta_chi2_per_bin": 35.532216696380985,
+              "fraction_isotropic_correlation": -0.4388185690806884,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3790532443481464,
+          "reduced_chi2": 1.113502364823116,
+          "fraction_iso_err": 0.006991715909518414,
+          "delta_bic": 98.92347631112483,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41039,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.028582122271374,
+              "fwhm_err_deg": 0.40845143967976505,
+              "fraction": 0.4322666001837421,
+              "fraction_err": 0.006762663024754436,
+              "delta_bic_vs_isotropic_replacement": 8436.001807648621,
+              "replacement_delta_chi2_per_bin": 34.52871914425424,
+              "fraction_isotropic_correlation": -0.9719857350353339,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.087976536737797,
+              "fwhm_err_deg": 0.0620278147435981,
+              "fraction": 0.18707128553784091,
+              "fraction_err": 0.0017821823084998574,
+              "delta_bic_vs_isotropic_replacement": 8436.001807648621,
+              "replacement_delta_chi2_per_bin": 34.52871914425424,
+              "fraction_isotropic_correlation": -0.4522693009625188,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.380662114278417,
+          "reduced_chi2": 1.161390180639144,
+          "fraction_iso_err": 0.007379238337765214,
+          "delta_bic": 103.21315341260771,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41040,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.70465616834699,
+              "fwhm_err_deg": 0.3860753123295837,
+              "fraction": 0.4493210664128856,
+              "fraction_err": 0.006725391560866408,
+              "delta_bic_vs_isotropic_replacement": 8695.754182011604,
+              "replacement_delta_chi2_per_bin": 35.59327805557794,
+              "fraction_isotropic_correlation": -0.976304160445932,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.021434823010765,
+              "fwhm_err_deg": 0.05668674781155569,
+              "fraction": 0.18540053908279805,
+              "fraction_err": 0.0016267653045234666,
+              "delta_bic_vs_isotropic_replacement": 8695.754182011604,
+              "replacement_delta_chi2_per_bin": 35.59327805557794,
+              "fraction_isotropic_correlation": -0.44675759370775286,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.36527839450431626,
+          "reduced_chi2": 0.9767220567377247,
+          "fraction_iso_err": 0.007292797514477999,
+          "delta_bic": 71.32881084412901,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41041,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.81067206802157,
+              "fwhm_err_deg": 0.3646910833617976,
+              "fraction": 0.43410707599073634,
+              "fraction_err": 0.006121547481288543,
+              "delta_bic_vs_isotropic_replacement": 8650.418655296146,
+              "replacement_delta_chi2_per_bin": 35.407476716580156,
+              "fraction_isotropic_correlation": -0.9711727080399725,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.8828169675445,
+              "fwhm_err_deg": 0.055367850869654914,
+              "fraction": 0.1846834753433181,
+              "fraction_err": 0.0016252991893794567,
+              "delta_bic_vs_isotropic_replacement": 8650.418655296146,
+              "replacement_delta_chi2_per_bin": 35.407476716580156,
+              "fraction_isotropic_correlation": -0.4403504502361646,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3812094486659455,
+          "reduced_chi2": 0.8993330960436626,
+          "fraction_iso_err": 0.006660781074609984,
+          "delta_bic": 72.00891633169795,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41042,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.541809514940766,
+              "fwhm_err_deg": 0.3866268127028043,
+              "fraction": 0.4446984071918527,
+              "fraction_err": 0.006649980014924111,
+              "delta_bic_vs_isotropic_replacement": 8787.846143706725,
+              "replacement_delta_chi2_per_bin": 35.97070412809893,
+              "fraction_isotropic_correlation": -0.9752209586734346,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.016547323105172,
+              "fwhm_err_deg": 0.056702631832220234,
+              "fraction": 0.18683876157921417,
+              "fraction_err": 0.0016444313487013293,
+              "delta_bic_vs_isotropic_replacement": 8787.846143706725,
+              "replacement_delta_chi2_per_bin": 35.97070412809893,
+              "fraction_isotropic_correlation": -0.4467614333036412,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.36846283122893314,
+          "reduced_chi2": 1.0128818569588858,
+          "fraction_iso_err": 0.007219868391628719,
+          "delta_bic": 79.95006773389741,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41043,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.525521441847154,
+              "fwhm_err_deg": 0.3637152736018876,
+              "fraction": 0.424444639819909,
+              "fraction_err": 0.005941916608083545,
+              "delta_bic_vs_isotropic_replacement": 8313.204667456219,
+              "replacement_delta_chi2_per_bin": 34.0254521762526,
+              "fraction_isotropic_correlation": -0.9690549240229674,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.930892576606887,
+              "fwhm_err_deg": 0.055838015954827055,
+              "fraction": 0.18618097602514927,
+              "fraction_err": 0.0016364125616284127,
+              "delta_bic_vs_isotropic_replacement": 8313.204667456219,
+              "replacement_delta_chi2_per_bin": 34.0254521762526,
+              "fraction_isotropic_correlation": -0.4434271666496834,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38937438415494174,
+          "reduced_chi2": 0.9430441364573784,
+          "fraction_iso_err": 0.0064836733328700455,
+          "delta_bic": 93.51381201256476,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41044,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.39711006237353,
+              "fwhm_err_deg": 0.3598657188600966,
+              "fraction": 0.4322659807725536,
+              "fraction_err": 0.005962797028044876,
+              "delta_bic_vs_isotropic_replacement": 8361.507964773367,
+              "replacement_delta_chi2_per_bin": 34.223416509519595,
+              "fraction_isotropic_correlation": -0.9678496643253383,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.914137107645433,
+              "fwhm_err_deg": 0.05766153545605317,
+              "fraction": 0.1828912804312981,
+              "fraction_err": 0.0016721315164216375,
+              "delta_bic_vs_isotropic_replacement": 8361.507964773367,
+              "replacement_delta_chi2_per_bin": 34.223416509519595,
+              "fraction_isotropic_correlation": -0.44213168132750946,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3848427387961483,
+          "reduced_chi2": 1.0384715180650477,
+          "fraction_iso_err": 0.006510393420789576,
+          "delta_bic": 70.49264192859937,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41045,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.20898392566689,
+              "fwhm_err_deg": 0.3824872881158923,
+              "fraction": 0.4365893545877018,
+              "fraction_err": 0.00638607235941642,
+              "delta_bic_vs_isotropic_replacement": 8435.565160055798,
+              "replacement_delta_chi2_per_bin": 34.52692960493939,
+              "fraction_isotropic_correlation": -0.9729090970679943,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.115260532398278,
+              "fwhm_err_deg": 0.05753893362179492,
+              "fraction": 0.18813964801521774,
+              "fraction_err": 0.0016580277206713248,
+              "delta_bic_vs_isotropic_replacement": 8435.565160055798,
+              "replacement_delta_chi2_per_bin": 34.52692960493939,
+              "fraction_isotropic_correlation": -0.4550899654961339,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3752709973970805,
+          "reduced_chi2": 0.9762277688523173,
+          "fraction_iso_err": 0.00696761967120265,
+          "delta_bic": 102.82283310889204,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41046,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.48374398350312,
+              "fwhm_err_deg": 0.36213446674115013,
+              "fraction": 0.4264467949822794,
+              "fraction_err": 0.005903005094957653,
+              "delta_bic_vs_isotropic_replacement": 8264.091808949304,
+              "replacement_delta_chi2_per_bin": 33.824169969257035,
+              "fraction_isotropic_correlation": -0.9682389968660478,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.997189809910678,
+              "fwhm_err_deg": 0.05725569281000846,
+              "fraction": 0.18434942901562518,
+              "fraction_err": 0.0016499239973774616,
+              "delta_bic_vs_isotropic_replacement": 8264.091808949304,
+              "replacement_delta_chi2_per_bin": 33.824169969257035,
+              "fraction_isotropic_correlation": -0.44700655745291407,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38920377600209544,
+          "reduced_chi2": 0.9239011150659212,
+          "fraction_iso_err": 0.006453046577763618,
+          "delta_bic": 65.7032104969561,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41047,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.97843002843662,
+              "fwhm_err_deg": 0.4101619639785948,
+              "fraction": 0.45256613670727697,
+              "fraction_err": 0.007177337610619803,
+              "delta_bic_vs_isotropic_replacement": 8623.226933783866,
+              "replacement_delta_chi2_per_bin": 35.296035234972464,
+              "fraction_isotropic_correlation": -0.9775305227047884,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.130520292059844,
+              "fwhm_err_deg": 0.05964846889594606,
+              "fraction": 0.18731906052956795,
+              "fraction_err": 0.0016984506568001163,
+              "delta_bic_vs_isotropic_replacement": 8623.226933783866,
+              "replacement_delta_chi2_per_bin": 35.296035234972464,
+              "fraction_isotropic_correlation": -0.4544425807716717,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.36011480276315516,
+          "reduced_chi2": 1.0741870878082893,
+          "fraction_iso_err": 0.007787914885927498,
+          "delta_bic": 85.81690244373408,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41048,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.598719031230694,
+              "fwhm_err_deg": 0.36208196612307425,
+              "fraction": 0.43520027584941223,
+              "fraction_err": 0.00602631192418341,
+              "delta_bic_vs_isotropic_replacement": 8267.182897240895,
+              "replacement_delta_chi2_per_bin": 33.83683836389471,
+              "fraction_isotropic_correlation": -0.9691468616757998,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.001118275502387,
+              "fwhm_err_deg": 0.058285310335592665,
+              "fraction": 0.18192239949244773,
+              "fraction_err": 0.0016610036758238143,
+              "delta_bic_vs_isotropic_replacement": 8267.182897240895,
+              "replacement_delta_chi2_per_bin": 33.83683836389471,
+              "fraction_isotropic_correlation": -0.4475234005778625,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38287732465814,
+          "reduced_chi2": 1.0091200560705151,
+          "fraction_iso_err": 0.006583719302178805,
+          "delta_bic": 98.8703297993934,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41049,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.552017664439205,
+              "fwhm_err_deg": 0.4061847081764734,
+              "fraction": 0.4393342491226171,
+              "fraction_err": 0.006891850189725904,
+              "delta_bic_vs_isotropic_replacement": 8694.548769874154,
+              "replacement_delta_chi2_per_bin": 35.588337841899865,
+              "fraction_isotropic_correlation": -0.975446828040865,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.060553196337372,
+              "fwhm_err_deg": 0.058986114943142334,
+              "fraction": 0.18734035963945117,
+              "fraction_err": 0.0016999874662702815,
+              "delta_bic_vs_isotropic_replacement": 8694.548769874154,
+              "replacement_delta_chi2_per_bin": 35.588337841899865,
+              "fraction_isotropic_correlation": -0.4503619900291419,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3733253912379317,
+          "reduced_chi2": 1.0837594395489292,
+          "fraction_iso_err": 0.007488243145235051,
+          "delta_bic": 119.21576349368661,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41050,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.17926036840965,
+              "fwhm_err_deg": 0.38095097306806175,
+              "fraction": 0.43533883511326593,
+              "fraction_err": 0.006362878611397446,
+              "delta_bic_vs_isotropic_replacement": 8555.878028648527,
+              "replacement_delta_chi2_per_bin": 35.02001513195877,
+              "fraction_isotropic_correlation": -0.9730084816543474,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.025052307549421,
+              "fwhm_err_deg": 0.056625655921377464,
+              "fraction": 0.1869908624559741,
+              "fraction_err": 0.0016449097131505095,
+              "delta_bic_vs_isotropic_replacement": 8555.878028648527,
+              "replacement_delta_chi2_per_bin": 35.02001513195877,
+              "fraction_isotropic_correlation": -0.4507158700196838,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37767030243076,
+          "reduced_chi2": 0.8787201381723114,
+          "fraction_iso_err": 0.006932521769093212,
+          "delta_bic": 62.29372142812514,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41051,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.28735691932848,
+              "fwhm_err_deg": 0.3513831717685346,
+              "fraction": 0.42886992869093077,
+              "fraction_err": 0.005766936946899154,
+              "delta_bic_vs_isotropic_replacement": 8594.061504038275,
+              "replacement_delta_chi2_per_bin": 35.17650478519544,
+              "fraction_isotropic_correlation": -0.9667318704996439,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.919339631958302,
+              "fwhm_err_deg": 0.05611600645422771,
+              "fraction": 0.1849712337874018,
+              "fraction_err": 0.0016451084849916523,
+              "delta_bic_vs_isotropic_replacement": 8594.061504038275,
+              "replacement_delta_chi2_per_bin": 35.17650478519544,
+              "fraction_isotropic_correlation": -0.4426795385235533,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38615883752166746,
+          "reduced_chi2": 0.9204431597666559,
+          "fraction_iso_err": 0.0063033376066866115,
+          "delta_bic": 88.80178315035795,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41052,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.63367384502231,
+              "fwhm_err_deg": 0.38756147512945077,
+              "fraction": 0.44646212960216036,
+              "fraction_err": 0.006681497583410582,
+              "delta_bic_vs_isotropic_replacement": 8703.920522723127,
+              "replacement_delta_chi2_per_bin": 35.62674666505139,
+              "fraction_isotropic_correlation": -0.9756976767859645,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.061385571365143,
+              "fwhm_err_deg": 0.05665983167875246,
+              "fraction": 0.1886708148851469,
+              "fraction_err": 0.0016396098658498666,
+              "delta_bic_vs_isotropic_replacement": 8703.920522723127,
+              "replacement_delta_chi2_per_bin": 35.62674666505139,
+              "fraction_isotropic_correlation": -0.45019545102694264,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3648670555126927,
+          "reduced_chi2": 0.9755383322734461,
+          "fraction_iso_err": 0.007257266572649246,
+          "delta_bic": 80.67015766942234,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41053,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.220443420525676,
+              "fwhm_err_deg": 0.3892848985121015,
+              "fraction": 0.4345845095285121,
+              "fraction_err": 0.006514759233918084,
+              "delta_bic_vs_isotropic_replacement": 8590.944380629006,
+              "replacement_delta_chi2_per_bin": 35.16372968925582,
+              "fraction_isotropic_correlation": -0.9731188695754729,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.031429138800943,
+              "fwhm_err_deg": 0.05739675735277899,
+              "fraction": 0.18878636384660535,
+              "fraction_err": 0.0016787488187357926,
+              "delta_bic_vs_isotropic_replacement": 8590.944380629006,
+              "replacement_delta_chi2_per_bin": 35.16372968925582,
+              "fraction_isotropic_correlation": -0.4485777873126281,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.37662912662488257,
+          "reduced_chi2": 1.0493950447147942,
+          "fraction_iso_err": 0.007092684571828931,
+          "delta_bic": 89.77464871304721,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41054,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.82311293704245,
+              "fwhm_err_deg": 0.3671969024844538,
+              "fraction": 0.43100677712134966,
+              "fraction_err": 0.006105505279435421,
+              "delta_bic_vs_isotropic_replacement": 8774.014053416258,
+              "replacement_delta_chi2_per_bin": 35.91401523346587,
+              "fraction_isotropic_correlation": -0.9710028498341186,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.908185875949094,
+              "fwhm_err_deg": 0.05515495100931224,
+              "fraction": 0.18627621541075876,
+              "fraction_err": 0.001627706154404868,
+              "delta_bic_vs_isotropic_replacement": 8774.014053416258,
+              "replacement_delta_chi2_per_bin": 35.91401523346587,
+              "fraction_isotropic_correlation": -0.4425563051248992,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.38271700746789167,
+          "reduced_chi2": 0.9922743380434385,
+          "fraction_iso_err": 0.006648814647531525,
+          "delta_bic": 111.92185995088357,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41055,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.63614430921744,
+              "fwhm_err_deg": 0.3645910325087753,
+              "fraction": 0.4284426500130176,
+              "fraction_err": 0.006019612153656747,
+              "delta_bic_vs_isotropic_replacement": 8312.468175079426,
+              "replacement_delta_chi2_per_bin": 34.02243376487229,
+              "fraction_isotropic_correlation": -0.9697539092278507,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.93363911946796,
+              "fwhm_err_deg": 0.05644693173388942,
+              "fraction": 0.1837034458408761,
+              "fraction_err": 0.001639332644370128,
+              "delta_bic_vs_isotropic_replacement": 8312.468175079426,
+              "replacement_delta_chi2_per_bin": 34.02243376487229,
+              "fraction_isotropic_correlation": -0.44349559620742246,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3878539041461063,
+          "reduced_chi2": 0.8641132268995282,
+          "fraction_iso_err": 0.006564579226541332,
+          "delta_bic": 70.51959279955264,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41056,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.54952858575511,
+              "fwhm_err_deg": 0.3791803598281893,
+              "fraction": 0.43174127027441106,
+              "fraction_err": 0.006298433599398552,
+              "delta_bic_vs_isotropic_replacement": 8558.089984672526,
+              "replacement_delta_chi2_per_bin": 35.02908052549975,
+              "fraction_isotropic_correlation": -0.9691569617406,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 7.880681964551218,
+              "fwhm_err_deg": 0.0586945481204789,
+              "fraction": 0.18504648328231388,
+              "fraction_err": 0.0017297792525827005,
+              "delta_bic_vs_isotropic_replacement": 8558.089984672526,
+              "replacement_delta_chi2_per_bin": 35.02908052549975,
+              "fraction_isotropic_correlation": -0.44132484580103737,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3832122464432751,
+          "reduced_chi2": 1.1178852291822863,
+          "fraction_iso_err": 0.0068675653328339045,
+          "delta_bic": 83.34254926802652,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41057,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 36.420719516458526,
+              "fwhm_err_deg": 0.40431749975859965,
+              "fraction": 0.44083235363839324,
+              "fraction_err": 0.006868280990346146,
+              "delta_bic_vs_isotropic_replacement": 8634.8708526589,
+              "replacement_delta_chi2_per_bin": 35.343756213968504,
+              "fraction_isotropic_correlation": -0.9745362434632346,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.046528974253716,
+              "fwhm_err_deg": 0.059694710184009715,
+              "fraction": 0.18705106241977656,
+              "fraction_err": 0.00172464912089903,
+              "delta_bic_vs_isotropic_replacement": 8634.8708526589,
+              "replacement_delta_chi2_per_bin": 35.343756213968504,
+              "fraction_isotropic_correlation": -0.45009894567027803,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3721165839418302,
+          "reduced_chi2": 1.1067355337393445,
+          "fraction_iso_err": 0.007469651506349703,
+          "delta_bic": 100.45239497634981,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        },
+        {
+          "seed": 41058,
+          "axes": [
+            [
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              0
+            ]
+          ],
+          "populations": [
+            {
+              "fwhm_deg": 35.596525411055545,
+              "fwhm_err_deg": 0.36515667646740907,
+              "fraction": 0.4307889754212815,
+              "fraction_err": 0.005986804734554493,
+              "delta_bic_vs_isotropic_replacement": 8450.08559550497,
+              "replacement_delta_chi2_per_bin": 34.586439586288456,
+              "fraction_isotropic_correlation": -0.9685402177499279,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "fwhm_deg": 8.075413306387826,
+              "fwhm_err_deg": 0.05810190441713862,
+              "fraction": 0.18580847260039363,
+              "fraction_err": 0.001669707214275407,
+              "delta_bic_vs_isotropic_replacement": 8450.08559550497,
+              "replacement_delta_chi2_per_bin": 34.586439586288456,
+              "fraction_isotropic_correlation": -0.45146777653661807,
+              "axis": [
+                1,
+                1,
+                0
+              ]
+            }
+          ],
+          "near_random": [],
+          "fraction_iso": 0.3834025519783248,
+          "reduced_chi2": 0.968506530622897,
+          "fraction_iso_err": 0.006552280164727775,
+          "delta_bic": 125.62919862671265,
+          "determined": true,
+          "parameter_status": "determined",
+          "reasons": []
+        }
+      ]
+    }
+  ]
+}

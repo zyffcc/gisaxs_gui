@@ -7,10 +7,12 @@ from dataclasses import replace
 from src.gimap.shared.profiles import Profile
 from src.gimap.shared.radial_peaks import MAX_PEAKS, find_peaks, orientation_peak_rows
 
-from ..domain.crystal.cell_observations import CellPeak, Refraction, corrected, finite_number
-from ..domain.crystal.refinement import refine_cell, refine_fibre_strain, select_peaks, system_for_cell
+from ..domain.crystal.cell_observations import CellPeak, Refraction, corrected
+from ..domain.crystal.film_optics import film_optics
+from ..domain.crystal.refinement import refine_fibre_strain, select_peaks
 from ..domain.giwaxs import giwaxs_maps, q_from_two_theta, radial_sector_curves
 from ..domain.models import GiwaxsSettings
+from .cell_assignments import fit_assignments
 from .indexing import IndexingSettings, assign_peaks, film_critical_angle
 from .reduction_errors import reduction_errors
 
@@ -59,7 +61,7 @@ def _correct_spots(spots, source, geometry, specs):
     return assignment, exclusions
 
 
-def _sector_assignments(curves, geometry, specs, cap):
+def _sector_assignments(curves, geometry, specs, cap, offsets):
     """Independent fitted radii on non-overlapping |χ| sectors. Preserve each sector's angular aperture."""
     rows = []
     limits = []
@@ -71,17 +73,17 @@ def _sector_assignments(curves, geometry, specs, cap):
             continue
         limits.append((low, high))
         fitted = _peak_rows(curve, geometry, cap)
-        assigned = assign_peaks(fitted, specs, geometry=geometry)
+        assigned = assign_peaks(fitted, specs, geometry=geometry, q_offsets=offsets)
         for item in assigned["assignments"]:
             rows.append({**item, "sector": curve.key, "chi_range": (low, high)})
     return rows
 
 
-def _fibre_fit(phase, axis, sectors):
-    selected, excluded = select_peaks(phase.name, sectors, with_atoms=bool(phase.atoms))
+def _fibre_fit(spec, axis, sectors, system):
+    selected, excluded = select_peaks(spec.name, sectors)
     # The angular aperture identifies an equivalent pole. Only the radius was measured.
     peaks = [replace(peak, chi_range_deg=sectors[peak.source_index].get("chi_range")) for peak in selected]
-    record = refine_fibre_strain(phase.cell, axis, peaks)
+    record = refine_fibre_strain(spec.reference_cell, axis, peaks, cell_errors=spec.cell_errors, system=system)
     record["excluded"].extend(excluded)
     for entry in [*record["excluded"], *record["residuals"]]:
         item = sectors[entry["source_index"]]
@@ -103,6 +105,35 @@ def frame_cell_refinement(analysis, specs, settings=IndexingSettings(), *, assig
         raise ValueError("The visible phases changed after peak assignment.")
     source = analysis.geometry
     critical = film_critical_angle(settings, source) if settings.refraction else source.critical_angle_deg
+    results = _fit_map(analysis, specs, critical, assignment, orientations, max_peaks, check_cancel)
+    compared = {critical: results}
+    for spec, record in zip(specs, results):
+        angle = float(settings.critical_angle_deg or source.critical_angle_deg or 0.)
+        origin = "indexing or map setting"
+        if not angle:
+            optical = film_optics(spec.phase(), source.wavelength_angstrom)
+            angle = optical.get("critical_angle_deg", 0.)
+            origin = optical["source"]
+        if not angle:
+            record["refraction_sensitivity"] = {"available": False, "reason": "No film critical angle available."}
+            continue
+        for trial in (0., angle):
+            if trial not in compared:
+                compared[trial] = _fit_map(analysis, specs, trial, assignment, (), max_peaks, check_cancel)
+        on_off = {}
+        for key, trial in (("off", 0.), ("on", angle)):
+            fit = next(f for f in compared[trial] if f["phase"] == spec.name)
+            on_off[key] = {k: fit.get(k) for k in ("ok", "reason", "values", "errors", "chi2_red", "metric_rank",
+                                                   "seeds", "zero_shift", "zero_shift_error")}
+        record["refraction_sensitivity"] = {"available": True, "critical_angle_deg": angle, "source": origin,
+                                            **on_off, "on_minus_off_A": {
+            k: on_off["on"]["values"][k] - v for k, v in on_off["off"]["values"].items()
+            if k in ("a", "b", "c") and k in on_off["on"]["values"]}}
+    return results
+
+
+def _fit_map(analysis, specs, critical, assignment, orientations, max_peaks, check_cancel):
+    source = analysis.geometry
     geometry = source.with_critical_angle(critical)
     original = (assignment or {}).get("assignments", ())
     spots = [r for r in original if r.get("q_parallel") is not None and r.get("qz") is not None]
@@ -117,48 +148,22 @@ def frame_cell_refinement(analysis, specs, settings=IndexingSettings(), *, assig
     curves = _curves(analysis, geometry) if not only_spots else []
     if assignment is None or rebinned:
         assignment = assign_peaks(_peak_rows(curves[0], geometry, max_peaks), specs, geometry=geometry)
-    rows = assignment["assignments"]
     axes = {}
     for item in orientations or ():
         resolved = {tuple(axis) for axis in item.get("axes", ())}
         if item.get("determined") and len(resolved) == 1:
             axes[item["phase"]] = resolved.pop()
     sectors = None
-    results = []
-    for spec in specs:
+    results, models, offsets = fit_assignments(specs, assignment, check_cancel=check_cancel)
+    for spec, record in zip(specs, results):
         if check_cancel:
             check_cancel()
-        phase = spec.phase()
-        reference = spec.reference_cell
-        system = system_for_cell(reference, number=spec.space_group_number, symbol=spec.space_group,
-                                 operations=spec.operations)
-        peaks, excluded = select_peaks(spec.name, rows, with_atoms=bool(phase.atoms))
-        record = refine_cell(reference, system, peaks)
-        widths = {row["q"]: row.get("fwhm") for row in rows}
-        invalid = {row["source_index"] for row in record["excluded"]}
-        peaks = [p for p in peaks if p.source_index not in invalid]
-        record["excluded"].extend(excluded)
-        for entry in record["excluded"]:
-            src = rows[entry["source_index"]]
-            candidates = [src, *src.get("alternatives", ())]
-            entry.update(sigma=finite_number(src.get("q_err")), candidate_hkl=", ".join(
-                c["hkl"] for c in candidates if c["phase"] == spec.name))
         record["excluded"].extend(row for row in skipped if row["phase"] == spec.name)
-        for row in record["residuals"]:
-            src = rows[row["source_index"]]
-            if "before_refraction" in src:
-                row["before_refraction"] = src["before_refraction"]
-        record.update(phase=spec.name, phase_spec=spec.record(), unassigned_q=assignment.get("unassigned_q", []),
-                      selection_rule="Within max(3 sigma_q, FWHM/2), exclude cross-phase or tentative "
-                                     "assignments. For competing families require one CIF sum(|F|²) at least "
-                                     "three times the combined intensity of the others.",
-                      seeds=[{"hkl": list(p.hkl), "q": p.q, "sigma": p.sigma, "fwhm": widths[p.q]} for p in peaks],
-                      q_axis={**(assignment.get("q_axis") or {}), "critical_angle_deg": geometry.critical_angle_deg,
-                              "rebinned_for_refraction": rebinned})
+        record["q_axis"] = {**(assignment.get("q_axis") or {}), "critical_angle_deg": geometry.critical_angle_deg,
+                            "rebinned_for_refraction": rebinned}
         if spec.name in axes:
             if not spots and not only_spots and sectors is None:
-                sectors = _sector_assignments(curves[1:], geometry, specs, max_peaks)
-            measured = spots or sectors or []
-            record["fibre_strain"] = _fibre_fit(replace(phase, cell=reference), axes[spec.name], measured)
-        results.append(record)
+                sectors = _sector_assignments(curves[1:], geometry, models, max_peaks, offsets)
+            measured = assign_peaks(spots, models, q_offsets=offsets)["assignments"] if spots else sectors or []
+            record["fibre_strain"] = _fibre_fit(spec, axes[spec.name], measured, record["system"])
     return results

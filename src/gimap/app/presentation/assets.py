@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QPixmap
 
+from src.gimap.shared.resources import RESOURCE_ROOT
 
-ASSET_ROOT = Path(__file__).resolve().parents[4] / "assets"
+ASSET_ROOT = RESOURCE_ROOT / "assets"
 ICON_ROOT = ASSET_ROOT / "icons"
 
 APP_ICON_PATH = ICON_ROOT / "GIMaP Logo.svg"

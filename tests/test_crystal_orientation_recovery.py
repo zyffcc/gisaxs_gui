@@ -109,6 +109,21 @@ def test_measured_evidence_decides_whether_a_broad_distribution_has_an_axis():
     assert "axis" not in near_random[0]
 
 
+def test_broad_fraction_can_trade_with_random_despite_detectable_angular_modulation():
+    from src.gimap.features.analyze.domain.crystal.texture import _populations
+    from src.gimap.features.analyze.domain.crystal.texture_search import Trial
+
+    axes = [(1, 0, 0), (0, 0, 1)]
+    fit = Trial((0, 1), False, np.array([np.log(12.), .2, np.log(76.), .10]), 40., 65.)
+    alternatives = [Trial((i,), False, np.array([np.log(24.), .4]), 150., 175.) for i in range(2)]
+    errors = [.03, .40, .10, .01]
+    resolved, unresolved, _ = _populations(fit, axes, np.diag(np.square(errors)), [fit, *alternatives], 50)
+    assert [r["axis"] for r in resolved] == [[1, 0, 0]]
+    broad, = unresolved
+    assert "axis" not in broad and broad["fraction_isotropic_correlation"] < -.99
+    assert broad["replacement_delta_chi2_per_bin"] > 1.
+
+
 def test_reweighted_doublet_and_two_real_fibre_populations_are_selected_by_bic():
     phase, rings = synthetic("MAPbI3_tetragonal", SEED, second_axis=(0, 0, 1), share=0.42,
                              family_reweight=(((0, 0, 2), 0.15),))
@@ -160,29 +175,32 @@ def test_public_p08_automatic_crystal_orientation_zero_roll():
     mapi, lead = report["crystal_orientation"]
     assert mapi["phase"] == "MAPbI3 (tetragonal)" and lead["phase"] == "PbI2"
     assert not mapi["determined"] and "joint or ring reduced χ² exceeds 5" in mapi["reasons"]
-    assert len(mapi["populations"]) == 2 and mapi["fwhm_deg"] is None
+    assert mapi["parameter_status"] == "conditional on the preferred candidate"
+    assert len(mapi["populations"]) == 1 and len(mapi["near_random"]) == 1
+    assert "axis" not in mapi["near_random"][0]
     assert mapi["film_optics"]["electron_density_e_per_a3"] == pytest.approx(1.04228, abs=1e-5)
     assert mapi["film_optics"]["beta"] == pytest.approx(1.26942e-7, rel=1e-4)
-    assert mapi["reduced_chi2"] == pytest.approx(31.75, abs=.15)
+    assert mapi["reduced_chi2"] == pytest.approx(14.93, abs=.15)
     assert [r["reduced_chi2"] for r in mapi["rings"]] == pytest.approx(
-        [38.74, 12.89, 14.28, 58.29, 115.00, 8.94, 20.55, 8.59, 5.65, 2.97], abs=.25)
+        [45.47, 9.95, 15.71, 7.76, 19.50, 6.07, 12.52, 12.36, 4.89, 1.66], abs=.25)
     strong = mapi["rings"][0]
     assert {r["hkl"] for r in strong["components"]} == {"110", "002"}
     assert strong["profile_settings"]["min_exit_deg"] == 0.
     assert strong["measured"][84] and strong["fit_mask"][84]
     assert strong["exit_transmission"][84] > 1.
     assert strong["observed"][84] < strong["fitted"][84] - 3*strong["sigma"][84]
-    assert strong["largest_residual"]["chi_deg"] == pytest.approx(3.5)
-    assert strong["largest_residual"]["observed_minus_fit_sigma"] > 20.
+    assert strong["profile_settings"]["pole_angle_coordinate"] == "inside film"
+    assert strong["largest_residual"]["chi_deg"] == pytest.approx(86.5)
+    assert strong["largest_residual"]["observed_minus_fit_sigma"] < -20.
     for ring in mapi["rings"] + lead["rings"]:
         np.testing.assert_allclose(ring["fitted"], np.sum([r["values"] for r in ring["components"]], axis=0))
         assert len(ring["observed"]) == len(ring["measured"]) == len(ring["chi_deg"])
     assert lead["axes"] == [[0, 0, 1], [0, 0, 1]]
     assert not lead["search_settings"]["noncollinear_poles_available"]
     assert len(lead["rings"]) == 1
-    assert lead["rings"][0]["reduced_chi2"] == pytest.approx(2.76, abs=.08)
+    assert lead["rings"][0]["reduced_chi2"] == pytest.approx(3.12, abs=.08)
     widths = sorted(p["fwhm_deg"] for p in lead["populations"])
-    assert widths == pytest.approx([16.69, 65.58], abs=.3)
+    assert widths == pytest.approx([16.83, 65.94], abs=.3)
 
 
 def test_transmitted_sharp_and_broad_populations_recover_their_own_widths_and_fractions():
@@ -218,10 +236,9 @@ def test_public_p08_without_phases_keeps_the_existing_single_ring_results():
 def test_measured_angles_and_absorption_reach_public_crystal_orientation():
     report = public_frame(diagnostics=True)
     measurement = report["sample_roll_measurement"]
-    assert measurement["method"] == "combined" and measurement["significant"]
+    assert measurement["method"] == "unsupported fibre tilt" and not measurement["significant"]
     assert measurement["origin"] == "automatic"
-    assert report["geometry"]["sample_roll_deg"] == pytest.approx(measurement["deg"])
-    assert measurement["deg"] == pytest.approx(-1.30, abs=.07)
+    assert report["geometry"]["sample_roll_deg"] == 0.
     incidence = report["incidence_measurement"]
     assert incidence["decision"] == "disagreement"
     assert incidence["reference_deg"] == .075
@@ -229,36 +246,38 @@ def test_measured_angles_and_absorption_reach_public_crystal_orientation():
     assert incidence["deg"] == pytest.approx(.5012, abs=.003)
     mapi, lead = report["crystal_orientation"]
     assert mapi["film_optics"]["depth_source"] == "thick limit"
-    assert mapi["reduced_chi2"] == pytest.approx(3.366, abs=.08)
+    assert mapi["reduced_chi2"] == pytest.approx(6.63, abs=.08)
     assert not mapi["determined"] and lead["axes"] == [[0, 0, 1], [0, 0, 1]]
-    assert lead["reduced_chi2"] == pytest.approx(1.786, abs=.08)
+    assert lead["reduced_chi2"] == pytest.approx(1.76, abs=.08)
     attenuated, basal = report["benchmark_film_absorption"]
     assert attenuated["film_absorption"]["thick_limit"]
-    assert not attenuated["determined"] and basal["axes"] == [[0, 0, 1], [0, 0, 1]]
+    assert not attenuated["determined"] and not basal["determined"]
+    assert basal["axes"] == [[0, 0, 1]]
+    assert basal["near_random"][0]["replacement_delta_chi2_per_bin"] > 1.
     assert attenuated["points"] == mapi["points"]
     for fit in (mapi, attenuated):
-        assert fit["axes"] == [[1, 1, 0]]
-        assert fit["populations"][0]["fwhm_deg"] == pytest.approx(11.08, abs=.2)
+        assert fit["axes"] == [[0, 0, 1]]
+        assert fit["populations"][0]["fwhm_deg"] == pytest.approx(11.43, abs=.2)
         broad, = fit["near_random"]
-        assert "axis" not in broad and broad["fwhm_deg"] == pytest.approx(78.68, abs=.3)
+        assert "axis" not in broad and broad["fwhm_deg"] == pytest.approx(69.26, abs=.3)
         # The small modulation is detected, but its fitted fraction trades with random.
         assert broad["delta_bic_vs_isotropic_replacement"] > 100.
         assert 0. < broad["replacement_delta_chi2_per_bin"] < 1.
         assert broad["fraction_isotropic_correlation"] < -.95
         assert broad["fraction"] < 3. * broad["fraction_err"]
-        assert fit["fraction_iso"] == pytest.approx(.952, abs=.003)
+        assert fit["fraction_iso"] == pytest.approx(.966, abs=.003)
         assert fit["fraction_iso_err"] == pytest.approx(fit["populations"][0]["fraction_err"])
         from src.gimap.features.assistant.application.pipeline_crystal import crystal_lines
         report_text = "\n".join(crystal_lines([fit]))
-        assert "near-random" in report_text and "(2 2 1)" not in report_text
-    assert attenuated["reduced_chi2"] == pytest.approx(3.371, abs=.08)
+        assert "near-random" in report_text and "conditional on the preferred candidate" in report_text
+    assert attenuated["reduced_chi2"] == pytest.approx(6.64, abs=.08)
     assert [r["reduced_chi2"] for r in attenuated["rings"]] == pytest.approx(
-        [1.64, 2.46, 6.04, 2.89, 2.10, 3.72, 4.62, 3.13, 3.79, 3.64], abs=.12)
+        [5.09, 4.97, 6.99, 18.21, 7.94, 4.89, 5.03, 3.50, 2.93, 2.81], abs=.12)
     horizon = attenuated["rings"][0]
     for i in (84, 85):
         assert horizon["fit_mask"][i]
-        assert abs(horizon["observed"][i] - horizon["fitted"][i]) < 1.5 * horizon["sigma"][i]
-    assert basal["reduced_chi2"] == pytest.approx(1.809, abs=.08)
+        assert horizon["observed"][i] < horizon["fitted"][i] - 2.5 * horizon["sigma"][i]
+    assert basal["reduced_chi2"] == pytest.approx(1.78, abs=.08)
 
 
 def test_texture_recovers_one_refracted_wave_optical_depth_across_three_rings():

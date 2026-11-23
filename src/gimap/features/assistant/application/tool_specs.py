@@ -104,6 +104,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
                     "keep_incidence": {"type": "boolean"},
                     "yoneda_critical_deg": NUMBER_OR_NULL,
                     "yoneda_material": {"type": ["string", "null"], "enum": ["Si", "SiO2", "glass", "Au", None]},
+                    "assume_fibre_normal": {"type": "boolean", "description": "Use ring symmetry for roll only when the user states that the fibre axis is the surface normal."},
                     "pixel_size_um": NUMBER_OR_NULL,
                     "frame": {"type": ["integer", "null"]},
                     "sum_frames": {"type": ["integer", "null"]},

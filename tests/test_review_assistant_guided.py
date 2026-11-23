@@ -8,6 +8,7 @@ language switch, and Auto hands its detected technique to the run instead of swi
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 from pathlib import Path
@@ -59,6 +60,35 @@ def _show(page, frame_index: int, summed: int) -> None:
     page.run_analysis()
     assert page.tasks.wait(60)
     QApplication.processEvents()
+
+
+def test_save_report_json_keeps_the_recipe_and_structural_results(tmp_path, monkeypatch):
+    _app()
+    from src.gimap.features.assistant.presentation import guided_analysis
+
+    frame, path = tmp_path / "film.edf", tmp_path / "film_report.json"
+    report = _report(frame)
+    report["reproduction"] = {"schema": 1, "kind": "automatic"}
+    report["cell_refinement"] = [{"phase": "sample", "ok": False, "reason": "no assigned rings"}]
+
+    def save(name, text):
+        Path(name).write_text(text, encoding="utf-8")
+        return name
+
+    def choose(parent, title, source, suffix, filters):
+        assert "(*.json)" in filters
+        return str(path), "Replayable report (*.json)"
+
+    guided = GuidedAnalysis(lambda: None, save_text=save)
+    guided.frame_shown(str(frame))
+    guided.report = report
+    monkeypatch.setattr(guided_analysis, "ask_save_path", choose)
+    monkeypatch.setattr(guided_analysis, "saved_toast", lambda *args: None)
+    try:
+        assert guided.save_report() == str(path)
+        assert json.loads(path.read_bytes()) == report
+    finally:
+        guided.results.deleteLater()
 
 
 # -- results of a series belong to the frames the run analysed ------------------------------------------

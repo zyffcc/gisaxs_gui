@@ -13,7 +13,9 @@ They are not GIMaP's data: keep the licences and the attribution below when you 
 
 `galaxi_bornagain.poni`, `manifest.json` and `reference_values.json` are GIMaP's own files (see below).
 `MAPbI3_reference.cif` and `PbI2_reference.cif` are GIMaP's comparison models from the indexing validation
-in *Physics and Methods*, chapter 7. The tetragonal MAPbI₃ model includes only the Pb and I sites.
+in *Physics and Methods*, chapter 7. The tetragonal MAPbI₃ model contains four Pb and twelve I
+after site expansion. Its bulk formula and Z = 4 also supply C, H and N for film optics.
+The PbI₂ sites expand to one Pb and two I per cell, consistent with its formula and Z = 1.
 `PbTe_bulk_reference.cif` describes ideal rock salt with the bulk lattice parameter quoted below.
 These three example files are distributed under GIMaP's licence. The original measurements come from the
 sources in the table. A candidate CIF supplies expected reflections for comparison with the measured peaks.

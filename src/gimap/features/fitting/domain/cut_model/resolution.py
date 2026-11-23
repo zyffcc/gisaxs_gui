@@ -70,6 +70,19 @@ def tabulated(q_out, table_q, curves, sigma: float) -> np.ndarray:
 
 
 TABLE_POINTS = 1024
+PREDICT_TABLE_POINTS = 256
+PREDICT_MAX_RELATIVE = 0.01
+
+
+def predict_sharp_limit(q):
+    """Widths below a quarter of the smallest measured spacing resolve no broadening in Predict."""
+    steps = np.diff(np.unique(q))
+    return 0.25 * float(steps.min()) if steps.size else 0.0
+
+
+def predict_grid(q, sigma):
+    """Common table for the whole Predict prior, independent of the other samples in a batch."""
+    return table_grid(q, max(float(sigma), PREDICT_MAX_RELATIVE * float(np.max(q))), PREDICT_TABLE_POINTS)
 
 
 def table_grid(q, sigma: float, points: int = TABLE_POINTS) -> np.ndarray:

@@ -27,7 +27,7 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="gimap", description=f"{APP_NAME}: GISAXS and GIWAXS analysis. Opens the files and folders given "
                                   "(detector frames, a folder of them, a .gimap project). "
-                                  "Use 'gimap reproduce RECORD.json [--out FOLDER]' to repeat a reduction or fit.")
+                                  "Use 'gimap reproduce RECORD.json [--out FOLDER]' to repeat a reduction, fit or automatic analysis.")
     parser.add_argument("paths", nargs="*", metavar="FILE_OR_FOLDER",
                         help="detector frames, a folder of frames or a project (.gimap) to open")
     parser.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
@@ -51,6 +51,9 @@ def saved_appearance(data_dir: Path) -> tuple[str, str]:
 def launch(argv: Optional[Sequence[str]] = None) -> int:
     """Run GIMaP; returns the exit code."""
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] == ["--automatic-replay-worker"]:
+        from src.gimap.app.reproduce_automatic import worker_main
+        return worker_main(arguments[1:])
     if arguments[:1] == ["reproduce"]:
         from src.gimap.app.reproduce import reproduce_cli
         return reproduce_cli(arguments[1:])

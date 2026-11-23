@@ -204,7 +204,11 @@ def test_the_command_line_writes_the_cuts_and_the_fit(galaxi_run, tmp_path: Path
     lines = (tmp_path / "fit_curve.csv").read_text(encoding="utf-8").splitlines()
     header = [line for line in lines if line.startswith("#")]
     assert header[0].startswith("# GIMaP v")  # where the curve comes from, then its columns
-    assert header[-1].startswith("# q (A^-1), I, sigma, I_fit")
+    assert header[-1].startswith("# q (A^-1), I, sigma, I_fit, fit_sigma")
+    columns = np.loadtxt(tmp_path / "fit_curve.csv", delimiter=",")
+    fitted = report["gisaxs"]["fit"]
+    np.testing.assert_array_equal(columns[:, 4], fitted["native"][0]["sigma"])
+    assert np.any(columns[:, 4] > columns[:, 2])  # reused interpolation endpoints
     table = (tmp_path / "fit_solutions.csv").read_text(encoding="utf-8").splitlines()
     comments = [line for line in table if line.startswith("#")]
     assert comments[:-2] == header[:-1]  # the same lines as the curve tables: release, input with SHA-256, geometry

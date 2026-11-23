@@ -18,6 +18,16 @@ if str(ROOT) not in sys.path:
 EXTERNAL = ROOT / "tests/data/external"
 
 
+def _portable(value):
+    if isinstance(value, dict):
+        return {k: _portable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_portable(v) for v in value]
+    if isinstance(value, str) and value.startswith(str(ROOT) + os.sep):
+        return Path(value).relative_to(ROOT).as_posix()
+    return value
+
+
 def public_case(name, folder, visit=None):
     from src.gimap.app.headless_assistant import open_headless_session
     from src.gimap.features.analyze.application.cell_refinement import frame_cell_refinement
@@ -91,7 +101,9 @@ def main():
             from tools.benchmarks.cell_series import benchmark
             t, a, c, record = benchmark(home)
             fits = [row["fits"]["Tetragonal film"] for row in record["frames"]]
-            result["series"] = {"time_s": t.tolist()}
+            result["series"] = {"time_s": t.tolist(), "frame_assignments": [
+                {k: f[k] for k in ("residuals", "excluded", "metric_rank", "zero_shift", "zero_shift_error")}
+                for f in fits]}
             for key, truth in (("a", a), ("c", c), ("V", a*a*c)):
                 measured = np.array([f["values"][key] for f in fits])
                 result["series"][key] = dict(truth=truth.tolist(), fitted=measured.tolist(),
@@ -104,7 +116,9 @@ def main():
                     print(name, fit["phase"], fit["reason"] or fit["values"], fit["errors"], fit["strain"],
                           len(fit["residuals"]), fit["chi2_red"])
     if args.json:
-        args.json.write_text(json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+        result["command"] = f"python tools/benchmarks/cell_refinement.py --part {args.part} --trials {args.trials} --json {args.json.as_posix()}"
+        encoded = json.dumps(_portable(result), indent=2, ensure_ascii=False, allow_nan=False)
+        args.json.write_text(encoded, encoding="utf-8")
 
 
 if __name__ == "__main__":

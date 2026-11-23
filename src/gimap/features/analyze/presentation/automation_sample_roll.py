@@ -16,7 +16,7 @@ class SampleRollAutomationMixin:
                 "incidence_measurement": analysis.incidence_measurement,
                 "incidence_locked": getattr(analysis.request, "incidence_locked", False)}
 
-    def prepare_frame_angles(self, roll_policy, roll_deg, critical_deg, yoneda_material=None):
+    def prepare_frame_angles(self, roll_policy, roll_deg, critical_deg, yoneda_material=None, assume_fibre_normal=False):
         model = self._page.view_model
         frame = model.state.analysis
         fixed_roll = frame.geometry.sample_roll_deg if roll_policy == "keep" else roll_deg
@@ -31,7 +31,8 @@ class SampleRollAutomationMixin:
         profile = frame.resolution.profile
         fallback = profile.geometry.sample_roll_deg if profile else 0.
         measure = partial(measure_frame_angles, frame, model.frames, roll_deg=fixed_roll,
-                          critical_angle_deg=critical_deg, fallback_roll_deg=fallback, yoneda_material=yoneda_material)
+                          critical_angle_deg=critical_deg, fallback_roll_deg=fallback, yoneda_material=yoneda_material,
+                          assume_fibre_normal=assume_fibre_normal)
         return frame, measure, source
 
     def set_frame_angles(self, frame, roll_policy, roll_deg, roll, incidence, reference, source, critical_source,

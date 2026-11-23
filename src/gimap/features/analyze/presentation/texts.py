@@ -28,7 +28,7 @@ from ..application.geometry_files import PIXEL_MISMATCH, SHAPE_MISMATCH
 from ..application.frame_import import OTHER_DETECTOR
 from ..application.technique import BY_RINGS
 from .views.mask_tools_view import RULES, SHAPES
-from ..application.indexing import SYMMETRY_TEMPLATES
+from ..application.indexing import CIF_COMPOSITION, SYMMETRY_TEMPLATES
 
 NO_PROFILE = "No instrument profile for {detector} ({shape}). Calibrate once or enter the geometry to get q curves."
 PROFILE_SHAPE = "Profile “{name}” is for {profile_shape} frames; this frame is {shape}."
@@ -115,6 +115,7 @@ TEMPLATES: tuple[tuple[str, dict[str, Callable[[str], str]]], ...] = (
     (OTHER_DETECTOR, {"detector": tr}),  # “detector not named” when the file names none
     (BY_RINGS, {}),
     *((template, {}) for template in SYMMETRY_TEMPLATES),  # how a CIF phase got its symmetry, or why not
+    (CIF_COMPOSITION, {"sites": tr, "formula": tr, "z": tr}),
     *((template, {"error": _frame_beyond} if template == FEWER_FRAMES else {}) for template in READ_ERRORS),
 )
 """English templates of the messages made elsewhere, with what to do with each value (default: keep it)."""

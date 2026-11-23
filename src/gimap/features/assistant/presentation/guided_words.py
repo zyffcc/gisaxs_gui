@@ -17,6 +17,11 @@ from src.gimap.shared import fit_names
 from src.gimap.shared.orientation_notes import COVERAGE_WARNING
 
 SENTENCES = (
+    "The estimate draws {weight}% of its weight from {feature}.",
+    "{reference} and frame αi = {value}° ({method}) differ by more than 3σ.",
+    "{reference} and frame αi = {value}° ({method}) agree within 3σ.",
+    "frame αi = {value}° ({method}).",
+    "The frame estimate is unresolved ({method}).",
     "q = {q} Å⁻¹.", COVERAGE_WARNING,
     "At q = {q} Å⁻¹ the pole fit is not determined ({bounds}).",
     "Exclude pixels with αf < {angle}° ({source}). Polarisation: {factor}.",
@@ -45,7 +50,7 @@ SENTENCES = (
     "The halves differ by {percent} % (median) up to |qy| = {q} Å⁻¹ even after the symmetry correction (a shadow, an "
     "absorber or real in-plane anisotropy): both are kept and the {better} half, the better covered one, is fitted.",
     "Both halves are usable (points in {a} and {b} of their |qy| ranges) and {agree}: they are averaged where both "
-    "exist, which halves the noise{extend}.",
+    "exist{extend}.",
     "agree within {percent} %",
     "; beyond {q} Å⁻¹ the longer {side} half continues alone to {reach} Å⁻¹",
     "mean of both halves up to |qy| = {q} Å⁻¹",
@@ -163,7 +168,7 @@ SENTENCES = (
 """English templates of the sentences a run writes; ``{name}`` is a value written as it is (or ``NESTED``).
 The fixed sentences (no values) are plain keys of the table. The form with the most fixed text is tried first,
 so a short form never takes a sentence of a longer one ("clear: … beats …")."""
-NESTED = frozenset({"texture", "agree", "extend", "now", "place"})
+NESTED = frozenset({"texture", "agree", "extend", "now", "place", "feature", "method"})
 """Values that are sentences themselves (a texture, whether the halves agree, how far one goes on, "no frame",
 where the search found a file)."""
 LISTS = frozenset({"bounds"})
@@ -173,6 +178,8 @@ _SENTENCE_BREAK = re.compile(r"(?<=[.。])\s+(?=[A-Z])")
 """Between two sentences of a text that has no form of its own (a hint made of several sentences)."""
 
 _SAVED_SENTENCES = (
+    "Both halves are usable (points in {a} and {b} of their |qy| ranges) and {agree}: they are averaged where both "
+    "exist, which halves the noise{extend}.",
     "no clear preferred orientation (f − f_iso = {f}, within ±{margin}): the ring is strongest at |χ| ≈ {chi}° but "
     "nearly as intense elsewhere",
     "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "

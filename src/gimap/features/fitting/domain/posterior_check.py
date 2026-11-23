@@ -60,7 +60,7 @@ class PredictTarget:
         self.likelihood = Likelihood(self.data, self.composition, law, coupling)
         active = E.active(self.composition)[0]
         reflection = {E.GLOBAL.start + 4, E.GLOBAL.start + 5}
-        self.dims = [d for d in np.flatnonzero(active) if self.data.reflected or d not in reflection]
+        self.dims = [d for d in np.flatnonzero(active) if self.likelihood.free_reflection or d not in reflection]
         self.names = [PHYSICAL_NAMES[d] for d in self.dims]
         self.reported = [n for d, n in zip(self.dims, self.names) if E.NAMES[d] not in NUISANCE]
         centre = np.array(centre, float)
@@ -71,15 +71,22 @@ class PredictTarget:
         for d in reflection:
             if not np.isfinite(centre[d]):
                 centre[d] = 0.0
-        unit = E.to_unit(dimensionless(centre[None, :], self.data.q_max), [self.data.ratio], self.composition)
+        unit = self._unit(centre[None, :])
         self.z_star = _logit(np.clip(unit, 1e-6, 1 - 1e-6))[0][self.dims]
         samples = np.asarray(importance_starts, float)
         self.importance_z = np.empty((0, len(self.dims)))
         if samples.size:
             samples = np.where(active, samples, np.nan)  # the job's JSON uses zero for inactive coordinates
-            unit = E.to_unit(dimensionless(samples, self.data.q_max), np.full(len(samples), self.data.ratio),
-                             self.composition)[:, self.dims]
+            unit = self._unit(samples)[:, self.dims]
             self.importance_z = np.unique(_logit(unit[np.all(np.isfinite(unit), axis=1)]), axis=0)
+
+    def _unit(self, samples):
+        encoded = dimensionless(samples, self.data.q_max, disk=self.likelihood.free_reflection)
+        return E.to_unit(encoded, np.full(len(samples), self.data.ratio), self.composition)
+
+    def _physical(self, full):
+        values = E.from_z(full, np.full(len(full), self.data.ratio), self.composition)
+        return physical(values, self.data.q_max, disk=self.likelihood.free_reflection)
 
     def _full(self, z) -> np.ndarray:
         z = np.atleast_2d(np.asarray(z, float))
@@ -89,7 +96,7 @@ class PredictTarget:
 
     def __call__(self, z) -> np.ndarray:
         full = self._full(z)
-        values = physical(E.from_z(full, np.full(full.shape[0], self.data.ratio), self.composition), self.data.q_max)
+        values = self._physical(full)
         log_like, _amplitudes, _chi2 = self.likelihood(values)
         out = log_like + E.log_prior(full, self.composition, self.dims if self.data.substrate else None)
         return np.where(np.isfinite(out), out, -np.inf)
@@ -97,7 +104,7 @@ class PredictTarget:
     def values(self, z) -> np.ndarray:
         """Physical values (B, len(names)) of positions z (B, k)."""
         full = self._full(z)
-        values = physical(E.from_z(full, np.full(full.shape[0], self.data.ratio), self.composition), self.data.q_max)
+        values = self._physical(full)
         return values[:, self.dims]
 
 

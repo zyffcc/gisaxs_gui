@@ -62,7 +62,9 @@ def _profile(maps, pixels, analysis, window, q, optics, *, fit_absorption=False)
     auto_exit = optics["available"] and corrections.orientation_min_exit_deg is None
     if auto_exit:
         corrections = replace(corrections, orientation_min_exit_deg=0.)
-    profiles, indices, sines = measured_ring_profiles(maps, *pixels, analysis.geometry, window, maps.q_step, corrections)
+    film_index = (optics["delta"], optics["beta"]) if optics["available"] else None
+    profiles, indices, sines, chi = measured_ring_profiles(
+        maps, *pixels, analysis.geometry, window, maps.q_step, corrections, film_index=film_index)
     curve = profiles[1.0]
     region = curve.region
     if optics["available"]:
@@ -74,11 +76,11 @@ def _profile(maps, pixels, analysis, window, q, optics, *, fit_absorption=False)
         profile = fold_profile(curve.x, curve.intensity, curve.sigma, region["background"])
         if optics.get("model") == "frame corrected with refracted waves":
             return profile, region, None, None
-        rays = (optics, analysis.geometry, q, maps.chi_deg.flat[indices], maps.qz.flat[indices], curve)
+        rays = (optics, analysis.geometry, q, chi, maps.qz.flat[indices], curve)
         # Preserve the surface field as a separate diagnostic. The model uses the full factor.
-        region["exit_transmission"] = ring_transmission(*rays, sin_exit=sines).tolist()
+        region["exit_transmission"] = ring_transmission(*rays, sin_exit=sines, internal_bins=True).tolist()
         factor, absorption = ring_optical_factors(
-            *rays, sin_exit=sines, fit_absorption=fit_absorption,
+            *rays, sin_exit=sines, internal_bins=True, fit_absorption=fit_absorption,
             thickness_nm=optics.get("thickness_nm", np.inf), geometric_depth=optics.get("geometric_optical_depth"))
         return profile, region, factor, absorption
     profile = fold_profile(curve.x, curve.intensity, curve.sigma, region["background"],
@@ -181,7 +183,7 @@ def frame_crystal_orientation(analysis, specs, *, chi_max=90.0, frame_source=Non
             for ring in record.get("rings", []):
                 ring.update(metadata[ring["ring_id"]])
         else:
-            record = {"phase": spec.name, "ok": False, "determined": False, "rings": [],
+            record = {"phase": spec.name, "ok": False, "determined": False, "parameter_status": "unavailable", "rings": [],
                       "reasons": ["No usable ring assigned to this phase."]}
         record.setdefault("excluded_rings", []).extend(excluded)
         record.update(phase_spec=spec.record(), fitted_up_to_chi_deg=chi_max,

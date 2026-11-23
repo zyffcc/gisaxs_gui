@@ -1,16 +1,20 @@
-"""The second held-out set of the 1D benchmarks: fit1d_recovery.py's draw on a fresh seed range, widened.
+"""The extended recovery generator, including replay of the archived second set.
 
 Same ranges, levels of physics, curve and counts as fit1d_recovery.draw/curve (the independent truth model
 yoneda_truth.py), and in addition three populations (a third size scale 1.8–3 times from the second) and the decoupling
 approximation (DA) in half of the cases. Compositions cycle through COMPOSITIONS; ``index`` and ``seed0`` fix a case.
-Used by posterior_recovery.py and fit1d_recovery.py with --set extended (seed0 20261201 for the frozen set).
+The archived draws used seed0 20261201 and shared seeds with the first and third sets.
 """
 from __future__ import annotations
 
 import numpy as np
 
-import recovery_cases as fr
-import yoneda_truth as yt
+if __package__:
+    from . import recovery_cases as fr
+    from .case_streams import case_streams
+else:
+    import recovery_cases as fr
+    from case_streams import case_streams
 
 COMPOSITIONS = {"sphere": ("sphere",), "vc": ("vc",), "sphere,sphere": ("sphere", "sphere"),
                 "sphere,vc": ("sphere", "vc"), "sphere,sphere,vc": ("sphere", "sphere", "vc"),
@@ -18,8 +22,10 @@ COMPOSITIONS = {"sphere": ("sphere",), "vc": ("vc",), "sphere,sphere": ("sphere"
 SEED0 = 20261201
 
 
-def draw(index: int, seed0: int = SEED0) -> dict:
-    rng = np.random.default_rng(seed0 + index)
+def draw(index: int, seed0: int = SEED0, *, set_name="extended") -> dict:
+    if set_name not in ("extended", "legacy-extended"):
+        raise ValueError(f"Use recovery_cases.draw for {set_name!r}")
+    rng, noise_seed, metadata = case_streams(set_name, seed0, index)
     names = list(COMPOSITIONS)
     comp = names[index % len(names)]
     level = "model" if (index // len(names)) % 2 == 0 else "measured"
@@ -38,31 +44,10 @@ def draw(index: int, seed0: int = SEED0) -> dict:
                          share=1.0 if k == 0 else float(rng.uniform(0.3, 1.0))))
     peak = float(10 ** rng.uniform(3, 5))
     return dict(index=index, composition=comp, level=level, coupling=coupling, populations=pops, peak_counts=peak,
-                background=float(10 ** rng.uniform(-3, -1.5)), seed=seed0 + index)
+                background=float(10 ** rng.uniform(-3, -1.5)), seed=noise_seed, **metadata)
 
 
-def curve(case: dict):
-    """fit1d_recovery.curve with the case's coupling (and recovery_cases.TRUTH's physics)."""
-    inst = yt.Instrument(peak_counts=0.0)
-    if case["level"] == "measured":
-        inst = yt.replace(inst, sigma_g=0.005, central=30.0, eta=0.03, gamma=0.004, rough=1.0, xi=50.0, hurst=0.5)
-    total, peak_of_particles = np.zeros_like(fr.Q), None
-    for k, p in enumerate(case["populations"]):
-        film = yt.Film(R=p["R"], sR=p["sR"], D=p["D"], s_nn=p["s_nn"], coupling=case.get("coupling", "lma"),
-                       scattering=fr.TRUTH["scattering"], cyl_h=2.0 * p["R"] if p["shape"] == "vc" else 0.0)
-        own = yt.measured_curve(fr.Q, yt.Case(fr.truth_geometry(), film,
-                                              inst if k == 0 else yt.replace(inst, central=0.0, rough=0.0)))
-        particles = own["parts"]["particles"]
-        if peak_of_particles is None:
-            peak_of_particles = float(particles.max())
-            total += own["I"]
-        else:
-            total += own["I"] * p["share"] * peak_of_particles / float(particles.max())
-    total += case["background"] * float(total.max())
-    scale = case["peak_counts"] / float(total[fr.Q > 0.1].max())
-    rng = np.random.default_rng(case["seed"])
-    counts = rng.poisson(total * scale).astype(float)
-    return counts, np.sqrt(np.maximum(counts, 1.0))
+curve = fr.curve
 
 
 __all__ = ["COMPOSITIONS", "SEED0", "curve", "draw"]

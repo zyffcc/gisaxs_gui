@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Optional, Sequence
 
 import numpy as np
@@ -12,8 +12,8 @@ import numpy as np
 from .. import fit_engine
 from . import encoding as E
 from . import reporting
-from .infer import Cut, infer
-from .laplace import local_posterior
+from .infer import Composition, Cut, Mode, infer
+from .laplace import Local, local_posterior, pool_composition
 from .model_start import fit_model
 from .moves import starts as moved_starts
 
@@ -52,13 +52,41 @@ LOCAL_ROUNDS, SLOW_ROUNDS = 8, 3
 """At most this many rounds of the local posterior (``laplace.local_posterior``); of a composition with a random
 cylinder, whose evaluations are slow, ``SLOW_ROUNDS``."""
 ESS_FAILED = 10
+"""Use BIC for all compositions if any composition has fewer effective pooled draws than this."""
 LARGE, SMALL = 0.7, 1.0
 """q_min·R and q_max·R limits of the ``large`` and ``small`` flags (``window_flags``)."""
-"""Below this many effective samples at any solution, the solutions are compared by BIC (``bic`` flag)."""
 MODEL_ERROR_FLOOR = 0.05
 """A relative model error per point, added to the σ of the counts (σ² + (f·I)²) in the posterior, the solutions'
 probabilities and their errors: Fitting's model describes a measured cut only to about this fraction, so the
 intervals are not narrower than that allows. The least-squares fit and χ²/N keep the curve's own σ."""
+
+
+@dataclass
+class Candidate:
+    result: Composition
+    mode: Mode
+    counts_fit: fit_engine.FitResult
+    floor_fit: fit_engine.FitResult
+    centre: Optional[np.ndarray]
+    bic: float
+    local: Optional[Local] = None
+
+
+def _normalized(scores):
+    weights = np.exp(scores - np.max(scores))
+    return weights / weights.sum()
+
+
+def _comparison(groups, pools, bics, by_bic):
+    """Compare one score per composition, then partition its weight among its starts."""
+    indices = list(groups)
+    best = {c: np.min(bics[groups[c]]) for c in indices}
+    scores = [-best[c] / 2 if by_bic else pools[c].log_evidence for c in indices]
+    probabilities = dict(zip(indices, _normalized(np.asarray(scores))))
+    shares = np.empty(len(bics))
+    for c, places in groups.items():
+        shares[places] = _normalized(-0.5 * bics[places]) if by_bic else pools[c].shares
+    return probabilities, shares, best
 
 
 def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Optional[float] = None,
@@ -72,19 +100,19 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
     """Solutions of a cut (q in nm⁻¹, qz the vacuum q₊ = k_i + k_f of the Born term in nm⁻¹, 0: the effective
     interface; ``qz_minus`` k_i − k_f when both angles are known: spheres get the exit-reflected path with a free
     effective reflection coefficient, ``Cut.reflected``), most probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
-    the posterior. With a known substrate and the wavelength and both angles in grazing, all stages evaluate the
-    four-term DWBA. The proposal network still conditions on the two measured vertical wave-vector combinations.
+    the posterior. With a known substrate and the wavelength and both angles in grazing, all stages use four paths
+    for spheres and the finite Born transfer for random cylinders.
 
     1. The network's importance-weighted samples of each composition (given, or the head's ``shortlist`` among
        ``allowed``) and their modes (``infer``).
     2. Each mode (``refine_modes`` of them, and ``explored`` modes of the tempered weights) refined by least squares
        from its heaviest sample; for the ``RETRY_COMPOSITIONS`` best compositions of two or three populations,
        ``MOVES`` starts at their degeneracies (``moves``); one search of the ranges for those whose solutions all stay
-       above χ²/N = ``CHI2_RETRY``. Steps 1–2 use the curve's σ.
-    3. The posterior of the solutions within ``DELTA_BIC`` of the best (at most ``LOCAL_MAX``) sampled around each
-       (``laplace``): intervals and evidence, with the model error ``model_error_floor`` (``MODEL_ERROR_FLOOR``)
-       added to σ, as in BIC and the least-squares errors.
-    4. Their probabilities from the evidences, or from BIC when a sampling did not converge (``ESS_FAILED``).
+       above χ²/N = ``CHI2_RETRY``. Starts are fitted with the counting errors and refitted with the floor.
+    3. Sample around the floor-weighted optima within ``DELTA_BIC`` of the best (at most ``LOCAL_MAX``).
+       Pool all proposal rounds within each composition for its evidence and each start's share.
+    4. Normalize the evidences across compositions. If any composition fails sampling (``ESS_FAILED``),
+       normalize exp(−min BIC/2) across compositions and split each weight by relative BIC.
 
     ``cancelled``: a function asked between the steps; when it returns True, ``RuntimeError("Fitting cancelled")``.
     ``progress``: given ``(stage, done, total)`` at the same points — ``proposals`` (compositions sampled by the
@@ -116,26 +144,29 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
         data = replace(counts, sigma=np.hypot(counts.sigma, model_error_floor * np.abs(counts.intensity)))
     weighed = fit_engine.FitData.prepare(data.q, data.intensity, data.sigma)
 
-    def _bic(refined) -> float:
-        """χ² (with the model error) + k ln N of a least-squares solution (k its free values, the scales included)."""
-        residual = fit_engine.residuals(refined.model, weighed)
-        return float(residual @ residual + refined.free * math.log(max(refined.points, 2)))
+    def bic(floor_fit) -> float:
+        residual = fit_engine.residuals(floor_fit.model, weighed)
+        return float(residual @ residual + floor_fit.free * math.log(floor_fit.points))
 
     results = infer(network, counts, compositions, allowed=allowed, shortlist=shortlist, samples=samples, seed=seed,
                     law=law, coupling=coupling,
                     progress=None if progress is None else (lambda done, total: tell("proposals", done, total)))
     lo, hi = E.bounds([data.ratio])
     tau_dim = E.GLOBAL.start + 3
-    found = {r.index: [] for r in results}  # composition -> [(mode, refined, centre)]
+    found = {r.index: [] for r in results}
 
     def add(result, mode, refined) -> None:
-        centre = refine.model_values(refined.model, result.index)
-        if centre is None:  # the refined radii no longer keep the composition's order of types: no local posterior
-            found[result.index].append((mode, refined, None))
-            return
+        floor_fit = fit_engine.fit(refined.model, weighed, method="local") if model_error_floor > 0 else refined
+        centre = refine.model_values(floor_fit.model, result.index)
+        candidate = Candidate(result, mode, refined, floor_fit, centre, bic(floor_fit))
         types = E.composition_types(result.index)
-        if not any(c is not None and refine._same(c, centre, types) for _m, _r, c in found[result.index]):
-            found[result.index].append((mode, refined, centre))
+        modes = found[result.index]
+        for i, previous in enumerate(modes):
+            if centre is not None and previous.centre is not None and refine._same(previous.centre, centre, types):
+                if candidate.bic < previous.bic:
+                    modes[i] = candidate
+                return
+        modes.append(candidate)
 
     def slow(index) -> bool:
         """A random cylinder (15–800 ms per evaluation, 20–30 s per least-squares fit): only its heaviest modes are
@@ -153,105 +184,110 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
             add(result, mode, fit_engine.fit(fit_model(mode.best, result.index, counts, law, coupling, grazing),
                                              fit_data, method="local"))
     tell("refinement", len(results), len(results))
-    by_score = sorted((r for r in results if found[r.index]), key=lambda r: min(_bic(e[1]) for e in found[r.index]))
+    def ranked_compositions():
+        return sorted((r for r in results if found[r.index]), key=lambda r: min(e.bic for e in found[r.index]))
+
+    by_score = ranked_compositions()
     for number, result in enumerate(by_score[:refine.RETRY_COMPOSITIONS]):
-        placed = [e for e in found[result.index] if e[2] is not None]
+        placed = [e for e in found[result.index] if e.centre is not None]
         if not refine.MOVES or not placed or slow(result.index):
             continue
         check()
         tell("starts", number, len(by_score[:refine.RETRY_COMPOSITIONS]))
-        for mode, _refined, centre in sorted(placed, key=lambda e: _bic(e[1]))[:refine.MOVED_SOLUTIONS]:
+        for candidate in sorted(placed, key=lambda e: e.bic)[:refine.MOVED_SOLUTIONS]:
             tried = []
-            for values in moved_starts(centre, result.index):
+            for values in moved_starts(candidate.centre, result.index):
                 start = fit_model(values, result.index, counts, law, coupling, grazing)
                 residual = fit_engine.residuals(start, fit_data)
                 tried.append((float(residual @ residual), len(tried), start))
             for _chi2, _i, start in sorted(tried)[:refine.MOVES]:
-                add(result, mode, fit_engine.fit(start, fit_data, method="local"))
-    by_score = sorted((r for r in results if found[r.index]), key=lambda r: min(_bic(e[1]) for e in found[r.index]))
+                add(result, candidate.mode, fit_engine.fit(start, fit_data, method="local"))
+    by_score = ranked_compositions()
     for result in by_score[:refine.RETRY_COMPOSITIONS]:
-        if result.modes and min(e[1].chi2_reduced for e in found[result.index]) > refine.CHI2_RETRY:
+        if result.modes and min(e.counts_fit.chi2_reduced for e in found[result.index]) > refine.CHI2_RETRY:
             heaviest = np.argsort(-result.weights)[:refine.SEEDS]
             seeds = tuple(fit_model(result.samples[i], result.index, counts, law, coupling, grazing) for i in heaviest)
             start = fit_model(result.modes[0].best, result.index, counts, law, coupling, grazing)
             tell("search", 0, 1)
             add(result, result.modes[0], fit_engine.fit(start, fit_data, method="global", seeds=seeds, seed=seed))
-    ranked = sorted(((_bic(e[1]), result, e) for result in results for e in found[result.index]),
-                    key=lambda t: t[0])
+    ranked = sorted((e for modes in found.values() for e in modes), key=lambda e: e.bic)
     if not ranked:
         return []
-    kept = [(result, e) for score, result, e in ranked[:refine.LOCAL_MAX] if score <= ranked[0][0] + refine.DELTA_BIC]
-    entries = []  # (result, mode, model, refined, local)
-    lsq_of = {}  # an entry's place -> the least-squares errors and chi2/N of its model (with the model error)
+    kept = [e for e in ranked[:refine.LOCAL_MAX] if e.bic <= ranked[0].bic + refine.DELTA_BIC]
 
-    def finish(entries: list, final: bool = True) -> list[PosteriorSolution]:
-        """Step 4 on ``entries``: their probabilities, and every solution above ``min_probability`` (``final``:
-        also the compositions' probabilities, ``result.probability``)."""
-        # The solutions are compared by their evidence (importance sampling); when the sampling of one of them did
-        # not converge (e.g. a curve the model does not describe, whose posterior with the model error lies away
-        # from the least-squares optimum), all of them are compared by BIC, as fit1d does.
-        by_bic = any(e[4] is None or e[4].ess < refine.ESS_FAILED for e in entries)
-        log_z = np.array([-0.5 * _bic(e[3]) if by_bic else e[4].log_evidence for e in entries])
-        weights = np.exp(log_z - log_z.max())
-        weights /= weights.sum()
-        composition_weight = {}
-        for (result, *_rest), w in zip(entries, weights):
-            composition_weight[result.index] = composition_weight.get(result.index, 0.0) + float(w)
+    def finish(entries, final=False):
+        groups = {}
+        for place, entry in enumerate(entries):
+            groups.setdefault(entry.result.index, []).append(place)
+        pools = {}
+        locals_ = [None] * len(entries)
+        for index, places in groups.items():
+            sampled = [i for i in places if entries[i].local is not None]
+            if sampled:
+                pool = pool_composition([entries[i].local for i in sampled])
+                pools[index] = pool
+                for i, local in zip(sampled, pool.locals):
+                    locals_[i] = local
+        by_bic = any(local is None for local in locals_) or any(p.ess < refine.ESS_FAILED for p in pools.values())
+        fits = []
+        bics = np.array([e.bic for e in entries])
+        for i, (entry, local) in enumerate(zip(entries, locals_)):
+            displayed = entry.counts_fit
+            if local is not None and local.ess >= refine.ESS_FAILED:
+                displayed, best_floor = refine._within_posterior(entry.result.index, displayed, entry.floor_fit,
+                                                                 local, data, weighed, law, coupling, grazing)
+                bics[i] = bic(best_floor)
+            fits.append(displayed)
+
+        probabilities, shares, best_bic = _comparison(groups, pools, bics, by_bic)
         if final:
             for result in results:
-                result.probability = composition_weight.get(result.index, 0.0)
-        diagnostics = reporting.comparison_diagnostics(entries, by_bic, composition_weight)
+                result.probability = probabilities.get(result.index, 0.0)
+        diagnostics = reporting.comparison_diagnostics(
+            [e.result for e in entries], locals_, pools, by_bic, probabilities)
         level = counts.level
         warning_qz = counts.qz if level > 1 else measured_qz
         out = []
-        for place, ((result, mode, model, refined, local), w, z) in enumerate(zip(entries, weights, log_z)):
-            if w < min_probability:
+        for i, (entry, refined, local) in enumerate(zip(entries, fits, locals_)):
+            result, model = entry.result, refined.model
+            share = float(shares[i])
+            weight = float(probabilities[result.index] * share)
+            if weight < min_probability:
                 continue
-            share = float(w / composition_weight[result.index])
-            if place not in lsq_of:  # the same numbers in every call: computed once
-                lsq_errors, _pairs = fit_engine.errors(model, weighed)
-                lsq_chi2 = float(np.sum(fit_engine.residuals(model, weighed) ** 2)) / max(1, refined.points - refined.free)
-                lsq_of[place] = (lsq_errors, lsq_chi2)
-            solution = refine._solution(result, (mode, model, refined, local), data, fit_data, lo, hi, "lm", float(w),
-                                 {"head_log_prob": result.head_log_prob, "mode_weight": share,
-                                  "diagnostics": {**diagnostics[place], **sampling, **counts.substrate_record(),
-                                                  "cut_qz": counts.qz, "cut_qz_minus": counts.qz_minus,
-                                                  "model_error_floor": model_error_floor, "substrate_level": level,
-                                                  "reflected_beam": reflected_beam, "measured_qz": warning_qz,
-                                                  "supplied_heights_nm": known_heights or {}},
-                                  "reflection": refine._reflection_extra(model) if counts.reflected else None,
-                                  "composition_log_evidence": float(z), "network_ess": result.ess,
-                                  "dropped_points": data.dropped, "compared_by": "bic" if by_bic else "evidence"},
-                                 lsq=lsq_of[place], from_errors=by_bic)
+            lsq_errors, _pairs = fit_engine.errors(model, weighed)
+            residuals = fit_engine.residuals(model, weighed)
+            lsq_chi2 = float(residuals @ residuals) / max(1, refined.points - refined.free)
+            diagnostics[i].update(sampling, **counts.substrate_record(), cut_qz=counts.qz, cut_qz_minus=counts.qz_minus,
+                                  model_error_floor=model_error_floor, substrate_level=level, reflected_beam=reflected_beam,
+                                  measured_qz=warning_qz, supplied_heights_nm=known_heights or {},
+                                  mode_bic=float(bics[i]), composition_bic=float(best_bic[result.index]))
+            extra = dict(head_log_prob=result.head_log_prob, mode_weight=share, diagnostics=diagnostics[i],
+                         reflection=refine._reflection_extra(model) if counts.reflected else None,
+                         network_ess=result.ess, dropped_points=data.dropped, compared_by="bic" if by_bic else "evidence")
+            if result.index in pools:
+                extra["composition_log_evidence"] = pools[result.index].log_evidence
+            solution = refine._solution(result, (entry.mode, model, refined, local), data, fit_data, lo, hi, "lm",
+                                        weight, extra, lsq=(lsq_errors, lsq_chi2), from_errors=by_bic)
             if level == 1 and measured_qz:
                 solution.flags += tuple(refine.interface_flags(model, measured_qz))
             solution.flags += tuple(reporting.grazing_flags(model, warning_qz, level, reflected_beam, known_heights))
             if by_bic:
-                solution.flags = solution.flags + ("bic",)
+                solution.flags += ("bic",)
             out.append(solution)
         seconds = time.perf_counter() - tick
         for solution in out:
             solution.seconds = seconds
         return sorted(out, key=lambda s: -s.probability)
 
-    for number, (result, (mode, refined, centre)) in enumerate(kept):
+    for number, entry in enumerate(kept):
         check()
         tell("sampling", number, len(kept))
-        local = None
-        if centre is not None:
-            tau = float(mode.median[tau_dim]) if np.isfinite(mode.median[tau_dim]) else 0.02
-            # The posterior has the model error in σ: it is sampled around the least-squares optimum with that σ,
-            # which on a bright curve the model describes only in part lies away from the optimum of the counts' σ.
-            again = None if slow(result.index) else fit_engine.fit(refined.model, weighed, method="local")
-            around = None if again is None else refine.model_values(again.model, result.index)
-            local = local_posterior(data, result.index, centre if around is None else around, tau, rng,
-                                    local_samples, law, coupling,
-                                    rounds=refine.SLOW_ROUNDS if slow(result.index) else refine.LOCAL_ROUNDS)
-            if around is not None and local.ess >= refine.ESS_FAILED:
-                refined = refine._within_posterior(result.index, refined, again, local, data, weighed, law, coupling,
-                                            grazing)
-        entries.append((result, mode, refined.model, refined, local))
-        if partial is not None and len(entries) < len(kept):
-            partial(finish(entries, final=False))
+        if entry.centre is not None:
+            tau = entry.mode.median[tau_dim]
+            entry.local = local_posterior(data, entry.result.index, entry.centre, float(tau) if np.isfinite(tau) else 0.02,
+                                          rng, local_samples, law, coupling,
+                                          rounds=refine.SLOW_ROUNDS if slow(entry.result.index) else refine.LOCAL_ROUNDS)
+        if partial is not None and number + 1 < len(kept):
+            partial(finish(kept[:number + 1]))
     tell("sampling", len(kept), len(kept))
-    return finish(entries)
+    return finish(kept, final=True)

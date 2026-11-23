@@ -68,7 +68,13 @@ def with_substrate(model: FitModel, material: str, delta: float = 0.0, beta: flo
 def prediction_model(model: FitModel, cut: dict) -> FitModel:
     """Apply the geometry edited in Predict to Model, preserving its other parameters and their limits."""
     substrate = Substrate.from_dict(cut.get("substrate"))
+    edited = model.substrate != substrate or any(
+        value != model.globals[key].value for key, value in cut["grazing"].items())
     model = replace(model, substrate=substrate)
+    if model.predict_level is not None and edited:
+        ai, af = (cut["grazing"].get(key, 0) for key in ("alpha_i", "alpha_f"))
+        level_number = (4 if substrate else 3) if ai and af else 2 if ai or af else 1
+        model = replace(model, predict_level=level_number)
     for key, value in cut["grazing"].items():
         parameter = model.globals[key]
         model = model.with_parameter(("globals", key), value=value, lower=min(value, parameter.lower),

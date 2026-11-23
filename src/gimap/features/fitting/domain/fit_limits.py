@@ -12,12 +12,17 @@ TAIL_RANGES = frozenset({"res_amplitude", "res_width", "res_exponent"})
 """The beam tail's ranges: set from the curve by GIMaP (``beam_tail``), and kept with any composition (globals)."""
 
 
+def _explicit_limit(owner, key, parameter, *, include_tail=False):
+    defaults = INFO[key]
+    changed_range = (parameter.lower, parameter.upper) != (defaults.lower, defaults.upper)
+    return (changed_range and (include_tail or owner != "globals" or key not in TAIL_RANGES)
+            or not parameter.free and (defaults.free or parameter.value != defaults.value))
+
+
 def explicit_limits(model: FitModel) -> bool:
     """Defaults do not count as user constraints when exploring different compositions (nor do the beam tail's
     ranges, which GIMaP sets from the curve and a proposal of any composition keeps)."""
-    return any(((p.lower, p.upper) != (INFO[key].lower, INFO[key].upper) and not (owner == "globals" and key in TAIL_RANGES))
-               or (not p.free and (INFO[key].free or p.value != INFO[key].value))
-               for (owner, key), p in model.parameters())
+    return any(_explicit_limit(owner, key, p) for (owner, key), p in model.parameters())
 
 
 def constrain_proposal(proposal: FitModel, base: FitModel) -> FitModel:
@@ -28,6 +33,10 @@ def constrain_proposal(proposal: FitModel, base: FitModel) -> FitModel:
     for path, parameter in base.parameters():
         if path[0] != "globals" and not same:
             continue
+        if proposal.predict_level is not None and not _explicit_limit(*path, parameter, include_tail=True):
+            # A saved Predict model carries the prior bounds, scale settings and resolution that produced its curve.
+            # Only an explicit constraint in the receiving Model overrides those saved settings.
+            continue
         try:
             value = proposal.get(path).value
         except (KeyError, IndexError):
@@ -35,7 +44,7 @@ def constrain_proposal(proposal: FitModel, base: FitModel) -> FitModel:
         value = min(max(value, parameter.lower), parameter.upper) if parameter.free else parameter.value
         proposal = proposal.with_parameter(path, value=value, free=parameter.free,
                                            lower=parameter.lower, upper=parameter.upper)
-    if same:
+    if same and proposal.predict_level is None:
         from dataclasses import replace
         proposal = replace(proposal, components=tuple(replace(c, structure=b.structure)
                            for c, b in zip(proposal.components, base.components)))

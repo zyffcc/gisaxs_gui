@@ -189,14 +189,13 @@ def test_the_automatic_analysis_assigns_the_rings_and_fits_their_pole_figures(tm
             assert 0.0 <= pole["oriented_fraction"] <= 1.0 and pole["oriented_fraction_err"] >= 0.0
         markdown = pipeline_markdown(report)
         assert "## Phase assignment" in markdown and "pole figure (Gaussian + isotropic)" in markdown
-        assert "## Refined unit cells" in markdown and "Observed − fitted" in markdown
+        assert "## Refined unit cells" in markdown and "Metric rank 1/2" in markdown
         cell = report["cell_refinement"][0]
-        assert cell["ok"] and cell["system"] == "tetragonal"
-        assert cell["values"]["a"] == pytest.approx(8.9, abs=.15)
-        assert cell["values"]["c"] == pytest.approx(12.65, abs=.2)
-        assert all(cell["errors"][name] > 0 for name in ("a", "c", "V"))
-        assert cell["strain"]["a"] == pytest.approx(cell["values"]["a"]/cell["reference"]["a"] - 1.)
-        assert cell["residuals"] and cell["excluded"] and cell["chi2_red"] > 0
+        assert cell["system"] == "tetragonal" and not cell["ok"]
+        assert cell["metric_rank"] == 1 and cell["metric_parameters"] == 2
+        assert {tuple(s["hkl"]) for s in cell["seeds"]} == {(2, 0, 2), (4, 0, 4)}
+        assert cell["excluded"] and not cell["values"] and not cell["strain"]
+        assert "Expanded sites per cell" in markdown and "CIF sum formula × Z" in markdown
         assert "## Crystal orientation" in markdown and "measured ring f" in markdown
         from src.gimap.features.assistant.application.pipeline_report import compact_report
 

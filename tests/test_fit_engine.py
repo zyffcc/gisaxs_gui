@@ -319,7 +319,7 @@ def test_the_curve_fit_prepares_the_curve_it_is_given(monkeypatch) -> None:
         curve_fit(q, counts, broken, halves="positive")
 
 
-def _prepared_only(monkeypatch):
+def _prepared_only(monkeypatch, **factory_options):
     """The curve fit (``bootstrap.create_curve_fit``) with the points it would be fitted on in place of the fit: no
     network is loaded, nothing is predicted, the one row holds what the fit was handed."""
     from src.gimap.features.fitting.bootstrap import create_curve_fit
@@ -333,7 +333,28 @@ def _prepared_only(monkeypatch):
     monkeypatch.setattr(network, "load", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(refine, "predict", lambda *_args, **_kwargs: ["a solution"])
     monkeypatch.setattr(posterior_job, "curve_rows", rows)
-    return create_curve_fit()
+    return create_curve_fit(**factory_options)
+
+
+def test_automatic_replay_passes_saved_sampling_options_and_newly_measured_qz(monkeypatch):
+    from src.gimap.features.fitting.domain.posterior import refine
+
+    recorded = {"seed": 1729, "samples": 480, "local_samples": 160, "allowed": [0, 1],
+                "model_error_floor": 0.07, "qz": 8.0, "substrate": "no longer used"}
+    curve_fit = _prepared_only(monkeypatch, predict_settings=recorded)
+    seen = {}
+
+    def predict(network, q, observed, sigma, **options):
+        seen.update(options)
+        return ["a solution"]
+
+    monkeypatch.setattr(refine, "predict", predict)
+    q, counts, sigma = _counted_cut(100)
+    row = curve_fit(q, counts, sigma, cut_qz=0.12)[0]
+    for key in ("seed", "samples", "local_samples", "allowed", "model_error_floor"):
+        assert seen[key] == recorded[key]
+    assert seen["qz"] == 0.12 and "substrate" not in seen
+    assert row["seed"] == 1729
 
 
 def test_the_curve_fit_gives_the_same_reason_for_a_bad_sigma_whatever_the_length_of_the_cut(monkeypatch) -> None:

@@ -19,6 +19,7 @@ from .texture_search import BIC_TIE, Hypothesis, RingData, _coefficients, multip
 MAX_REDUCED_CHI2 = 5.
 MIN_DELTA_BIC = 6.
 MIN_FRACTION_SIGMA = 3.
+MAX_BROAD_ISOTROPIC_CORRELATION = .99
 
 
 @dataclass(frozen=True)
@@ -160,6 +161,12 @@ def _populations(trial, axes, covariance, trials, points):
         split_unresolved = (per_bin is not None and per_bin <= 1.
                             and error is not None and fraction < MIN_FRACTION_SIGMA * error
                             and correlation is not None and correlation < -np.sqrt(.5))
+        # For a single axis the fractions sum to one and are always perfectly
+        # anticorrelated. In a mixture, a broad share can trade with random
+        # material even when the profile modulation beats a nested-model test.
+        broad_trade = (len(trial.indices) == 2 and width >= math.exp(trial.x[2*(1-i)])
+                       and correlation is not None and abs(correlation) > MAX_BROAD_ISOTROPIC_CORRELATION
+                       and error is not None and fraction < MIN_FRACTION_SIGMA * error)
         weak_evidence = delta is not None and delta < MIN_DELTA_BIC
         if weak_evidence and len(trial.indices) == 2:
             # A one-width fit to a two-width mixture keeps the more similar width.
@@ -171,7 +178,7 @@ def _populations(trial, axes, covariance, trials, points):
             elif other is not None and abs(other.bic - reduced.bic) <= BIC_TIE:
                 distances = [abs(trial.x[2*j] - reduced.x[0]) for j in range(2)]
                 weak_evidence = i == int(np.argmax(distances))
-        if weak_evidence or split_unresolved:
+        if weak_evidence or split_unresolved or broad_trade:
             record["reason"] = ("isotropic replacement within 6 BIC units" if weak_evidence
                                 else "fraction trades with the isotropic fraction within 3σ")
             near_random.append(record)
@@ -190,7 +197,8 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
     curves include the model over unmeasured bins and use the original folded
     profile's units. A cancellation callback can raise between candidates.
     """
-    result = {"phase": phase.name, "ok": False, "determined": False, "reasons": [], "rings": [],
+    result = {"phase": phase.name, "ok": False, "determined": False, "parameter_status": "unavailable",
+              "reasons": [], "rings": [],
               "model": GAUSSIAN_MOSAIC, "axes": [], "populations": [], "runner_up_axes": None, "delta_bic": None,
               "width_bounds_deg": list(WIDTH_BOUNDS), "max_reduced_chi2": MAX_REDUCED_CHI2,
               "min_delta_bic": MIN_DELTA_BIC, "excluded_rings": []}
@@ -210,11 +218,13 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
                          "width_interpolation": "cubic spline in log FWHM", "width_knots": len(LOG_WIDTHS),
                          "max_legendre_degree": MAX_DEGREE, "bin_width_deg": 1., "bin_samples": BIN_SAMPLES,
                          "selection": "BIC = chi2 + k ln(N)", "bic_tie_tolerance": BIC_TIE,
+                         "axis_definition": "primitive reciprocal-lattice plane normal",
                          "mosaic_widths": "one per population; repeated axis allowed",
                          "min_distinct_axis_ring_separation_sigma": 1.,
                          "min_population_delta_bic": MIN_DELTA_BIC,
                          "max_near_random_replacement_delta_chi2_per_bin": 1.,
                          "min_separable_fraction_sigma": MIN_FRACTION_SIGMA,
+                         "max_broad_isotropic_fraction_correlation": MAX_BROAD_ISOTROPIC_CORRELATION,
                          "min_isotropic_explained_variance_fraction": .5},
     )
     data = []
@@ -261,6 +271,9 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
     if best.indices and (phi_err is None or any(p["fwhm_err_deg"] is None or p["fraction_err"] is None
                                                 for p in populations)):
         reasons.append("fit parameters are not identifiable")
+    if any(p["fraction_err"] is not None and p["fraction"] < MIN_FRACTION_SIGMA*p["fraction_err"]
+           for p in populations):
+        reasons.append("an oriented fraction is below three standard errors")
     width_at_bound = any(abs(p["fwhm_deg"] - b) < 1e-3 for p in populations for b in WIDTH_BOUNDS)
     if best.indices and (abs(phi-1.) < 1e-5 or width_at_bound):
         reasons.append("the width or isotropic limit is at a bound")
@@ -278,6 +291,7 @@ def fit_crystal_orientation(phase: Phase, rings: Sequence[TextureRing], *, check
     # director with the surface normal, averaged over populations and isotropic material.
     result.update({
         "ok": True, "determined": bool(populations and not reasons), "axes": directions,
+        "parameter_status": "conditional on the preferred candidate" if reasons else "determined",
         "populations": populations, "near_random": near_random,
         "axis_fractions": fractions, "axis_fractions_err": share_errors,
         "family_weights": "free" if best.free else "kinematic",

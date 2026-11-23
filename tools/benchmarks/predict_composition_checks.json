@@ -1,0 +1,671 @@
+{
+  "environment": {
+    "system": "Windows",
+    "python": "3.10.18",
+    "numpy": "1.26.4",
+    "scipy": "1.15.3",
+    "blas_threads": 1
+  },
+  "evidence_arguments": [
+    "--indices",
+    "0,1,4,5,8,13",
+    "--points",
+    "8",
+    "--samples",
+    "16384",
+    "--posterior-samples",
+    "4096"
+  ],
+  "mcmc_arguments": [],
+  "network_sha256": "7514c66e8cf384d9d4bc6ed7bdad1fbbca3d7d8e0c1b83c7c1aa9ea05a36ec7e",
+  "correction": "Independent single-start joint-amplitude integration minus the Laplace approximation, in log evidence.",
+  "mcmc_starts": "two dispersed ensembles, prior box; 4,000 steps per walker",
+  "before": {
+    "commit": "98b2a00af28426808dc15d43b267d0a63fe57ba7",
+    "composition_estimator": "sum of the retained starts before the display cutoff",
+    "ess_scope": "leading start",
+    "evidence_integration": {
+      "comparisons": [
+        {
+          "index": 0,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -1784.0773321197494,
+          "reported_ess": 202.2215079137912,
+          "independent_log_z": -1784.1218545594968,
+          "correction_log_z": -0.09398810938788249,
+          "correction_se": 0.185777462802259,
+          "converged_points": 11
+        },
+        {
+          "index": 0,
+          "role": "no paracrystal",
+          "compared_by": "evidence",
+          "composition_log_z": -8819.264611363678,
+          "reported_ess": 166.95011535248761,
+          "independent_log_z": -8819.11980084464,
+          "correction_log_z": 436.77820407071715,
+          "correction_se": 0.9996277542483758,
+          "converged_points": 11
+        },
+        {
+          "index": 0,
+          "role": "other family",
+          "compared_by": "evidence",
+          "composition_log_z": -1790.5908714631553,
+          "reported_ess": 117.56193999115789,
+          "independent_log_z": -1790.4598107574604,
+          "correction_log_z": 2.524805504057826,
+          "correction_se": 0.44574005095221425,
+          "converged_points": 11
+        },
+        {
+          "index": 0,
+          "role": "two populations",
+          "compared_by": "bic",
+          "composition_log_z": -1796.8445650451326,
+          "reported_ess": 32.814703294062646,
+          "independent_log_z": -1795.6175822329933,
+          "correction_log_z": -0.29726514529551773,
+          "correction_se": 0.16253379229400236,
+          "converged_points": 11
+        },
+        {
+          "index": 1,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -2242.2302965041285,
+          "reported_ess": 204.00259800801098,
+          "independent_log_z": -2242.196026156523,
+          "correction_log_z": 0.15132807284468885,
+          "correction_se": 0.1277979757074064,
+          "converged_points": 11
+        },
+        {
+          "index": 1,
+          "role": "no paracrystal",
+          "compared_by": "bic",
+          "composition_log_z": -7035.079548017571,
+          "reported_ess": 2.941218852239016,
+          "independent_log_z": -7022.251611604619,
+          "correction_log_z": 1199.70692210481,
+          "correction_se": 1.0,
+          "converged_points": 11
+        },
+        {
+          "index": 1,
+          "role": "other family",
+          "compared_by": "bic",
+          "composition_log_z": -2253.8905752870323,
+          "reported_ess": 1.2518081276825839,
+          "independent_log_z": -2256.172328054406,
+          "correction_log_z": 6.051995553066032,
+          "correction_se": 0.23069190059543038,
+          "converged_points": 11
+        },
+        {
+          "index": 1,
+          "role": "two populations",
+          "compared_by": "evidence",
+          "composition_log_z": -2248.9123470665536,
+          "reported_ess": 204.3976761725514,
+          "independent_log_z": -2249.9552472239816,
+          "correction_log_z": 0.08870280733280778,
+          "correction_se": 0.3863097345130257,
+          "converged_points": 11
+        },
+        {
+          "index": 4,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -2083.8202099489126,
+          "reported_ess": 115.89557298552842,
+          "independent_log_z": -2083.6007562661093,
+          "correction_log_z": 1.2093691475883324,
+          "correction_se": 0.3378687171778473,
+          "converged_points": 11
+        },
+        {
+          "index": 4,
+          "role": "no paracrystal",
+          "compared_by": "evidence",
+          "composition_log_z": -5568.132617785049,
+          "reported_ess": 27.97257469265984,
+          "independent_log_z": -5566.748966519796,
+          "correction_log_z": 252.6686116591891,
+          "correction_se": 0.14827677653855603,
+          "converged_points": 10
+        },
+        {
+          "index": 4,
+          "role": "other family",
+          "compared_by": "bic",
+          "composition_log_z": -2755.8075227264458,
+          "reported_ess": 1.0360007526878854,
+          "independent_log_z": -2757.237557553512,
+          "correction_log_z": 167.57188887444067,
+          "correction_se": 0.13568362614970375,
+          "converged_points": 11
+        },
+        {
+          "index": 4,
+          "role": "two populations",
+          "compared_by": "evidence",
+          "composition_log_z": -2090.891572328759,
+          "reported_ess": 54.776877909383956,
+          "independent_log_z": -2092.424843047233,
+          "correction_log_z": 0.3598431565961522,
+          "correction_se": 0.1888846851310152,
+          "converged_points": 11
+        },
+        {
+          "index": 5,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -1780.7330411974137,
+          "reported_ess": 191.87091883548794,
+          "independent_log_z": -1780.8868428953833,
+          "correction_log_z": 0.5293173236814321,
+          "correction_se": 0.18931659856144614,
+          "converged_points": 11
+        },
+        {
+          "index": 5,
+          "role": "no paracrystal",
+          "compared_by": "bic",
+          "composition_log_z": -2989.9683284507387,
+          "reported_ess": 1.6824185647948506,
+          "independent_log_z": -2976.251790507455,
+          "correction_log_z": 290.83139890172504,
+          "correction_se": 0.9725095760188117,
+          "converged_points": 11
+        },
+        {
+          "index": 5,
+          "role": "other family",
+          "compared_by": "bic",
+          "composition_log_z": -1957.784457006901,
+          "reported_ess": 1.2963573644969668,
+          "independent_log_z": -1957.314550770392,
+          "correction_log_z": 109.4355762953362,
+          "correction_se": 0.9999861180954949,
+          "converged_points": 11
+        },
+        {
+          "index": 5,
+          "role": "two populations",
+          "compared_by": "evidence",
+          "composition_log_z": -1784.6944979449067,
+          "reported_ess": 22.736744226752812,
+          "independent_log_z": -1786.2099526999662,
+          "correction_log_z": 0.291329538278168,
+          "correction_se": 0.08906312562073225,
+          "converged_points": 11
+        },
+        {
+          "index": 8,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -1957.7914927852376,
+          "reported_ess": 42.52405919420576,
+          "independent_log_z": -1958.9590647253792,
+          "correction_log_z": 0.3037242515888434,
+          "correction_se": 0.23109789956562427,
+          "converged_points": 11
+        },
+        {
+          "index": 8,
+          "role": "no paracrystal",
+          "compared_by": "evidence",
+          "composition_log_z": -4894.646392501229,
+          "reported_ess": 127.24840922369667,
+          "independent_log_z": -4894.740360418001,
+          "correction_log_z": 187.88389024388516,
+          "correction_se": 0.4382381819120059,
+          "converged_points": 11
+        },
+        {
+          "index": 8,
+          "role": "other family",
+          "compared_by": "bic",
+          "composition_log_z": -2007.0579723719159,
+          "reported_ess": 1.054412971921548,
+          "independent_log_z": -2014.0662730364584,
+          "correction_log_z": 23.733464096979073,
+          "correction_se": 0.34685886450317016,
+          "converged_points": 11
+        },
+        {
+          "index": 8,
+          "role": "two populations",
+          "compared_by": "bic",
+          "composition_log_z": -1967.0992320695111,
+          "reported_ess": 11.116979451928968,
+          "independent_log_z": -1973.6075463334255,
+          "correction_log_z": -0.1817967491588739,
+          "correction_se": 0.10514654691042438,
+          "converged_points": 11
+        },
+        {
+          "index": 13,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -2422.4729071541897,
+          "reported_ess": 170.89776533035018,
+          "independent_log_z": -2422.5071559708267,
+          "correction_log_z": 1.1545198377414647,
+          "correction_se": 0.26261449384074237,
+          "converged_points": 11
+        },
+        {
+          "index": 13,
+          "role": "no paracrystal",
+          "compared_by": "evidence",
+          "composition_log_z": -7521.760147931721,
+          "reported_ess": 14.909764000747932,
+          "independent_log_z": -7472.181197215783,
+          "correction_log_z": 1348.129250029149,
+          "correction_se": 0.2932230478460488,
+          "converged_points": 11
+        },
+        {
+          "index": 13,
+          "role": "other family",
+          "compared_by": "evidence",
+          "composition_log_z": -2423.4906647639186,
+          "reported_ess": 196.9926638643024,
+          "independent_log_z": -2423.658821401063,
+          "correction_log_z": 1.4690997398628993,
+          "correction_se": 0.217434292480711,
+          "converged_points": 11
+        },
+        {
+          "index": 13,
+          "role": "two populations",
+          "compared_by": "evidence",
+          "composition_log_z": -2424.6246250070094,
+          "reported_ess": 13.359398478717234,
+          "independent_log_z": -2426.1693509192423,
+          "correction_log_z": 0.7341104659001392,
+          "correction_se": 0.09551016607032647,
+          "converged_points": 11
+        }
+      ],
+      "reproduced_max_abs": 3.456079866737127e-11,
+      "rankings_changed": 0,
+      "solutions_converged": 23,
+      "truth_correction": {
+        "min": -0.09398810938788249,
+        "max": 1.2093691475883324,
+        "median": 0.4165207876351378
+      }
+    },
+    "mcmc": {
+      "gaussian_4d": {
+        "steps": 4000,
+        "ensembles": 2,
+        "walkers": 16,
+        "max_quantile_error_sigma": 0.06166771691125805,
+        "rhat": [
+          1.0017330091263565,
+          1.0035965056042175,
+          1.0151495405277713,
+          1.005192349685616
+        ],
+        "converged": true
+      },
+      "fit_target": {
+        "steps": 4000,
+        "ensembles": 2,
+        "walkers": 16,
+        "max_quantile_error_sigma": 20219.008596276304,
+        "rhat": [
+          1983.962668324717,
+          6.4850122411940925
+        ],
+        "converged": false
+      },
+      "predict_target": {
+        "importance_ess": 234.29757434345072,
+        "steps": 4000,
+        "walkers": 24,
+        "ensembles": 2,
+        "max_quantile_difference_sigma": 749.0720505314724,
+        "max_quantile_difference_sigma_populations": 749.0720505314724,
+        "rhat": [
+          60.028893597983355,
+          9.44976458378219,
+          1.0261131272229815,
+          1.1715426405240588,
+          2.119988785308586,
+          6.553608159201696
+        ],
+        "converged": false
+      }
+    }
+  },
+  "after": {
+    "commit": "f1628f3e5be0c5f5b819fb476c4bd7e9cb1ab053",
+    "composition_estimator": "pooled deterministic mixture",
+    "ess_scope": "pooled composition",
+    "evidence_integration": {
+      "comparisons": [
+        {
+          "index": 0,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -1784.0807253794571,
+          "reported_ess": 201.48734219317964,
+          "independent_log_z": -1784.1221939000905,
+          "correction_log_z": -0.09397396616178777,
+          "correction_se": 0.185787225891483,
+          "converged_points": 11
+        },
+        {
+          "index": 0,
+          "role": "no paracrystal",
+          "compared_by": "evidence",
+          "composition_log_z": -8819.258827691418,
+          "reported_ess": 183.83168652046726,
+          "independent_log_z": -8819.177675506055,
+          "correction_log_z": 438.46764467050815,
+          "correction_se": 0.9911740051444045,
+          "converged_points": 11
+        },
+        {
+          "index": 0,
+          "role": "other family",
+          "compared_by": "evidence",
+          "composition_log_z": -1790.591024439233,
+          "reported_ess": 117.00184643665831,
+          "independent_log_z": -1790.2245033326114,
+          "correction_log_z": 2.1271448648125495,
+          "correction_se": 0.3863891449575438,
+          "converged_points": 11
+        },
+        {
+          "index": 0,
+          "role": "two populations",
+          "compared_by": "bic",
+          "composition_log_z": -1794.3644112173836,
+          "reported_ess": 1.5710819439932966,
+          "independent_log_z": -1797.9030419302285,
+          "correction_log_z": -0.2532757042099658,
+          "correction_se": 0.08323758410211785,
+          "converged_points": 11
+        },
+        {
+          "index": 1,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -2242.224456337239,
+          "reported_ess": 202.57574330462683,
+          "independent_log_z": -2242.2006805230617,
+          "correction_log_z": 0.05066347829537676,
+          "correction_se": 0.09080006603028715,
+          "converged_points": 11
+        },
+        {
+          "index": 1,
+          "role": "no paracrystal",
+          "compared_by": "bic",
+          "composition_log_z": -7031.055437687227,
+          "reported_ess": 2.895403993508678,
+          "independent_log_z": -7022.256530118141,
+          "correction_log_z": 1198.8983662456317,
+          "correction_se": 0.9999999999998879,
+          "converged_points": 11
+        },
+        {
+          "index": 1,
+          "role": "other family",
+          "compared_by": "bic",
+          "composition_log_z": -2253.558525307595,
+          "reported_ess": 1.1749711055970034,
+          "independent_log_z": -2255.689517064184,
+          "correction_log_z": 5.569769245385688,
+          "correction_se": 0.17551298967661053,
+          "converged_points": 11
+        },
+        {
+          "index": 1,
+          "role": "two populations",
+          "compared_by": "evidence",
+          "composition_log_z": -2249.8863191223204,
+          "reported_ess": 676.476615220844,
+          "independent_log_z": -2250.455542793221,
+          "correction_log_z": -0.12707571708157062,
+          "correction_se": 0.18464922624121322,
+          "converged_points": 10
+        },
+        {
+          "index": 4,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -2083.8467626279576,
+          "reported_ess": 112.65946896062523,
+          "independent_log_z": -2083.5869632064314,
+          "correction_log_z": 1.1092969416632932,
+          "correction_se": 0.34021237074048655,
+          "converged_points": 11
+        },
+        {
+          "index": 4,
+          "role": "no paracrystal",
+          "compared_by": "evidence",
+          "composition_log_z": -5708.0071276323815,
+          "reported_ess": 103.31112466897333,
+          "independent_log_z": -5708.2250202723935,
+          "correction_log_z": 390.9015741021827,
+          "correction_se": 1.0,
+          "converged_points": 10
+        },
+        {
+          "index": 4,
+          "role": "other family",
+          "compared_by": "bic",
+          "composition_log_z": -3634.9554781308857,
+          "reported_ess": 2.1553207889026815,
+          "independent_log_z": -2753.328078229068,
+          "correction_log_z": 164.81139412452507,
+          "correction_se": 0.0054261178821955166,
+          "converged_points": 11
+        },
+        {
+          "index": 4,
+          "role": "two populations",
+          "compared_by": "evidence",
+          "composition_log_z": -2092.0142133321983,
+          "reported_ess": 288.4703877951179,
+          "independent_log_z": -2092.3934121881616,
+          "correction_log_z": 1.1848869815358145,
+          "correction_se": 0.4132322666728547,
+          "converged_points": 11
+        },
+        {
+          "index": 5,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -1780.703311861777,
+          "reported_ess": 162.9453253462345,
+          "independent_log_z": -1780.8954259447603,
+          "correction_log_z": 0.4654884865062865,
+          "correction_se": 0.20950055072714752,
+          "converged_points": 11
+        },
+        {
+          "index": 5,
+          "role": "no paracrystal",
+          "compared_by": "bic",
+          "composition_log_z": -2979.309510239011,
+          "reported_ess": 1.6418207073685434,
+          "independent_log_z": -2988.1805284667794,
+          "correction_log_z": 303.2133761949204,
+          "correction_se": 0.43916929570870816,
+          "converged_points": 11
+        },
+        {
+          "index": 5,
+          "role": "other family",
+          "compared_by": "bic",
+          "composition_log_z": -1960.3775236180675,
+          "reported_ess": 3.1907893687927578,
+          "independent_log_z": -1956.3002560964287,
+          "correction_log_z": 101.06855432537623,
+          "correction_se": 0.5417950809942708,
+          "converged_points": 11
+        },
+        {
+          "index": 5,
+          "role": "two populations",
+          "compared_by": "evidence",
+          "composition_log_z": -1785.3522809500448,
+          "reported_ess": 362.46020103748657,
+          "independent_log_z": -1785.4592504605412,
+          "correction_log_z": 0.8080347909821239,
+          "correction_se": 0.28401270955899627,
+          "converged_points": 11
+        },
+        {
+          "index": 8,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -1958.116908380738,
+          "reported_ess": 100.12877495298521,
+          "independent_log_z": -1958.247760639606,
+          "correction_log_z": 0.3409331595867626,
+          "correction_se": 0.2628729718592966,
+          "converged_points": 11
+        },
+        {
+          "index": 8,
+          "role": "no paracrystal",
+          "compared_by": "bic",
+          "composition_log_z": -4122.72965373059,
+          "reported_ess": 6.2915677749725125,
+          "independent_log_z": -4123.590712833956,
+          "correction_log_z": 92.09995365816788,
+          "correction_se": 0.6436150910771244,
+          "converged_points": 11
+        },
+        {
+          "index": 8,
+          "role": "other family",
+          "compared_by": "evidence",
+          "composition_log_z": -2011.707712166948,
+          "reported_ess": 16.596410272696804,
+          "independent_log_z": -2010.2346661260428,
+          "correction_log_z": 19.144728298262603,
+          "correction_se": 0.09434777503644554,
+          "converged_points": 11
+        },
+        {
+          "index": 8,
+          "role": "two populations",
+          "compared_by": "evidence",
+          "composition_log_z": -1968.1523287420523,
+          "reported_ess": 32.04591412873799,
+          "independent_log_z": -1967.8612707911861,
+          "correction_log_z": -0.23826704675115096,
+          "correction_se": 0.15312370196535074,
+          "converged_points": 11
+        },
+        {
+          "index": 13,
+          "role": "truth",
+          "compared_by": "evidence",
+          "composition_log_z": -2422.46175137207,
+          "reported_ess": 156.37801673057425,
+          "independent_log_z": -2422.5265835146506,
+          "correction_log_z": 2.260484134580866,
+          "correction_se": 0.836640401703856,
+          "converged_points": 11
+        },
+        {
+          "index": 13,
+          "role": "no paracrystal",
+          "compared_by": "evidence",
+          "composition_log_z": -7521.564050711161,
+          "reported_ess": 11.818556255362264,
+          "independent_log_z": -7466.208139299743,
+          "correction_log_z": 1181.7638557664109,
+          "correction_se": 0.010751020846267213,
+          "converged_points": 11
+        },
+        {
+          "index": 13,
+          "role": "other family",
+          "compared_by": "evidence",
+          "composition_log_z": -2423.4910882267145,
+          "reported_ess": 197.06615544255516,
+          "independent_log_z": -2423.6595880124773,
+          "correction_log_z": 1.7472620187190864,
+          "correction_se": 0.41689253201922283,
+          "converged_points": 11
+        },
+        {
+          "index": 13,
+          "role": "two populations",
+          "compared_by": "bic",
+          "composition_log_z": -2425.1826560595346,
+          "reported_ess": 4.61132893754945,
+          "independent_log_z": -2427.237590206832,
+          "correction_log_z": 1.068740525126446,
+          "correction_se": 0.18867379188240618,
+          "converged_points": 11
+        }
+      ],
+      "reproduced_max_abs": 2.1827872842550278e-11,
+      "rankings_changed": 0,
+      "solutions_converged": 22,
+      "truth_correction": {
+        "min": -0.09397396616178777,
+        "max": 2.260484134580866,
+        "median": 0.40321082304652456
+      }
+    },
+    "mcmc": {
+      "gaussian_4d": {
+        "steps": 4000,
+        "ensembles": 2,
+        "walkers": 16,
+        "max_quantile_error_sigma": 0.06166771691125805,
+        "rhat": [
+          1.0017330091263565,
+          1.0035965056042175,
+          1.0151495405277713,
+          1.005192349685616
+        ],
+        "converged": true
+      },
+      "fit_target": {
+        "steps": 4000,
+        "ensembles": 2,
+        "walkers": 16,
+        "max_quantile_error_sigma": 20219.008596276304,
+        "rhat": [
+          1983.962668324717,
+          6.4850122411940925
+        ],
+        "converged": false
+      },
+      "predict_target": {
+        "importance_ess": 234.2975560548261,
+        "steps": 4000,
+        "walkers": 24,
+        "ensembles": 2,
+        "max_quantile_difference_sigma": 749.0720490146833,
+        "max_quantile_difference_sigma_populations": 749.0720490146833,
+        "rhat": [
+          60.028893597983355,
+          9.44976458378219,
+          1.0261131272229815,
+          1.1715426405240588,
+          2.119988785308586,
+          6.553608159201696
+        ],
+        "converged": false
+      }
+    }
+  }
+}

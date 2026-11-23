@@ -88,7 +88,7 @@ def cut_qz_minus(model: fm.FitModel) -> Optional[float]:
     """k_i − k_f of the cut in nm⁻¹. When both angles are available, a known substrate selects four fixed paths
     and an unknown substrate gives spheres a free effective reflection coefficient."""
     geometry = fm.grazing(model)
-    if geometry is None or geometry.qz_born <= 0:
+    if geometry is None or geometry.mode == "born" or geometry.qz_born <= 0:
         return None
     minus = geometry.k_i - geometry.k_f
     return float(minus) if abs(minus) < geometry.qz_born else None

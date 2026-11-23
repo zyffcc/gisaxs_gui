@@ -65,6 +65,10 @@ class GuiWorkbench:
             self._check_frame(path or "")  # "": no frame open any more
         return status
 
+    def automatic_state(self, initial):
+        snapshot = getattr(self._automation, "automatic_state", None)
+        return self._call(snapshot, initial) if snapshot else None
+
     def set_mode(self, mode: str) -> dict:
         # A switch the procedure makes for the person is not saved as their mode in Analyze.
         return self._apply(lambda done: self._automation.set_mode(mode, done, remember=False))
@@ -86,9 +90,9 @@ class GuiWorkbench:
         return self._apply(lambda done: self._automation.set_orientation_min_exit(degrees, done))
 
     def apply_frame_angles(self, roll_policy, roll_deg, reference_deg, reference_source, keep_incidence,
-                           yoneda_critical_deg=None, yoneda_material=None) -> dict:
+                           yoneda_critical_deg=None, yoneda_material=None, assume_fibre_normal=False) -> dict:
         frame, measure, critical_source = self._call(self._automation.prepare_frame_angles, roll_policy, roll_deg,
-                                                     yoneda_critical_deg, yoneda_material)
+                                                     yoneda_critical_deg, yoneda_material, assume_fibre_normal)
         roll, incidence = measure()
         return self._apply(lambda done: self._automation.set_frame_angles(
             frame, roll_policy, roll_deg, roll, incidence, reference_deg, reference_source, critical_source,

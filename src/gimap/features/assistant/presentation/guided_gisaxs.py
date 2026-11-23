@@ -306,7 +306,10 @@ class GisaxsResults(QWidget):
         buttons = FlowLayout()
         save_curve = QPushButton(tr("Save Fitted Curve…"), self)
         save_curve.setObjectName("guidedSaveFitCurve")
-        save_curve.setToolTip(tr("CSV: q (Å⁻¹), I, σ of the fitted curve and the fit the run reports at the same q."))
+        if "fit_sigma" in (self.fit.get("data") or {}):
+            save_curve.setToolTip(tr("CSV columns give q (Å⁻¹), I, marginal σ, fitted I and the σ used for fitting."))
+        else:
+            save_curve.setToolTip(tr("CSV: q (Å⁻¹), I, σ of the fitted curve and the fit the run reports at the same q."))
         save_curve.clicked.connect(self.save_curve)
         save_table = QPushButton(tr("Save Fit Table…"), self)
         save_table.setObjectName("guidedSaveFitTable")

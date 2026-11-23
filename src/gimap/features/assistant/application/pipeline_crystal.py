@@ -27,6 +27,8 @@ def crystal_lines(phases: list[dict], word=str) -> list[str]:
         reasons = ", ".join(phase["reasons"])
         lines += [f"**{phase['phase']}** — {status}" + (f" ({reasons})." if reasons else "."), ""]
         if phase["ok"]:
+            if not phase["determined"]:
+                lines.extend(["The parameters below are conditional on the preferred candidate.", ""])
             near_random = phase.get("near_random", [])
             if near_random:
                 lines.append(f"The two best profile models differ by ΔBIC = {format_number(phase.get('delta_bic'))}.")
@@ -68,6 +70,8 @@ def crystal_lines(phases: list[dict], word=str) -> list[str]:
                       f"joint χ²_red = {format_number(phase.get('reduced_chi2'))}.", ""]
             optics = phase.get("film_optics")
             if optics:
+                if any(r.get("profile_settings", {}).get("pole_angle_coordinate") == "inside film" for r in phase["rings"]):
+                    lines += ["The pole angle χ is measured inside the film.", ""]
                 if optics.get("model") in ("refracted waves", "frame corrected with refracted waves"):
                     context = ("The frame was corrected for" if optics["model"].startswith("frame corrected")
                                else "The orientation model includes")

@@ -4,8 +4,8 @@ solutions from the other fitting methods, and what is exported.
 * ``prepare_curve``: a curve with signed q (a horizontal GISAXS cut) becomes the points that are
   fitted — both halves on |q|, their mean (``shared/signed_cut.mean_of_halves``: where the other half
   has measured points; in a hole of it, and where one half reaches further, the measured half alone),
-  or one half — with σ carried along (σ of a mean: ½·√(σ₊² + σ₋²)); then the fitting range and the
-  points left out. ``prepare_points`` also says what the points are made of.
+  or one half. The file weights include covariance from source bins shared by selected interpolated
+  points. ``prepare_points`` also says what the points are made of.
 * ``model_from_solution``: a solution of Predict parameters (a row of 1D Predict or of Analyze, ``native_v5``)
   as a model, and how closely the model reproduces its curve.
 * ``export_table`` / ``fit_record``: the points, the model and its terms, the residuals; and the
@@ -275,7 +275,10 @@ def prepare_points(curve: Curve, side: str = "mean", q_range: Optional[tuple] = 
         keep = (q >= low) & (q <= high)
     left_out = left_out_points(q, excluded) & keep if len(excluded) else np.zeros(q.shape, dtype=bool)
     keep &= ~left_out
-    data = FitData.prepare(q[keep], intensity[keep], None if sigma is None else sigma[keep],
+    selected_sigma = None if sigma is None else sigma[keep]
+    if halves is not None and weighting == "file":
+        selected_sigma = mean.fit_sigma(keep)
+    data = FitData.prepare(q[keep], intensity[keep], selected_sigma,
                            weighting=weighting, dq=dq[keep] if resolution == "file" else None)
     averaged = 0
     if halves is not None:
@@ -320,8 +323,10 @@ def cut_model_solution(row: Mapping) -> FitModel:
     for item in row.get("components") or ():
         p = item["params"]
         family = CUT_MODEL_FAMILIES[str(item["type"])]
-        component = new_component(family, radius=float(p["R"]), distance=float(p["D"]),
-                                  structure=bool(item.get("structure_factor", True)), law=row.get("law", "number_gauss"))
+        distance = p.get("D")
+        component = new_component(family, radius=float(p["R"]), distance=None if distance is None else float(distance),
+                                  structure=bool(item.get("structure_factor", distance is not None)),
+                                  law=row.get("law", "number_gauss"))
         params = dict(component.params)
         for key in ("sigma_R", "h", "sigma_h", "sigma_nn"):
             if key in params and p.get(key) is not None:
@@ -349,7 +354,7 @@ def model_from_solution(row: Mapping, base: Optional[FitModel] = None) -> tuple[
     if row.get("physics_backend") == "cut_model":
         proposed = cut_model_solution(row)
         model = constrain_proposal(proposed, base) if base is not None else proposed
-        if proposed.substrate is not None:
+        if proposed.substrate is not None or proposed.predict_level is not None:
             model = replace(model, globals={**model.globals, **{key: proposed.globals[key] for key in GRAZING}})
         return model, solution_deviation(model, row)
     converted = native_solution_mapping(row)

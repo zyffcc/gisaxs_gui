@@ -236,14 +236,15 @@ def resolution_kernel(dq, inst: Instrument):
     return x, k / (k.sum() * dq)
 
 
-def measured_curve(q_out, case: Case, rng=None, oversample=8):
+def measured_curve(q_out, case: Case, rng=None, oversample=8, *, legacy_beam_tail=False):
     """Measured horizontal cut at the positive q_out (nm^-1): truth -> resolution -> background -> counts.
 
-    Returns dict(q, I, sigma, I_true, parts) with I in counts (or the noiseless model when peak_counts <= 0)."""
+    Returns dict(q, I, sigma, I_true, parts) with I in counts (or the noiseless model when peak_counts <= 0).
+    legacy_beam_tail replays the archived curves that multiplied the broadened beam by the grid spacing."""
     inst = case.instrument
     q_out = np.asarray(q_out, float)
     dq = (q_out[1] - q_out[0]) / oversample
-    _, kern = resolution_kernel(dq, inst)
+    offsets, kern = resolution_kernel(dq, inst)
     half = len(kern) // 2
     q_hi = q_out.max() + (half + 2) * dq
     grid = np.arange(-q_hi, q_hi + dq / 2, dq)                    # symmetric grid including q = 0
@@ -252,12 +253,10 @@ def measured_curve(q_out, case: Case, rng=None, oversample=8):
     rough = inst.rough * ref * (1 + (grid * inst.xi) ** 2) ** (-(1 + inst.hurst))
     smeared_p = np.convolve(particles, kern, mode='same') * dq
     smeared_r = np.convolve(rough, kern, mode='same') * dq
-    # a sharp term at q = 0 smeared by the resolution is the resolution function itself
-    x_full = grid
-    _, kern_at = resolution_kernel(dq, inst)
-    central = inst.central * ref * np.interp(x_full, np.arange(-half, half + 1) * dq, kern_at, left=0, right=0) * dq
-    if inst.central > 0 and len(kern) == 1:
-        central = np.zeros_like(grid)
+    # Convolution of an integrated delta peak A with a unit-area density K is A K(q).
+    central = inst.central * ref * np.interp(grid, offsets, kern, left=0, right=0)
+    if legacy_beam_tail:
+        central *= dq
     total = smeared_p + smeared_r + central
     bg = inst.background * float(particles.max())
     pick = lambda arr: np.interp(q_out, grid, arr)

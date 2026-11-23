@@ -5,7 +5,12 @@ from __future__ import annotations
 
 import numpy as np
 
-import yoneda_truth as yt
+if __package__:
+    from .case_streams import case_streams
+    from . import yoneda_truth as yt
+else:
+    from case_streams import case_streams
+    import yoneda_truth as yt
 
 GEOM = yt.Geometry(wavelength_nm=0.1045, alpha_i_deg=0.40)       # P03, Yoneda row of Si
 Q = np.linspace(0.02, 2.0, 397)                                  # nm^-1
@@ -40,12 +45,18 @@ def exit_reflection() -> complex:
     return complex(geometry.fresnel(geometry.alpha_f))
 
 
-def draw(index, seed0=20261116):
+def draw(index, seed0=None, *, set_name="fit1d"):
     """One held-out case: composition, populations, counts and the level of physics."""
-    rng = np.random.default_rng(seed0 + index)
+    if set_name in ("extended", "legacy-extended"):
+        raise ValueError(f"Use heldout_cases.draw for {set_name!r}")
+    rng, noise_seed, metadata = case_streams(set_name, seed0, index)
     names = list(COMPOSITIONS)
     comp = names[index % len(names)]
     level = "model" if (index // len(names)) % 2 == 0 else "measured"
+    if set_name == "fresh":
+        # Every four consecutive compositions include two cuts of each level.
+        # On the next cycle each composition switches level.
+        level = "model" if (index // len(names) + index % len(names)) % 2 == 0 else "measured"
     shapes = COMPOSITIONS[comp]
     pops = []
     for k, shape in enumerate(shapes):
@@ -60,20 +71,22 @@ def draw(index, seed0=20261116):
                          share=1.0 if k == 0 else float(rng.uniform(0.3, 1.0))))
     peak = float(10 ** rng.uniform(3, 5))
     return dict(index=index, composition=comp, level=level, populations=pops, peak_counts=peak,
-                background=float(10 ** rng.uniform(-3, -1.5)), seed=seed0 + index)
+                background=float(10 ** rng.uniform(-3, -1.5)), seed=noise_seed, **metadata)
 
 
 def curve(case):
     """The measured curve of a case: populations summed without noise, then background and Poisson counts."""
+    coupling = case.get("coupling", "lma")
     inst = yt.Instrument(peak_counts=0.0)
     if case["level"] == "measured":
         inst = yt.replace(inst, sigma_g=0.005, central=30.0, eta=0.03, gamma=0.004, rough=1.0, xi=50.0, hurst=0.5)
     total, peak_of_particles = np.zeros_like(Q), None
     for k, p in enumerate(case["populations"]):
-        film = yt.Film(R=p["R"], sR=p["sR"], D=p["D"], s_nn=p["s_nn"], coupling="lma", scattering=TRUTH["scattering"],
+        film = yt.Film(R=p["R"], sR=p["sR"], D=p["D"], s_nn=p["s_nn"], coupling=coupling, scattering=TRUTH["scattering"],
                        cyl_h=2.0 * p["R"] if p["shape"] == "vc" else 0.0)
         own = yt.measured_curve(Q, yt.Case(truth_geometry(), film,
-                                           inst if k == 0 else yt.replace(inst, central=0.0, rough=0.0)))
+                                           inst if k == 0 else yt.replace(inst, central=0.0, rough=0.0)),
+                                legacy_beam_tail="set_name" not in case)
         particles = own["parts"]["particles"]
         if peak_of_particles is None:
             peak_of_particles = float(particles.max())
