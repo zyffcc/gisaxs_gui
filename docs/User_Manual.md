@@ -2726,14 +2726,20 @@ refines below χ²ᵣ 2, the ranges are searched for the two best compositions; 
 the solutions within a BIC of 20 of the best (at most four), which gives their probabilities and intervals.
 
 The network searches the whole range of each value it proposes. The solution retains the geometry and any
-upright-cylinder height distributions supplied for level 4. **Refine** afterwards keeps the values you fix.
+upright-cylinder height distributions supplied for level 4. Batch solutions also store the fitted model,
+including its resolution and parameter bounds, so opening one in Fitting reproduces its curve.
+A fixed value or a narrower range in the receiving Model can change the transferred curve.
+**Refine** afterwards keeps the values you fix.
 
 **Reading the result**
 
 - The solutions go to **Results ▸ Other solutions**, with the highest weight first. Each shows χ²ᵣ and its probability **p** or **BIC weight**. The
   highest-ranked solution is in Model, and **Method** turns to **Refine the values in Model**. Predict groups
-  solutions by particle family and paracrystal status in order of increasing radius. A composition's weight sums
-  the weights of all its retained solutions before the list is filtered for display. The probabilities compare the
+  solutions by particle family and paracrystal status in order of increasing radius. Predict pools the samples
+  from all starts of each composition and estimates its evidence once. Each solution receives the share of the
+  composition weight carried by its proposal's samples, including solutions below the display cutoff.
+  If sampling fails, the lowest BIC from the fits with the model-error floor sets each composition's weight.
+  Relative BIC within that composition divides the weight among its solutions. The probabilities compare the
   compositions tried and the distinct solutions of each: a solution with p 0.6 next to one with 0.4 means that the
   curve does not decide between them. With two or three populations this is common: another R of one population at
   the same D, or the paracrystals of two populations exchanged, can describe the curve as well; Predict tries these
@@ -2760,7 +2766,9 @@ upright-cylinder height distributions supplied for level 4. **Refine** afterward
   (effective interface) and level 2 (Born at q_z) flag sphere and random-cylinder radii above q_z·R = 1.2
   (`qzR_cov`). In the simulated DWBA sphere benchmark, nominal 68 % coverage was only 18–33 % at 1.2–1.7.
   Level 2 adds `qzR_fail` above 2. Use both angles for level 3 or fit the four-term DWBA with a known substrate.
-  Level 4 evaluates the reflected paths directly and omits the Born-approximation flags.
+  At level 3, spheres have a fitted reflection coefficient with |r| ≤ 1. At level 4, sphere amplitudes
+  include all four paths. Random cylinders use the orientation average at the finite Born transfer q₊ in
+  both sampling and refinement at levels 2 and 4. At levels 1 and 3 their vertical transfer is zero.
   Level 3 flags interval coverage above 1.7. The level-1 `qzR` radius-bias flag also starts above 1.7.
   At levels 2–4, an upright cylinder with fitted q₊R > 2 may stand for a sphere of similar radius (`cyl_sphere`).
   This shape ambiguity also occurred in the level-4 benchmark with a known Si substrate.
@@ -4071,11 +4079,11 @@ python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.t
 ```
 
 Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
-At q_z = 0.5226 nm⁻¹ the 5.94 nm upright cylinder has q_z·R = 3.10. *Needs attention* identifies it as
+At q_z = 0.5226 nm⁻¹ the 5.98 nm upright cylinder has q_z·R = 3.13. *Needs attention* identifies it as
 a possible sphere (`cyl_sphere:R_2`). The BornAgain reference uses spheres of radius 5.75 nm.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
 gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
-the candidate solutions and their weights. On the archive platform this run used BIC weights of 0.6540 and 0.3443 for two solutions of the same composition. In `fit_curve.csv`, `sigma` gives the pointwise standard error and `fit_sigma` includes the correlation between points that share interpolated measurements. Exit code 2 means that an item needs attention in the report.
+the candidate solutions and their weights. On the archive platform the leading composition had evidence probability 0.9995, divided between two solutions with weights 0.5126 and 0.4869. In `fit_curve.csv`, `sigma` gives the pointwise standard error and `fit_sigma` includes the correlation between points that share interpolated measurements. Exit code 2 means that an item needs attention in the report.
 The same folder contains `qmap.png` and `report.json`. The run summaries are
 `fig4/summary.md` and `fig4/summary.json`.
 

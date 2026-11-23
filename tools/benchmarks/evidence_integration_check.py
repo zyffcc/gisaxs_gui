@@ -7,8 +7,8 @@ Predict's likelihood of a cut (``infer.Likelihood``) at shape values θ is that 
 X the M columns (each population's term, the beam tail, the constant), B the 8 cubic B-splines of the model error.
 The B-splines sum to 1, so a constant in B c is the same as a common factor of all the scales a. Predict solves a* by
 non-negative least squares, integrates c exactly at a* (Woodbury), and then integrates a by Laplace at a* with the
-Hessian XᵀS⁻²X of χ²/2 alone (a half Gaussian for a scale at 0); the evidence of a solution is the importance-sampled
-integral of that likelihood over θ (``laplace.local_posterior``).
+Hessian XᵀS⁻²X of χ²/2 alone (a half Gaussian for a scale at 0). Predict pools the proposals of every retained
+start to estimate the integral of that likelihood over θ once per composition (``laplace.pool_composition``).
 
 Here the same model is integrated over a and c together. For any a the c integral is Gaussian and exact,
 
@@ -30,7 +30,7 @@ both halves, 'model' and 'measured'), the cut's q_z given (Predict's default 'bo
 (refine.predict, default settings, its σ with the 5 % model-error floor in the posterior) runs with each of four
 compositions: the truth (its family with a paracrystal), the same family without a paracrystal, the other family
 with a paracrystal (three columns each), and two populations of the true family with paracrystals (four columns).
-Around the most probable solution of each, the local posterior is sampled again as Predict does
+For an independent check, the full composition target is sampled again from the most probable solution alone
 (``local_posterior``, Predict's sample count and rounds, the model error starting at 0.02), and Δ = log L_joint −
 log L_Predict is computed at:
   refined      the solution's values, τ at the posterior median of τ
@@ -38,7 +38,8 @@ log L_Predict is computed at:
   posterior k  POINTS draws of the local posterior (systematic resampling of its weights; POSTERIOR_SAMPLES
                draws per joint integral, SAMPLES at the three points above)
 Because Z_joint = Z_Predict · E_post[exp Δ] (the posterior of Predict's likelihood), the posterior draws give the
-correction of each solution's evidence, log mean exp Δ, and so the change of every log Bayes factor against the truth.
+estimated correction in log evidence, log mean exp Δ, and the change in each log Bayes factor against the truth.
+The correction uses these independent single-start draws. predict_log_evidence records Predict's pooled estimate.
 Each Δ is split into the gain of moving a from a* to â (f(â) − f(a*)), the volume (½ log det XᵀS⁻²X − ½ log det
 −∇²f, over the scales above 0) and the rest (the joint integral against the Laplace of f at â).
 
@@ -452,7 +453,9 @@ def run_cut(network, index: int, points: int, samples: int, posterior_samples: i
         entry = dict(role=role, index=composition, name=E.composition_name(composition))
         solutions = refine.predict(network, fr.Q, intensity, sigma, qz=qz, compositions=[composition], seed=index)
         best = solutions[0]
-        entry.update(predict_log_evidence=float(best.log_evidence), predict_ess=float(best.ess),
+        diagnostics = best.extras["diagnostics"]
+        entry.update(predict_log_evidence=diagnostics.get("composition_log_evidence"),
+                     predict_ess=diagnostics.get("composition_ess"),
                      chi2_reduced=float(best.chi2_reduced), flags=list(best.flags),
                      compared_by=best.extras.get("compared_by"), solutions=len(solutions))
         centre = refine.model_values(best.model, composition)

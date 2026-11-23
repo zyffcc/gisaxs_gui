@@ -59,6 +59,8 @@ def model_to_dict(model: FitModel) -> dict:
         out["constraints"] = [inequality.to_dict() for inequality in model.inequalities]
     if model.substrate is not None:
         out["substrate"] = model.substrate.to_dict()
+    if model.predict_level is not None:
+        out["predict_level"] = model.predict_level
     if model.cut is not None:
         out["vertical_cut"] = vars(model.cut).copy()
     return out
@@ -124,6 +126,7 @@ def model_from_dict(data: Mapping) -> FitModel:
     model = FitModel(tuple(components), globals_, contact=bool(data.get("contact", True)), inequalities=constraints,
                      substrate=Substrate.from_dict(data.get("substrate")),
                      cut=VerticalCut(**data["vertical_cut"]) if data.get("vertical_cut") else None,
-                     resolution_mode=data.get("resolution_mode", "constant"), weighting=data.get("weighting", "file"))
+                     resolution_mode=data.get("resolution_mode", "constant"), weighting=data.get("weighting", "file"),
+                     predict_level=data.get("predict_level"))
     return fit_links.apply_links(fit_links.with_inequalities(model, constraints)) if constraints or any(
         p.tie for _path, p in model.parameters()) else model

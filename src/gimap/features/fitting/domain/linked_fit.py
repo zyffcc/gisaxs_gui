@@ -87,12 +87,19 @@ def current_values(problem, values) -> dict:
 def bound(problem, values, t=None) -> np.ndarray:
     """Each inequality in turn on ``values`` (in place): from ``t`` (decode) or into unit values (encode)."""
     current, units = current_values(problem, values), None if t is not None else np.zeros(len(values))
+    intervals = {}
     for index, relation, expression in problem.bounded:
         try:
             edge = expression(current)
         except ValueError:
             edge = math.nan
         low, high = limits(problem, index, relation, edge)
+        if problem.model.predict_level is not None:
+            # Predict has both a lower and an upper bound on D/R and h/R.
+            # Intersect them before converting this coordinate in either direction.
+            old_low, old_high = intervals.get(index, (low, high))
+            low, high = max(low, old_low), min(high, old_high)
+            intervals[index] = low, high
         log = bool(problem.logarithmic[index])
         if t is not None:
             values[index] = problem._to_value(t[index], low, high, log)

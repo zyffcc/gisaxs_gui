@@ -40,7 +40,7 @@ import numpy as np
 
 from .candidates import CandidateComponentParameters, CandidateParameterMapping
 from .cut_model import Geometry, size_averages
-from .cut_model import conventions, sizes
+from .cut_model import conventions, resolution, sizes
 from .cut_model import manual_sizes
 from .cut_model.geometry import from_angles
 from .cut_model.model import tail
@@ -203,6 +203,8 @@ class FitModel:
     """A vertical cut (fits of several curves): the curve is I(q_z) at the cut's in-plane q."""
     resolution_mode: str = "constant"
     weighting: str = "file"
+    predict_level: Optional[int] = None
+    """Forward model of a Predict solution, including its resolution quadrature and the level-2 Born transfer."""
 
     def __post_init__(self):
         if self.resolution_mode not in ("constant", "file"):
@@ -294,6 +296,8 @@ def grazing(model: FitModel):
     g = {key: float(model.globals[key].value) for key in GRAZING}
     if model.substrate is not None and g["alpha_i"] > 0 and g["alpha_f"] > 0:
         return model.substrate.geometry(g["wavelength"], g["alpha_i"], g["alpha_f"])
+    if model.predict_level == 2 and g["refl_amp"] == 0 and (g["alpha_i"] or g["alpha_f"]):
+        return Geometry("born", g["wavelength"], g["alpha_i"], g["alpha_f"])
     geometry = from_angles(g["alpha_i"], g["alpha_f"], g["wavelength"], g["refl_amp"], g["refl_phase"])
     return None if geometry.mode == "eia" else geometry
 
@@ -389,6 +393,11 @@ def particle_forms(model, q, dq, cache=None, *, scale_columns=False):
     geometry = grazing(model)
     sigma = model.globals["q_resolution"].value
     if model.resolution_mode == "constant" and sigma > 0 and q.size and model.cut is None:
+        if model.predict_level is not None:
+            if sigma > resolution.predict_sharp_limit(q):
+                return fit_resolution.constant_forms(model, q, sigma, cache, geometry, component_form,
+                                                     grid=resolution.predict_grid(q, sigma))
+            return [component_form(c, q, cache, geometry) for c in model.components]
         legacy = scale_columns and model.weighting == "file" and all(c.law not in manual_sizes.LAWS for c in model.components)
         if not legacy:
             return fit_resolution.constant_forms(model, q, sigma, cache, geometry, component_form)

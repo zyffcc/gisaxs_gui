@@ -16,12 +16,13 @@ MISSING_DQ = "Resolution from the file needs a dQ or sigma_q column, or NXcanSAS
 INVALID_DQ = "Every fitted point needs a finite, non-negative dQ for resolution from the file."
 
 
-def constant_forms(model, q, sigma, cache, geometry, component_form):
+def constant_forms(model, q, sigma, cache, geometry, component_form, *, grid=None):
     """The constant-resolution table used for both saved models and Predict."""
     if not model.components:
         return []
-    grid = table_grid(q, sigma)
-    fine = None if cache is None else cache.setdefault(("smearing grid", grid.size, float(grid[0]), float(grid[-1])), {})
+    if grid is None:
+        grid = table_grid(q, sigma)
+    fine = None if cache is None else cache.setdefault(("smearing grid", grid.tobytes()), {})
     forms = [component_form(component, grid, fine, geometry) for component in model.components]
     return list(tabulated(q, grid, np.array(forms), sigma))
 

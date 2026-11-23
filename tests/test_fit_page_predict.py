@@ -99,7 +99,7 @@ def test_the_batch_window_runs_predict(tmp_path, monkeypatch):
     """1D Predict's batch job with Predict parameters: rows in the window's layout, its files, a model of Fitting."""
     import json
 
-    from src.gimap.features.fitting.application.single_fit import model_from_solution
+    from src.gimap.features.fitting.application.single_fit import model_from_solution, model_to_dict
     from src.gimap.features.fitting.application.workflow_v5 import default_options, validate_options
     from src.gimap.features.fitting.infrastructure.adapters.workflow_v5 import run_workflow_job
 
@@ -120,6 +120,16 @@ def test_the_batch_window_runs_predict(tmp_path, monkeypatch):
     side = next((tmp_path / "out").glob("0001_*")) / "positive"
     stored = json.loads((side / "solutions.json").read_text(encoding="utf-8"))
     assert stored["method"] == "posterior" and stored["network"]["sha256"]
+    loaded, difference = model_from_solution(stored["solutions"][0], FitModel((new_component("sphere"),)))
+    assert model_to_dict(loaded) == best["model"] and difference < 1e-6
+    assert loaded.predict_level == 1 and loaded.inequalities
+    base = FitModel((new_component("sphere"),)).with_parameter((0, "R"), value=5.3, free=False)
+    base = base.with_parameter(("globals", "res_width"), lower=0.03, upper=0.04)
+    constrained, _ = model_from_solution(best, base)
+    assert constrained.get((0, "R")).value == 5.3 and not constrained.get((0, "R")).free
+    tail = constrained.globals["res_width"]
+    assert (tail.lower, tail.upper) == (0.03, 0.04) and tail.lower <= tail.value <= tail.upper
+    assert constrained.globals["q_resolution"] == loaded.globals["q_resolution"]
     assert (side / "display.npz").is_file() and (side / "fitting_curves.csv").is_file()
 
 

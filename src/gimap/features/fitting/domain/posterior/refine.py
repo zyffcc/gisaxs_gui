@@ -14,9 +14,9 @@ central interval, which is then extended to it. Flags:
 * ``unconstrained:NAME`` the 68 % interval covers more than ``UNCONSTRAINED`` of the prior's range (the curve says
   little about it);
 * ``correlated:A~B``    the refined values are correlated beyond ±0.95;
-* ``bic``               the sampling of a solution did not converge (fewer than ``ESS_FAILED`` effective samples):
-  the solutions and compositions are compared by BIC (χ² + k ln N, σ with the model error), not by their
-  evidence, and the intervals are the least-squares errors (σ with the model error; scaled by χ²/N when above 1);
+* ``bic``               a composition had fewer than ``ESS_FAILED`` effective pooled samples or a missing sampler.
+  Each composition is compared by its minimum BIC (χ² + k ln N at the fit with the model error in σ).
+  The intervals use least-squares errors (σ with the model error, scaled by χ²/N when above 1);
 * ``model_error``       the values are those of a least-squares fit with the model error in σ: the fit with the
   counts' σ alone lay outside the posterior's 95 % interval (``_within_posterior``);
 * ``low_ess``           fewer than ``ESS_MIN`` effective samples: the intervals are taken with tempered weights
@@ -172,21 +172,25 @@ def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra,
     the value's range), for solutions compared by BIC, whose posterior sampling did not converge. Every interval is
     extended to the refined value when that lies beside it (the module's docstring)."""
     mode, model, refined, local = entry
+    if any(component.family == "cylinder" for component in model.components):
+        if data.level in (3, 4):
+            extra["diagnostics"]["random_cylinder_transfer"] = "born" if data.level == 4 else "interface"
     # ``lsq``: (errors, χ²/N) with the σ the posterior uses (the model error added); least squares scales its errors
     # by χ²/N, and below 1 they keep their size.
     lsq_errors, lsq_chi2 = lsq if lsq is not None else ((refined.errors, refined.chi2_reduced) if refined else ({}, 1))
     widen = 1.0 / math.sqrt(min(1.0, lsq_chi2)) if lsq_chi2 > 0 else 1.0
-    quantiles = (local.quantiles([0.5, 0.16, 0.84, 0.025, 0.975], ESS_MIN) if local is not None
+    has_samples = local is not None and local.ess > 0
+    quantiles = (local.quantiles([0.5, 0.16, 0.84, 0.025, 0.975], ESS_MIN) if has_samples
                  else np.stack([mode.median, mode.low68, mode.high68, mode.low95, mode.high95]))
     extra["posterior_summary"] = {
         name: dict(zip(("median", "low68", "high68", "low95", "high95"), map(float, quantiles[:, dim])))
         for dim, name in _names(result.index)
-    } if local is not None else {}
-    if local is not None and data.reflected and any(c.family == "sphere" for c in model.components):
+    } if has_samples else {}
+    if has_samples and data.reflected and any(c.family == "sphere" for c in model.components):
         extra["posterior_summary"].update(reporting.reflection_quantiles(local, model.globals["refl_phase"].value, ESS_MIN))
-    extra["importance_starts"] = reporting.check_starts(local, ESS_MIN)
+    extra["importance_starts"] = reporting.check_starts(local, ESS_MIN) if has_samples else []
     extra["diagnostics"]["posterior_kind"] = (
-        None if local is None else "tempered" if local.ess < ESS_MIN else "evidence")
+        None if not has_samples else "tempered" if local.ess < ESS_MIN else "evidence")
     extra["diagnostics"]["interval_kind"] = "bic" if from_errors else extra["diagnostics"]["posterior_kind"]
     values, flags = {}, []
     for dim, name in _names(result.index):
@@ -244,19 +248,23 @@ def _within_posterior(composition: int, refined, again, local, data: Cut, weighe
     On a curve the model describes within σ they agree, and ``refined`` is the solution. Where a value of
     ``refined`` lies outside the posterior's central 95 % interval, the counts' optimum is set by the points the
     model describes worst, or is a local one beside the posterior's mass: the candidate with the fewest values
-    outside is the solution (flag ``model_error`` when it is not ``refined``)."""
+    outside is the solution (flag ``model_error`` when it is not ``refined``). Return the best floor-weighted fit
+    separately for BIC, regardless of which fit supplies the displayed values."""
     limits = local.quantiles([0.025, 0.975], ESS_MIN)
     best, fewest = refined, _outside(composition, refined.model, limits)
     if not fewest:
-        return refined
+        return refined, again
     start = fit_model(local.quantiles([0.5], ESS_MIN)[0], composition, data, law, coupling, grazing)
+    best_floor = again
     for candidate in (again, fit_engine.fit(start, weighed, method="local")):
         if model_values(candidate.model, composition) is None:
             continue
+        if candidate.chi2_reduced < best_floor.chi2_reduced:
+            best_floor = candidate
         outside = _outside(composition, candidate.model, limits)
         if outside < fewest:
             best, fewest = replace(candidate, message=MODEL_ERROR_NOTE), outside
-    return best
+    return best, best_floor
 
 
 MODEL_ERROR_NOTE = "model_error"

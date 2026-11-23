@@ -45,6 +45,7 @@ from .zh_orientation_verdict import ORIENTATION_VERDICT_ZH
 from .zh_pole_reference import POLE_REFERENCE_ZH
 from .zh_posterior_mcmc import POSTERIOR_MCMC_ZH
 from .zh_predict_report import PREDICT_REPORT_ZH
+from .zh_predict_levels import PREDICT_LEVELS_ZH
 from .zh_predict_sampling import PREDICT_SAMPLING_ZH
 from .zh_predict_substrate import PREDICT_SUBSTRATE_ZH
 from .zh_reduction_errors import REDUCTION_ERRORS_ZH
@@ -74,6 +75,7 @@ FEATURES_ZH = {
     **PHASE_GEOMETRY_ZH,
     **CELL_SENSITIVITY_ZH,
     **PREDICT_SUBSTRATE_ZH,
+    **PREDICT_LEVELS_ZH,
     **ANALYZE_NUMBERS_ZH, **FITTING_NUMBERS_ZH, **REPORT_NUMBERS_ZH,
     **CELL_REFINEMENT_ZH, **CELL_ORIENTATION_ZH, **CELL_SERIES_ZH,
     **SAMPLE_ROLL_ZH,

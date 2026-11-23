@@ -191,9 +191,33 @@ def test_several_compositions_at_once():
     network = Network.load(DATA / "flow_fixture.npz")
     q, counts, sigma = _curve(seed=5)
     solutions = refine.predict(network, q, counts, sigma, allowed=E.select(("sphere", "vertical_cylinder"), 1),
-                               shortlist=3, samples=100, local_samples=100)
-    assert solutions and abs(sum(s.probability for s in solutions) - 1.0) < 0.05
-    assert len({s.composition for s in solutions}) >= 1
+                               shortlist=3, samples=100, local_samples=100, min_probability=0.)
+    assert solutions and sum(s.probability for s in solutions) == pytest.approx(1.0)
+    for c in {s.composition for s in solutions}:
+        group = [s for s in solutions if s.composition == c]
+        assert sum(s.extras["mode_weight"] for s in group) == pytest.approx(1.0)
+        mass = sum(s.probability for s in group)
+        for s in group:
+            key = "composition_bic_weight" if "bic" in s.flags else "composition_probability"
+            assert s.extras["diagnostics"][key] == pytest.approx(mass)
+            assert s.probability == pytest.approx(mass * s.extras["mode_weight"])
+            if "bic" not in s.flags:
+                assert s.extras["composition_log_evidence"] == pytest.approx(np.logaddexp.reduce(
+                    [mode.log_evidence for mode in group]))
+
+
+def test_bic_uses_one_best_fit_per_composition_and_partitions_its_weight():
+    from src.gimap.features.fitting.domain.posterior.prediction import _comparison
+
+    # Repeating the first optimum changes the division of its composition's weight only.
+    for group, bics in [([0, 0, 1], [100., 104., 102.]), ([0, 0, 0, 1], [100., 100., 104., 102.])]:
+        groups = {c: [i for i, value in enumerate(group) if value == c] for c in (0, 1)}
+        weights, shares, best = _comparison(groups, {}, np.asarray(bics), True)
+        assert best == {0: 100., 1: 102.}
+        assert weights[0] == pytest.approx(1 / (1 + np.exp(-1)))
+        assert shares[groups[0]].sum() == pytest.approx(1.)
+        assert shares[groups[0][-1]] / shares[0] == pytest.approx(np.exp(-2))
+        assert shares[groups[1]] == pytest.approx([1.])
 
 
 def test_few_effective_samples_widen_the_intervals():
@@ -206,7 +230,7 @@ def test_few_effective_samples_widen_the_intervals():
     samples[:, 0] = rng.normal(5.0, 0.5, 400)
     log_w = rng.normal(0.0, 0.1, 400)
     log_w[0] = 40.0  # one sample carries all the weight
-    local = Local(composition, samples, log_w, np.zeros((400, 1)), np.zeros(400), 0.0, 1.0, samples[0])
+    local = Local(composition, samples, log_w, np.zeros((400, 1)), np.zeros(400), 0.0, 1.0, samples[0], trace=None)
     assert 1.0 / np.sum(local.weights**2) < 1.5
     narrow = local.quantiles([0.16, 0.84])[:, 0]
     wide = local.quantiles([0.16, 0.84], 50)[:, 0]
@@ -341,13 +365,34 @@ def test_later_rounds_follow_a_posterior_the_first_proposal_misses():
 def test_an_interval_holds_the_refined_value_and_stays_in_its_range(monkeypatch, by_bic):
     """The posterior's intervals and (compared by BIC) those of the least-squares errors: each holds the refined
     value, and none leaves the value's range (a spread is never negative)."""
+    floor_bics = []
     if by_bic:
+        from src.gimap.features.fitting.domain import fit_engine
+
         monkeypatch.setattr(refine, "ESS_FAILED", 1e9)
+        fit = fit_engine.fit
+
+        def record_fit(start, data, **options):
+            result = fit(start, data, **options)
+            if np.array_equal(data.sigma, np.hypot(sigma, .05 * np.abs(counts))):
+                residual = fit_engine.residuals(result.model, data)
+                floor_bics.append(residual @ residual + result.free * np.log(result.points))
+            return result
+
+        monkeypatch.setattr(fit_engine, "fit", record_fit)
     network = Network.load(DATA / "flow_fixture.npz")
     q, counts, sigma = _wide_curve(seed=2)
     solutions = refine.predict(network, q, counts, sigma, compositions=[SPHERE], samples=300, local_samples=200,
                                seed=1)
     assert solutions and ("bic" in solutions[0].flags) == by_bic
+    if by_bic:
+        diag = solutions[0].extras["diagnostics"]
+        assert floor_bics and diag["composition_bic"] == pytest.approx(min(floor_bics))
+        # The displayed optimum still uses counting errors. Its score differs from the floor-weighted minimum.
+        floor_data = fit_engine.FitData.prepare(q, counts, np.hypot(sigma, .05 * np.abs(counts)))
+        residual = fit_engine.residuals(solutions[0].model, floor_data)
+        k = sum(p.free and not p.tie for _path, p in solutions[0].model.parameters())
+        assert residual @ residual + k * np.log(len(q)) > diag["mode_bic"] + 1e-6
     for solution in solutions:
         for name, value in solution.values.items():
             assert value.low95 <= value.low68 <= value.best <= value.high68 <= value.high95, name

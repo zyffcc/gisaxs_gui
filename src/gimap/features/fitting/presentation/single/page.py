@@ -397,7 +397,12 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self._refresh_steps()  # also when the model was already this one
         self.render_results()
         self.show_step("model")
-        self._status(lambda: self._deviation_text(model_label(model), deviation), "ok" if deviation <= 0.01 else "warning")
+        if model.predict_level is not None and np.isfinite(deviation) and deviation > 1e-6:
+            self._status(lambda: trf("This model differs from the solution by up to {percent} %.",
+                                     percent=f"{100 * deviation:.3g}"), "warning")
+        else:
+            self._status(lambda: self._deviation_text(model_label(model), deviation),
+                         "ok" if deviation <= 0.01 else "warning")
         return True
 
     @staticmethod

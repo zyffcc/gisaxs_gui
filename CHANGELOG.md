@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- **Predict parameters** pools all starts when estimating a composition's evidence. The BIC fallback compares the best fit of each composition with the model-error floor included. Refinement and sampling use the same resolution, shape bounds and substrate model, including the level-3 reflection disk and the finite Born transfer for random cylinders at levels 2 and 4.
+
 - The public P08 replay example now reproduces the zero-roll analysis with the revised PbI₂ CIF. Its resolved MAPbI₃ reflections (202 and 404) constrain only one combination of lattice parameters, so the report withholds the tetragonal cell.
 - The recovery benchmarks can generate an independent 300-cut set, audit reused draws, and report composition reliability separately for evidence and BIC. They also provide whole-cut coverage intervals, a grid-independent simulated beam tail, and a row-by-row check of the archived validation table.
 - Automatic-analysis reports can be replayed from the original frames through GIWAXS phase assignment, orientation and cell refinement, or GISAXS Predict fitting. Averaging signed cuts now accounts for the variance of interpolated bins. Wheel installations include the illustrated manuals and the calibration detector catalogue.

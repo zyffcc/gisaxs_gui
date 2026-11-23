@@ -75,20 +75,15 @@ def height_fractions(data, types, law, coupling):
     return fractions
 
 
-def ordered_model(model):
-    """Refine in the increasing-radius order used by the supplied heights and by the posterior prior."""
-    if len(model.components) <= 1 or not any(c.heights for c in model.components):
-        return model
-    # Keep each R below the next R's upper limit and, with contact, below D_max / 2.
+def ordered_model(model, low, high):
+    """The same radius ordering, D/2R and h/2R ranges as the sampler, throughout refinement."""
+    # Keep each R below the next R's upper limit.
     # linked_fit.limits retains 1e-9 of a constrained interval at its upper end.
     # Reserve this interval so that even opposite unit-box corners satisfy both inequalities.
     next_cap = math.inf
     components = []
     for component in reversed(model.components):
         radius = component.params["R"]
-        if component.structure:
-            distance = component.params["D"]
-            next_cap = min(next_cap, (distance.upper - (distance.upper - distance.lower) * 1e-9) / 2)
         upper = min(radius.upper, next_cap)
         if upper <= radius.lower:
             raise ValueError("The radius bounds have no ordered solution for the supplied cylinder heights")
@@ -97,10 +92,18 @@ def ordered_model(model):
         next_cap = (upper - (upper - radius.lower) * 1e-9) / _RANK_MARGIN
     model = replace(model, components=tuple(reversed(components)))
     order = [fit_links.Inequality(f"R_{n}", ">=", f"{_RANK_MARGIN}*R_{n-1}") for n in range(2, len(components) + 1)]
-    # The engine normally sets D's contact limit before processing inequalities. Reapply it at the ordered R.
-    contact = [fit_links.Inequality(f"D_{n}", ">=", f"2*R_{n}")
-               for n, c in enumerate(model.components, 1) if c.structure]
-    return fit_links.with_inequalities(model, order + contact)
+    for n, component in enumerate(model.components, 1):
+        # D and h are physical lengths in Fitting, encoded as ratios to the current diameter in Predict.
+        for key, offset, applies in (("D", 4, component.structure), ("h", 2, component.family == "cylinder")):
+            if applies:
+                parameter = component.params[key]
+                radius = component.value("R")
+                minimum, maximum = 2 * low[offset], 2 * high[offset]
+                value = min(max(parameter.value, minimum * radius), maximum * radius, parameter.upper)
+                model = model.with_parameter((n - 1, key), value=value)
+                order.extend((fit_links.Inequality(f"{key}_{n}", ">=", f"{minimum:g}*R_{n}"),
+                              fit_links.Inequality(f"{key}_{n}", "<=", f"{maximum:g}*R_{n}")))
+    return fit_links.with_inequalities(model, order)
 
 
 # exp(log(R)) at the edge of a logarithmic fit interval can differ from R by a few ulps.
