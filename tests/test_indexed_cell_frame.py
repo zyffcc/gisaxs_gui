@@ -14,6 +14,30 @@ from src.gimap.shared.geometry import DetectorGeometry
 from tools.benchmarks.cell_refinement import public_case
 
 
+def test_all_positions_are_reassigned_with_refined_metric_and_offset():
+    from src.gimap.features.analyze.application.cell_assignments import fit_assignments
+
+    spec = PhaseSpec("Test phase", (6., 6., 8.4, 90., 90., 90.))
+    def position(h, k, l):
+        return 2*np.pi*np.sqrt((h*h+k*k)/6.018**2 + l*l/8.485**2) + .0015
+
+    hkls = [(0, 0, 1), (1, 0, 0), (1, 0, 1), (1, 1, 1), (2, 1, 0), (1, 0, 2)]
+    rows = [{"q": position(*h), "q_err": .0003, "fwhm": .024} for h in hkls]
+    rows.append({"q": .5*(position(1,1,0) + position(0,0,2)), "q_err": .0003, "fwhm": .024})
+    initial = assign_peaks(rows, [spec])
+    assert not initial["assignments"][-2]["assigned"]
+    assert initial["assignments"][-1]["hkl"] == "110" and not initial["assignments"][-1]["ambiguous"]
+    (fit,), _, _ = fit_assignments([spec], initial)
+    assert fit["ok"], fit["reason"]
+    assert [row["hkl"] for row in fit["residuals"]] == [list(h) for h in hkls]
+    excluded, = fit["excluded"]
+    assert {r["hkl"] for r in excluded["candidates"]} == {"110", "002"}
+    assert fit["metric_rank"] == 2 and fit["zero_shift"] == pytest.approx(.0015)
+    assert fit["zero_shift_error"] > 0
+    assert fit["assignment_sensitivity"]["range_A"]["a"] == pytest.approx([6.018, 6.018])
+    assert fit["assignment_sensitivity"]["range_A"]["c"] == pytest.approx([8.485, 8.485])
+
+
 def test_sector_radii_determine_directional_strain_only_with_a_resolved_axis():
     spec = PhaseSpec("Film", (6, 6, 6, 90, 90, 90), "F")
     geometry = DetectorGeometry(.0001, .0001, .2, 128., 128., 1., .2)
@@ -68,6 +92,10 @@ def test_refraction_reassigns_measured_spots_without_replacing_them_with_radial_
     assert fit["values"]["a"] == pytest.approx(5.)
     assert [r["before_refraction"]["qz"] for r in fit["residuals"]] == [r["qz"] for r in rows]
     assert fit["q_axis"]["critical_angle_deg"] == .18
+    compare = fit["refraction_sensitivity"]
+    assert compare["available"] and compare["source"] == "indexing or map setting"
+    assert compare["off"]["ok"] and compare["on"]["ok"] and compare["on"]["values"] == fit["values"]
+    assert abs(compare["on_minus_off_A"]["a"]) > 1e-5
 
 
 def test_overlay_refraction_rebins_full_ring_once_on_the_transmitted_map(tmp_path):

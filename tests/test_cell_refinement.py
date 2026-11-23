@@ -26,6 +26,9 @@ def test_noisy_cells_recover_all_free_parameters_and_one_sigma_coverage():
             assert .42 < param["coverage"] < .94
             fractions.append(param["coverage"])
     assert .65 < np.mean(fractions) < .82
+    blind = summary["unlabelled_overlapping_positions"]
+    assert blind["overlaps_per_draw"] > 0 and blind["successful_with_offset"] == 64
+    assert all(r["retained_overlaps"] == r["wrong_singletons"] == 0 for r in blind["draws"])
 
 
 def test_singular_and_exactly_determined_designs_and_absolute_errors():
@@ -33,6 +36,10 @@ def test_singular_and_exactly_determined_designs_and_absolute_errors():
     hkls = [(0, 0, i) for i in range(1, 6)]
     peaks = [CellPeak(h, q, .001) for h, q in zip(hkls, cell.q_of(hkls))]
     assert "independently" in refine_cell(cell, "tetragonal", peaks)["reason"]
+    harmonics = [(2, 0, 2), (4, 0, 4)]
+    tied = refine_cell(cell, "tetragonal", [CellPeak(h, q, .001) for h, q in zip(harmonics, cell.q_of(harmonics))])
+    assert not tied["ok"] and tied["metric_rank"] == 1 and tied["metric_parameters"] == 2
+    assert not tied["strain"]
     assert "Fewer" in refine_cell(cell, "tetragonal", peaks[:1])["reason"]
     basal = CellPeak((1, 0, 0), 2 * np.pi / cell.a, .002)
     result = refine_cell(cell, "tetragonal", [basal, peaks[0]])
@@ -68,7 +75,7 @@ def test_chi_square_inflates_covariance_and_strain_against_fixed_cif():
         assert record["q_corrected"] - record["q_calc"] == pytest.approx(record["residual"])
 
 
-def test_selection_uses_summed_family_intensity_roundtrip_and_keeps_measured_coordinates():
+def test_selection_excludes_same_phase_multiplets_even_with_a_dominant_powder_intensity():
     weak = ReflectionFamily((0, 0, 2), 2., ((0, 0, 2), (0, 0, -2)))
     strong = ReflectionFamily((1, 1, 0), 9., ((1, 1, 0), (1, -1, 0)))
     candidates = [Candidate("p", "002", 1., components=(weak,)),
@@ -77,17 +84,38 @@ def test_selection_uses_summed_family_intensity_roundtrip_and_keeps_measured_coo
     assert item.match.label == "002"
     records = [dict(item.record(), q_parallel=.8, qz=.6)]
     for inputs in ([item], records):
-        [peak], excluded = select_peaks("p", inputs, with_atoms=True)
-        assert not excluded and peak.hkl == strong.representative and peak.equivalents == strong.members
+        peaks, excluded = select_peaks("p", inputs, with_atoms=True)
+        assert not peaks and "Several reflection families" in excluded[0]["reason"]
         assert not select_peaks("p", inputs)[0]
-    assert select_peaks("p", records, with_atoms=True)[0][0].qz == .6
+    single = dict(assign(1., .0003, .01, candidates).record(), q_parallel=.8, qz=.6)
+    assert select_peaks("p", [single])[0][0].qz == .6
     assert "tentative" in select_peaks("p", [dict(records[0], tentative=True)], with_atoms=True)[1][0]["reason"]
     joined = Candidate("p", "002, 110", 1., components=(weak, strong))
-    assert select_peaks("p", [assign(1., .001, .03, [joined]).record()], with_atoms=True)[0][0].hkl == (1, 1, 0)
+    assert not select_peaks("p", [assign(1., .001, .03, [joined]).record()], with_atoms=True)[0]
     extra = Candidate("other", "010", 1.002, components=(weak,))
     unresolved = assign(1., .001, .03, [joined, extra]).record()
     for name in ("p", "other"):
         assert select_peaks(name, [unresolved], with_atoms=True)[1][0]["reason"].startswith("Reflections from")
+
+
+def test_cif_standard_uncertainties_propagate_into_tetragonal_axis_and_volume_strains(tmp_path):
+    from src.gimap.features.analyze.application.indexing import phase_from_cif
+
+    cif = tmp_path / "standard.cif"
+    cif.write_text("data_standard\n_cell_length_a 5.00(2)\n_cell_length_b 5.00\n_cell_length_b_esd .02\n_cell_length_c 7.000(3)E0\n"
+                   "_space_group_name_H-M_alt 'P 4'\n", encoding="utf-8")
+    spec = phase_from_cif(cif)
+    assert spec.cell_errors == (.02, .02, .003, None, None, None)
+    ref = spec.reference_cell
+    hkls = [(1, 0, 0), (0, 0, 1), (1, 1, 0), (1, 1, 1), (0, 0, 2)]
+    measured = UnitCell(5.01, 5.01, 7.02).q_of(hkls) + .001
+    peaks = [CellPeak(h, q, .0001) for h, q in zip(hkls, measured)]
+    fit = refine_cell(ref, "tetragonal", peaks, cell_errors=spec.cell_errors)
+    assert fit["reference_errors"]["V"] == pytest.approx(ref.volume*np.hypot(2*.02/5., .003/7.))
+    for name in ("a", "c", "V"):
+        x, x0 = fit["values"][name], fit["reference"][name]
+        error = np.hypot(fit["errors"][name]/x0, x*fit["reference_errors"][name]/x0**2)
+        assert fit["strain_errors"][name] == pytest.approx(error)
 
 
 def test_radiating_transmitted_spot_refraction_and_propagation_near_horizon():
@@ -124,6 +152,13 @@ def test_directional_strain_selects_equivalent_pole_and_requires_both_directions
     assert result["values"] == pytest.approx({"in_plane": ep, "out_of_plane": ez}, abs=1e-9)
     assert result["errors"]["in_plane"] > 0 and result["errors"]["out_of_plane"] > 0
     assert result["residuals"][1]["hkl"] == [0, 0, 1]
+    with_cif = refine_fibre_strain(ref, axis, peaks, cell_errors=(.01, .01, .01, None, None, None),
+                                  system="cubic")
+    # A common cubic reference scale changes both (1 + strain) inversely.
+    reference_shift = np.array([-(1+ep)*.01/ref.a, -(1+ez)*.01/ref.a, 0.])
+    np.testing.assert_allclose(with_cif["reference_covariance"], np.outer(reference_shift, reference_shift),
+                               rtol=1e-6, atol=1e-12)
+    assert with_cif["errors"]["in_plane"] > result["errors"]["in_plane"]
     assert not refine_fibre_strain(ref, axis, [peaks[0]] * 3)["ok"]
     parallel_only = [replace(p, q_parallel=p.q, qz=0.) for p in peaks]
     assert not refine_fibre_strain(ref, axis, parallel_only)["ok"]

@@ -176,6 +176,8 @@ class PipelineOptions:
     """Substrate of this GISAXS sample, as a material key or an optical-constants record at the cut's wavelength."""
     notes_source: Optional[dict] = None
     """Identity of the original bytes when the notes were read from a file."""
+    assume_fibre_normal: bool = False
+    """Allow ring symmetry to supply roll when the user identifies the fibre axis as the surface normal."""
 
 
 @dataclass

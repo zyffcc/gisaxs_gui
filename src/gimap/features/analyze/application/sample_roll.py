@@ -42,10 +42,11 @@ def _material_angle(material, wavelength_angstrom):
 
 
 def measure_frame_angles(analysis, frame_source, *, critical_angle_deg=None, roll_deg=None,
-                         use_resolved_roll=False, fallback_roll_deg=None, yoneda_material=None):
+                         use_resolved_roll=False, fallback_roll_deg=None, yoneda_material=None, assume_fibre_normal=False):
     """Absolute roll and incidence with the same measured pixels, dark, flat and mask."""
     data, valid = _observed_pixels(analysis, frame_source)
-    roll = measure_sample_roll(data, analysis.geometry, valid=valid, technique=analysis.kind)
+    roll = measure_sample_roll(data, analysis.geometry, valid=valid, technique=analysis.kind,
+                               assume_fibre_normal=assume_fibre_normal)
     if roll_deg is None:
         use_measured = roll.significant or (use_resolved_roll and roll.deg is not None)
         if fallback_roll_deg is None:

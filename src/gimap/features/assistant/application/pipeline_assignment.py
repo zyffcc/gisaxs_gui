@@ -50,6 +50,8 @@ def assignment_lines(report: dict) -> list[str]:
     axis = axis_text(found.get("q_axis") or {}, report.get("incidence_measurement"))
     lines = [f"Phases given: {names}. Rule: {found.get('rule')}.", axis, ""]
     for phase in found.get("phases") or ():
+        if phase.get("composition_text"):
+            lines.append(f"- {phase['name']}: {phase['composition_text']}")
         if phase.get("warnings"):
             lines.append(f"- ⚠ {phase.get('name', '?')}: " + " ".join(phase["warnings"]))
     if lines[-1]:

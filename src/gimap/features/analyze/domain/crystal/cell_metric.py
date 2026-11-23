@@ -86,7 +86,7 @@ class CellMetric:
         inverse = np.linalg.inv(direct.T @ direct)
         self.start = np.linalg.lstsq(self.basis.reshape(len(basis), 9).T, inverse.ravel(), rcond=None)[0]
 
-    def parameters(self, x):
+    def parameters(self, x, *, native=False):
         """Direct-cell parameters, volume and their exact derivatives with respect to x."""
         metric = np.einsum("n,nij->ij", x, self.basis)
         np.linalg.cholesky(metric)  # refuse an indefinite reciprocal metric even if all observed q² are positive
@@ -103,12 +103,59 @@ class CellMetric:
             derivatives[name] = -np.rad2deg(dcos / np.sqrt(1 - cosine**2))
         values["V"] = np.sqrt(np.linalg.det(g))
         derivatives["V"] = -.5 * values["V"] * np.einsum("ij,nji->n", g, self.basis)
-        if self.rhombohedral:
+        if self.rhombohedral and not native:
             # Conventional hexagonal vectors a_h = b_r - a_r, c_h = a_r + b_r + c_r.
             for name, vector in (("a", np.array([-1, 1, 0])), ("c", np.ones(3))):
                 values[name] = np.sqrt(vector @ g @ vector)
                 derivatives[name] = np.einsum("i,nij,j->n", vector, dg, vector) / (2 * values[name])
             values["V"] *= 3
             derivatives["V"] *= 3
-        report = self.names + ["V"]
+        report = ["a", "b", "c", "alpha", "beta", "gamma"] if native else self.names + ["V"]
         return {name: float(values[name]) for name in report}, np.array([derivatives[name] for name in report])
+
+
+def independent_reference_parameters(metric, system, errors):
+    """Groups of symmetry-equivalent CIF coordinates with one independent standard uncertainty."""
+    # Independent direct-cell parameters; symmetry-tied CIF entries describe the same variable.
+    groups = [(0,), (1,), (2,)]
+    if system == "cubic" or metric.rhombohedral:
+        groups = [(0, 1, 2)]
+    elif system in ("tetragonal", "trigonal", "hexagonal"):
+        groups = [(0, 1), (2,)]
+    if metric.rhombohedral:
+        groups.append((3, 4, 5))
+    elif system in ("monoclinic", "triclinic"):
+        groups.extend((i,) for i, name in enumerate(("alpha", "beta", "gamma"), 3) if name in metric.names)
+    for group in groups:
+        sigma = next((errors[i] for i in group if i < len(errors) and errors[i] is not None), None)
+        if sigma is not None:
+            yield group, sigma
+
+
+def reference_errors(reference, metric, system, errors):
+    """Propagate reported CIF s.u.s; equivalent lengths/angles vary together in the CIF setting."""
+    if not errors or not any(e is not None for e in errors):
+        return {}
+    # dV/d(a,b,c,α,β,γ) for the cell in the original CIF setting.
+    lengths = np.asarray(reference.as_tuple()[:3])
+    angles = np.radians(reference.as_tuple()[3:])
+    ca, cb, cg = np.cos(angles)
+    v = reference.volume
+    dvol = np.r_[v / lengths, np.prod(lengths)**2 / v * np.sin(angles)
+                 * (np.array([ca, cb, cg]) - [cb*cg, ca*cg, ca*cb]) * np.pi/180]
+    names = ("a", "b", "c", "alpha", "beta", "gamma")
+    deriv = {name: np.eye(6)[i] for i, name in enumerate(names) if name in metric.names}
+    deriv["V"] = dvol
+    if metric.rhombohedral:
+        a, angle = reference.a, angles[0]
+        basal, axial = np.sqrt(2*(1-ca)), np.sqrt(3*(1+2*ca))
+        deriv = {"a": np.array([basal, 0, 0, a*np.sin(angle)/basal*np.pi/180, 0, 0]),
+                 "c": np.array([axial, 0, 0, -3*a*np.sin(angle)/axial*np.pi/180, 0, 0]),
+                 "V": 3*dvol}
+    variances = {}
+    for group, sigma in independent_reference_parameters(metric, system, errors):
+        for key, gradient in deriv.items():
+            partial = gradient[list(group)].sum()
+            if partial:
+                variances[key] = variances.get(key, 0.) + (partial*sigma)**2
+    return {k: float(np.sqrt(v)) for k, v in variances.items()}

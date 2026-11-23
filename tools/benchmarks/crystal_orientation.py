@@ -154,8 +154,9 @@ def coverage(name, trials):
                                                   (fractions[i], "fraction", "fraction_err", "fraction_within_1sigma")):
                     sigma = pop[err]
                     counts[counter][i] += sigma is not None and abs(pop[key] - target) <= sigma
-        fits.append({key: fit.get(key) for key in ("axes", "populations", "near_random", "fraction_iso", "reduced_chi2",
-                                                   "fraction_iso_err", "delta_bic", "determined")})
+        fits.append({"seed": seed, **{key: fit.get(key) for key in (
+            "axes", "populations", "near_random", "fraction_iso", "reduced_chi2",
+            "fraction_iso_err", "delta_bic", "determined", "parameter_status", "reasons")}})
     return {"phase": name, "truth": {"axis": axis, "fwhm_deg": widths, "fractions": fractions,
                                      "fraction_iso": phi, "exit_transmission": mixed,
                                      "film_index": {"delta": DELTA, "beta": BETA} if mixed else None}, "trials": trials,
@@ -195,6 +196,8 @@ def public_diagnostics(report, page, cifs):
     from src.gimap.features.analyze.application.crystal_orientation import _pixels, _profile, frame_crystal_orientation
     from src.gimap.features.analyze.domain.crystal.texture import TextureRing, fit_crystal_orientation
     from src.gimap.features.analyze.domain.giwaxs import giwaxs_maps
+    from src.gimap.features.analyze.domain.refracted_film import internal_qz
+    from src.gimap.shared.geometry.q_inverse import exit_sine_of_qz
 
     model = page.view_model
     analysis = model.state.analysis
@@ -209,7 +212,6 @@ def public_diagnostics(report, page, cifs):
     old_cut = []
     residuals = []
     paired = []
-    polar = np.abs(maps.chi_deg)
     for cif, fit in zip(cifs, fits):
         rings = []
         for row in fit["rings"]:
@@ -226,7 +228,8 @@ def public_diagnostics(report, page, cifs):
                 means.append(total / count.clip(min=1))
                 counts.append(count)
             use_both = np.minimum(*counts) >= 12
-            paired.append({"phase": fit["phase"], "q": row["q"], "chi_centres_deg": (edges[:-1]+1)[use_both].tolist(),
+            paired.append({"phase": fit["phase"], "q": row["q"], "pole_angle_coordinate": "active q map",
+                           "chi_centres_deg": (edges[:-1]+1)[use_both].tolist(),
                            "negative": means[0][use_both].tolist(), "positive": means[1][use_both].tolist()})
             profile, _, _, _ = _profile(maps, pixels, analysis, row["q_window"], row["q"], {"available": False})
             rings.append(TextureRing(row["ring_id"], row["q"], *row["q_window"], profile))
@@ -237,8 +240,13 @@ def public_diagnostics(report, page, cifs):
             worst = row["largest_residual"]
             angle = worst["chi_deg"]
             low, high = row["q_window"]
-            mask = analysis.valid & maps.above_horizon & (maps.q >= low) & (maps.q <= high)
-            sector = maps.q[mask & (polar >= angle-.5) & (polar < angle+.5)]
+            polar = abs(signed)
+            if row["profile_settings"].get("pole_angle_coordinate") == "inside film":
+                optics = fit["film_optics"]
+                sines = exit_sine_of_qz(analysis.geometry, maps.qz[band])
+                normal = internal_qz(analysis.geometry, sines, optics["delta"], optics["beta"])
+                polar = np.degrees(np.arctan2(abs(maps.q_parallel[band]), normal))
+            sector = maps.q[band][(polar >= angle-.5) & (polar < angle+.5)]
             covered = [float(sector.min()), float(sector.max())] if sector.size else None
             chi2 = z @ z
             residuals.append({"phase": fit["phase"], "q": row["q"], "peak_residual_chi_deg": angle,

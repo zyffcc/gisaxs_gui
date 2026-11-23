@@ -21,13 +21,40 @@ CIFS = Path(__file__).parent / "data" / "external" / "giwaxs_p08_mapi"
     ("PbI2_reference", {"Pb": 1, "I": 2}, 188/(4.557**2*6.979*np.sin(np.pi/3)), 3.13e-6, 2.23e-7),
 ])
 def test_cif_compositions_and_optical_constants_at_18_kev(name, populations, rho, delta, beta):
-    phase = phase_from_cif(CIFS / (name + ".cif")).phase()
-    record = film_optics(phase, 0.688801)
+    spec = phase_from_cif(CIFS / (name + ".cif"))
+    record = film_optics(spec.phase(), 0.688801)
     assert record["available"]
     assert record["atoms_per_cell"] == populations
     assert record["electron_density_e_per_a3"] == pytest.approx(rho)
     assert record["delta"] == pytest.approx(delta, rel=.004)
     assert record["beta"] == pytest.approx(beta, rel=.004)
+    phase_record = spec.record()
+    assert phase_record["formula_atoms_per_cell"] == populations
+    if name == "PbI2_reference":
+        assert phase_record["formula_units_z"] == 1 and phase_record["site_atoms_per_cell"] == populations
+        assert phase_record["composition_check"] == "consistent"
+    else:  # The diffraction model includes only the Pb/I framework. Optics use the complete formula.
+        assert phase_record["formula_units_z"] == 4 and phase_record["site_atoms_per_cell"] == {"Pb": 4, "I": 12}
+        assert phase_record["composition_warning"] in spec.warnings
+
+
+@pytest.mark.parametrize("with_z", [True, False])
+def test_cif_load_reports_wrong_site_multiplicity_even_without_z(tmp_path, with_z):
+    from src.gimap.features.assistant.application.pipeline_assignment import assignment_lines
+
+    cif = (CIFS / "PbI2_reference.cif").read_text(encoding="utf-8")
+    cif = cif.replace("0.33333 0.66667 0.265", "0.17 0.29 0.3")
+    if not with_z:
+        cif = cif.replace("_cell_formula_units_Z 1", "")
+    path = tmp_path / "model.cif"
+    path.write_text(cif, encoding="utf-8")
+    spec = phase_from_cif(path)
+    phase = spec.record()
+    assert phase["site_atoms_per_cell"] == {"Pb": 1, "I": 12}
+    assert phase["composition_check"] == "mismatch" and phase["composition_warning"] in spec.warnings
+    lines = assignment_lines({"phase_assignment": {"phases": [phase]}})
+    assert any("I 12" in line and ("Z = 1." if with_z else "Z = unspecified.") in line for line in lines)
+    assert any(phase["composition_warning"] in line for line in lines)
 
 
 def test_unsupported_sum_formula_uses_expanded_sites_including_occupancy():
@@ -45,7 +72,7 @@ def test_unsupported_sum_formula_uses_expanded_sites_including_occupancy():
 
 
 def test_unavailable_optics_distinguish_unknown_absorption_from_zero_absorption():
-    phase = phase_from_cif(CIFS / "PbI2_reference.cif").phase()
+    phase = replace(phase_from_cif(CIFS / "PbI2_reference.cif").phase(), formula_sum="", formula_units_z=None)
     empty = film_optics(replace(phase, atoms=()), 1.)
     assert not empty["available"] and empty["delta"] is None and empty["beta"] is None
     for missing in (film_optics(phase, 5.), film_optics(replace(phase, atoms=(replace(phase.atoms[0], element="Xe"),)), 1.)):

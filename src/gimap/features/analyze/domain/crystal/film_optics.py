@@ -3,39 +3,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-import re
 
 import numpy as np
 from scipy.interpolate import PchipInterpolator
 
-from src.gimap.shared.geometry.q_inverse import exit_sine_of_qz
+from src.gimap.shared.geometry.q_inverse import exit_sine_of_qz, qz_of_exit_sine
 from src.gimap.shared.ring_profile import fold_ring
 from src.gimap.shared.xray_scattering import (
     ENERGY_RANGE_KEV, HC_KEV_NM, R_E_NM, TABULATED_ELEMENTS, scattering_factors,
 )
 
 from ..intensity import film_absorption_factor
-from ..refracted_film import REFRACTED_FILM_FORMULA, RefractedFilm, exit_transmission
+from ..refracted_film import REFRACTED_FILM_FORMULA, RefractedFilm, exit_transmission, internal_qz
 from .scattering import ATOMIC_NUMBER
-from .symmetry import expand_sites
-
-
-def _formula_counts(formula, units):
-    """Flat CIF sum formula, e.g. 'C H6 I3 N Pb'. Require the entire formula and a positive Z."""
-    if not formula or units is None or not math.isfinite(units) or units <= 0.:
-        return None
-    counts = {}
-    remaining = formula.strip()
-    while remaining:
-        match = re.match(r"([A-Z][a-z]?)\s*(\d+(?:\.\d+)?|\.\d+)?\s*", remaining)
-        if not match or match[1] not in ATOMIC_NUMBER:
-            return None
-        amount = float(match[2] or 1.)
-        if amount <= 0. or not math.isfinite(amount*units):
-            return None
-        counts[match[1]] = counts.get(match[1], 0.) + units*amount
-        remaining = remaining[match.end():]
-    return counts or None
+from .composition import phase_composition
 
 
 def film_optics(phase, wavelength_angstrom):
@@ -43,15 +24,12 @@ def film_optics(phase, wavelength_angstrom):
     if not np.isfinite(wavelength_angstrom) or wavelength_angstrom <= 0.:
         raise ValueError("The film refractive index requires a positive wavelength.")
     energy = 10 * HC_KEV_NM / wavelength_angstrom
-    site_counts = {}
-    positions = expand_sites([atom.xyz for atom in phase.atoms], phase.operations) if phase.atoms else []
-    for atom, sites in zip(phase.atoms, positions):
-        site_counts[atom.element] = site_counts.get(atom.element, 0.) + atom.occupancy * len(sites)
-    bulk = _formula_counts(phase.formula_sum, phase.formula_units_z)
-    populations = bulk or site_counts
+    counts = phase_composition(phase)
+    bulk = counts["formula_atoms_per_cell"]
+    populations = bulk or counts["site_atoms_per_cell"]
     composition = "CIF sum formula × Z" if bulk else "symmetry-expanded CIF atom sites"
     record = {"available": False, "source": composition, "composition_source": composition, "atoms_per_cell": populations,
-              "formula_sum": phase.formula_sum, "formula_units_z": phase.formula_units_z, "site_atoms_per_cell": site_counts,
+              **counts,
               "wavelength_angstrom": wavelength_angstrom, "energy_kev": energy, "cell_volume_a3": phase.cell.volume,
               "electron_density_e_per_a3": None, "delta": None, "beta": None}
     if not bulk and (phase.formula_sum or phase.formula_units_z is not None):
@@ -75,13 +53,35 @@ def film_optics(phase, wavelength_angstrom):
     return record
 
 
+def _central_exit(geometry, q, centres, optics):
+    """External ray at an internal polar bin centre and the active map's ring radius.
+
+    This supplies plotting values only for bins without pixels. Along the ring, the
+    internal pole angle decreases monotonically with external exit angle.
+    """
+    def angle(sine):
+        qz_map = qz_of_exit_sine(geometry, sine)
+        parallel = np.sqrt(np.maximum(0., q**2 - qz_map**2))
+        return np.degrees(np.arctan2(parallel, internal_qz(geometry, sine, optics["delta"], optics["beta"])))
+
+    low = np.full_like(centres, math.sin(geometry.critical_rad))
+    high = np.ones_like(low)
+    accessible = (centres <= angle(low)) & (centres >= angle(high))
+    for _ in range(40):
+        mid = .5*(low + high)
+        below = angle(mid) > centres
+        low, high = np.where(below, mid, low), np.where(below, high, mid)
+    return np.where(accessible, .5*(low + high), np.nan)
+
+
 class _RingRays:
     """Per-pixel and central model rays, folded with the measured profile's uncertainty weights."""
 
-    def __init__(self, geometry, q, chi_pixels, qz_pixels, signed_profile, sin_exit):
+    def __init__(self, geometry, q, chi_pixels, qz_pixels, signed_profile, sin_exit, internal_optics):
         self.sine = exit_sine_of_qz(geometry, qz_pixels) if sin_exit is None else sin_exit
         centres = np.arange(90) + .5
-        self.central_sine = exit_sine_of_qz(geometry, q * np.cos(np.radians(centres)))
+        self.central_sine = (exit_sine_of_qz(geometry, q * np.cos(np.radians(centres))) if internal_optics is None
+                             else _central_exit(geometry, q, centres, internal_optics))
         self.index = np.clip(np.floor(chi_pixels.astype(float) + 90).astype(int), 0, 179)
         self.counts = np.bincount(self.index, minlength=180)
         self.profile = signed_profile
@@ -96,9 +96,9 @@ class _RingRays:
         return np.where(measured, values, np.nan_to_num(central))
 
 
-def ring_transmission(optics, geometry, q, chi_pixels, qz_pixels, signed_profile, *, sin_exit=None):
+def ring_transmission(optics, geometry, q, chi_pixels, qz_pixels, signed_profile, *, sin_exit=None, internal_bins=False):
     """The exit surface field alone, for the exported angular diagnostics."""
-    rays = _RingRays(geometry, q, chi_pixels, qz_pixels, signed_profile, sin_exit)
+    rays = _RingRays(geometry, q, chi_pixels, qz_pixels, signed_profile, sin_exit, optics if internal_bins else None)
     return rays.fold(*(exit_transmission(s, optics["delta"], optics["beta"])
                        for s in (rays.sine, rays.central_sine)))
 
@@ -112,13 +112,14 @@ def _thickness(u, incident_rate, depth_rate):
 
 
 def ring_optical_factors(optics, geometry, q, chi_pixels, qz_pixels, signed_profile, *,
-                         fit_absorption=False, thickness_nm=np.inf, geometric_depth=None, sin_exit=None):
+                         fit_absorption=False, thickness_nm=np.inf, geometric_depth=None, sin_exit=None,
+                         internal_bins=False):
     """Fold the full depth-integrated wave intensity on the same rays as the observed data.
 
     A geometrically corrected frame retains the ratio of wave to geometrical factors at its
     known thickness. Unmeasured bins are evaluated at the ring centre for plotting.
     """
-    rays = _RingRays(geometry, q, chi_pixels, qz_pixels, signed_profile, sin_exit)
+    rays = _RingRays(geometry, q, chi_pixels, qz_pixels, signed_profile, sin_exit, optics if internal_bins else None)
     sin_in = math.sin(geometry.incidence_rad)
     waves = [RefractedFilm(s, sin_in, optics["delta"], optics["beta"], geometry.wavelength_angstrom)
              for s in (rays.sine, rays.central_sine)]

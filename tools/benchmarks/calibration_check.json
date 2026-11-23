@@ -319,24 +319,24 @@
  },
  "coverage": {
   "frames_file": "per_cut/calibration_check_frames.json.gz",
-  "command": "python tools/benchmarks/calibration_check.py --part all --cases 300 --workers 3",
+  "command": "python tools/benchmarks/calibration_check.py --part coverage --cases 300 --workers 3",
+  "commit": "dd95f3aa0268d35e9e364b0f89c5d418c7d5bc52",
   "cases": 300,
   "seed0": 20261122,
   "workers": 3,
-  "seconds": 1695.5,
+  "seconds": 1078.8,
   "set_up": "Pilatus 1M (981 x 1043 px of 172 um, the gaps of the public frame); direct beam uniform in the central 80 % of the detector; L uniform in 1.5-3 m; rot1, rot2 uniform in +-3 deg, rot3 = 0; lambda (0.5-2 A) chosen so that about 3, 4-6 or 7-9 rings lie on the detector (a third of the frames each); every order on the detector drawn as a Gaussian ring of 1.5-3 px sigma (2x2 sub-pixels; the public frame's rings are 5.5-6 px FWHM), first ring 2000-30000 counts, order^-(1.5-2.5), azimuthal modulation up to 30 %; background falling as 1/(1 + (r/r0)^2), r0 0.4-1 ring spacing, 1/10-1/60 of the first ring at its radius, plus 1-10 counts; Poisson counts; a beam stop of 8-20 px radius and its arm (1 % of the counts). Engine: standard agbh, energy and pixel size given, a distance estimate within +-15 %, tilt auto. 2theta of every sub-pixel from pyFAI's formula (detector_tilt.tilted_rays), not from lab_rays, which GIMaP fits with.",
   "identified_means": "tilt refined with a 1 sigma, |L - L_true| < 5 % and the beam within 5 px of the truth",
-  "engines": {
-   "as_shipped": "CalibrationEngine as in this checkout, with guided ring extraction and fitted candidate ranking by the supported and missing rings and the point residual"
-  },
+  "scored_candidate": "Geometry returned after with_line_checks, including its own five standard errors and matched-ring count. Tilt-vector error is hypot(rot1-returned minus true rot1, rot2-returned minus true rot2), in degrees, for every returned geometry. Coverage counts all returned joint fits with five standard errors, including misidentified fits. Empirical coverage of +/- one standard error need not equal 68 percent.",
   "three_rings_jackknife": "Leave one of three rings out and refit all five parameters. If any replicate is unconverged, physically inadmissible, or has a rank-deficient normalized Jacobian, hold tilt fixed in all three replicates. In that fallback, use full-fit covariance for the tilts and its standard errors as floors on x, y and L.",
   "as_shipped": {
    "identified": "300/300",
-   "headless_identified": "300/300",
+   "returned": 300,
+   "p95_tilt_vector_error_deg": 0.035943631824631866,
    "calibration_and_line_check_seconds_per_frame": {
     "timed": 300,
-    "mean": 15.502,
-    "median": 15.115
+    "mean": 9.882,
+    "median": 9.69
    },
    "identified_by_target_rings": {
     "3": "100/100",
@@ -355,29 +355,39 @@
     "3": {
      "cases": 6,
      "beam_x_px": {
-      "within_1sigma": 0.667,
-      "within_2sigma": 0.833,
-      "median_error_over_sigma": 0.737
+      "within_1sigma_count": 3,
+      "within_2sigma_count": 5,
+      "within_1sigma": 0.5,
+      "within_2sigma": 0.8333333333333334,
+      "median_error_over_sigma": 1.008
      },
      "beam_y_px": {
-      "within_1sigma": 0.667,
+      "within_1sigma_count": 4,
+      "within_2sigma_count": 6,
+      "within_1sigma": 0.6666666666666666,
       "within_2sigma": 1.0,
-      "median_error_over_sigma": 0.396
+      "median_error_over_sigma": 0.35
      },
      "distance_mm": {
-      "within_1sigma": 0.833,
-      "within_2sigma": 0.833,
-      "median_error_over_sigma": 0.44
+      "within_1sigma_count": 5,
+      "within_2sigma_count": 5,
+      "within_1sigma": 0.8333333333333334,
+      "within_2sigma": 0.8333333333333334,
+      "median_error_over_sigma": 0.475
      },
      "rot1_deg": {
-      "within_1sigma": 0.333,
-      "within_2sigma": 0.833,
-      "median_error_over_sigma": 1.397
+      "within_1sigma_count": 2,
+      "within_2sigma_count": 5,
+      "within_1sigma": 0.3333333333333333,
+      "within_2sigma": 0.8333333333333334,
+      "median_error_over_sigma": 1.405
      },
      "rot2_deg": {
+      "within_1sigma_count": 3,
+      "within_2sigma_count": 3,
       "within_1sigma": 0.5,
-      "within_2sigma": 0.667,
-      "median_error_over_sigma": 1.437
+      "within_2sigma": 0.5,
+      "median_error_over_sigma": 1.496
      },
      "student_t_expected": {
       "within_1sigma": 0.577,
@@ -388,29 +398,39 @@
     "4-6": {
      "cases": 138,
      "beam_x_px": {
-      "within_1sigma": 0.594,
-      "within_2sigma": 0.855,
-      "median_error_over_sigma": 0.684
+      "within_1sigma_count": 85,
+      "within_2sigma_count": 120,
+      "within_1sigma": 0.6159420289855072,
+      "within_2sigma": 0.8695652173913043,
+      "median_error_over_sigma": 0.672
      },
      "beam_y_px": {
-      "within_1sigma": 0.616,
-      "within_2sigma": 0.862,
-      "median_error_over_sigma": 0.699
+      "within_1sigma_count": 85,
+      "within_2sigma_count": 118,
+      "within_1sigma": 0.6159420289855072,
+      "within_2sigma": 0.855072463768116,
+      "median_error_over_sigma": 0.705
      },
      "distance_mm": {
-      "within_1sigma": 0.565,
-      "within_2sigma": 0.819,
-      "median_error_over_sigma": 0.747
-     },
-     "rot1_deg": {
-      "within_1sigma": 0.623,
-      "within_2sigma": 0.862,
+      "within_1sigma_count": 78,
+      "within_2sigma_count": 113,
+      "within_1sigma": 0.5652173913043478,
+      "within_2sigma": 0.8188405797101449,
       "median_error_over_sigma": 0.745
      },
+     "rot1_deg": {
+      "within_1sigma_count": 87,
+      "within_2sigma_count": 121,
+      "within_1sigma": 0.6304347826086957,
+      "within_2sigma": 0.8768115942028986,
+      "median_error_over_sigma": 0.731
+     },
      "rot2_deg": {
-      "within_1sigma": 0.565,
-      "within_2sigma": 0.841,
-      "median_error_over_sigma": 0.874
+      "within_1sigma_count": 76,
+      "within_2sigma_count": 114,
+      "within_1sigma": 0.5507246376811594,
+      "within_2sigma": 0.8260869565217391,
+      "median_error_over_sigma": 0.904
      },
      "student_t_expected": {
       "within_1sigma": 0.619,
@@ -421,29 +441,39 @@
     ">=7": {
      "cases": 156,
      "beam_x_px": {
-      "within_1sigma": 0.66,
-      "within_2sigma": 0.955,
-      "median_error_over_sigma": 0.684
+      "within_1sigma_count": 103,
+      "within_2sigma_count": 149,
+      "within_1sigma": 0.6602564102564102,
+      "within_2sigma": 0.9551282051282052,
+      "median_error_over_sigma": 0.681
      },
      "beam_y_px": {
-      "within_1sigma": 0.679,
-      "within_2sigma": 0.904,
-      "median_error_over_sigma": 0.598
+      "within_1sigma_count": 107,
+      "within_2sigma_count": 141,
+      "within_1sigma": 0.6858974358974359,
+      "within_2sigma": 0.9038461538461539,
+      "median_error_over_sigma": 0.614
      },
      "distance_mm": {
-      "within_1sigma": 0.622,
-      "within_2sigma": 0.891,
-      "median_error_over_sigma": 0.792
+      "within_1sigma_count": 96,
+      "within_2sigma_count": 139,
+      "within_1sigma": 0.6153846153846154,
+      "within_2sigma": 0.8910256410256411,
+      "median_error_over_sigma": 0.793
      },
      "rot1_deg": {
-      "within_1sigma": 0.641,
-      "within_2sigma": 0.923,
+      "within_1sigma_count": 99,
+      "within_2sigma_count": 145,
+      "within_1sigma": 0.6346153846153846,
+      "within_2sigma": 0.9294871794871795,
       "median_error_over_sigma": 0.71
      },
      "rot2_deg": {
-      "within_1sigma": 0.609,
-      "within_2sigma": 0.891,
-      "median_error_over_sigma": 0.832
+      "within_1sigma_count": 95,
+      "within_2sigma_count": 138,
+      "within_1sigma": 0.6089743589743589,
+      "within_2sigma": 0.8846153846153846,
+      "median_error_over_sigma": 0.822
      },
      "student_t_expected": {
       "within_1sigma": 0.654,
@@ -456,140 +486,183 @@
     "3": {
      "cases": 6,
      "beam_x_px": {
-      "within_1sigma": 0.833,
+      "within_1sigma_count": 5,
+      "within_2sigma_count": 6,
+      "within_1sigma": 0.8333333333333334,
       "within_2sigma": 1.0,
-      "median_error_over_sigma": 0.399
+      "median_error_over_sigma": 0.4
      },
      "beam_y_px": {
+      "within_1sigma_count": 6,
+      "within_2sigma_count": 6,
       "within_1sigma": 1.0,
       "within_2sigma": 1.0,
-      "median_error_over_sigma": 0.23
+      "median_error_over_sigma": 0.221
      },
      "distance_mm": {
+      "within_1sigma_count": 6,
+      "within_2sigma_count": 6,
       "within_1sigma": 1.0,
       "within_2sigma": 1.0,
-      "median_error_over_sigma": 0.33
+      "median_error_over_sigma": 0.405
      },
      "rot1_deg": {
-      "within_1sigma": 0.667,
+      "within_1sigma_count": 4,
+      "within_2sigma_count": 6,
+      "within_1sigma": 0.6666666666666666,
       "within_2sigma": 1.0,
-      "median_error_over_sigma": 0.496
+      "median_error_over_sigma": 0.487
      },
      "rot2_deg": {
+      "within_1sigma_count": 6,
+      "within_2sigma_count": 6,
       "within_1sigma": 1.0,
       "within_2sigma": 1.0,
-      "median_error_over_sigma": 0.424
+      "median_error_over_sigma": 0.415
      }
     },
     "4-6": {
      "cases": 138,
      "beam_x_px": {
-      "within_1sigma": 0.862,
-      "within_2sigma": 0.993,
-      "median_error_over_sigma": 0.444
+      "within_1sigma_count": 120,
+      "within_2sigma_count": 137,
+      "within_1sigma": 0.8695652173913043,
+      "within_2sigma": 0.9927536231884058,
+      "median_error_over_sigma": 0.448
      },
      "beam_y_px": {
-      "within_1sigma": 0.862,
-      "within_2sigma": 0.986,
-      "median_error_over_sigma": 0.49
+      "within_1sigma_count": 120,
+      "within_2sigma_count": 137,
+      "within_1sigma": 0.8695652173913043,
+      "within_2sigma": 0.9927536231884058,
+      "median_error_over_sigma": 0.478
      },
      "distance_mm": {
-      "within_1sigma": 0.739,
-      "within_2sigma": 0.949,
-      "median_error_over_sigma": 0.653
+      "within_1sigma_count": 103,
+      "within_2sigma_count": 133,
+      "within_1sigma": 0.7463768115942029,
+      "within_2sigma": 0.9637681159420289,
+      "median_error_over_sigma": 0.661
      },
      "rot1_deg": {
-      "within_1sigma": 0.833,
-      "within_2sigma": 0.971,
-      "median_error_over_sigma": 0.536
+      "within_1sigma_count": 115,
+      "within_2sigma_count": 135,
+      "within_1sigma": 0.8333333333333334,
+      "within_2sigma": 0.9782608695652174,
+      "median_error_over_sigma": 0.51
      },
      "rot2_deg": {
-      "within_1sigma": 0.71,
-      "within_2sigma": 0.978,
-      "median_error_over_sigma": 0.579
+      "within_1sigma_count": 99,
+      "within_2sigma_count": 135,
+      "within_1sigma": 0.717391304347826,
+      "within_2sigma": 0.9782608695652174,
+      "median_error_over_sigma": 0.595
      }
     },
     ">=7": {
      "cases": 156,
      "beam_x_px": {
-      "within_1sigma": 0.833,
-      "within_2sigma": 0.987,
-      "median_error_over_sigma": 0.486
+      "within_1sigma_count": 132,
+      "within_2sigma_count": 154,
+      "within_1sigma": 0.8461538461538461,
+      "within_2sigma": 0.9871794871794872,
+      "median_error_over_sigma": 0.483
      },
      "beam_y_px": {
-      "within_1sigma": 0.821,
-      "within_2sigma": 0.987,
-      "median_error_over_sigma": 0.384
+      "within_1sigma_count": 129,
+      "within_2sigma_count": 155,
+      "within_1sigma": 0.8269230769230769,
+      "within_2sigma": 0.9935897435897436,
+      "median_error_over_sigma": 0.392
      },
      "distance_mm": {
-      "within_1sigma": 0.776,
-      "within_2sigma": 0.955,
-      "median_error_over_sigma": 0.55
+      "within_1sigma_count": 121,
+      "within_2sigma_count": 149,
+      "within_1sigma": 0.7756410256410257,
+      "within_2sigma": 0.9551282051282052,
+      "median_error_over_sigma": 0.556
      },
      "rot1_deg": {
-      "within_1sigma": 0.782,
-      "within_2sigma": 0.955,
-      "median_error_over_sigma": 0.531
+      "within_1sigma_count": 123,
+      "within_2sigma_count": 149,
+      "within_1sigma": 0.7884615384615384,
+      "within_2sigma": 0.9551282051282052,
+      "median_error_over_sigma": 0.512
      },
      "rot2_deg": {
-      "within_1sigma": 0.731,
-      "within_2sigma": 0.955,
-      "median_error_over_sigma": 0.62
+      "within_1sigma_count": 116,
+      "within_2sigma_count": 150,
+      "within_1sigma": 0.7435897435897436,
+      "within_2sigma": 0.9615384615384616,
+      "median_error_over_sigma": 0.611
      }
     }
    },
    "within_1sigma_with_covariance_floor_7plus": {
-    "beam_x_px": 0.846,
-    "beam_y_px": 0.84,
+    "beam_x_px": 0.859,
+    "beam_y_px": 0.846,
     "distance_mm": 0.795,
     "rot1_deg": 0.801,
-    "rot2_deg": 0.769
+    "rot2_deg": 0.776
    },
    "three_rings_cases": 6
   },
   "three_ring_set": {
-   "command": "python tools/benchmarks/calibration_check.py --part all --cases 300 --workers 3",
+   "command": "python tools/benchmarks/calibration_check.py --part coverage --cases 300 --workers 3",
+   "commit": "dd95f3aa0268d35e9e364b0f89c5d418c7d5bc52",
    "cases": 150,
    "seed0": 21261122,
    "workers": 3,
-   "seconds": 632.7,
+   "seconds": 343.8,
    "set_up": "as the main set with about 3 rings on the detector, but orders above 3 not drawn",
    "as_shipped": {
     "identified": "150/150",
     "identified_with_3_rings": 150,
-    "headless_identified": "150/150",
+    "covariance_tilt_fallbacks": 0,
+    "returned": 150,
+    "p95_tilt_vector_error_deg": 0.037838057752347,
     "calibration_and_line_check_seconds_per_frame": {
      "timed": 150,
-     "mean": 11.514,
-     "median": 11.995
+     "mean": 6.282,
+     "median": 6.31
     },
     "not_identified": {},
     "coverage_reported_sigma": {
      "cases": 150,
      "beam_x_px": {
-      "within_1sigma": 0.613,
+      "within_1sigma_count": 93,
+      "within_2sigma_count": 123,
+      "within_1sigma": 0.62,
       "within_2sigma": 0.82,
-      "median_error_over_sigma": 0.666
+      "median_error_over_sigma": 0.722
      },
      "beam_y_px": {
-      "within_1sigma": 0.687,
-      "within_2sigma": 0.853,
-      "median_error_over_sigma": 0.533
+      "within_1sigma_count": 103,
+      "within_2sigma_count": 128,
+      "within_1sigma": 0.6866666666666666,
+      "within_2sigma": 0.8533333333333334,
+      "median_error_over_sigma": 0.59
      },
      "distance_mm": {
-      "within_1sigma": 0.593,
-      "within_2sigma": 0.82,
-      "median_error_over_sigma": 0.754
+      "within_1sigma_count": 93,
+      "within_2sigma_count": 129,
+      "within_1sigma": 0.62,
+      "within_2sigma": 0.86,
+      "median_error_over_sigma": 0.733
      },
      "rot1_deg": {
-      "within_1sigma": 0.64,
-      "within_2sigma": 0.873,
-      "median_error_over_sigma": 0.745
+      "within_1sigma_count": 95,
+      "within_2sigma_count": 130,
+      "within_1sigma": 0.6333333333333333,
+      "within_2sigma": 0.8666666666666667,
+      "median_error_over_sigma": 0.742
      },
      "rot2_deg": {
-      "within_1sigma": 0.673,
-      "within_2sigma": 0.833,
-      "median_error_over_sigma": 0.596
+      "within_1sigma_count": 102,
+      "within_2sigma_count": 127,
+      "within_1sigma": 0.68,
+      "within_2sigma": 0.8466666666666667,
+      "median_error_over_sigma": 0.587
      },
      "student_t_expected": {
       "within_1sigma": 0.577,
@@ -600,52 +673,62 @@
     "coverage_least_squares_sigma": {
      "cases": 150,
      "beam_x_px": {
-      "within_1sigma": 0.873,
+      "within_1sigma_count": 132,
+      "within_2sigma_count": 150,
+      "within_1sigma": 0.88,
       "within_2sigma": 1.0,
-      "median_error_over_sigma": 0.439
+      "median_error_over_sigma": 0.462
      },
      "beam_y_px": {
-      "within_1sigma": 0.92,
+      "within_1sigma_count": 136,
+      "within_2sigma_count": 150,
+      "within_1sigma": 0.9066666666666666,
       "within_2sigma": 1.0,
-      "median_error_over_sigma": 0.354
+      "median_error_over_sigma": 0.358
      },
      "distance_mm": {
-      "within_1sigma": 0.747,
-      "within_2sigma": 0.987,
-      "median_error_over_sigma": 0.603
+      "within_1sigma_count": 116,
+      "within_2sigma_count": 149,
+      "within_1sigma": 0.7733333333333333,
+      "within_2sigma": 0.9933333333333333,
+      "median_error_over_sigma": 0.564
      },
      "rot1_deg": {
-      "within_1sigma": 0.893,
+      "within_1sigma_count": 136,
+      "within_2sigma_count": 150,
+      "within_1sigma": 0.9066666666666666,
       "within_2sigma": 1.0,
-      "median_error_over_sigma": 0.43
+      "median_error_over_sigma": 0.419
      },
      "rot2_deg": {
-      "within_1sigma": 0.88,
-      "within_2sigma": 0.993,
-      "median_error_over_sigma": 0.401
+      "within_1sigma_count": 134,
+      "within_2sigma_count": 149,
+      "within_1sigma": 0.8933333333333333,
+      "within_2sigma": 0.9933333333333333,
+      "median_error_over_sigma": 0.402
      }
     },
     "example": {
      "truth": {
-      "beam_x_px": 200.36638,
-      "beam_y_px": 609.027193,
-      "distance_mm": 2422.214656,
-      "rot1_deg": -1.572923,
-      "rot2_deg": 0.084117
+      "beam_x_px": 200.366380374992,
+      "beam_y_px": 609.027192519236,
+      "distance_mm": 2422.21465612745,
+      "rot1_deg": -1.572922691123,
+      "rot2_deg": 0.084116618061
      },
      "fit": {
-      "beam_x_px": 200.359788,
-      "beam_y_px": 609.022495,
-      "distance_mm": 2422.243615,
-      "rot1_deg": -1.576447,
-      "rot2_deg": 0.122211
+      "beam_x_px": 200.3597878013,
+      "beam_y_px": 609.022495401935,
+      "distance_mm": 2422.243615397756,
+      "rot1_deg": -1.576446632369,
+      "rot2_deg": 0.12221102055
      },
      "sigma": {
-      "beam_x_px": 0.004791,
-      "beam_y_px": 0.005096,
-      "distance_mm": 0.01283,
-      "rot1_deg": 0.012959,
-      "rot2_deg": 0.028451
+      "beam_x_px": 0.004791188378,
+      "beam_y_px": 0.005096161912,
+      "distance_mm": 0.012830009418,
+      "rot1_deg": 0.012958758893,
+      "rot2_deg": 0.028450696324
      },
      "jackknife_two_ring_fits": [
       {

@@ -17,6 +17,11 @@ from src.gimap.shared import fit_names
 from src.gimap.shared.orientation_notes import COVERAGE_WARNING
 
 SENTENCES = (
+    "The estimate draws {weight}% of its weight from {feature}.",
+    "{reference} and frame αi = {value}° ({method}) differ by more than 3σ.",
+    "{reference} and frame αi = {value}° ({method}) agree within 3σ.",
+    "frame αi = {value}° ({method}).",
+    "The frame estimate is unresolved ({method}).",
     "q = {q} Å⁻¹.", COVERAGE_WARNING,
     "At q = {q} Å⁻¹ the pole fit is not determined ({bounds}).",
     "Exclude pixels with αf < {angle}° ({source}). Polarisation: {factor}.",
@@ -163,7 +168,7 @@ SENTENCES = (
 """English templates of the sentences a run writes; ``{name}`` is a value written as it is (or ``NESTED``).
 The fixed sentences (no values) are plain keys of the table. The form with the most fixed text is tried first,
 so a short form never takes a sentence of a longer one ("clear: … beats …")."""
-NESTED = frozenset({"texture", "agree", "extend", "now", "place"})
+NESTED = frozenset({"texture", "agree", "extend", "now", "place", "feature", "method"})
 """Values that are sentences themselves (a texture, whether the halves agree, how far one goes on, "no frame",
 where the search found a file)."""
 LISTS = frozenset({"bounds"})

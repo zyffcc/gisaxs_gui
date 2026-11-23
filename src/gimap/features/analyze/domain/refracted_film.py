@@ -31,6 +31,13 @@ def exit_transmission(sin_exit, delta, beta):
     return _surface_wave(sin_exit, delta, beta)[1]
 
 
+def internal_qz(geometry, sin_exit, delta, beta):
+    """Normal component of the real momentum transfer between the two transmitted waves (Å⁻¹)."""
+    incident = normal_wavevector_ratio(math.sin(geometry.incidence_rad), delta, beta)
+    outgoing = normal_wavevector_ratio(sin_exit, delta, beta)
+    return geometry.wavevector_inv_angstrom * (incident.real + outgoing.real)
+
+
 def _depth_integral(rate, thickness):
     """Integral of exp(−rate*z) from 0 to thickness, including transparent rays."""
     return np.divide(-np.expm1(-rate * thickness), rate,

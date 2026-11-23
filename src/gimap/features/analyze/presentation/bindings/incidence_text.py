@@ -25,6 +25,11 @@ def incidence_text(record, kind):
         observed.append(f"{tr(label)}  {value}")
     if record.get("deg") is not None:
         observed.insert(0, measured_incidence(record))
+        dominant = record.get("dominant_estimator")
+        if dominant:
+            label = {"specular": "Single specular-like spot", "horizon": "Shadow edge", "yoneda": "Yoneda band"}[dominant]
+            observed.append(trf("{feature} supplies {weight}% of the incidence weight.", feature=tr(label),
+                                weight=f"{100 * record['estimator_weights'][dominant]:.2f}"))
     else:
         observed.insert(0, tr("Incidence estimates disagree." if record.get("method") == "disagreement"
                               else "No incidence angle could be measured."))

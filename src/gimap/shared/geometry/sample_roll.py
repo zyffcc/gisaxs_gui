@@ -25,6 +25,7 @@ class RollMeasurement:
     error_deg: float | None
     method: str
     symmetry_feature: str = "fibre rings"
+    assume_fibre_normal: bool = False
 
     @property
     def significant(self) -> bool:
@@ -41,6 +42,7 @@ class HorizonTrace:
     incidence_error_deg: float
     intercept_px: tuple[float, float]
     near_beam_incidence_deg: float | None
+    strip_edges_px: tuple[tuple[float, float], ...] = ()
 
 
 def fit_horizon_trace(data, valid, g):
@@ -140,10 +142,20 @@ def fit_horizon_trace(data, valid, g):
     incidence_error = max(math.sqrt(4 * np.var([fit[1] for fit in estimates])),
                           math.degrees(math.atan2(step * py, g.distance_m)),
                           abs(result[1] - near[1]) if near is not None else 0.)
-    return HorizonTrace(roll, result[1], incidence_error, result[2], near[1] if near else None)
+    # Retain the strongest observed downward gradient in each strip at the fitted slope.
+    # Scatter away from a straight trace reveals displaced shadows on the detector.
+    angle_index = int(np.argmin(np.abs(angles - result[0])))
+    strip_edges = []
+    for x, scores_at_angle in zip(strip_x, stack[:, angle_index]):
+        if np.isfinite(scores_at_angle).any() and np.nanmax(scores_at_angle) > 0.:
+            edge = crossing[angle_index] + slopes[angle_index] * x + offsets[np.nanargmax(scores_at_angle)]
+            point = (edge, cx+x) if transpose else (cx+x, edge)
+            strip_edges.append(tuple(map(float, point)))
+    return HorizonTrace(roll, result[1], incidence_error, result[2], near[1] if near else None, tuple(strip_edges))
 
 
-def measure_sample_roll(data, geometry: DetectorGeometry, *, valid=None, technique="giwaxs") -> RollMeasurement:
+def measure_sample_roll(data, geometry: DetectorGeometry, *, valid=None, technique="giwaxs",
+                        assume_fibre_normal=False) -> RollMeasurement:
     """Estimate absolute ψ, independent of a previously applied sample roll.
 
     Positive ψ puts the surface normal toward lab right. Input pixels are the measured,
@@ -167,6 +179,10 @@ def measure_sample_roll(data, geometry: DetectorGeometry, *, valid=None, techniq
     symmetry = RollEstimate(*pair) if pair is not None else None
     if horizon is None and symmetry is None:
         return RollMeasurement(None, None, None, None, "unavailable", feature)
+    if horizon is None and not gisaxs:
+        if assume_fibre_normal:
+            return RollMeasurement(None, symmetry, symmetry.deg, symmetry.error_deg, "fibre assumption", feature, True)
+        return RollMeasurement(None, symmetry, None, None, "unsupported fibre tilt", feature)
     if horizon is None or symmetry is None:
         chosen = horizon or symmetry
         return RollMeasurement(horizon, symmetry, chosen.deg, chosen.error_deg, "horizon" if horizon else "symmetry",
@@ -178,4 +194,9 @@ def measure_sample_roll(data, geometry: DetectorGeometry, *, valid=None, techniq
     # Both estimators see the same frame, and sometimes the same shadow edge on rings.
     # Retain the best individual error and allow for the observed method disagreement.
     error = max(min(horizon.error_deg, symmetry.error_deg), abs(horizon.deg - symmetry.deg)/2)
+    # A broad edge interval containing zero cannot corroborate a significant ring-only tilt.
+    if not gisaxs and abs(value) >= 3 * error and abs(horizon.deg) < 3 * horizon.error_deg:
+        if not assume_fibre_normal:
+            return RollMeasurement(horizon, symmetry, None, None, "unsupported fibre tilt", feature)
+        return RollMeasurement(horizon, symmetry, value, error, "fibre assumption", feature, True)
     return RollMeasurement(horizon, symmetry, value, error, "combined", feature)

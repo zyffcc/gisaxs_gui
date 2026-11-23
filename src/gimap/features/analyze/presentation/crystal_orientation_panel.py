@@ -58,6 +58,7 @@ def _summary(phase, ring):
                          axes=_axes(phase.get("runner_up_axes")), **stats)
     lines = [
         " · ".join((f"{phase['phase']} · {status}", *reasons)),
+        *([] if phase["determined"] else [tr("Parameters are conditional on the preferred candidate.")]),
         *populations,
         *[trf("Near-random · {reason}", reason=tr(p["reason"])) for p in near_random],
         trf(fraction_label,
@@ -97,7 +98,8 @@ def _plot(plot, phase, ring):
         curves.append((label, chi, np.asarray(family["values"], dtype=float)))
         colors.append(FAMILY_COLORS[i % len(FAMILY_COLORS)])
         styles.append(LineStyle(width=1.5, style=Qt.DashLine, z=2.5))
-    plot.set_labels("χ (°)", tr("N(χ) = net intensity × sin χ"))
+    angle = tr("Internal χ (°)") if ring.get("profile_settings", {}).get("pole_angle_coordinate") == "inside film" else "χ (°)"
+    plot.set_labels(angle, tr("N(χ) = net intensity × sin χ"))
     low, high = ring["q_window"]
     plot.set_title(f"{phase['phase']} · q = {low:.3f}–{high:.3f} Å⁻¹")
     plot.legend.setColumnCount(1 if len(curves) <= 6 else 2)

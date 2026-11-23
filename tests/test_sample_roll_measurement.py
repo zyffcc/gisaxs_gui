@@ -72,6 +72,17 @@ def test_conflicting_texture_and_shadow_are_reported():
     assert not result.significant
 
 
+def test_inclined_fibre_without_a_shadow_cannot_set_sample_roll():
+    data, valid, geometry = _frame(3., shadow=False)
+    result = measure_sample_roll(data, geometry, valid=valid)
+    assert result.horizon is None and result.symmetry.deg == pytest.approx(3., abs=.5)
+    assert result.deg is None and not result.significant
+    assert result.method == "unsupported fibre tilt"
+    assumed = measure_sample_roll(data, geometry, valid=valid, assume_fibre_normal=True)
+    assert assumed.significant and assumed.deg == result.symmetry.deg
+    assert assumed.assume_fibre_normal
+
+
 @pytest.mark.parametrize("masked", [True, False])
 def test_uniform_or_unmeasured_frame_cannot_set_roll(masked):
     data, valid, geometry = _frame(2.)
@@ -83,16 +94,22 @@ def test_uniform_or_unmeasured_frame_cannot_set_roll(masked):
     assert not result.significant
 
 
-def test_p08_roll_reduces_bilateral_profile_residual():
+def test_p08_ring_symmetry_and_conditional_fibre_normal_reduction():
     from tools.benchmarks.sample_roll import DATA, measure_public
 
     if not (DATA / "giwaxs_p08_mapi").is_dir():
         pytest.skip("Public P08 frame is unavailable.")
     result = measure_public("giwaxs_p08_mapi")
-    assert result["significant"] and result["method"] == "combined"
+    assert result["method"] == "unsupported fibre tilt" and not result["significant"]
+    assert abs(result["horizon"]["deg"]) < 3 * result["horizon"]["error_deg"]
+    assert result["incidence"]["roll_deg"] == 0.
+    result = measure_public("giwaxs_p08_mapi", assume_fibre_normal=True)
+    assert result["significant"] and result["method"] == "fibre assumption"
     assert -2. < result["deg"] < -.7
     incidence = result["incidence"]
     assert incidence["used_estimators"] == ("horizon", "specular")
+    assert incidence["dominant_estimator"] == "specular"
+    assert incidence["estimator_weights"]["specular"] > .99
     assert abs(incidence["deg"]-.50) <= incidence["error_deg"] < .03
     assert incidence["deg"]-result["published_incidence_deg"] > 3*incidence["error_deg"]
     # The full frame and the nearest half of strips have different apparent edges.

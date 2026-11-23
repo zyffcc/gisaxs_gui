@@ -1,12 +1,22 @@
-"""Known cells, independent ring-centre errors and a fixed additive shift in q."""
+"""Cell coverage from indexed centres and from unlabelled, unresolved simulated peak positions."""
 
 from __future__ import annotations
 
 from itertools import product
+import argparse
+import json
 import math
+from pathlib import Path
+import sys
 
 import numpy as np
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.gimap.features.analyze.application.cell_assignments import fit_assignments
+from src.gimap.features.analyze.application.indexing import PhaseSpec, assign_peaks
 from src.gimap.features.analyze.domain.crystal.cell import UnitCell
 from src.gimap.features.analyze.domain.crystal.refinement import CellPeak, refine_cell
 
@@ -22,6 +32,55 @@ CELLS = {
     "triclinic": ((5., 6., 7., 84., 97., 106.), (5.018, 5.985, 7.014, 84.1, 96.9, 106.15)),
 }
 SHIFT = 0.0015  # Å⁻¹
+
+
+def _unlabelled(trials):
+    """Only noisy centres, widths and errors enter indexing. Ground truth stays with the scorer."""
+    rng = np.random.default_rng(70814)
+    a, c = 6.018, 8.485
+    spec = PhaseSpec("Tetragonal simulation", (6., 6., 8.40, 90., 90., 90.))
+    # Bragg spacings generated independently of the indexing catalogue. Equivalents
+    # share one radius. Instrumentally unresolved lines form one measured centroid.
+    lines = sorted((2*np.pi*np.sqrt((h*h + k*k)/a**2 + l*l/c**2) + SHIFT, (h,k,l))
+                   for h, k, l in product(range(5), repeat=3) if h >= k and h+k+l)
+    width = .027
+    groups = []
+    for q, hkl in lines:
+        if q > 3.4:
+            break
+        if groups and q - groups[-1][0][0] < .75*width:
+            groups[-1].append((q, hkl))
+        else:
+            groups.append([(q, hkl)])
+    estimates, errors, rows = [], [], []
+    for draw in range(trials):
+        measured = []
+        for group in groups:
+            weights = rng.uniform(.65, 1.35, len(group))
+            sigma = rng.uniform(.00025, .0006)
+            q = np.average([g[0] for g in group], weights=weights) + rng.normal(0., sigma)
+            measured.append({"q": q, "q_err": sigma, "fwhm": width})
+        assigned = assign_peaks(measured, [spec])
+        (fit,), _, _ = fit_assignments([spec], assigned)
+        used = [r["source_index"] for r in fit["residuals"]]
+        rows.append({"draw": draw, "ok": fit["ok"], "reason": fit["reason"], "used": len(used),
+                     "retained_overlaps": sum(len(groups[i]) > 1 for i in used),
+                     "wrong_singletons": sum(len(groups[r["source_index"]]) == 1 and
+                         tuple(r["hkl"]) != groups[r["source_index"]][0][1] for r in fit["residuals"]),
+                     "reassignment_passes": len(fit["assignment_iterations"]) - 1,
+                     "values": fit["values"], "errors": fit["errors"], "zero_shift": fit.get("zero_shift"),
+                     "zero_shift_error": fit.get("zero_shift_error")})
+        if fit["ok"] and fit["zero_shift_fitted"]:
+            estimates.append([fit["values"]["a"], fit["values"]["c"], fit["zero_shift"]])
+            errors.append([fit["errors"]["a"], fit["errors"]["c"], fit["zero_shift_error"]])
+    parameters = {}
+    if estimates:
+        for j, (name, true) in enumerate((("a", a), ("c", c), ("zero_shift", SHIFT))):
+            values, sigmas = np.array(estimates)[:, j], np.array(errors)[:, j]
+            parameters[name] = {"truth": true, "mean": float(values.mean()), "mean_sigma": float(sigmas.mean()),
+                                "coverage": float(np.mean(abs(values-true) <= sigmas))}
+    return {"seed": 70814, "trials": trials, "successful_with_offset": len(estimates), "peaks": len(groups),
+            "overlaps_per_draw": sum(len(group) > 1 for group in groups), "parameters": parameters, "draws": rows}
 
 
 def _rings(cell):
@@ -66,4 +125,17 @@ def coverage(trials=100):
                                 "coverage": float(np.mean(np.abs(values[:, j] - truth[name]) <= errors[:, j])),
                                 "mean_sigma": float(errors[:, j].mean())}
         output[case] = {"trials": trials, "rings": len(q), "parameters": parameters}
+    output["unlabelled_overlapping_positions"] = _unlabelled(trials)
     return output
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--trials", type=int, default=100)
+    parser.add_argument("--json", type=Path)
+    args = parser.parse_args()
+    result = coverage(args.trials)
+    for case, run in result.items():
+        print(case, {k: v["coverage"] for k, v in run["parameters"].items()})
+    if args.json:
+        args.json.write_text(json.dumps(result, indent=2, allow_nan=False), encoding="utf-8")
