@@ -175,7 +175,8 @@ class Sequence:
         for p in self.pools:
             p.join()
 
-    def setup(self, x0, reps, mono, tol, weight, smooth=(), smooth_weight=0.0, far_weight=0.0, prior=None):
+    def setup(self, x0, reps, mono, tol, weight, smooth=(), smooth_weight=0.0, far_weight=0.0, prior=None,
+              film=None, film_free=()):
         'x0: one start vector per window (pnames order). mono: names that may not decrease (scales tol, weight).'
         self.prior = prior if prior is not None and prior.active else None
         W, nf, ns = self.W, self.nf, self.ns
@@ -189,6 +190,10 @@ class Sequence:
         pairs = [(i, i + o) for o in FAR for i in range(W - o)] if self.sf > 0 and self.mono else []
         self.fi = np.array([i for i, _ in pairs], int)
         self.fj = np.array([j for _, j in pairs], int)
+        self.film = np.zeros(W, bool) if film is None else np.asarray(film, bool)
+        free_q = {idx[m] for m in film_free if m in idx} if self.film.any() else set()
+        self.adj_free = {q: self.film[1:] for q in free_q}
+        self.far_free = {q: self.film[self.fj] for q in free_q} if len(self.fj) else {}
         self.ss = math.sqrt(max(float(smooth_weight), 0.0))
         self.smooth = [(idx[m], float(sc), m) for m, sc in smooth if m in idx and sc > 0] if self.ss > 0 else []
         k = np.arange(1, W - 1)
@@ -263,7 +268,9 @@ class Sequence:
 
     def decrease(self, rep, q):
         d = rep[:-1, q] - rep[1:, q]
-        return np.where(np.isfinite(d), d, 0.0)
+        d = np.where(np.isfinite(d), d, 0.0)
+        m = getattr(self, "adj_free", {}).get(q)
+        return d if m is None else np.where(m, -1.0, d)
 
     def curve(self, rep, q):
         'Quantity q at the interior windows minus the value interpolated between the two neighbours (nan kept).'
@@ -277,7 +284,9 @@ class Sequence:
     def far(self, rep, q, sc):
         'Quantity q of an earlier window minus its value FAR places later, beyond one scale (<= 0: no fall).'
         d = rep[self.fi, q] - rep[self.fj, q] - sc
-        return np.where(np.isfinite(d), d, 0.0)
+        d = np.where(np.isfinite(d), d, 0.0)
+        m = getattr(self, "far_free", {}).get(q)
+        return d if m is None else np.where(m, -1.0, d)
 
     def pen_far(self, rep):
         if not len(self.fi):
@@ -463,10 +472,11 @@ class Sequence:
                              tr_solver="lsmr", x_scale="jac", max_nfev=nfev, ftol=1e-5, xtol=1e-8)
 
 
-def refine(sq, x0, reps, mono, tol, weight, smooth, smooth_weight, nfev, outdir, far_weight=0.0, prior=None):
+def refine(sq, x0, reps, mono, tol, weight, smooth, smooth_weight, nfev, outdir, far_weight=0.0, prior=None,
+           film=None, film_free=()):
     'sq: Sequence of the time-ordered windows; x0: their start vectors (pnames order); prior: GrowthPrior or None.'
     t0 = time.time()
-    sq.setup(x0, reps, mono, tol, weight, smooth, smooth_weight, far_weight, prior)
+    sq.setup(x0, reps, mono, tol, weight, smooth, smooth_weight, far_weight, prior, film, film_free)
     sq._base(sq.z0)
     start = sq.state()
     r = sq.solve(nfev)

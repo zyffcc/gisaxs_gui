@@ -39,11 +39,18 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter ▸ Analyze, Refine and Full for Cu and Ag on a polymer film**: the joint fit also starts every film
+  window from the model's film-density fluctuation switched on and from a dense film with small grains on it, each
+  refined on its own, and keeps them where the data fit them better; over the scan it keeps only the metal amount and
+  the film thickness from decreasing, no longer the grain size, spacing and coverage (analysis package c1b0b817). On
+  the scans it was tested on, the fit deviation fell, none grew by more than 5 %, and the thickness fringes of a
+  continuous film come out; the joint fit takes several times longer. Values of these modes on polymer films change;
+  Si, TiO₂ and mode Quick are unchanged (*Physics and Methods* 12.1).
 - **Sputter ▸ Analyze: what the model does not describe.** On a polymer film a line under the **Real Space** views
   says that no metal inside the polymer is drawn (for Cu: the data did not resolve it; for the other metals: the
   model has none), and the report of a metal on a polymer ends with a section on what the model does not describe —
-  that metal and, once the film has formed, the thickness fringes along the exit angle, which the joint fit does not
-  reproduce (analysis package 0d3d5b47; the values of an analysis do not change). Both are in *Known limitations*.
+  that metal and, once the film has formed, the thickness fringes along the exit angle and whether the joint fit
+  matched them (analysis package 0d3d5b47; the values of an analysis do not change). Both are in *Known limitations*.
 - **Sputter ▸ Analyze: the structure at any time.** Under the window line, **Analyze This Time** analyses a time that
   is not one of the analysed windows: within seconds the joint fit interpolated there (along the logarithm of the time
   since the onset), then refined to the frames of that time. It becomes a window marked *on demand* among the others
@@ -1306,9 +1313,9 @@ hold.
 - **Sputter draws and reports no metal inside a polymer film**: the model has none; for Cu on polymer films two forms
   were tested and the data did not resolve either (Ag not tested). GISAXS here cannot tell: use a depth-resolved
   measurement.
-- **Sputter's joint fit does not reproduce the thickness fringes of a continuous film on a polymer** (horizontal
-  stripes along the exit angle). Take the film thickness from the fringes (the report does) and read the model's base
-  layer in the film stage as its closest description.
+- **Sputter can still miss the thickness fringes of a continuous film on a polymer** (horizontal stripes along the
+  exit angle) where the joint solution does not take a dense film, and always in mode Quick. Take the film thickness
+  from the fringes (the report does) and read the model's base layer there as its closest description.
 - **Sputter keeps every result folder**, and the frames its analysis package read (`sputter_client/`), in the user
   data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds its parameters
   and result-folder reference.

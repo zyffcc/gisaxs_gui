@@ -173,7 +173,15 @@ def _render(args):
         _live_window(cfg, ctx, s, t, "refined", "refined", mu, d5, _wanted_live(cfg, ctx, xr, m, p, h, rep.tolist()))
         LV.progress("refine", n + 1, total, force=True, family=cfg["family"], evaluations=seen[0], current=0,
                     budget=budget)
-    for row, t, v in vtodo:
+    _refine_variants(cfg, s, vtodo, var)
+    return rows
+
+
+def _refine_variants(cfg, s, vtodo, var):
+    '--variant: each variant of vtodo [(row, t, variant)] refined on its own (var["refine"]); v["refined"].'
+    from . import adapter as A
+    for n, (row, t, v) in enumerate(vtodo):
+        LV.progress("refine", n, len(vtodo), family=cfg["family"])
         ctx = A.Context(cfg, s, t)
         nf = len(ctx.names)
         t0 = time.time()
@@ -188,6 +196,21 @@ def _render(args):
                                 seconds=time.time() - t0, nfev=var["refine"])
         except (Exception, SystemExit) as e:
             v["refined"] = dict(dev5=float("nan"), error=str(e)[:120])
+    if vtodo:
+        LV.progress("refine", len(vtodo), len(vtodo), force=True, family=cfg["family"])
+
+
+def _variant_pass(args):
+    "--variant in a --reuse run (the second step of analyze's refine mode): the variants of the reused rows, drawn"
+    cfg, scan, rows, var = args
+    from . import adapter as A
+    s = A.get_scan(scan)
+    vtodo = []
+    for row in rows:
+        row.pop("variants", None)
+        if "best" in row:
+            vtodo += [(row, row["t"], v) for v in _variants(A.Context(cfg, s, row["t"]), row["best"]["x"], var, row)]
+    _refine_variants(cfg, s, vtodo, var)
     return rows
 
 
@@ -244,10 +267,10 @@ def _all_times(args):
     return [float(t) for t in tt]
 
 
-def time_path(pools, reps, names, tol, lam, tx=None, cont=(), lam_c=0.0, cap=np.inf):
+def time_path(pools, reps, names, tol, lam, tx=None, cont=(), lam_c=0.0, cap=np.inf, film=None, free=()):
     'Time-consistent choice of one entry per window (Viterbi). pools: time-ordered [(t, [entry])]; an entry holds'
     idx = {r["name"]: k for k, r in enumerate(reps)}
-    mono = [(idx[n], tol.get(n, 0.05)) for n in names if n in idx]
+    mono = [(idx[n], tol.get(n, 0.05), n) for n in names if n in idx]
     use = [i for i, (_, es) in enumerate(pools) if es]
     if not use:
         return {}
@@ -257,7 +280,9 @@ def time_path(pools, reps, names, tol, lam, tx=None, cont=(), lam_c=0.0, cap=np.
     for i in range(1, len(use)):
         A, B = R[i - 1], R[i]
         C = np.zeros((len(A), len(B)))
-        for k, tl in mono:
+        for k, tl, nm in mono:
+            if film is not None and film[use[i]] and nm in free:
+                continue
             d = A[:, None, k] - B[None, :, k] - tl
             C += lam * np.where(np.isfinite(d) & (d > 0), d / tl, 0.0) ** 2
         if cont and lam_c > 0:
@@ -434,6 +459,37 @@ def _client_entry(cfg, a, data_root):
     return dict(metal=meta.get("metal", "?"), env=env, client=True), meta
 
 
+FILM_AMOUNT_NM = 6.5
+"""--film-stage amount: the nominal amount from which a window counts as film (the report's stage by amount)."""
+
+
+def film_windows(feats, times, porous=False, how="reading", rows=None, pnames=None):
+    "Whether each window of times is in the film stage. how: 'reading' - read from the counts alone as the report"
+    from .report import _stages
+    by = {float(d["t"]): d for d in feats}
+    if how == "amount":
+        return [float(by.get(float(t), {}).get("h_nom", 0.0)) >= FILM_AMOUNT_NM for t in times]
+    if how == "fb":
+        k = list(pnames).index("fb")
+        best = {float(r["t"]): r["best"]["x"][k] for r in rows if "best" in r}
+        return [best.get(float(t), 0.0) >= 0.5 for t in times]
+    lines = []
+    for t in times:
+        d = by.get(float(t), {})
+        L = {"h_nom": float(d.get("h_nom", 0.0))}
+        of, og = d.get("obs_fringe") or {}, d.get("obs_grain") or {}
+        if of.get("status"):
+            L["obs_fringe_status"] = of["status"]
+        if of.get("d_nm"):
+            L["obs_d_fringe_nm"] = of["d_nm"]
+        if og.get("status"):
+            L["obs_h_grain_status"] = og["status"]
+        if og.get("d_nm"):
+            L["obs_h_grain_nm"] = og["d_nm"]
+        lines.append(L)
+    return [st == "film" for st, _ in _stages(lines, porous)]
+
+
 def parse_variants(specs, pnames, refine, min_fb):
     '--variant NAME=VALUE,... (repeatable) -> dict(variants=[(label, [(name, value)])], refine, min_fb) for _render,'
     if not specs:
@@ -531,6 +587,12 @@ def main():
                     "0 = drawn only")
     ap.add_argument("--variant-min-fb", type=float, default=0.5, help="--variant: only windows whose best candidate has "
                     "a base share fb at least this (film stage); 0 = every window")
+    ap.add_argument("--film-free", default="", help="--sequence: NAME,... of the no-decrease quantities not charged for a "
+                    "step into a film-stage window (read from the counts as the report does); e.g. lnD_mass,cov,lnR_mass: on a "
+                    "closed film the grains are relief and need not keep growing like islands (2026-11-23); default none")
+    ap.add_argument("--film-stage", choices=["reading", "amount", "fb"], default="reading", help="--film-free: how a "
+                    "window is put in the film stage - reading: from the counts as the report does; amount: nominal amount "
+                    f">= {FILM_AMOUNT_NM} nm; fb: best candidate with fb >= 0.5")
     ap.add_argument("--transplant", type=int, default=1, help="--sequence: 1 = the solutions of neighbouring windows "
                     "join the pool of a window, 0 = candidates and own refined solution only")
     ap.add_argument("--no-network-step", action="store_true", help="a GUI's step tree: this run only refines (analyze "
@@ -675,6 +737,16 @@ def main():
             r.pop("seq", None)
         okf = [d for d in feats if d["ok"]]
         print(f"--reuse: {len(okf)} windows (features, candidates, per-window refinement) from state.json.gz", flush=True)
+        var = parse_variants(a.variant, info["pnames"], a.variant_refine, a.variant_min_fb)
+        if var and a.sequence > 0:
+            LV.step("joint.pool", "running", summary="film windows: start variants refined on their own")
+            t_var = time.time()
+            chunks = [rows[i::nw] for i in range(nw)]
+            rows = sum(runner.run(cfg, [(cfg, a.scan, c, var) for c in chunks if c], _variant_pass, nw, data=a.data,
+                                  shadow=a.shadow), [])
+            rows.sort(key=lambda r: r["t"])
+            print(f"--variant: {sum(len(r.get('variants', ())) for r in rows)} start variants in "
+                  f"{sum(bool(r.get('variants')) for r in rows)} windows ({time.time() - t_var:.0f} s)", flush=True)
     if netfam != cfg["family"]:
         new_ = [n_ for n_ in info["pnames"] if n_ not in meta["params"]]
         dropped_ = [n_ for n_ in meta["params"] if n_ not in info["pnames"]]
@@ -685,6 +757,11 @@ def main():
     mono = ([m_ for m_ in a.monotone.split(",") if m_] if a.monotone is not None
             else list(cfg.get("monotone", ["lnD", "cov"])))
     use = [r for r in rows if "best" in r]
+    free = [n_ for n_ in a.film_free.split(",") if n_]
+    if [n_ for n_ in free if n_ not in mono]:
+        raise SystemExit(f"--film-free {a.film_free}: only no-decrease quantities ({', '.join(mono)})")
+    film_ = film_windows(feats, [r["t"] for r in use], porous=cfg["family"].startswith("tio2"), how=a.film_stage,
+                         rows=use, pnames=info["pnames"]) if free and use else None
     seq, scales = None, []
     if a.sequence > 0 and use:
         from . import sequence as SQ
@@ -756,7 +833,8 @@ def main():
                     for k_, (_, es) in enumerate(pools):
                         for e in es:
                             e["prior"] = prior.cost(e["h_m"], e["reported"], bool(sq.after[k_]))
-            path = time_path(pools, reps, mono, TOL, a.path_weight, sq.tx, cont, a.smooth_weight, a.jump_cost)
+            path = time_path(pools, reps, mono, TOL, a.path_weight, sq.tx, cont, a.smooth_weight, a.jump_cost,
+                             film=film_, free=free)
             chosen = {t: es[path[t]] for t, es in pools}
             _dump(out / "pool.json.gz", dict(key=key, t=[t for t, _ in pools], tx=sq.tx, scales=scales, growth=GROW,
                                              jump_cost=a.jump_cost, smooth_weight=a.smooth_weight, monotone=mono,
@@ -768,9 +846,12 @@ def main():
                 setup_notes["variants"] = dict(specs=list(a.variant), refine=a.variant_refine, min_fb=a.variant_min_fb,
                                                windows=sorted(float(r["t"]) for r in use if r.get("variants")),
                                                start_from={f"{t:g}": chosen[t].get("src") for t, _ in pools})
+            if free:
+                setup_notes["film_free"] = dict(quantities=free, rule=f"film stage: {a.film_stage}",
+                                                windows=[float(r["t"]) for r, f in zip(use, film_) if f])
             a._setup_notes = setup_notes
             sw, seq = SQ.refine(sq, x_start, reps, mono, TOL, a.path_weight, scales,
-                                a.smooth_weight, a.sequence, out, a.far_weight, prior)
+                                a.smooth_weight, a.sequence, out, a.far_weight, prior, film=film_, film_free=free)
             sh_ = seq.get("shared") or {}
             LV.step("joint.fit", "done", detail="joint.json" if history else None,
                     summary=f"{len(history)} iterations, median fit deviation {seq['end']['median_dev5']:.1f}"

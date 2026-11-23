@@ -45,6 +45,16 @@ def growth_prior_used(setting, metal, substrate):
     return setting == "on" or (setting == "auto" and (metal, substrate) in PRIOR_DEFAULT_ON)
 
 
+VARIANT_FAMILIES = ("cu_p5", "polyag_p3")
+VARIANT_ARGS = ["--variant", "lnRP=1.791759,lnAP=0", "--variant", "fb=0.9,lnR=1.1,lnRP=1.791759,lnAP=0",
+                "--variant-refine", 15, "--monotone", "lnh_mass,lnt_film"]
+
+
+def variant_args(family, sequence):
+    'The start-variant arguments of predict for this family when it runs the whole-scan refinement.'
+    return list(VARIANT_ARGS) if sequence and family in VARIANT_FAMILIES else []
+
+
 MODES = dict(quick=dict(refine=0, sequence=0, max_windows=60), refine=dict(refine=0, sequence=6, max_windows=24),
              full=dict(refine=30, sequence=30, max_windows=96))
 FILES = dict(report_md="REPORT.md", report_png="report.png", report_csv="report.csv", windows_csv="windows.csv",
@@ -289,6 +299,7 @@ def main(argv=None):
             args = [f, "--scan", a.label, "--out", out / f, "--times", "all", "--step", a.step, "--max-windows",
                     a.max_windows or mode["max_windows"], "--k", 3, "--workers", a.workers, "--refine", refine]
             args += ["--sequence", sequence] if sequence else []
+            args += variant_args(f, sequence)
             args += ["--growth-prior", "default"] if sequence and a.prior_used else []
             args += ["--like", like] if like else []
             return args + (["--data", data] if data is not None else [])
