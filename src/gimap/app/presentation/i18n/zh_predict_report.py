@@ -23,7 +23,7 @@ PREDICT_REPORT_ZH = {
         "模型中的数值及其 68 % 区间（区间已扩展至包含最小二乘值）：{values}。",
     "The particles in Model uses the families in radius order, with their paracrystals. "
     "For a choice of particles, the network proposes compositions. Evidence or BIC weights rank the fits.":
-        "使用模型中的颗粒时，按半径顺序采用各颗粒类型及其准晶设置。若允许选择颗粒，网络提出候选组成，按证据或 BIC 权重排列拟合结果。",
+        "使用模型中的颗粒时，按半径顺序采用各颗粒类型及其次晶设置。若允许选择颗粒，网络提出候选组成，按证据或 BIC 权重排列拟合结果。",
     "The network proposes particles and sizes. Least squares refines the values. Evidence compares the solutions, "
     "with BIC weights if sampling fails. Refine afterwards to use the limits in Model.":
         "网络提出颗粒组成和尺寸，再用最小二乘精修数值。按证据比较各解；抽样失败时用 BIC 权重。之后可在模型的范围内精修。",

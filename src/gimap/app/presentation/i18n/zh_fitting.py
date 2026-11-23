@@ -449,7 +449,7 @@ FITTING_ZH = {
     'Any particles (1–3)':
         '任意颗粒（1–3 种）',
     'The particles in Model: their families, with or without a paracrystal, in the order of their radii. A choice: the network proposes the compositions it finds most probable among these, and their posterior probabilities decide.':
-        '模型中的颗粒：它们的形状、是否有准晶结构因子，按半径排序。选择一类：网络在其中给出它认为最可能的组成，由后验概率决定。',
+        '模型中的颗粒：它们的形状、是否有次晶结构因子，按半径排序。选择一类：网络在其中给出它认为最可能的组成，由后验概率决定。',
     'Predict: the solutions':
         '预测：解的得出方式',
     'Refine each solution (least squares)':

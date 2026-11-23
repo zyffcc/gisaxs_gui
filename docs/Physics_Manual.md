@@ -1,15 +1,14 @@
 # GIMaP Physics and Methods Reference
 
-This reference states what GIMaP computes, from a detector frame to a reported number: every equation as it is implemented, with its symbols, units, defaults and thresholds, the assumptions behind it, what it does not model, and how its uncertainties are estimated. It is written for the scientists who measure GISAXS and GIWAXS with GIMaP, so that they can judge and report its results, and for referees, who should be able to reproduce a number from the equations and the settings in the export records. It does not explain the windows and buttons: each method names the place in the program where it is used in one short clause.
+This reference states what GIMaP computes, from a detector frame to a reported number. It gives each equation as implemented, with its symbols, units, defaults and thresholds, its assumptions, what it leaves out, and how its uncertainties are estimated. With the equations and the settings in the export records, a reader can reproduce a reported number. Each method names in one short clause where the program uses it; the windows and buttons are described in the User Manual.
 
 Applies to GIMaP 0.2.0.
 
-Opened from **Help ▸ Physics and Methods**, this reference has a fixed, expandable chapter outline and
-**Search this document** for headings and text. Both work offline; click a result to jump to its section.
-Equations retain their original symbols, spacing and line breaks in fixed-width blocks. Scroll horizontally
-inside a wide block to read the complete equation and its number; the text remains selectable and copyable.
+In **Help ▸ Physics and Methods** this reference has an expandable chapter outline and **Search this document**
+for headings and text. Both work offline; click a result to jump to its section. Equations are in fixed-width
+blocks; scroll a wide block sideways to see the whole equation and its number.
 
-The [User Manual](User_Manual.md) (`docs/User_Manual.md`, Help ▸ User Manual) explains how to use the program; this reference explains what the program does with the data. Both describe the same version. Where they seem to disagree, or where this text disagrees with the program, please report it.
+The [User Manual](User_Manual.md) (`docs/User_Manual.md`, Help ▸ User Manual) explains how to use the program; this reference explains what the program does with the data. Both describe the same version. Please report any place where they disagree, or where this text disagrees with the program.
 
 To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root of the repository, or Help ▸ How to Cite GIMaP…, and name the version you used. Methods taken from other work are cited where they are used; the full list is under References at the end.
 
@@ -275,7 +274,7 @@ X_j = (j + 0.5 − x_c) · p_x                                          (1.3)
 Y_i = (y_c − (i + 0.5)) · p_y                                        (1.4)
 ```
 
-X points to the right of the image and Y points up: the sign of Y is opposite to the row index. `X`, `Y` and `L` share one length unit. A test pins the convention: with `(x_c, y_c) = (3.5, 2.5)` the centre of pixel (row 2, column 3) sits at `X = Y = 0`, and the pixel one row up has `Y = +p_y`.
+X points to the right of the image and Y points up: Y decreases as the row index grows. `X`, `Y` and `L` share one length unit. Example: with `(x_c, y_c) = (3.5, 2.5)` the centre of pixel (row 2, column 3) sits at `X = Y = 0`, and the pixel one row up has `Y = +p_y`.
 
 For a sub-image whose top-left corner is pixel `(top, left)`, the beam centre becomes `(x_c − left, y_c − top)`. Every physical pixel keeps its q.
 
@@ -308,7 +307,7 @@ Analyze takes the geometry of a frame from an instrument profile: a stored geome
 - **Order.** (1) The profile picked by the user, when it is for frames of this size or has no stored size. (2) The `.poni` beside the frame: in the frame's own folder, the `.poni` whose name begins like the frame's (or the frame's like its), else the only `.poni` there; it is used when it states a wavelength, its `max_shape` (if stated) equals the frame shape and its pixel size agrees within 1 % with the header's (if stated). (3) The profile matched by score (below). (4) None: nothing is reduced.
 - **Another detector.** A profile picked by the user for frames of another size is not used on this frame: the frame then takes (2) or (3), and the message says which profile was set aside and why. Only an explicit **Use Anyway** for that frame size uses it.
 - **Score.** Every profile gets a score: a profile with a stored frame shape that differs from the frame scores 0 and is never used; an equal shape adds 1; a detector name that equals or prefixes the other (case-insensitive, runs of spaces ignored) adds 2. The highest score wins; ties go to the most recently updated profile.
-- **A `.poni` beside the frame and a matched profile.** The file wins over a profile matched by score, because a profile of the same detector may come from another experiment. A profile whose `source` names that file or the frame's folder wins over the file: a beam centre or geometry saved in Analyze while the file was in use names it, so what was saved later is used.
+- **A `.poni` beside the frame and a matched profile.** The file wins over a profile matched by score, because a profile of the same detector may come from another experiment. A profile whose `source` names that file or the frame's folder wins over the file: it holds a beam centre or geometry saved in Analyze while the file was in use, so the later values are used.
 - **Overrides.** Each override replaces one field and nothing else:
   - a beam centre set in the session (only on frames of the shape it was set on);
   - the beam centre written in the file header (CBF `Beam_xy`, NeXus `beam_center_x/y`), only when the user opts in; the default is off;
@@ -323,7 +322,7 @@ Implementation: `src/gimap/features/analyze/application/geometry_resolution.py`,
 
 ### 1.5 Exception: Trainset's legacy convention
 
-The retired Trainset research code keeps the convention with which its training data were generated. It is not an application workspace. Its detector grid is
+The retired Trainset research code, outside the application, keeps the convention of its training data. Its detector grid is
 
 ```text
 X_j = (j − x_c,index) · p_x,      Y_i = (y_c,index − i) · p_y          (1.6)
@@ -387,7 +386,7 @@ tan 2θ_f = X / (L cos α_i + Y sin α_i)                                (2.9)
 
 The code computes the three components of (2.3) directly; it never forms 2θ_f.
 
-Signs at ψ = 0 for a perpendicular detector in orientation 3: `q_y > 0` to the right of the direct beam on the image, `q_z > 0` above the horizon. At the direct beam `q = 0` and `α_f = −α_i`. The tests pin three points: the direct beam gives `q = (0, 0, 0)`; the horizon (`X = 0`, `Y = L tan α_i`) gives `q = k (1 − cos α_i, 0, sin α_i)`; the specular beam (`X = 0`, `Y = L tan 2α_i`) gives `q = (0, 0, 2k sin α_i)`. For every pixel `|k_f| = k` to 10⁻¹³ Å⁻¹. With `α_i = 0` the map reduces to transmission rings.
+Signs at ψ = 0 for a perpendicular detector in orientation 3: `q_y > 0` to the right of the direct beam on the image, `q_z > 0` above the horizon. At the direct beam `q = 0` and `α_f = −α_i`. Three reference points: the direct beam gives `q = (0, 0, 0)`; the horizon (`X = 0`, `Y = L tan α_i`) gives `q = k (1 − cos α_i, 0, sin α_i)`; the specular beam (`X = 0`, `Y = L tan 2α_i`) gives `q = (0, 0, 2k sin α_i)`. For every pixel `|k_f| = k` to 10⁻¹³ Å⁻¹. With `α_i = 0` the map reduces to transmission rings.
 
 This exact flat-detector model is the only q mapping that Analyze uses. Its derivation is standard (Renaud et al., 2009; Hexemer & Müller-Buschbaum, 2015).
 
@@ -406,7 +405,7 @@ q_∥ = sign(q_y) · √(q_x² + q_y²)                                       (2
 - **|q| and 2θ are independent of α_i and ψ.** A rotation keeps the angle between `k_i` and `k_f`, so 2θ from (2.12) is the true scattering angle. In the laboratory frame `cos 2θ = k̂_i · k̂_f = L/L_p`. The optional 2θ axis of the GIWAXS I(q) curves converts the q of each point with (2.12); the bins stay uniform in q.
 - **χ** (GIWAXS polar angle): 0° along the surface normal (out of plane), ±90° in the sample plane, with the sign of `q_y`. Above the horizon `q_z > 0`, so χ lies between −90° and +90°. Because `q_∥² + q_z² = |q|²`, a point at (|q|, χ) has `q_∥ = |q| sin χ` and `q_z = |q| cos χ` exactly.
 - **Missing wedge.** In the plane of incidence (`X′ = 0`, the beam column for an unrotated detector and ψ = 0) `q_y = 0` but `q_x ≠ 0`, so χ is not zero there. With the public P08 geometry (section 2.4), the beam column reaches χ ≈ 2.2° at |q| = 0.73 Å⁻¹, 5.7° at 1.83 Å⁻¹ and 9.0° at 2.87 Å⁻¹. Smaller χ at these |q| is not measured by a flat detector (Baker et al., 2010).
-- A second azimuth exists in the code for transmission data, `atan2(Y, X)` (0° to the right, 90° up). No part of the program uses it; every χ shown or exported by Analyze is the χ of (2.13).
+- For grazing-incidence frames, every χ shown or exported by Analyze is the χ of (2.13). Transmission frames use the detector azimuth (section 6.11).
 
 Implementation: `src/gimap/shared/geometry/q_mapping.py`, `src/gimap/features/analyze/domain/giwaxs.py`
 
@@ -427,19 +426,19 @@ and the exit angle at a row on the beam column is `α_f = atan2((y_c − row) p_
 
 Example (GALAXI geometry of section 1.4): `row_horizon` = 638.3 and `row_specular` = 557.0. The Yoneda band of this frame lies at row 607.5, which (2.14) turns into `α_f` = 0.18°.
 
-**Measuring ψ on one frame.** Both measurements use calibrated rays and valid measured pixels. The angle search runs from −8° to +8° in 0.1° increments. Film absorption, fibre Lorentz weighting and mirror filling are omitted when measuring ψ. On the detector, the projected horizon is a straight line. The first estimator scores the intensity drop across that line in strips of columns near the horizon. A free offset lets the observed edge lie above or below the geometric horizon (for example, at a Yoneda band). Deleting contiguous groups of strips measures how much the slope depends on the chosen part of the edge.
+**Measuring ψ on one frame.** Two estimators use the calibrated rays and the valid measured pixels, without film absorption, Lorentz weighting or mirror filling. Each searches ψ from −8° to +8° in steps of 0.1°. The first uses the horizon, a straight line on the detector: it scores the intensity drop across that line in strips of columns near the horizon. A free offset lets the observed edge lie above or below the geometric horizon (for example at a Yoneda band). Leaving out contiguous groups of strips shows how much the slope depends on the part of the edge used.
 
-At fixed vacuum |q|, rays on opposite sides of the incidence plane have equal |χ|. Write their laboratory azimuths from vertical as β = atan2(X,Y). For each strong ring, the second estimator minimises the mean of `[I(ψ+β) − I(ψ−β)]²` using the same measured pairs of angular bins at every trial ψ. Flat profiles, ambiguous minima and insufficient bilateral coverage do not determine a symmetry axis. The uncertainty includes angular sampling, correlated sector residuals and differences between rings. In GISAXS the second estimator fits the direction of a narrow central specular rod in laboratory coordinates.
+At fixed vacuum |q|, rays on opposite sides of the incidence plane have equal |χ|. Write their laboratory azimuths from vertical as β = atan2(X,Y). For each strong ring, the second estimator minimises the mean of `[I(ψ+β) − I(ψ−β)]²` over the same measured pairs of angular bins at every trial ψ. A ring with a flat profile, an ambiguous minimum or too little coverage on both sides gives no estimate. The uncertainty includes angular sampling, correlated sector residuals and differences between rings. In GISAXS the second estimator fits the direction of a narrow central specular rod in laboratory coordinates.
 
-A single shadow edge, Yoneda band or specular rod can supply the roll. A tilted fibre axis gives the same ring symmetry as a rolled substrate. To apply a significant GIWAXS ring estimate, the edge must independently reach three standard errors from zero and agree with the rings. When the user explicitly assumes a surface-normal fibre axis, the ring estimate is also admissible without a resolved edge. Conflicting measurements still prevent selection. For two estimates with standard errors s₁ and s₂, agreement requires `|ψ₁ − ψ₂| ≤ 2√(s₁²+s₂²)`. Their mean uses inverse-variance weights. Because both estimates use the same frame, its uncertainty is the larger of the smaller individual error and half their difference. Disagreement is recorded with both estimates. Automatic analysis uses a roll supplied for the run or set in Analyze, including zero. It also keeps a nonzero roll in the resolved geometry. Otherwise it applies the frame estimate when `|ψ| ≥ 3s`. These are frame-based uncertainties conditional on the detector calibration.
+A shadow edge, Yoneda band or specular rod alone can give the roll. A tilted fibre axis gives the same ring symmetry as a rolled substrate. A GIWAXS ring estimate is therefore applied only when the edge also lies three standard errors from zero and agrees with the rings, or when the user states that the fibre axis is the surface normal. Conflicting estimates give no roll. Two estimates with standard errors s₁ and s₂ agree when `|ψ₁ − ψ₂| ≤ 2√(s₁²+s₂²)`; they are then averaged with inverse-variance weights. Both come from the same frame, so the error of the mean is the larger of the smaller single error and half their difference. A disagreement is recorded with both estimates. Automatic analysis uses a roll supplied for the run or set in Analyze (zero included) and keeps a nonzero roll of the resolved geometry. Otherwise it applies the frame estimate when `|ψ| ≥ 3s`. The errors assume a correct detector calibration.
 
 Implementation: `src/gimap/shared/geometry/detector_geometry.py`, `src/gimap/features/analyze/domain/gisaxs.py`, `src/gimap/features/analyze/domain/giwaxs.py`
 
-**Measuring the external incidence angle.** The direct beam, pixel pitches and detector rotations define a ray for each pixel. Write its components as (b, x, z) along the beam, across it and up in the plane of the rolled sample normal. On the horizon the exit angle is zero, giving αᵢ = atan2(z,b). For an on-axis specular reflection the ray has turned through 2αᵢ, giving αᵢ = ½ atan2(z,b). A GISAXS band at a known material critical angle α_c satisfies (z cos αᵢ − b sin αᵢ)/|r| = sin α_c. On the incidence plane this gives αᵢ = atan2(z,b) − α_c. A band from a multilayer requires a choice of interface. For an explicitly selected Si, SiO₂, plate glass or Au layer, the program evaluates α_c ≃ √(2δ) in radians using the density and wavelength-dependent forward scattering factors in §9.17. Outside the optical table’s 4.895–30 keV range, the other estimators remain available and the report explains why the band was omitted. An independently known α_c can be supplied directly.
+**Measuring the external incidence angle.** The direct beam, pixel pitches and detector rotations define a ray for each pixel. Write its components as (b, x, z) along the beam, across it and up in the plane of the rolled sample normal. On the horizon the exit angle is zero, giving αᵢ = atan2(z,b). For an on-axis specular reflection the ray has turned through 2αᵢ, giving αᵢ = ½ atan2(z,b). A GISAXS band at a known material critical angle α_c satisfies (z cos αᵢ − b sin αᵢ)/|r| = sin α_c. On the incidence plane this gives αᵢ = atan2(z,b) − α_c. For a band from a multilayer, choose the interface. For a selected Si, SiO₂, plate glass or Au layer, the program computes α_c ≃ √(2δ) in radians from the density and the wavelength-dependent forward scattering factors of §9.17. Outside the table's 4.895–30 keV the band is left out, the report says why, and the other estimators still run. A known α_c can also be entered directly.
 
-The shadow fit determines its intercept with the input αᵢ set to zero. Its uncertainty includes sampling, omission of contiguous detector strips and the shift on using only strips closer to the beam. The specular search tests 0–3° incidence. It requires a localized peak on the calculated ray above both flanks. A second check follows the cone of constant |q| to detect Bragg arcs: after subtracting a local radial background, either side retaining at least half the axial signal at 1.5–3 radial widths excludes the peak. A compact diffraction spot exactly on that ray can still mimic specular reflection. Its angular error is half the greater of one sampling interval and the peak FWHM divided by 2.355, in scattering angle. The GISAXS band uses the existing off-axis Yoneda estimate. Its width and row sampling give an angular error. Its illuminated flank cannot also count as a shadow.
+The shadow fit finds its intercept with the input αᵢ set to zero. Its error includes sampling, leaving out contiguous detector strips, and the shift when only strips near the beam are used. The specular search tests incidence angles of 0–3° and needs a localized peak on the calculated ray, above both flanks. To reject Bragg arcs it follows the cone of constant |q|: after subtraction of a local radial background, the peak is rejected when either side keeps at least half the axial signal at 1.5–3 radial widths. A compact diffraction spot exactly on that ray can still pass as a specular reflection. The specular error is half the larger of one sampling interval and FWHM/2.355 of the peak, in scattering angle. The GISAXS band uses the off-axis Yoneda estimate; its width and row sampling give its error, and its illuminated flank does not also count as a shadow.
 
-For a unique largest set of estimates with every pair within three combined standard errors, the program reports their inverse-variance weighted mean. Its error is at least the smallest component uncertainty and increases with excess between-method scatter. A selected angle must exceed zero by more than three standard errors. The record keeps the individual estimates even when the frame gives no selection. The errors are conditional on the calibration, feature identification and any supplied critical angle. The normalized weight of estimator j is (1/sⱼ²)/Σ(1/sₖ²) over the selected observations. The report names an estimator with weight at least 90%, including when a single specular-like spot supplies the precision. The near-beam intercept is a check on the full shadow trace. The JSON retains the calibrated direct beam, the unsmoothed spot and flank intensities, and the strongest edge position from each contributing strip.
+The program takes the largest set of estimates in which every pair agrees within three combined standard errors. When that set is unique, it reports their inverse-variance weighted mean. The error of the mean is at least the smallest single error and grows with excess scatter between the methods. A selected angle must exceed zero by more than three standard errors. The errors assume a correct calibration, feature identification and supplied critical angle. The weight of estimator j is (1/sⱼ²)/Σ(1/sₖ²) over the selected estimates. The report names an estimator with a weight of 90 % or more, for example a single specular-like spot. The near-beam intercept checks the full shadow trace. The JSON keeps the individual estimates (also when none is selected), the calibrated direct beam, the unsmoothed spot and flank intensities, and the strongest edge position of each strip used.
 
 ### 2.4 GISAXS or GIWAXS
 
@@ -453,7 +452,7 @@ where `W` and `H` are the numbers of columns and rows. The frame is GIWAXS when 
 
 **SAXS/WAXS in transmission.** A powder calibrant measured in transmission at a SAXS distance would be GISAXS by this rule. Analyze's Auto therefore takes a frame as transmission (mode **SAXS**, SAXS/WAXS in transmission, section 6.11) when no incidence angle is known (none set, and 0° in the geometry) and either the file name names a standard (the words `agbh`, `agbe`, `behenate`, `lab6`, `ceo2`) or the frame shows three or more complete rings by the test below. An incidence angle above 0 always means grazing incidence. The mode can also be chosen by hand. The ring test runs once per frame and beam centre (`analyze/application/technique.py`).
 
-The ring test: the valid pixels are averaged in 1-pixel rings about the beam centre and in 24 sectors of 15°; a maximum of the ring average that exceeds its 61-pixel running median by 6 robust σ and by 30 % of that median, and is at most 25 pixels wide at half height, is a ring; it is complete when the detector covers at least 90° of azimuth at its radius and at least 80 % of the covered sectors show 30 % of its height above their own background. With three or more complete rings Analyze reduces the frame in transmission; the automatic analysis reports it as a transmission frame of a calibrant or powder, runs its GISAXS procedure on it (the cuts are written) and fits no particle model (`analyze/domain/ring_frame.py`, `assistant/application/ring_frames.py`). The public silver behenate frame has five such rings, the public GALAXI GISAXS frame none.
+The ring test averages the valid pixels in 1-pixel rings about the beam centre and in 24 sectors of 15°. A ring is a maximum of the ring average that exceeds its 61-pixel running median by 6 robust σ and by 30 % of that median, and is at most 25 pixels wide at half height. It is complete when the detector covers at least 90° of azimuth at its radius and at least 80 % of the covered sectors show 30 % of its height above their own background. With three or more complete rings Analyze reduces the frame in transmission. The automatic analysis reports it as a transmission frame of a calibrant or powder, runs its GISAXS procedure on it (the cuts are written) and fits no particle model (`analyze/domain/ring_frame.py`, `assistant/application/ring_frames.py`). The public silver behenate frame has five such rings, the public GALAXI GISAXS frame none.
 
 Examples from the public data: the GALAXI frame reaches `2θ_max` = 5.3° (GISAXS). The P08 GIWAXS frame (`giwaxs_p08_mapi`, PerkinElmer 2048 × 2048 px, `p` = 200 µm, `λ` = 0.6888 Å, `L` = 811.8 mm, direct beam (545.5, 1826.9) px from its `.poni`, `α_i` = 0.075°) reaches 30.2° (GIWAXS).
 
@@ -463,14 +462,14 @@ Implementation: `src/gimap/features/analyze/domain/classification.py`
 
 ### 2.5 What the q map does not model
 
-The following effects are not in the q map, nor anywhere else in Analyze:
+Analyze, the q map included, leaves out these effects or applies them only when chosen:
 
 - **Refraction and the distorted-wave Born approximation (DWBA).** `q_z` is the kinematic vacuum value unless the film's critical angle is given (section 2.6). No reflected-wave terms of the DWBA are computed.
-- **Detector tilt and rotation.** All three detector rotations enter the pixel rays, q, χ, the solid angle and the polarisation factor (section 3.7). Geometry Calibration fits rot1 and rot2 (section 3.8).
-- **Sample azimuth.** The sample axes are fixed by the surface normal and incident beam. A separate crystallographic azimuth about the surface normal requires independent information.
+- **Detector tilt and rotation** are included: all three rotations enter the pixel rays, q, χ, the solid angle and the polarisation factor (section 3.7). Geometry Calibration fits rot1 and rot2 (section 3.8).
+- **Sample azimuth.** The sample axes are fixed by the surface normal and the incident beam. A crystallographic azimuth about the surface normal needs separate information.
 - **Parallax and sensor thickness.** A pixel is its centre; there is no depth of interaction and no pixel splitting.
 - **Flat field and efficiency.** A flat field (detector response) divides the frames only when one is chosen (section 4.10; off by default). No detector-efficiency, air or window absorption correction is applied.
-- **Absolute intensity.** Section 4.12 describes optional normalisation by exposure time, monitor, transmission and thickness, and calibration in cm⁻¹ for a given set-up. Flat-field and geometric corrections act before this step (section 4.10 and chapter 5). Normalising a series to a reference peak gives a relative intensity (section 6.10).
+- **Absolute intensity.** Normalisation by exposure time, monitor, transmission and thickness, and calibration in cm⁻¹, are optional (section 4.12); they act after the flat-field and geometric corrections (section 4.10 and chapter 5). Normalising a series to a reference peak gives a relative intensity (section 6.10).
 - **Beam properties.** Divergence, energy bandwidth and footprint are not modelled.
 
 Implementation: `src/gimap/shared/geometry/q_mapping.py` (the only q mapping Analyze uses)
@@ -490,13 +489,13 @@ q_y and q_∥ do not change; |q| of (2.10) and χ of (2.13) use the q_z of (2.18
 - Below α_c a wave in the film is evanescent and its term is 0. q_z then no longer tells α_f, so pixels with
   α_f < α_c are left out of the q maps, of I(q), I(χ), the sectors and boxes of GIWAXS, and the vertical GISAXS cut
   stops at the row of α_c. The horizontal cut I(q_y) does not change. With α_i < α_c the incident term is 0.
-- Hand example (tested): λ = 1 Å, α_i = 0.2°, α_c = 0.15°, α_f = 1.0°: q_z = 2π (0.0172549 + 0.0023088) =
+- Example: λ = 1 Å, α_i = 0.2°, α_c = 0.15°, α_f = 1.0°: q_z = 2π (0.0172549 + 0.0023088) =
   0.122923 Å⁻¹, against the kinematic 2π (sin 1° + sin 0.2°) = 0.131583 Å⁻¹.
-- It describes one homogeneous film and the transmitted waves only. The reflected-wave terms of the DWBA, a
-  substrate and a depth profile are not included, and α_c is taken as given (for example from the film's density, or
-  from the Yoneda band, section 2.3). An α_c too large or too small moves q_z most near α_f ≈ α_c.
-- The value is a setting of the measurement, kept with the Analyze settings, not in the instrument profile. The record
-  gives it as `geometry.critical_angle_deg` (0: kinematic), `geometry_convention` says what q_z is, the CSV headers of
+- The model is one homogeneous film with the transmitted waves only, without the reflected-wave terms of the DWBA, a
+  substrate or a depth profile. α_c is taken as given (for example from the film's density, or from the Yoneda band,
+  section 2.3). A wrong α_c moves q_z most near α_f ≈ α_c.
+- The value is a setting of the measurement, kept with the Analyze settings and not in the instrument profile. The
+  record gives it as `geometry.critical_angle_deg` (0: kinematic), `geometry_convention` says what q_z is, the CSV headers of
   the command line name it, and the automatic report's *q* decision reads *q_z corrected for refraction in the film
   (αc = …)* (sections 7.9, 8.6).
 
@@ -505,7 +504,7 @@ Implementation: `src/gimap/shared/geometry/q_mapping.py` (`refracted_qz`), `src/
 
 ## 3. Calibration
 
-Geometry Calibration (Tools menu) finds the beam centre, the distance and the detector tilt (pyFAI's rot1 and rot2, section 3.8) from a powder pattern of a standard. The energy and the pixel size are inputs and are not refined. The energy is never assumed: it comes from the file header (or the companion NXS of a CBF) or is entered, and the record says which (`metadata.energy_source`: `file header`, `companion NXS`, `entered by user`, `imported calibration`); without one, Auto Calibration does not start. The same engine runs without the window in Run Automatic Analysis and in `tools/gimap_agent.py`.
+Geometry Calibration (Tools menu) finds the beam centre, the distance and the detector tilt (pyFAI's rot1 and rot2, section 3.8) from a powder pattern of a standard. The energy and the pixel size are fixed inputs. The energy comes from the file header (or the companion NXS of a CBF) or is entered, and the record says which (`metadata.energy_source`: `file header`, `companion NXS`, `entered by user`, `imported calibration`). Without an energy, Auto Calibration does not start. The same engine runs without the window in Run Automatic Analysis and in `tools/gimap_agent.py`.
 
 ### 3.1 Calibrants
 
@@ -530,7 +529,7 @@ d_hkl = a / √(h² + k² + l²)                                            (3.3
 - For CeO2 the first spacings are 3.1244 Å (111), 2.7058 Å (200), 1.9133 Å (220) and 1.6317 Å (311); q runs from 2.0110 to 8.0440 Å⁻¹.
 - For AgBH, q runs from 0.10763 Å⁻¹ (n = 1) to 2.1525 Å⁻¹ (n = 20). The relative intensities 1/n provide a weak ordering prior in the final comparison of candidate geometries (section 3.3).
 - With the standard set to Auto, all four line sets are tried.
-- The values are fixed; temperature is not taken into account. The code cites no source. The AgBH spacing equals the 58.380(3) Å of Huang et al. (1993). The LaB6 value differs from the certified lattice parameter of NIST SRM 660c (4.156826 Å at 22.5 °C; Black et al., 2020) by 1.8 × 10⁻⁵ relative. The CeO₂ value differs from the certified lattice parameter of NIST SRM 674b (5.41153 Å at 22.5 °C; NIST, 2017) by 2.2 × 10⁻⁵ relative; the code does not state its source.
+- The values are fixed and do not depend on temperature. The AgBH spacing equals the 58.380(3) Å of Huang et al. (1993). The LaB6 value differs from the certified lattice parameter of NIST SRM 660c (4.156826 Å at 22.5 °C; Black et al., 2020) by 1.8 × 10⁻⁵ relative, the CeO₂ value from that of NIST SRM 674b (5.41153 Å at 22.5 °C; NIST, 2017) by 2.2 × 10⁻⁵ relative.
 
 Implementation: `src/gimap/features/calibration/domain/standards.py`
 
@@ -555,18 +554,18 @@ Inputs: the image, the energy (λ from (1.1)), the pixel size (from the header o
 1. **Preprocessing.** Valid pixels are finite, not masked by the reader and above 0, so zero-filled gaps and apertures are left out. Percentiles and the maximum are taken on a sample of about 2.5 × 10⁵ valid pixels. When the maximum exceeds `max(20 P_99.95, 10⁶)`, the pixels at that value are dropped. Values are clipped to `[0, P_99.9]` and transformed with `ln(1 + I)`. By default a smooth background is subtracted: a Gaussian of σ = `max(6, min(H, W)/90)` px, normalised by the smoothed valid mask so that gaps do not bleed in; negative results are set to 0.
 2. **Beam-centre proposals.** Up to 14 initial proposals, at least 3 px apart, each with a support between 0 and 1. They come from the direct beam and beam stop along the bright beam column, from voting of intensity-gradient lines of partial arcs (which can place a centre outside the detector), from the image centre, from the header centre (support 0.70), from 180° symmetry by phase correlation (support 0.20), and from a coarse-to-fine search for the sharpest radial profile.
    For transmission and grazing-incidence images alike, the engine also tests refined copies of up to four arc-voting proposals. It centres a radial profile on each trial position and maximises the sharpness of the rings using the brightest quarter of valid pixels. The grid step decreases from 4 to 2, 1 and 0.5 px. A refined centre is added if it lies at least 1 px from every existing proposal.
-3. **Ring detection for each proposal.** The image is resampled onto 360 azimuths × 1 px radii. The radial profile is the 60th percentile over azimuth, which is robust against streaks and gaps (the plain radial mean when OpenCV is missing). The profile is smoothed with a Gaussian of σ = 1.2 px. Peaks need a prominence of at least `max(2.3 MAD, 0.08 (P_85 − median), 10⁻⁵)`, an azimuthal coverage of at least 1.5 % and a radius of at least 40 px. Peak radii stay on the 1 px grid; they are not interpolated.
+3. **Ring detection for each proposal.** The image is resampled onto 360 azimuths × 1 px radii. The radial profile is the 60th percentile over azimuth, which is robust against streaks and gaps (the plain radial mean when OpenCV is missing). The profile is smoothed with a Gaussian of σ = 1.2 px. Peaks need a prominence of at least `max(2.3 MAD, 0.08 (P_85 − median), 10⁻⁵)`, an azimuthal coverage of at least 1.5 % and a radius of at least 40 px. Peak radii stay on the 1 px grid.
    For the polar profile, let e(r,φ) be the signal above the local background along the ray at φ.
    That background is a radial Gaussian average (σ = 8 px) over valid samples. At radius r, coverage is the
    fraction of all 360 rays that are valid and satisfy e(r,φ) > max(1.5 MAD_φ(e), 0.005) in the preprocessed
    signal. An arc with similar intensity at every illuminated azimuth can therefore support a peak.
 4. **Distance hypotheses and matching.** Each of the first 35 peaks paired with each standard line gives a distance by inverting (3.6). Distances inside the range are clustered within 0.8 %. At each distance, predicted and observed radii are paired in order of increasing absolute difference. For AgBH the tolerance is h = max(2.5 px, 0.012 r). For other standards it is max(3 px, 0.018 r, 0.6 w), where w is the peak width. The paired radii give L by (3.7). If any AgBH pair exceeds its tolerance after this fit, the engine removes the largest |Δr|/h and refits until the remaining pairs agree.
-5. **Preliminary ranking.** A weighted score rewards matched rings (each counted in proportion to its prominence up to 0.1 in the log-scaled profile, about 10 % contrast, and whole above it: chance coincidences with noise-level peaks do not outweigh fewer clear rings), azimuthal coverage, valid area, centre support, an unbroken run of orders and prominence, and a Gaussian prior of 20 % width around an estimated distance. It penalises the residual, inconsistent per-ring distances, unexplained inner peaks and (for AgBH) a missing first order.
+5. **Preliminary ranking.** A weighted score rewards matched rings, azimuthal coverage, valid area, centre support, an unbroken run of orders and prominence, and a Gaussian prior of 20 % width around an estimated distance. A matched ring counts in proportion to its prominence up to 0.1 in the log-scaled profile (about 10 % contrast) and fully above it, so that noise-level peaks do not outweigh fewer clear rings. The score penalises the residual, inconsistent per-ring distances, unexplained inner peaks and (for AgBH) a missing first order.
 6. **Joint refinement.** For up to 6 groups of proposals with up to 3 distinct distances each, the beam centre and L are refined together. Ring points are the valid pixels within `h = clip(0.012 r, 3, 10)` px of each predicted ring whose preprocessed signal reaches the 70th percentile of the annulus, at most 800 per ring. The residual (3.8) is minimised with `scipy.optimize.least_squares` (soft-L1 loss, f_scale 2 px, at most 80 evaluations). The centre may move by 5 px (direct-beam proposal), by 40 to 140 px (arc voting) or by 12 to 60 px (other proposals); L may move by ±15 %. Only `x_c`, `y_c` and `L` are free.
    Within 25 % of a supplied distance estimate, hypotheses differing by at least 1.5 % in distance may
    enter the same group's refinement. Farther from the estimate, or without one, the separation is 25 %.
 7. **Re-matching.** At the refined centre the rings are detected again and matched at the refined L, and L is solved again with (3.7). The ring-radius RMS from this step enters the preliminary ranking.
-8. **Candidate selection.** The guided search below checks up to 20 distinct geometries. When it confirms at least two lines, these lines enter the point fit. An independently resolved radial peak can also enter if the neighbouring line spacing leaves less than 2 px of guided search half-width after reserving its flanks and the measured radial angular support is at least 4/72 of a full circle. This match takes the untested half-weight in S below. A short arc lacking enough supporting sectors by itself cannot add another order. With fewer than two confirmed lines the radial assignments remain available. Up to five geometries proceed to the point fit, including candidates from the guided and radial rankings and, in Auto mode, competing standards. The search is repeated on the fitted ellipses. A change of assigned lines triggers another point fit. The record holds the SHA-256, size and modification time of the image, the energy, λ, pixel sizes, candidates and image shape. A single matched ring carries a distance-ambiguity warning.
+8. **Candidate selection.** The guided ring search (below) checks up to 20 distinct geometries. When it confirms at least two lines, these lines enter the point fit. A radial peak resolved on its own also enters when the line spacing leaves less than 2 px of search half-width after its flanks and its angular support is at least 4/72 of a full circle; it takes the untested half-weight in S below. A short arc without enough supporting sectors adds no order. With fewer than two confirmed lines the radial assignments are kept. Up to five geometries go to the point fit: candidates of the guided and radial rankings and, in Auto mode, of competing standards. The search is repeated on the fitted ellipses, and a change of assigned lines starts another point fit. The record holds the SHA-256, size and modification time of the image, the energy, λ, pixel sizes, candidates and image shape. A single matched ring carries a distance-ambiguity warning.
 
 ```text
 L = Σ_m u_m r_m / Σ_m u_m²,     u_m = tan 2θ_m / p̄     (r_m: observed radii in px)     (3.7)
@@ -581,7 +580,7 @@ t = tan[2 arcsin(qλ/4π)], the predicted intersection lies at r = L t / (√(b�
 when the denominator is positive. This follows the ellipse on a tilted detector with either pixel aspect ratio.
 The engine samples 72 sectors of 12 rays each, averaging the valid preprocessed signals at integer offsets
 from each predicted r. A radial bin needs at least four valid rays. On a recognised grazing-incidence frame,
-the search excludes the specular rod and the half-plane shadowed by the sample when measuring both presence and absence.
+the search leaves out the specular rod and the half-plane shadowed by the sample.
 
 The search half-width w is ⌈0.012 L t / p̄⌉, clipped to 4–12 px and narrowed where lines are close. The search
 and its two background flanks together extend at most 45 % of the nearest predicted line spacing on either side.
@@ -614,7 +613,7 @@ in pixels (2 when unavailable). The distance term is zero without an estimate. K
 p. K is zero when a comparison is unavailable. The engine evaluates S again on the final geometry, after any
 tilt refinement and refit with newly confirmed orders. The largest S ranks first.
 
-Wavelength, pixel size and rot3 are fixed. Powder rings measure angles to the incident beam, so they cannot determine a rotation about it. The engine keeps the supplied rot3 even when refinement is skipped (default 0°). The physical rotations of a candidate are `rot1_deg`, `rot2_deg` and `rot3_deg`.
+Wavelength, pixel size and rot3 are fixed. Powder rings measure angles to the incident beam and so cannot give a rotation about it; rot3 keeps its supplied value (default 0°). The physical rotations of a candidate are `rot1_deg`, `rot2_deg` and `rot3_deg`.
 
 **Uncertainty.** The sector centroids from one ring can shift together. With n ≥ 3 rings contributing points,
 the engine omits each whole ring in turn and refits the remaining centroids. For a parameter θ, the jackknife
@@ -624,43 +623,20 @@ of the n estimates.
 - With four or more rings, each refit varies the same parameters as the full fit. With three rings and tilt refinement disabled, each refit varies x_c, y_c and L.
 - With three rings and fitted tilts, each pair of rings is first fitted with all five parameters free. All three refits must converge to finite values, have |rot1| and |rot2| below 30° and give 0.75 L_full < L < 1.25 L_full. For each refit, the solver's final Jacobian with columns normalised to unit length must satisfy s_min/s_max > √ε, where s_min and s_max are its extreme singular values and ε is double-precision machine epsilon. When these checks pass, all five parameters receive the joint ring-jackknife σ. This includes the coupling between beam centre, distance and tilt.
 - If any two-ring refit fails those checks, all three pairs are refitted with both tilts fixed at their three-ring values. The full five-parameter fit gives C = s² (JᵀJ)⁻¹, where J is the Jacobian of the pixel residuals (3.17) and s² = Σ ρ_p²/(N − 5) for N centroids. Each tilt has σ = √C_ii. For x_c, y_c and L, the reported σ is max(σ_J, √C_ii). If JᵀJ is singular, only the conditional jackknife uncertainties for x_c, y_c and L are available.
-- With two rings, uncertainties come from the covariance alone, with denominator N − p for p free parameters. The default fit keeps the tilts fixed, so p = 3. Treat this as a lower bound because the point residuals within a ring can be correlated.
+- With two rings, uncertainties come from the covariance alone, with denominator N − p for p free parameters. The default fit keeps the tilts fixed, so p = 3. This is a lower bound, because the point residuals within a ring can be correlated.
 
 The estimates assume the ring assignments are correct and omit systematic errors shared by all rings. The calibration
 record gives `center_x_sigma_px`, `center_y_sigma_px`, `distance_sigma_mm` and `uncertainty_method`. The result tooltips
 show these uncertainties and the instrument profile carries them into each `<stem>_analysis.json`.
 
-**Measured coverage of calibration standard errors.** The benchmark scores the five parameters that the
-line-position check returns. For each parameter it counts the returned joint fits whose estimate lies
-within one reported standard error of the input value. The measured fraction estimates coverage on
-these simulations. The tilt accuracy statistic is the 95th percentile of
-√[(rot1_fit − rot1_true)² + (rot2_fit − rot2_true)²], in degrees, across every returned geometry.
-Recovery requires fitted tilts with errors, a direct beam within 5 px and a relative distance error below 5 %.
-The simulated Pilatus 1M AgBh frames target three to nine visible rings. Each component rotation lies
-between −3° and +3° and the input distance estimate lies within 15 % of the truth.
-
-| Simulated set | Matched rings | Fits | x_c | y_c | L | rot1 | rot2 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Development | 3 | 6 | 50.0 % | 66.7 % | 83.3 % | 33.3 % | 50.0 % |
-| Development | 4–6 | 138 | 61.6 % | 61.6 % | 56.5 % | 63.0 % | 55.1 % |
-| Development | ≥7 | 156 | 66.0 % | 68.6 % | 61.5 % | 63.5 % | 60.9 % |
-| Development, only orders 1–3 drawn | 3 | 150 | 62.0 % | 68.7 % | 62.0 % | 63.3 % | 68.0 % |
-| Held-out | 3 | 3 | 66.7 % | 0.0 % | 100.0 % | 100.0 % | 100.0 % |
-| Held-out | 4–6 | 59 | 59.3 % | 62.7 % | 62.7 % | 57.6 % | 62.7 % |
-| Held-out | ≥7 | 58 | 67.2 % | 55.2 % | 56.9 % | 53.4 % | 53.4 % |
-| Held-out, only orders 1–3 drawn | 3 | 150 | 64.7 % | 65.3 % | 57.3 % | 58.7 % | 58.0 % |
-
-All 300 development geometries and all 150 separate three-order controls passed the recovery criteria.
-The line check selected another candidate in 102/300 development frames. The returned tilt-vector
-error had a 95th percentile of 0.03594°. In the development set 75 fits used 10–12 orders and the
-maximum combined detector tilt, arccos(cos rot1 · cos rot2), was 4.109°.
-On disjoint held-out seeds, all 120 geometries and all 150 three-order controls passed. The check
-changed 38/120 candidates and the held-out tilt-vector error had a 95th percentile of 0.02760°.
-The interval from θ − σ to θ + σ has finite-ring sampling variability. With n independent rings a Student
-t reference with n − 1 degrees of freedom gives 57.7 %, 61.9 % and 65.4 % coverage, averaged over the ring
-counts in the 3, 4–6 and ≥7 classes. In the main set the six fits with exactly three matches give little
-precision on coverage. The reported errors also omit systematic shifts shared by all rings.
-The input conditions, fitted values and coverage are recorded in [the calibration benchmark](../tools/benchmarks/README.md#geometry-calibration-against-pyfai-and-the-coverage-of-its-1σ).
+**Measured coverage of calibration standard errors.** The benchmark calibrates simulated Pilatus 1M AgBh frames
+with three to nine visible rings, rotations within ±3° and a distance estimate within 15 % of the truth. Every
+geometry returned by the line-position check (section 3.4) was recovered: direct beam within 5 px, distance within
+5 %. For x_c, y_c, L, rot1 and rot2, the interval θ ± σ held the true value in 53–69 % of the fits with four or more
+matched rings, near the 62–65 % a Student t with n − 1 degrees of freedom gives for so few rings. The 95th
+percentile of the tilt error √[(rot1_fit − rot1_true)² + (rot2_fit − rot2_true)²] was 0.036°.
+[The calibration benchmark](../tools/benchmarks/README.md#geometry-calibration-against-pyfai-and-the-coverage-of-its-1σ)
+gives the conditions and the results per ring count.
 
 Implementation: `src/gimap/features/calibration/domain/engine.py`, `src/gimap/features/calibration/domain/preprocessing.py`, `src/gimap/features/calibration/domain/center_estimator.py`, `src/gimap/features/calibration/domain/radial_profile.py`, `src/gimap/features/calibration/domain/peak_detector.py`, `src/gimap/features/calibration/domain/peak_matcher.py`, `src/gimap/features/calibration/domain/guided_rings.py`, `src/gimap/features/calibration/domain/candidate_ranker.py`, `src/gimap/features/calibration/domain/optimizer.py`
 
@@ -684,7 +660,7 @@ For the confidence thresholds below, RMS is the larger of the ring-radius RMS an
 | Medium | at least 2 rings and RMS ≤ 6 px; or at least 4 rings, centre support ≥ 0.8, RMS ≤ 8 px and coverage ≥ 0.05; or at least 5 rings, centre support ≥ 0.8, RMS ≤ 10 px and coverage ≥ 0.015 |
 | Low | otherwise |
 
-**Line positions (Run Automatic Analysis, `tools/gimap_agent.py`).** The ring residual depends on how many rings are fitted and on what the flat model cannot describe, such as a tilt. The automatic analysis therefore also checks where the standard's lines land in q:
+**Line positions (Run Automatic Analysis, `tools/gimap_agent.py`).** The ring residual depends on how many rings are fitted and on what the model cannot describe. The automatic analysis therefore also checks where the standard's lines land in q:
 
 1. The calibration image is integrated with the candidate geometry, canonical centre and flat detector: `q = (4π/λ) sin(½ atan2(r, L))`, with r from the pixel centres; a tilted candidate is integrated with its rotations (GIMaP's pixel→q mapping, section 3.7). Bins are 0.0015 Å⁻¹ wide; bins with at least 20 pixels count.
 2. For every line with at least 12 such bins within ±0.025 Å⁻¹, a Gaussian on a linear background is fitted.
@@ -702,14 +678,13 @@ For the confidence thresholds below, RMS is the larger of the ring-radius RMS an
 | good (no line check possible) | at least 3 rings, RMS ≤ 1.5 px and confidence High or Medium |
 | unreliable (no line check possible) | fewer than 2 rings |
 
-When comparing AgBh assignments of a calibration ranked by guided ring evidence, the independently accepted
-q values of the first-ranked AgBh solution form a reference set if at least three are measured. An alternative
-AgBh assignment must measure every line in that set. The engine compares ε on exactly those q values so that
-another harmonic assignment cannot win by fitting a different subset. For other standards, fewer than three
-reference lines or older records, it compares each candidate's ε on its own set of at least three accepted lines.
-The record names the selection rule in `chosen_by`.
+When AgBh assignments ranked by guided ring evidence are compared, the accepted lines of the first-ranked AgBh
+solution form a reference set if there are at least three. An alternative AgBh assignment must measure every line
+of that set, and ε is compared on exactly those q values, so that another harmonic assignment cannot win by fitting
+a different subset. For other standards, with fewer than three reference lines, or for older records, each
+candidate's ε is taken on its own set of at least three accepted lines. The record names the rule in `chosen_by`.
 
-"Good" measures agreement with the calibration image. Check the acquisition records to establish that the calibration belongs to the sample data. Section 3.8 compares the GIMaP and pyFAI calibrations of the public AgBh frame.
+"Good" means agreement with the calibration image. Check in the acquisition records that the calibration belongs to the sample data. Section 3.8 compares the GIMaP and pyFAI calibrations of the public AgBh frame.
 
 Implementation: `src/gimap/features/calibration/domain/candidate_ranker.py`, `src/gimap/features/calibration/domain/line_check.py`, `src/gimap/features/calibration/application/headless.py`, `src/gimap/features/assistant/domain/calibration_quality.py`
 
@@ -739,7 +714,7 @@ tilt = arccos(cos rot_1 cos rot_2)                                      (3.13)
 - `L_poni` is the normal distance in metres. Equations (3.10)–(3.11) give the beam centre in orientation 3. For a detector of width W and height H, orientation 1 uses `(W − x, H − y)`, 2 uses `(x, H − y)`, 3 uses `(x, y)` and 4 uses `(W − x, y)`. These transforms act on continuous corner coordinates. A reversed array index uses `N − 1 − i`. GIMaP applies the same signs to pixel displacements before the rotations. If an axis is reversed, its dimension must be available from the detector configuration, a known detector shape or the frame. Unsupported orientation values are rejected.
 - The pixel sizes come from `PixelSize1/2`, from `detector_config`, or from a known detector name (Pilatus 172 µm, Eiger 75 µm, PerkinElmer 200 µm, Lambda 55 µm, MAR345 100 µm, Jungfrau 75 µm). The wavelength is converted from m to Å.
 - The rotations go into the geometry with the direct beam and the distance (section 3.7); the instrument profile also keeps the file's distance, PONI, rotations and pixel sizes (`tilt` in `instrument_profiles.json`; `dropped_tilt` up to 0.2.0, still read). Above 0.5° the file's inspection notes the tilt.
-- Analyze compares the stated detector dimensions and pixel sizes against the frame. **Load .poni…** reports a shape mismatch or a pixel size differing by more than 1 % from the header. Automatic loading skips incompatible files. A file without a wavelength needs one typed. Run Automatic Analysis requires matching ordered dimensions for flipped detectors. The signed ray coordinates for all four orientations were checked against pyFAI 2026.9.0.
+- Analyze compares the stated detector dimensions and pixel sizes against the frame. **Load .poni…** reports a shape mismatch or a pixel size differing by more than 1 % from the header. Automatic loading skips incompatible files. A file without a wavelength needs one typed. Run Automatic Analysis requires matching ordered dimensions for flipped detectors. The signed ray coordinates of all four orientations agree with pyFAI 2026.9.0.
 - **Writing.** Analyze and Geometry Calibration export PONI 2.1 with the pixel sizes, frame shape, detector orientation, normal distance, PONI coordinates, rotations and wavelength. Undo the orientation flip before applying the inverse of (3.10)–(3.12). The default orientation is 3.
 
 ```text
@@ -781,26 +756,19 @@ that of its rows upward. Without rotations in orientation 3, (3.15) is `(L, X, Y
 - **Ray intersection.** Let `n = ĉ × r̂` and `b = (L, 0, 0)`. A laboratory ray `u` reaches the detector at `s u`, where `s = (n·b)/(n·u)`. A finite positive s is required. Project `s u − b` onto the two signed detector axes to obtain the pixel displacements. Mirror filling and XRR use this same intersection.
 - A beam centre moved later (the GISAXS symmetry axis, a centre set by hand) moves the detector in its own plane;
   the rotations stay.
-- A test compares (3.15) with (3.14) for several sets of rotations (equal to 10⁻¹⁷ m) and, on the public Xeuss
-  frame (tilt 6.06°), |q| of every pixel with pyFAI's `4π sin θ / λ` (equal to 10⁻⁹).
-- `tools/benchmarks/pyfai_comparison.py` compares with pyFAI itself (2026.9) on the four public frames, tilts 0 to
-  6.06°: |q|, 2θ, and q∥ and q_z against pyFAI's fiber units `qip` and `qoop` (sample orientation 4) agree to
-  10⁻¹³; the solid angle agrees to 10⁻⁷ up to one constant (pyFAI normalises to the PONI, GIMaP to the direct
-  beam), the polarisation factor exactly.
-- `tools/benchmarks/pygid_comparison.py` compares with pygid (0.2.20) on the two pygid example frames (P08, Xeuss):
-  q∥ and q_z of every pixel agree to 10⁻¹⁵ once GIMaP's direct beam is moved by half a pixel along both axes. pygid
-  places pixel i at i·p from the PONI, pyFAI and GIMaP at its centre, (i + ½)·p; as given, the two differ by up to
-  1.1 × 10⁻³ Å⁻¹ (P08) and 2.4 × 10⁻³ Å⁻¹ (Xeuss). The ring centres of pygid's polar map agree with GIMaP's I(q) to
-  7 × 10⁻⁴ Å⁻¹ on P08, a third of the map's q step. The polar maps published with the examples (pygid 0.1.16) put
-  the rings 1.6 to 1.7 × 10⁻³ Å⁻¹ lower; their q grid differs from that of pygid 0.2.20 by up to 1.4 × 10⁻³ Å⁻¹.
-- What the tilt changes: leaving it out puts |q| off by up to 0.20 % on the P08 file (tilt 0.31°), 0.08 % on the
-  AgBh file (0.57°) and 6.3 % on the Xeuss file (6.06°, at the corner farthest from the beam). Rot3 alone leaves |q|
-  unchanged and turns χ by rot_3.
+- `tools/benchmarks/pyfai_comparison.py` compares with pyFAI 2026.9 on the four public frames, tilts 0 to 6.06°:
+  |q|, 2θ, and q∥ and q_z against pyFAI's fiber units `qip` and `qoop` (sample orientation 4) agree to 10⁻¹³. The
+  solid angle agrees to 10⁻⁷ up to one constant (pyFAI normalises to the PONI, GIMaP to the direct beam), the
+  polarisation factor exactly.
+- pygid (0.2.20) places pixel i at i·p from the PONI; pyFAI and GIMaP place it at its centre, (i + ½)·p. With
+  GIMaP's direct beam moved by half a pixel along both axes, q∥ and q_z of every pixel agree with pygid's to 10⁻¹⁵;
+  without the shift they differ by up to 2.4 × 10⁻³ Å⁻¹ (`tools/benchmarks/pygid_comparison.py`).
+- Leaving the tilt out would put |q| off by up to 0.20 % on the P08 file (tilt 0.31°) and 6.3 % on the Xeuss file
+  (6.06°, at the corner farthest from the beam). Rot3 alone leaves |q| unchanged and turns χ by rot_3.
 - The automatic analysis lists the tilt under *Decisions* (`detector tilt: 6.06° in the geometry`), and the
   Geometry step and its summary say `detector tilt 6.06°`. The record has the rotations in `geometry`.
-- Profiles saved by GIMaP 0.1 kept the tilt beside a flat geometry (`dropped_tilt`). They are read with the tilt
-  in the geometry. Geometry Calibration fits rot1 and rot2 (section 3.8), and the Detector geometry dialog of
-  Analyze has fields for rot1, rot2 and rot3 (degrees).
+- Profiles saved by GIMaP 0.1 kept the tilt beside a flat geometry (`dropped_tilt`); they are read with the tilt
+  in the geometry. The Detector geometry dialog of Analyze has fields for rot1, rot2 and rot3 (degrees).
 - **Checking rot3 with a GISAXS frame.** In **Geometry ▸ Check rot3**, pick two distant points on the observed rod. On the plane of incidence the exact condition is `q_y = k X′/|t| = 0`. The signed magnitude q∥ includes q_x and can be nonzero along that plane. For the two rays, the tool holds ψ fixed and solves `ΔX′ = 0` as rot3 varies, taking the solution nearest the current angle modulo 180°. Both endpoint q_y values test the beam centre as well. Enter the angle in the geometry dialog. A second pair on the horizon or the same Yoneda band tests Δα_f = 0 using (2.8).
 - The initial ring search before tilt refinement still assumes a perpendicular detector. A horizontal cut defined by detector rows can also mix exit angles (section 6.7).
 
@@ -847,13 +815,10 @@ In a calibration JSON, `metadata.ring_point_fits` stores the before and after va
 
 Applying or exporting a manually changed geometry clears the point-fit RMS values and uncertainties. The retained ring-radius RMS describes the original automatic ring matches.
 
-**Validation.** Ring points of the public Xeuss `.poni` geometry (tilt 6.06°, rot_1 = −5.100°, rot_2 = −3.274°),
-from an untilted start 3 % off in distance, give rot_1 and rot_2 within 0.012° of the file's. A synthetic LaB₆
-frame (1200 × 1200 px, 172 µm, 12 keV, L = 200 mm, rot_1 = 2.0°, rot_2 = −1.5°) through the whole engine gives
-rot_1 and rot_2 within 0.05° of their input values. On the public AgBh frame at λ = 1.0 Å, GIMaP matches orders 1–5
-and obtains a ring-point RMS of 0.142 px. Its direct beam is (179.736, 264.012) px in the window coordinates,
-0.193 px from the independent pyFAI calibration. The distances to the direct beam are 1633.473 and 1634.053 mm,
-respectively. For an untilted geometry the tilt fields change no pixel's q (equal to 10⁻¹²).
+**Validation.** From an untilted start 3 % off in distance, ring points of the public Xeuss `.poni` geometry
+(tilt 6.06°) give rot_1 and rot_2 within 0.012° of the file's values. On the public AgBh frame at λ = 1.0 Å, GIMaP
+matches orders 1–5 with a ring-point RMS of 0.142 px. Its direct beam lies 0.193 px from that of the independent
+pyFAI calibration, and the two distances to the direct beam are 1633.473 and 1634.053 mm.
 
 Implementation: `src/gimap/features/calibration/domain/tilt_fit.py`, `src/gimap/features/calibration/domain/optimizer.py`
 (`estimate_uncertainty`), `src/gimap/features/calibration/domain/engine.py`
@@ -862,7 +827,7 @@ Implementation: `src/gimap/features/calibration/domain/tilt_fit.py`, `src/gimap/
 
 ### 4.1 Stored values and valid pixels
 
-The readers convert each frame to single precision for computation but do not rescale or offset it. They record the stored data type in `metadata["stored_dtype"]` (TIFF, EDF, CBF and NeXus/HDF5; a frame without this entry is treated as integer counts). Each reader also returns a mask of pixels that carry no data:
+The readers convert each frame to single precision, without rescaling or offset. They record the stored data type in `metadata["stored_dtype"]` (TIFF, EDF, CBF and NeXus/HDF5; a frame without this entry is treated as integer counts). Each reader also returns a mask of pixels that carry no data:
 
 - **CBF:** non-finite or negative values.
 - **EDF:** non-finite values, and `|I − Dummy| ≤ DDummy` when the header gives a non-zero `Dummy`.
@@ -895,7 +860,7 @@ NeXus files follow the NeXus format (Könnecke et al., 2015). The content of the
 
 Every frame of a source is read by its index.
 
-**Orientation.** A file written by the Lambda server (it has a module position, a `layout` such as `1556X516`, or "lambda" in its description, type or local name) gets the transform GIMaP has always applied to P03 Lambda data:
+**Orientation.** A file written by the Lambda server (it has a module position, a `layout` such as `1556X516`, or "lambda" in its description, type or local name) gets the P03 Lambda transform:
 
 1. a module stored the other way round from its declared layout (columns × rows) is transposed first;
 2. the modules are placed at their translations on a canvas whose origin is translation 0 (the canvas is shifted only when a translation is negative, so that the smallest one becomes 0); uncovered parts are invalid;
@@ -1033,7 +998,7 @@ Var(J/F) = (V_I + s_B² V_B)/F² + J² V_Dff/(m² F⁴)
            + (c_K/F + J r/(m F²))² V_K                 (shared K)
 ```
 
-The same dark pixel changes the numerator by `c_K` and the flat response by `−r/m` per count. Adding the two contributions to the derivative before squaring retains the cross term `2 c_K J r V_K/(m F³)`. With automatic errors, subtracting a dark or background selects pixel scatter. With forced Poisson or supplied σ errors, raw reference variances use nonnegative counts as Poisson estimates. A reference supplied after dark subtraction provides only net counts, from which the original dark and read noise cannot be recovered. A supplied σ frame provides `V_I`. Propagation treats the measured mean response as a fixed calibration constant. It omits the resulting interpixel covariance and correlations across frames that reuse a flat.
+The same dark pixel changes the numerator by `c_K` and the flat response by `−r/m` per count. Adding the two contributions to the derivative before squaring retains the cross term `2 c_K J r V_K/(m F³)`. With automatic errors, subtracting a dark or background selects pixel scatter. With forced Poisson or supplied σ errors, raw reference variances use nonnegative counts as Poisson estimates. A reference supplied after dark subtraction holds only net counts, so its original dark and read noise are lost. A supplied σ frame provides `V_I`. Because `m` is held fixed, the propagation omits the interpixel covariance it causes and the correlations across frames that reuse a flat.
 
 The flat exposure must retain its count or ADU scale. A unit-mean response map alone cannot supply its counting variance.
 
@@ -1064,10 +1029,10 @@ I_norm,p = c · I′_p,      c = A_abs / (t_exp · M · T · d)                 
 | `d` | thickness entered in mm, converted to cm for a standard-derived scale | typed |
 | `A_abs` | absolute-scale factor | typed or fitted to a standard measured in the same set-up |
 
-- A term that is off is 1. The section lists, for the frame shown, every header value it can take (exposure time
-  and monitors); a frame whose header lacks the value chosen is not analysed and the reason is said (nothing is
-  guessed). For a sum of frames (section 4.3) `t_exp` and `M` are the sums over the frames summed.
-- **What it changes.** Only the scale: q, the shape of every curve, the cuts and the peak positions do not change.
+- A term that is off is 1. The Normalisation section lists the header values of the frame shown (exposure time
+  and monitors). A frame whose header lacks the chosen value is not analysed, and the message says why. For a sum
+  of frames (section 4.3) `t_exp` and `M` are the sums over the frames summed.
+- **What it changes.** Only the intensity scale; q, the shape of every curve, the cuts and the peak positions stay.
   The standard-derived scale gives cm⁻¹. Manual normalisation gives `counts/(pixel·s·monitor·mm) × A_abs` with the terms in use.
 - **Uncertainty.** Normalisation scales the sample and reference variances together. Conditional on the scale,
 
@@ -1139,16 +1104,16 @@ correction is this solid angle relative to that of the pixel at the direct beam,
 F_Ω = Ω_p / Ω_beam = (L / |t|)³                                                  (5.2)
 ```
 
-This is what the code computes for every geometry, tilted or not. L_n cancels, and F_Ω is 1 at the direct beam
-(pyFAI normalises to the point of normal incidence instead; the two differ by one constant, section 3.7). For an
-untilted detector (all rotations 0: perpendicular to the direct beam) `|t| = L_p` (2.2) and `L/L_p = cos 2θ`, so
+The code uses (5.2) for every geometry, tilted or not. L_n cancels, and F_Ω is 1 at the direct beam. pyFAI
+normalises to the point of normal incidence; the two differ by one constant (section 3.7). For an untilted
+detector (all rotations 0: perpendicular to the direct beam) `|t| = L_p` (2.2) and `L/L_p = cos 2θ`, so
 
 ```text
 Ω_p = p_x p_y L / L_p³ = (p_x p_y / L²) cos³ 2θ,      F_Ω = cos³ 2θ      (untilted)      (5.3)
 ```
 
-On a tilted detector `L/|t|` is not cos 2θ (the component of t along the beam changes across the detector), so
-(5.3) does not hold there and (5.2) is used.
+On a tilted detector `L/|t|` differs from cos 2θ, because the component of t along the beam changes across the
+detector; there only (5.2) applies.
 
 Implementation: `src/gimap/features/analyze/domain/intensity.py`
 
@@ -1234,7 +1199,7 @@ Implementation: `src/gimap/features/analyze/domain/intensity.py`, `src/gimap/fea
 
 - Each point normally gives the mean of its valid pixels. The GIWAXS Lorentz-weighted radial curve gives the sum of corrected pixel intensities in each q bin (§5.6). For independent pixels its variance is the sum of their corrected variances. For a mean both the intensity and standard error are divided by the number of contributing pixels. The intensity unit of a mean is counts per pixel (`I (counts/pixel)`) before normalisation.
 - **No pixel splitting.** Each pixel goes whole to the one bin or detector line that holds its centre's coordinate; pyFAI's split-pixel integrators distribute it instead.
-- **Checked against pyFAI.** On the four public frames, GIMaP's I(q) over the whole azimuth and pyFAI's `integrate1d` (2026.9, histogram, no splitting) on the same pixels, q range and bins agree to 10⁻⁷ (95 % of the bins; the largest difference 0.2 %, where pixels on a bin edge fell the other way) on every bin that holds the same pixels in both. With the solid angle and polarisation, pyFAI divides the sum of the counts by the sum of the factors (`Σ I / Σ F`), GIMaP takes the mean of `I / F`; the two differ where F and I both vary across a bin: by a median of 0.26 % (at most 1.3 %) on the Xeuss frame, close to the sample, and 0.04 % on the P08 frame (`tools/benchmarks/pyfai_comparison.py`).
+- **Checked against pyFAI.** On the four public frames, GIMaP's I(q) and pyFAI's `integrate1d` (2026.9, histogram, no splitting) agree to 10⁻⁷ on every bin that holds the same pixels in both. With the solid angle and polarisation, pyFAI divides the sum of the counts by the sum of the factors (`Σ I / Σ F`) and GIMaP takes the mean of `I / F`. The two differ where F and I both vary across a bin, by a median of 0.26 % on the Xeuss frame, close to the sample (`tools/benchmarks/pyfai_comparison.py`).
 - No smoothing and no interpolation across gaps. A bin without pixels gives no point, and the plotted curve is broken there.
 - Each curve carries, per point, x, I, σ and n (the number of pixels).
 - Two samplings are used: one point per detector line (GISAXS cuts, section 6.3) and fixed-edge bins (GIWAXS, section 6.2).
@@ -1276,7 +1241,7 @@ Automatic mode chooses Poisson errors for integer storage and scatter for floati
 σ² = max(S, 1) / n²       (detector rows or columns)                             (6.6)
 ```
 
-At about 1–10 counts per point an observed downward fluctuation also shrinks its own error, giving it greater weight in a fit. **Smoothed intensity** estimates the shot variance from up to two occupied bins on each side, excluding the target and stopping at gaps. It uses the observed estimate for an isolated bin. With corrections, write `S_k` for the sum of sample shot variances and `W_k` for the sum of one-count scale factors. The smoothed prediction is `W_k Σ_neighbors S / Σ_neighbors W`. Floor the shot variance at `(W_k/n_k)²`, add the summed reference variance (4.10), then divide by `n_k²`. This changes the exported σ only. Near a sharp feature its neighbours may have a different mean. Fitting retains its own weighting choices.
+At about 1–10 counts per point an observed downward fluctuation also shrinks its own error, giving it greater weight in a fit. **Smoothed intensity** estimates the shot variance from up to two occupied bins on each side, excluding the target and stopping at gaps. It uses the observed estimate for an isolated bin. With corrections, write `S_k` for the sum of sample shot variances and `W_k` for the sum of one-count scale factors. The smoothed prediction is `W_k Σ_neighbors S / Σ_neighbors W`. Floor the shot variance at `(W_k/n_k)²`, add the summed reference variance (4.10), then divide by `n_k²`. This changes only the exported σ; Fitting keeps its own weighting. Near a sharp feature the neighbours can have a different mean.
 
 **(b) Scatter of the pixels.** For corrected pixel values `X` in bin `k`,
 
@@ -1348,7 +1313,7 @@ Implementation: `src/gimap/features/analyze/domain/giwaxs.py`, `src/gimap/featur
 
 ### 6.7 GISAXS cuts
 
-**Yoneda band.** The search window runs from the row of `α_f = 1.5°` down to the row of `α_f = −0.2°` (equation (2.14)). The 0.2° below the computed horizon absorbs small errors of α_i or of the beam centre. The columns are two bands of 100 px on both sides of a 31-column strip around the beam column `c_0 = ⌊x_c⌋`, namely `[c_0 − 115, c_0 − 15)` and `[c_0 + 16, c_0 + 116)`. This keeps the direct beam, the specular rod and a rod-shaped beam stop out. The profile is the median of the valid pixels in each row, smoothed with a 3-row moving average that ignores missing rows. The brightest row gives `r_Y = row + 0.5`, and `α_f` follows from (2.14). The window needs at least 3 rows. For the cited phenomenon see Yoneda (1963).
+**Yoneda band.** The search window runs from the row of `α_f = 1.5°` down to the row of `α_f = −0.2°` (equation (2.14)). The 0.2° below the computed horizon absorbs small errors of α_i or of the beam centre. The columns are two bands of 100 px on both sides of a 31-column strip around the beam column `c_0 = ⌊x_c⌋`, namely `[c_0 − 115, c_0 − 15)` and `[c_0 + 16, c_0 + 116)`. This keeps the direct beam, the specular rod and a rod-shaped beam stop out. The profile is the median of the valid pixels in each row, smoothed with a 3-row moving average that ignores missing rows. The brightest row gives `r_Y = row + 0.5`, and `α_f` follows from (2.14). The window needs at least 3 rows. The band is the one described by Yoneda (1963).
 
 With nonzero sample roll the Yoneda search follows constant exit angle across the side bands. The horizontal and vertical cut widths define q_z limits on the beam column and q_y limits at the horizon, respectively. The mean and error use the original measured pixels inside these limits. The detector displays the projected bands. The row and column rules below describe ψ = 0, where a horizon-height change of more than half a row across the detector triggers a warning.
 
@@ -1376,7 +1341,7 @@ also give `qz_edges` and `alpha_f_edges_deg` (the q_z and α_f of the horizontal
 `⌈r_c + h⌉` on the beam-centre column) and `qy_edges` and `two_theta_f_edges_deg` (the q_y and 2θ_f of the vertical
 band's column edges where each meets the horizon). The band limits are pixel edges, (6.12)–(6.14).
 
-**Cuts of the person, defined in q.** The Cuts step holds any number of named cuts besides the two automatic ones.
+**Your own cuts, defined in q.** The Cuts step holds any number of named cuts besides the two automatic ones.
 Each is defined in the `q_y`–`q_z` plane (Å⁻¹, `q_y` signed), so it means the same on every frame of the geometry and
 is drawn alike on the detector (mapped back to pixels) and on the q map. A pixel belongs to a cut when the q of its
 centre lies inside it — whole pixels, never split — and only usable pixels count (valid and above the horizon, as in
@@ -1436,7 +1401,7 @@ cell(p) = ( ⌊N_y (y_p − y_0)/(y_1 − y_0)⌋ , ⌊N_x (x_p − x_0)/(x_1 �
 | Cake | q | χ | 800 (q) × 360 (χ, 0.5° each) | q from 0 to the largest q; χ from −90° to +90° |
 
 - Only usable pixels (valid and above the horizon) enter.
-- A q map is never finer than the detector samples q. Along each axis the cell is at least the step of that coordinate between a usable pixel and its right and lower neighbours (their root sum of squares; the 95th percentile over the usable pixels), so `N = min(N_max, ⌊range / step⌋)`, at least 32. A 619 × 487 frame then gets about 490 × 580 cells instead of 800 × 800, on which nearly half the cells between measured ones stayed empty.
+- A q map is never finer than the detector samples q. Along each axis the cell is at least the step of that coordinate between a usable pixel and its right and lower neighbours (their root sum of squares; the 95th percentile over the usable pixels), so `N = min(N_max, ⌊range / step⌋)`, at least 32. A 619 × 487 frame then gets about 490 × 580 cells.
 - Empty cells are NaN; in the cake, the missing wedge next to χ = 0° stays empty.
 - The q maps are stored with row 0 at the largest `q_z`; the cake with row 0 at χ = −90°.
 - The maps carry no σ. They are for display and for export as tables (Save ▸ View Data as CSV…); no curve is computed from them.
@@ -1454,7 +1419,7 @@ I(|q|) = ½ [ I_+(|q|) + Ĩ_−(|q|) ]                                          
 σ(|q|) = ½ √( σ_+²(|q|) + σ̃_−²(|q|) )                                               (6.17)
 ```
 
-- One half gives the |q| points of the mean: the `q_y > 0` half, in the prepared cut of Run Automatic Analysis and of its model fit, in the Series map and in Fitting alike, so one cut gives one mean curve. A half with fewer than two points never gives the grid.
+- The |q| points of the mean are those of the `q_y > 0` half, in the prepared cut of Run Automatic Analysis and its model fit, in the Series map and in Fitting, so one cut gives one mean curve. A half with fewer than two points never sets the grid.
 - Between two independent bins on the other half, at fractional distance `t`, the interpolated intensity is `(1−t) I₁ + t I₂` and its variance is `σ̃² = (1−t)² σ₁² + t² σ₂²`. Equation (6.17) gives the marginal standard error of the average.
 - Points are averaged only where the other half has measured points on both sides without a hole, or a point at the same |q| (within 1 % of a step). A hole is an interval wider than 2.5 times the local step, the median of the 9 surrounding intervals.
 - Elsewhere the measured half stands alone with its own σ. Points of the other half that lie in a hole of this half, or beyond its ends, are added as measured. Nothing is interpolated across a hole.
@@ -1479,7 +1444,7 @@ Implementation: `src/gimap/shared/signed_cut.py`, `src/gimap/features/analyze/ap
 
 ### 6.10 Reference-peak corrections of a series
 
-The Series map, its traces and the peak followed in a window are described in sections 11.1 and 11.2. This section gives the two corrections that Batch Export can apply to each frame of a GIWAXS series (In-situ corrections; both off by default). A peak that does not change during the run, such as a substrate reflection or an internal standard, is located as the highest I(q) point within `q_ref ± Δ` (defaults 2.132 and 0.035 Å⁻¹). Its position is therefore limited by the bin width; it is not a fitted centre.
+The Series map, its traces and the peak followed in a window are described in sections 11.1 and 11.2. This section gives the two corrections that Batch Export can apply to each frame of a GIWAXS series (In-situ corrections; both off by default). A peak that does not change during the run, such as a substrate reflection or an internal standard, is located as the highest I(q) point within `q_ref ± Δ` (defaults 2.132 and 0.035 Å⁻¹). Its position is therefore limited by the bin width.
 
 ```text
 L′ = L · q_obs / q_ref           (repeated up to 3 times, until |ΔL|/L < 10⁻⁶)        (6.18)
@@ -1570,10 +1535,10 @@ it to a copy of the curve smoothed with a Gaussian of σ = 2 bins, and then lift
 b_i ← b_i + median{ y_j − b_j : abs(y_j − b_j) < 3 σ_j }                                    (7.6)
 ```
 
-The shift (7.6) is applied only when at least `max(5, ⌊N/5⌋)` bins satisfy the condition. Here y is the
-unsmoothed curve and σ its bin error. The baseline is used to find candidates (section 7.3), as the start of each
-peak fit and for the sector comparison (section 7.6). The ring orientation background is fitted in its own intensity units (section 7.7). It is not the background of the reported peak heights: those refer to the local linear background of
-the profile fit (section 7.4).
+Here y is the unsmoothed curve and σ its bin error. The shift (7.6) is applied when at least `max(5, ⌊N/5⌋)` bins
+satisfy the condition. The baseline serves to find candidates (section 7.3), to start each peak fit and to compare the
+sectors (section 7.6). Reported peak heights refer to the local linear background of the profile fit (section 7.4).
+The ring orientation fits its own background (section 7.7).
 
 Implementation: `src/gimap/features/assistant/domain/profiles.py`
 
@@ -1599,16 +1564,14 @@ q range. At least 12 bins are needed.
    converges closer than half the larger FWHM to a peak already accepted is dropped, unless the widths differ by more
    than a factor 3 and both have SNR ≥ 5 (a sharp reflection on a halo).
 
-**The cap.** The limit of 12 keeps a run short: fitting candidates that fail or merge takes most of the time. It is
-the default, not a judgement of the other candidates. When more candidates qualify than are fitted, the report says
-so: the *Decisions* line *peak search* gives "N candidate peaks found; the 12 most prominent were fitted", the peak
-search record gives `candidates`, `max_peaks` and `truncated`, and the series hints are titled as taken from the
-fitted peaks only. The peak table, the sector comparison, the rings analysed and the series hints all use the fitted
-peaks. A candidate is a maximum before fitting; fitting merges or rejects many of them, so fitting all gives fewer
-peaks than candidates. `--max-peaks N` (command line) or `max_peaks` (the tools `find_peaks` and
-`run_standard_pipeline`) fits more; Run Automatic Analysis in the window always uses 12. On the public P08 frame
-115 candidates qualify; fitting all of them gives 32 peaks instead of 12, among them clean ones such as
-q = 3.585 Å⁻¹ (SNR 33), in about 8 s instead of under 1 s.
+**The cap.** The limit of 12 keeps a run short: candidates that fail or merge take most of the time. When more
+candidates qualify, the report says so. The *Decisions* line *peak search* gives "N candidate peaks
+found; the 12 most prominent were fitted", the peak search record gives `candidates`, `max_peaks` and `truncated`, and
+the title of the series hints says that they come from the fitted peaks only. The peak table, the sector comparison,
+the rings analysed and the series hints all use the fitted peaks. Fitting merges or rejects many candidates, so
+fitting all of them gives fewer peaks than candidates. `--max-peaks N` (command line) or `max_peaks` (the tools
+`find_peaks` and `run_standard_pipeline`) fits more; Run Automatic Analysis in the window always uses 12. On the
+public P08 frame 115 candidates qualify; fitting all of them gives 32 peaks in about 8 s, against 12 peaks in under 1 s.
 
 When no peak qualifies, the report gives the reason and the strongest feature seen (its q, SNR_loc and h_rel).
 
@@ -1628,10 +1591,9 @@ s = FWHM / ( 2 √(2 ln 2) )                                                    
 least 10⁻¹²), q_0 at the candidate, FWHM_guess, b_0 = the SNIP baseline there and b_1 = 0. Bounds: h_pk ≥ 0, q_0 within the
 window, 0.5 Δq ≤ FWHM ≤ 2h; b_0 and b_1 are free.
 
-**Fit.** Weighted least squares with the bin errors as absolute σ — Poisson counting errors for photon counts as
-measured, the pixel scatter of each bin otherwise (section 6.4); the report's *Decisions* line *uncertainties* names
-which (`scipy.optimize.curve_fit`, bounded trust region,
-at most 5000 evaluations). The fit is rejected when q_0 lies on the window edge, when FWHM reaches its upper bound,
+**Fit.** Weighted least squares (`scipy.optimize.curve_fit`, bounded trust region, at most 5000 evaluations) with the
+bin errors as absolute σ: Poisson counting errors for photon counts as measured, otherwise the pixel scatter of each
+bin (section 6.4). The report's *Decisions* line *uncertainties* names which. The fit is rejected when q_0 lies on the window edge, when FWHM reaches its upper bound,
 or when h_pk ≤ 0. If the fitted centre leaves the candidate's half-maximum span (a shoulder or neighbour widened the
 candidate), the peak is fitted again with twice the width of its cleaner flank; the refit is kept when it stays
 inside the span and is significant.
@@ -1643,14 +1605,14 @@ inside the span and is significant.
 σ_p = √(C_pp) · max(1, √χ²_red)                                                                (7.12)
 ```
 
-The errors are inflated when `χ²_red > 1` and never deflated. After the fit, a peak is kept only if
+The errors are inflated when `χ²_red > 1` and never deflated. After the fit, a peak is kept if
 
 ```text
 SNR = h_pk / σ(h_pk) ≥ 3   and   h_pk ≥ 0.02 abs(b_0)                                                  (7.13)
 ```
 
-A candidate whose profile cannot be fitted is kept, with the flag `fit_failed` and the width from step 1 of section 7.3,
-only if `SNR_loc ≥ 6`.
+A candidate whose profile cannot be fitted is kept when `SNR_loc ≥ 6`, with the flag `fit_failed` and the width from
+step 1 of section 7.3.
 
 **Derived quantities.**
 
@@ -1677,15 +1639,14 @@ h_pk is in counts per pixel above the local linear background; A is in counts pe
 | fit_failed | no usable profile fit | caveat |
 
 A peak with a caveat (step_edges, spike, fit_failed, weak or broad, in this order of precedence) is listed in the
-report with the reason, but it is not used for ring selection, sizes or series hints. Neither is a peak flagged
-at_edge, whose shape, position and width the end of the searched range may cut off: the report lists it as "at the
+report with the reason but is not used for ring selection, sizes or series hints. The same holds for a peak flagged
+at_edge, since the end of the searched range may cut off its shape, position and width; the report lists it as "at the
 end of the data: check". The peaks left, without a caveat and not at the edge, are the *reliable* peaks.
 
 **Series hints.** From each of the three lowest-q reliable peaks, GIMaP looks for the orders of a lamellar
 series (1 : 2 : 3 : 4) and of a hexagonal series (1 : √3 : 2 : √7 : 3), each order matched within 2 % of its
 expected q. A series is reported when at least three orders (the first included) match. The orders of a lamellar
-series must follow one another: the search ends at the first missing order, so a peak at 4.92 times the first q with
-the third and fourth order missing is no lamellar series. A hexagonal series must include √3 or √7, the orders a
+series must follow one another: the search ends at the first missing order. A hexagonal series must include √3 or √7, the orders a
 lamellar series does not have. This is a hint; no phase is assigned.
 
 Implementation: `src/gimap/features/assistant/domain/peaks.py`
@@ -1694,8 +1655,8 @@ Implementation: `src/gimap/features/assistant/domain/peaks.py`
 
 Among the reliable peaks (no caveat, not at_edge), the analysis takes the **three of largest area A** (7.16); the
 number is an option (`--rings N`). A ring the user names (`ring_q`) is added when no chosen peak lies within half its
-FWHM. Each chosen ring gets an orientation analysis (section 7.7). A Scherrer size (section 7.8) is computed only when
-a reliable peak lies within half a FWHM of the ring. The rings left out, and why, are listed in the *Decisions*.
+FWHM. Each chosen ring gets an orientation analysis (section 7.7). A Scherrer size (section 7.8) is computed when a
+reliable peak lies within half a FWHM of the ring. The rings left out, and why, are listed in the *Decisions*.
 
 Implementation: `src/gimap/features/assistant/application/pipeline.py`
 
@@ -1722,13 +1683,13 @@ A sector whose own background is below 0.2 times the background of the full ring
 is taken as shadowed (beam stop, absorber, insensitive area) and is not compared. A sector without pixels at q_0 is
 named as not measured.
 
-This is a coarse comparison of two 20°-wide sectors. It is not a pole figure.
+This is a coarse comparison of two 20°-wide sectors; sections 7.7 and 7.11 give the orientation distribution.
 
 Implementation: `src/gimap/features/assistant/domain/orientation.py`
 
 ### 7.7 Ring orientation and the Hermans orientation factor
 
-With a phase assignment, §7.11 uses the same radial windows, detector errors and folding for the joint crystal orientation fit. When the CIF supplies film optical constants, that fit models refraction and attenuation of both film waves and admits measured pixels down to the horizon of the active q map. An explicit exit-angle or polar-angle limit still applies. The single-ring Hermans and pole-figure procedures below use their original cuts.
+With a phase assignment, the joint crystal orientation fit of §7.11 uses the same radial windows, detector errors and folding. When the CIF supplies film optical constants, that fit models refraction and attenuation of both film waves and uses measured pixels down to the horizon of the active q map; an exit-angle or polar-angle limit set by the user still applies. The single-ring Hermans factor and pole figure use the pixel selection described below.
 
 **Ring window.** The ring is centred on the fitted q_0 of the nearest radial peak (when one lies within
 `max(2 FWHM, 3 Δq)` of the requested q), with the half width
@@ -1739,11 +1700,10 @@ h_χ = max( 0.75 FWHM, 2 Δq ),   limited to 0.04 q_0 for a broad peak          
 
 Without a fitted peak the window is ±1.5 % of the requested q. The pixels with q in this window give I(χ) in 1° bins.
 
-**Pixel selection and background.** The orientation profile uses measured pixels, with polarisation correction on by default (factor 0.99 when no frame value is selected, §5.3). It inherits the selected solid-angle, absorption and flat-field corrections. Pixels with α_f below the selected minimum are removed before binning. The automatic minimum is twice the film critical angle when supplied, otherwise twice the incidence angle. A local Gaussian plus linear baseline is fitted to radial pixel means in the same intensity units over three ring-window widths. Its baseline b at the window centre is held constant across χ. If the peak fit is unavailable, the adjacent radial bins supply b.
+**Pixel selection and background.** The orientation profile uses measured pixels, with polarisation correction on by default (factor 0.99 when no frame value is selected, §5.3) and the selected solid-angle, absorption and flat-field corrections. Pixels with α_f below the selected minimum are removed before binning. The automatic minimum is twice the film critical angle when supplied, otherwise twice the incidence angle. A Gaussian on a linear baseline is fitted to the radial pixel means, in the same intensity units, over three ring-window widths. The baseline at the window centre is the background b, constant in χ. Without a peak fit, the adjacent radial bins give b.
 
-For each measured I(χ) bin, σ follows the detector error model in §6.4. Enabling mirror filling on the radial curve
-leaves the measured ring pixels and their propagated errors intact. The saved ring records its model in
-`orientation_settings.error_model`.
+Each measured I(χ) bin has the σ of the detector error model of §6.4. Mirror filling of the radial curve leaves the
+ring pixels and their errors unchanged. The saved ring records the model in `orientation_settings.error_model`.
 
 **Folding.** The two halves ±χ are combined into 90 bins of `abs(χ)`, bin k covering [k°, k+1°), with centre
 χ_k = k + 0.5°, by inverse-variance weighting:
@@ -1791,8 +1751,9 @@ the same measured bins:
 f_iso = f  evaluated with Ī_k = 1 on every measured bin                                      (7.27)
 ```
 
-f must be compared with f_iso, not with 0. With the code's 1° bins, an isotropic ring with `abs(χ)` below 10° missing
-gives f_iso = −0.015; with `abs(χ)` below 20° missing, f_iso = −0.058 (C_w = 0.94).
+Compare f with f_iso: on a partly measured ring a random orientation does not give f = 0. With the code's 1° bins, an
+isotropic ring with `abs(χ)` below 10° missing gives f_iso = −0.015; with `abs(χ)` below 20° missing, f_iso = −0.058
+(C_w = 0.94); a ring measured only up to `abs(χ)` = 80° has f_iso = +0.10.
 
 **Uncertainty.** Monte Carlo with 200 draws and a fixed seed (0):
 
@@ -1801,11 +1762,9 @@ f^(m) = f( Ī_k + ε_k^(m) ),   ε_k^(m) ~ N(0, σ_k²),   m = 1 … 200        
 σ_f = standard deviation of { f^(m) }                                                        (7.29)
 ```
 
-σ_f is a statistical uncertainty: it propagates the bin errors σ_k,
-which are Poisson counting errors for photon counts as measured and the pixel scatter otherwise (section 6.4; the
-public P08 frame is a floating-point frame, so there σ_f is a pixel-scatter uncertainty, not counting noise). It does
-not contain the uncertainty of the background b, of the window or of the geometry, nor the dependence on the bins
-next to the sample horizon described below.
+σ_f is a statistical uncertainty: it propagates the bin errors σ_k of section 6.4 (on the public P08 frame, a
+floating-point frame, these are the pixel scatter). The uncertainty of b, of the window and of the geometry is not in
+it; the systematic range below covers b and the bins next to the sample horizon.
 
 **Maxima and texture text.** The folded profile is interpolated across unmeasured bins and smoothed with a Gaussian
 of σ = 1.5 bins. Maxima need a prominence of at least 3 times the median σ_k, and are reported only in measured bins
@@ -1822,20 +1781,19 @@ fold edge (0° or 90°) has its width doubled. The texture sentence follows thes
 | highest maximum above 70° | oriented in the sample plane |
 | otherwise | tilted, maximum at ±χ |
 
-The rule compares f with f_iso, not with 0 (7.27): for a partly measured ring a random orientation does not give
-f = 0, and a ring measured only up to `abs(χ)` = 80° has f_iso = +0.10 already. The margin is 0.1, or three
-statistical uncertainties σ_f when they are larger. A maximum next to an unmeasured range is flagged: the true
-maximum may lie inside that range. The report's *Decisions* line *texture rule* states the rule, and every ring
-row gives the measured f, its statistical error and its systematic range. The difference from f_iso is a coverage diagnostic used by the texture rule. Subtracting an isotropic reference cannot reconstruct missing intensity in a ratio of weighted sums.
+A maximum next to an unmeasured range is flagged, since the true maximum may lie inside that range. The report's
+*Decisions* line *texture rule* states the rule, and every ring row gives the measured f, its statistical error and
+its systematic range. f − f_iso is a coverage diagnostic for the texture rule; it does not restore the intensity
+missing from f.
 
-**Systematic range.** Recompute (7.25–7.26) for each combination of exit-angle minimum × {0.5, 1, 2}, horizon intensity threshold {off, 0.05 M, 0.10 M} and background shift {−σ_b, 0, +σ_b}. Use 20% of |b| when the background has no fitted standard error. Apply the following alternatives to each resulting folded profile.
+**Systematic range.** f (7.25–7.26) is recomputed for each combination of exit-angle minimum × {0.5, 1, 2}, horizon intensity threshold {off, 0.05 M, 0.10 M} and background shift {−σ_b, 0, +σ_b}. Without a fitted standard error of the background, σ_b is 20% of |b|. Each resulting folded profile is used in these ways:
 
-- Keep the measured bins and leave the gaps empty. The nominal selection gives the reported central f and f_iso.
-- Continue the unmeasured high-angle edge to 90° at the mean net pole density of the preceding 10° band. To locate that band, look for a contiguous tail in the last 10° of measured coverage. Starting with the longest candidate, test whether every bin is measured and below 75% of the mean net density in the 10° immediately before it. Use the band before the first qualifying tail, or the final 10° of coverage if none qualifies.
-- For an attenuated tail, also test dropping it with the horizon gap empty, and replacing both tail and gap with the same band density.
-- Separately fill the wedge from 0° to the first measured bin at the mean net density in the first 10° of coverage. A determined nominal pole fit and a determined fit for that selection also contribute a model fill of this wedge, with one propagated standard error on either side (§7.11).
+- The measured bins, with the gaps left empty. The nominal selection gives the reported central f and f_iso.
+- The unmeasured high-angle edge continued to 90° at the mean net pole density of a 10° band. The band lies before an attenuated tail: among contiguous tails in the last 10° of measured coverage, from the longest down, the first whose bins are all measured and below 75% of the mean net density of the 10° before it. Without such a tail the band is the final 10° of coverage.
+- With an attenuated tail, also the tail dropped with the horizon gap left empty, and tail and gap both filled at the band density.
+- Separately, the wedge from 0° to the first measured bin filled at the mean net density of the first 10° of coverage. When the nominal pole fit and the fit for that selection are both determined, their model fill of this wedge also enters, with one propagated standard error on either side (§7.11).
 
-Band means are arithmetic means of the measured folded Ī_k. A continued density is bounded below by zero and multiplied by sin χ_k **at the target bin** in both sums. Signed measured densities elsewhere retain their values. Internal gaps stay empty. The bracket gives the smallest and largest f across these alternatives and identifies the settings and scenario for each endpoint. When its width exceeds 0.05 the report flags that the measured χ range does not determine the orientation factor. An unseen peak stronger than the neighboring band can give f outside this range. Geometry uncertainty and χ-dependent background can also shift f.
+Band means are arithmetic means of the measured folded Ī_k. A continued density is bounded below by zero and multiplied by sin χ_k **at the target bin** in both sums. Elsewhere the signed measured densities are kept. Internal gaps stay empty. The bracket gives the smallest and largest f across these alternatives and names the settings and scenario of each endpoint. When its width exceeds 0.05 the report flags that the measured χ range does not determine the orientation factor. An unmeasured peak stronger than the neighbouring band can put f outside this range; errors of the geometry and a background that varies with χ also shift f.
 
 For the public P08 MAPbI₃ ring at 0.997 Å⁻¹ and α_i = 0.075°, the central estimate is f = 0.142 ± 0.00275 (stat), with f_iso = 0.0563. The unmeasured 84–90° interval accounts for 10.5% of the full sin χ weight (7.24). Continuing the 71–81° band through both 81–84° and the gap gives the lower limit of 0.0711 at b − σ_b. Omitting 81–84° and leaving the gap empty gives the upper limit of 0.157 at b + σ_b.
 
@@ -1855,14 +1813,14 @@ The Scherrer equation (Scherrer, 1918) written in q gives the crystallite size �
 (7.30) is the usual `τ = K λ / (β cos θ)` with `β = Δ(2θ)` in radians, since `β_q = (2π/λ) cos θ · β`.
 (7.31) removes an instrumental width by Gaussian quadrature; (7.32) is the exact derivative of (7.30–7.31) with
 respect to FWHM. Defaults: K = 0.9 (Patterson, 1939; Langford & Wilson, 1978). **Run Automatic Analysis passes no
-instrumental width (FWHM_instr = 0).** Every automatic size is therefore a lower bound of the coherence length, and is
-reported with "≥". The beam footprint and divergence, the sample–detector distance and pixel size, the q binning and
-the mixing of directions over all χ all broaden the radial peak (Smilgies, 2009), and so do strain and
-paracrystalline disorder; none of these is subtracted. A size is also marked a lower bound when FWHM is below 3 bins
-(binning-limited). The tool accepts K and FWHM_instr when called from a script or by Process with AI.
+instrumental width (FWHM_instr = 0)**, so every automatic size is a lower bound of the coherence length and is
+reported with "≥". The beam footprint and divergence, the sample–detector distance and pixel size, the q binning, the
+mixing of directions over all χ (Smilgies, 2009), strain and paracrystalline disorder all broaden the radial peak, and
+none of them is subtracted. A size is also a lower bound when FWHM is below 3 bins (binning-limited). A script or
+Process with AI can pass K and FWHM_instr to the tool.
 
-No size is given when FWHM is above 0.15 q_0 (a halo: the report gives 2π/FWHM as a correlation length, not a crystal
-size), or when FWHM ≤ FWHM_instr.
+No size is given when FWHM ≤ FWHM_instr or FWHM > 0.15 q_0. For such a halo the report gives 2π/FWHM as a correlation
+length.
 
 For example, q_0 = 1.50 Å⁻¹ and FWHM = 0.03000 ± 0.00060 Å⁻¹ give d = 4.19 Å and
 τ ≥ 188.5 ± 3.8 Å. In nm the report gives τ ≥ 18.85 ± 0.38 nm.
@@ -1873,15 +1831,14 @@ Implementation: `src/gimap/features/assistant/domain/size.py`
 
 For each peak: q_0 ± σ, d ± σ_d, FWHM ± σ, height, local background, area, SNR, χ²_red, flags and caveat, the sector
 preference and ρ_oi, and the size with its lower-bound mark and note. For each ring: the q window, coverage (unweighted
-share of measured 1° bins), C_w, measured f ± σ_f [systematic range], isotropic reference, peak directions, missing and shadowed ranges, fitted f and oriented fraction. The record keeps the background, polarisation, exit threshold, scenario results and fit-quality reasons. Reports round each positive statistical uncertainty to two significant digits and the estimate to the same decimal place. Decimal ties round to even. The systematic range is shown separately. In compact tables, parentheses give the uncertainty in units of the last displayed digit. Search limits, settings and open questions accompany the results.
+share of measured 1° bins), C_w, measured f ± σ_f [systematic range], isotropic reference, peak directions, missing and shadowed ranges, fitted f and oriented fraction. The record keeps the background, polarisation, exit threshold, scenario results and fit-quality reasons. Reports round each positive statistical uncertainty to two significant digits and the estimate to the same decimal place. Decimal ties round to even. The systematic range is shown separately. In compact tables, parentheses give the uncertainty in units of the last displayed digit. Search limits, settings and open questions accompany the results. The *Decisions* say what the numbers are:
 
 - *q*: kinematic, no refraction correction. Near or below the film's critical angle, refraction shifts q_z by up to
   about k sin α_i, and the line gives that number for the frame (`2π/λ · sin α_i`; 0.0119 Å⁻¹ for the public P08
-  frame at α_i = 0.075°, λ = 0.6888 Å), or says that it is unknown while α_i is 0° for want of a value. With the
+  frame at α_i = 0.075°, λ = 0.6888 Å), or says that it is unknown when α_i is missing (0°). With the
   film's critical angle given (section 2.6) it reads *q_z corrected for refraction in the film (αc = …)*;
-- *uncertainties* identifies the statistical error model and the separate sensitivity range for f.
+- *uncertainties* names the statistical error model and the separate sensitivity range for f.
 - *peak search* records the candidate cap, *texture rule* gives the isotropic comparison, and *ring orientation* states the exit cut and polarisation.
-
 - *phase assignment* when phases were given, and *pole figure* when rings were analysed (sections 7.10, 7.11).
 
 *Incidence angle* records the nominal value from the run options, notes, Analyze command bar, a unit-labelled sample incidence in the selected frame header, or instrument profile, in that order. A frame sum uses a header value only when its members agree. The frame measurement in §2.3 supplies a missing nominal angle and replaces a nominal angle that differs by more than three measured standard errors. **Keep entered αi** or `--keep-incidence` retains the nominal angle and still reports the comparison. When both sources are missing, the run uses 0° and asks for αi. The JSON record keeps geometry and peak-fit values to 15 significant digits. The tool-response snapshots use the precision specified in section 14.10.
@@ -1909,16 +1866,14 @@ leaves a choice open it is made and said: the origin choice that puts the atoms 
 positions at the right origin and spread over general ones at the wrong one; choice 2 when that is a tie), and the
 hexagonal or rhombohedral axes from the cell. The cell must have the shape of the system and setting (a = b and 90°
 for a tetragonal group, γ = 120° on hexagonal axes, α = γ = 90° for unique axis b; lengths within 0.2 %, angles
-within 0.2°). Tested: every entry has the number of general positions of its point group and lattice and every
-glide plane and screw axis its symbol names; I4/mcm, Pnma, Pbnm, P2₁/c, C2/c, P1̄, Pm3̄m, Fm3̄m, Fd3̄m, Ia3̄d,
-P6₃mc, P3̄m1, R3̄m, P4₂/mnm, I4₁/amd and P4mm have their extinctions; a MAPbI₃ CIF that names only I 4/m c m gives
-the reflections and intensities of the CIF with all 32 operations (101 and 103 absent).
+within 0.2°). Tests check the general positions, glide planes and screw axes of every entry and the extinctions of
+16 groups (among them I4/mcm, Pnma, Fm3̄m and R3̄m); a MAPbI₃ CIF that names only I 4/m c m gives the reflections and
+intensities of the CIF with all 32 operations.
 
 When the operations cannot be found — a symbol that cannot be read or is not in the table, a cell of another shape,
 no space group named — the phase gives **positions only**: every (h, k, l) ≠ 0 of the cell, |F|² = 1, no
 extinctions. Its warnings stay with the phase (the Symmetry column, the record and the report), and a ring assigned
-to it is `tentative` (7.42). Earlier versions applied only the lattice centring of the symbol with the atoms as
-listed, which gave reflections the space group forbids and wrong intensities.
+to it is `tentative` (7.42).
 
 **Reciprocal lattice.** With the columns of A the vectors **a**, **b**, **c** in the Cartesian frame of the cell
 (**a** along x, **b** in the x–y plane):
@@ -2011,30 +1966,27 @@ ring position |q_hkl| of the phases shown when
 |q_0 − q_hkl| ≤ δ,    δ = max( 3 σ(q_0), FWHM / 2 )                                                 (7.42)
 ```
 
-The window takes the larger of the statistical error and the half width: σ(q_0) of a strong ring is often 10⁻⁴ Å⁻¹,
-smaller than the cell constants or the geometry are known, while a reflection within the half width still lies
-under the peak. For each candidate the differences are `Δq = q_0 − q_hkl` and
+σ(q_0) of a strong ring is often 10⁻⁴ Å⁻¹, below the accuracy of the cell constants and the geometry, while a
+reflection within the half width still lies under the peak; the window therefore takes the larger of the two. For each candidate the differences are `Δq = q_0 − q_hkl` and
 `Δd/d = (d_0 − d_hkl)/d_hkl = q_hkl/q_0 − 1`. The latter is the exact fractional difference relative to the reference
 spacing. Two or more reflection families in the window make the assignment ambiguous, even if all belong to one phase.
 
 The *Phase assignment* report identifies the q used for I(q). With no film refraction correction it is the kinematic
 |q|. With a film α_c applied to the reduction it is the transmitted-channel |q| using the internal q_z of (2.6).
-Near the horizon the shift in q_z can be of order k sin α_i, whose value is given for the frame. Above α_c the
-transmitted and reflected channels can produce two rings from one reflection. Assignment compares radial peak
-centres to powder positions and does not separate the two channels.
+Near the horizon q_z can shift by about k sin α_i; the report gives this value for the frame. Above α_c one reflection
+can give two rings, one per channel; the assignment compares radial peak centres with powder positions and does not
+tell the channels apart.
 
 Provide candidate phases in the Phases window or with `--phase CIF` of `tools/gimap_agent.py auto`. The report
 lists the nearest and alternative reflections, marks ambiguous assignments and lists the measured q of unassigned
 peaks. The JSON records the q axis, match tolerance, Δq, Δq/σ(q_0), Δd/d and alternatives. A match to a phase
 known only by its reflection positions is also marked tentative.
 
-Validation (tested). LaB₆ (Pm3̄m, a = 4.1569 Å): the first nine rings fall on d = 4.1569, 2.9394, 2.4000, 2.0785,
-1.8590, 1.6971, 1.4697, 1.3856 and 1.3145 Å to 10⁻⁴ Å, with multiplicities 6, 12, 8, 6, 24, 24, and on GIMaP's
-LaB₆ calibrant lines (3.1) to 10⁻⁶ Å⁻¹. MAPbI₃ (I4/mcm, a = 8.874 Å, c = 12.671 Å, Pb and I only, from a CIF with
-its 32 operations): 111, 101, 100, 001, 113 and 301 are absent by (7.34). On the public P08 frame the peaks are
-assigned as 0.8989 → PbI₂ 001 (Δq = −0.0014 Å⁻¹; PbI₂ P3̄m1, a = 4.557 Å, c = 6.979 Å), 0.9972 → MAPbI₃ 110
-(Δq = −0.0041 Å⁻¹; 002 at +0.0055 Å⁻¹ is within the window too), 1.4091 → 112, 1.9902 → 004, 2.2255 → 114; the peak
-at 0.452 Å⁻¹ has no reflection within ±0.026 Å⁻¹ and is left unassigned.
+Validation (tested). The first nine LaB₆ rings (Pm3̄m, a = 4.1569 Å) fall on their d-spacings to 10⁻⁴ Å and on
+GIMaP's LaB₆ calibrant lines (3.1) to 10⁻⁶ Å⁻¹. In MAPbI₃ (I4/mcm, from a CIF with its 32 operations) 111, 101, 100,
+001, 113 and 301 are absent by (7.34). On the public P08 frame the peaks at 0.8989, 0.9972, 1.4091, 1.9902 and
+2.2255 Å⁻¹ are assigned to PbI₂ 001 and MAPbI₃ 110, 112, 004 and 114 (MAPbI₃ 002 also lies in the window of the
+0.9972 Å⁻¹ peak); the peak at 0.452 Å⁻¹ has no reflection within ±0.026 Å⁻¹ and stays unassigned.
 
 Not modelled: the Lorentz–polarisation and absorption factors of the ring and spot intensities (the sizes and the
 I column are m|F|²), peak widths, the DWBA amplitudes of the channels (the reflected spots are drawn without a
@@ -2085,7 +2037,7 @@ which includes the missing wedge as the model fills it, next to f from the measu
 and the 2D order `2⟨cos²χ⟩ − 1` of ρ along the ring without the sin χ weight (the orientation parameter
 SciAnalysis reports). Statistical errors of the fit and of its derived moments use the fitted covariance. For the filled-wedge sensitivity, the measured bins are held fixed and the Jacobian of the hybrid moment propagates covariance of all fitted parameters through the extrapolation.
 
-**Automatic analysis.** A Gaussian cone plus an isotropic component is fitted to each selected ring. The highest I(χ) maximum fixes χ₀ to 0° below 20° or to 90° above 70°. Other directions are fitted. The report gives the measured f, the model f and oriented fraction together. **1 − φ is conditional on the background b.** A fit is reported as *not determined* if it fails to converge, reaches a free-parameter bound, gives χ²_red > 5 or FWHM > 100°, or has unidentifiable parameters. *Needs attention* identifies the reason. Its numerical outputs are diagnostic. Its extrapolation is excluded from the systematic range in §7.7.
+**Automatic analysis.** A Gaussian cone plus an isotropic component is fitted to each selected ring. The highest I(χ) maximum fixes χ₀ to 0° below 20° or to 90° above 70°. Other directions are fitted. The report gives the measured f, the model f and the oriented fraction together. **1 − φ depends on the background b.** A fit is *not determined* when it does not converge, reaches a bound of a free parameter, gives χ²_red > 5 or FWHM > 100°, or has parameters that cannot be identified. *Needs attention* gives the reason; the values of such a fit are diagnostic only, and its extrapolation is left out of the systematic range of §7.7.
 
 **Export.** *Export…* writes the profile as CSV (`chi_deg N sigma measured model`; the source, geometry and fit in
 `#` lines) and `<stem>_indexing.json` beside it: the record of the frame (14.2), the phases with their source files
@@ -2122,7 +2074,7 @@ u = sin αf = q cos χ / (2π/λ) − sin αi                    (external q)
 |T_f|² = |2u / [u + √(u² − 2δ + 2iβ)]|²,    u > 0
 ```
 
-Zⱼ is the atomic number. The forward factors for H, C, N, O, Na, Si, Ca, I, Au and Pb are interpolated over 4.895–30 keV. When factors are unavailable, δ is estimated from rₑλ²ρₑ/(2π), β is unknown and the fit retains the §7.7 exit cut. With film optics, each signed bin averages the full depth-integrated factor F_film (§5.4) over its measured pixels at their external exit angles, then combines ±χ with the intensity profile's weights. The fit takes the external exit angle from each measured detector ray, including when the q map uses refraction. For display bins without pixels it uses the ray at the centre of the ring window when that ray exists. Within the radial window of the active q map, each measured pixel is binned by its internal pole angle χ = atan2(|q∥|, qzᶠ), where qzᶠ = k Re[√(sin²αi − 2δ + 2iβ) + √(sin²αf − 2δ + 2iβ)]. Both square roots use the branch with nonnegative imaginary part. The in-plane momentum transfer is conserved. A single interface can enhance scattering near the critical angle. It cannot account for a beamstop, an asymmetric sample shadow, diffuse background varying with χ, or a peak leaving the extraction window. [Henke scattering factors](https://henke.lbl.gov/optical_constants/asf.html) · [Gasser et al., 2025, §2.6](https://doi.org/10.1107/S1600576724010628)
+Zⱼ is the atomic number. The forward factors for H, C, N, O, Na, Si, Ca, I, Au and Pb are interpolated over 4.895–30 keV. When factors are unavailable, δ is estimated from rₑλ²ρₑ/(2π), β is unknown and the fit retains the §7.7 exit cut. With film optics, each signed bin averages the full depth-integrated factor F_film (§5.4) over its measured pixels at their external exit angles, then combines ±χ with the intensity profile's weights. The fit takes the external exit angle from each measured detector ray, including when the q map uses refraction. For display bins without pixels it uses the ray at the centre of the ring window when that ray exists. Within the radial window of the active q map, each measured pixel is binned by its internal pole angle χ = atan2(|q∥|, qzᶠ), where qzᶠ = k Re[√(sin²αi − 2δ + 2iβ) + √(sin²αf − 2δ + 2iβ)]. Both square roots use the branch with nonnegative imaginary part. The in-plane momentum transfer is conserved. The single interface describes the enhancement near the critical angle; it does not describe a beam stop, an asymmetric sample shadow, a diffuse background that varies with χ, or a peak leaving the extraction window. [Henke scattering factors](https://henke.lbl.gov/optical_constants/asf.html) · [Gasser et al., 2025, §2.6](https://doi.org/10.1107/S1600576724010628)
 
 The default orientation model uses the thick-film limit when the thickness is unknown. For a frame corrected with the geometrical absorption factor, the model uses the supplied thickness and divides F_film by the factor already applied to each pixel. A frame corrected with the refracted-wave model needs no further film multiplier. The P08 benchmark also fits one thickness shared by all rings of each phase, including that parameter in BIC and the degrees of freedom. It reports the optical depth τ = μd for a finite thickness. At the thick limit only the angular dependence can be inferred.
 
@@ -2130,17 +2082,17 @@ The search compares isotropic material with one or two oriented populations. Eac
 
 An orientation is **determined** when the joint and every ring’s reduced χ² are ≤ 5, the next candidate is at least 6 BIC units worse, the parameters are identifiable, widths lie away from their bounds and φ is below the isotropic limit. The per-ring degrees of freedom subtract that ring’s share of the weighted Jacobian leverage. The full covariance, scaled by max(1, χ²_red), gives conditional 1σ errors for each width and each absolute fraction including their correlations. These local errors exclude uncertainty in the background, optical constants, phase assignment and model choice. A parameter on a bound can have an asymmetric interval.
 
-The fit checks each population against an isotropic replacement on the measured bins. It refits the remaining populations and ring amplitudes. A BIC increase below 6 gives weak evidence for the extra population. If either of two components can be removed, the comparison retains the better single-component fit (the closer width for a tie). A separate check uses the joint covariance. If pₐ < 3σ(pₐ) and corr(pₐ, φ) < −1/√2, more than half the local variance of pₐ is associated with exchange with random material. For this covariance check to mark a component **near-random**, its replacement must also increase χ² by at most one per measured bin on average. In a two-component fit, the broader fraction is also pooled when |corr(p_broad, φ)| > 0.99 and p_broad < 3σ(p_broad). This rule applies even when that component improves the profile shape. An oriented fraction below three standard errors among the remaining components prevents an axis determination. For a single fibre component the identity φ = 1 − p forces correlation −1, so the two-component test does not apply. A component with weak BIC support is also pooled. Even when a broad modulation improves the profile fit, its split from random material can be uncertain. The report pools this fraction with φ and omits its axis. The pooled error follows from the covariance of 1 − Σ pₐ over the retained components. The saved record gives the replacement ΔBIC, fraction correlation and original fitted width.
+Each population is tested against an isotropic replacement on the measured bins, with the other populations and the ring amplitudes refitted. A BIC increase below 6 is weak evidence for that population. If either of two components can be removed, the better single-component fit is kept (the closer width for a tie). A second test uses the joint covariance. If pₐ < 3σ(pₐ) and corr(pₐ, φ) < −1/√2, more than half the local variance of pₐ is exchange with random material; the component is **near-random** when its replacement also raises χ² by at most one per measured bin on average. In a two-component fit the broader fraction is also pooled when |corr(p_broad, φ)| > 0.99 and p_broad < 3σ(p_broad), even when it improves the profile shape. For a single fibre component φ = 1 − p forces correlation −1, so this test does not apply. Near-random components and components with weak BIC support are pooled with φ, and their axes are omitted. The pooled error follows from the covariance of 1 − Σ pₐ over the retained components. An oriented fraction below three standard errors among the remaining components leaves the axis undetermined. The saved record gives the replacement ΔBIC, the fraction correlation and the original fitted width.
 
 The reported crystal Hermans factor is Σₐ pₐ ∫ Kₐ(γ) P₂(cos γ) sin γ dγ over the hemisphere, with P₂(x) = (3x²−1)/2. The sum includes the resolved populations, and each population’s own axis defines γ. Each ring also reports its model-free f over the measured bins (§7.7). When the fit fails the quality criteria, its axes, widths and fractions are diagnostic estimates.
 
-For the public P08 frame (λ = 0.688801 Å), the MAPbI₃ formula with four units per cell gives ρₑ = 1.0423 e Å⁻³, δ = 2.183 × 10⁻⁶, β = 1.269 × 10⁻⁷ and αc = 0.1197°. Only Pb and I have refined positions in the benchmark CIF. With automatic frame angles, the surface evidence leaves the roll at 0°. The fit to the film pole angles has joint reduced χ² = 6.63. The preferred candidate contains a narrow population of 3.42 ± 0.52% with FWHM 11.43 ± 0.53°. The broader population and isotropic material have fraction correlation −0.99985 and are pooled. The orientation verdict is undetermined. [Public-frame benchmark](../tools/benchmarks/README.md#p08-crystal-orientation-at-the-measured-incidence-and-roll)
+For the public P08 frame (λ = 0.688801 Å), the MAPbI₃ formula with four units per cell gives ρₑ = 1.0423 e Å⁻³, δ = 2.183 × 10⁻⁶, β = 1.269 × 10⁻⁷ and αc = 0.1197°. The benchmark CIF has refined positions for Pb and I only, and with automatic frame angles the roll stays at 0°. The fit to the film pole angles has joint reduced χ² = 6.63. The preferred candidate has a narrow population of 3.42 ± 0.52% with FWHM 11.43 ± 0.53°; the broader population is pooled with the isotropic material (fraction correlation −0.99985). The orientation is undetermined. [Public-frame benchmark](../tools/benchmarks/README.md#p08-crystal-orientation-at-the-measured-incidence-and-roll)
 
 ### 7.12 Unit-cell refinement from indexed peaks
 
-For each visible phase, the observations are fitted radial centres qⱼ in Å⁻¹ with finite positive standard errors σⱼ from §7.4. Each measured peak contributes once. The assignment window is ±max(3σⱼ, FWHM/2). Exclude tentative assignments and windows containing distinct families from one or more phases. Texture can change the intensity ratio, so the centre of an unresolved multiplet has no measured weight for its individual families. After the first fit, recalculate all candidate positions using the refined metrics and q offsets and reassign the measured peaks. Repeat until the assignments stabilize. Reflections equivalent under the free metric count as one family.
+For each visible phase, the observations are fitted radial centres qⱼ in Å⁻¹ with finite positive standard errors σⱼ from §7.4. Each measured peak contributes once. The assignment window is ±max(3σⱼ, FWHM/2). Tentative assignments and windows with distinct families of one or more phases are left out: texture can change the intensity ratio, so the centre of an unresolved multiplet has no measured weight for its families. After the first fit, all candidate positions are recalculated with the refined metrics and q offsets and the measured peaks are assigned again, until the assignments are stable. Reflections equivalent under the free metric count as one family.
 
-Let A contain the direct lattice vectors as columns, M = (AᵀA)⁻¹ and hⱼ be the column of CIF indices. Fit the independent entries of the reciprocal metric by minimizing
+Let A contain the direct lattice vectors as columns, M = (AᵀA)⁻¹ and hⱼ be the column of CIF indices. The independent entries of the reciprocal metric are fitted by minimizing
 
 ```text
 q̂ⱼ = 2π √(hⱼᵀ M hⱼ) + Δq₀
@@ -2151,20 +2103,19 @@ The cubic cell has one independent length, tetragonal and hexagonal/trigonal cel
 
 An additive q zero shift Δq₀ represents an empirical offset over the measured range. For p independent metric parameters, it is fitted only with at least p+2 usable peaks and an independent shift column in the weighted Jacobian. Otherwise it is fixed at zero. The report gives the fitted offset and its standard error. A wavelength error rescales q. A detector-distance error approximates a common scale only at small scattering angles. The metric design must have full rank. For example, tetragonal 202 and 404 constrain only 4/a² + 4/c², even with both centres measured precisely.
 
-**Refraction.** With a supplied film critical angle, use transmitted-channel q for both the incoming and outgoing beam as in §7.10. For a propagating exit ray, q∥ is conserved and qz = k[√(sin²αf − sin²αc) + Re√(sin²αi − sin²αc)]. When the overlay selects a different αc, the frame is binned again on this map and peak positions and errors are fitted again. A full ring has no single exit angle. A curve already reduced with that αc supplies its fitted centres directly. For a supplied 2D spot, the measured direction gives its exit angle. Propagate its radial error at fixed direction as σT = |∂qT/∂qmap| σmap. The model assumes the transmitted branch for these positions. [Jiang, J. Appl. Cryst. 48, 917–926 (2015)](https://journals.iucr.org/j/issues/2015/03/00/rg5085/).
+**Refraction.** With a supplied film critical angle, use transmitted-channel q for both the incoming and outgoing beam as in §7.10. For a propagating exit ray, q∥ is conserved and qz = k[√(sin²αf − sin²αc) + Re√(sin²αi − sin²αc)]. When the overlay selects a different αc, the frame is binned again on this map and peak positions and errors are fitted again. A full ring has no single exit angle. A curve already reduced with that αc supplies its fitted centres directly. For a supplied 2D spot, the measured direction gives its exit angle, and its radial error is propagated at fixed direction as σT = |∂qT/∂qmap| σmap. The model assumes the transmitted branch for these positions. [Jiang, J. Appl. Cryst. 48, 917–926 (2015)](https://journals.iucr.org/j/issues/2015/03/00/rg5085/).
 
 **Errors.** For the weighted Jacobian J and ν = N − number of fitted parameters, C = (JᵀJ)⁻¹ max(1, χ²/ν). At ν = 0 the supplied absolute peak errors determine C and χ²red is undefined. The full covariance propagates to the direct cell and V = |det A|. For a length u, εᵤ = u/u₀ − 1 and σ²(εᵤ) = (σᵤ/u₀)² + (u σ₀/u₀²)² for independent measured and reference cells. The volume change follows the same formula, with reference-cell errors propagated through V. Dimensions tied by symmetry share their CIF uncertainty. Other reference parameters are treated as independent. A missing CIF uncertainty contributes no known variance. Leave-one-centre-out fits give the range of parameters for retained subsets and identify subsets of insufficient rank. Separate fits remeasure radial positions with refraction off and on at the supplied film critical angle or the angle from CIF optics. Residuals are observed minus fitted q in Å⁻¹.
 
-**Directional strain.** For one resolved fibre pole, project each reference reciprocal vector into P perpendicular to the director and Z along it. The directional model fits q̂ = √[(P/(1+ε∥))² + (Z/(1+εz))²] + Δq₀ against independent measured radii with the same weighting and rank rules. A measured spot direction selects its symmetry-equivalent pole. For sector I(q) the angular limits must select a single distinct reference pole angle. The panel uses the non-overlapping in-plane and out-of-plane sectors. The fitted pole indices are held fixed. For the directional strains and any fitted offset, the reported covariance adds G C₀ Gᵀ. G is the derivative of the refitted parameters with respect to each independent CIF cell coordinate, including the change in director and reciprocal-vector projections. C₀ contains the reported reference variances.
+**Directional strain.** For one resolved fibre pole, each reference reciprocal vector is split into P perpendicular to the director and Z along it. The directional model fits q̂ = √[(P/(1+ε∥))² + (Z/(1+εz))²] + Δq₀ against independent measured radii with the same weighting and rank rules. A measured spot direction selects its symmetry-equivalent pole. For sector I(q) the angular limits must select a single distinct reference pole angle. The panel uses the non-overlapping in-plane and out-of-plane sectors. The fitted pole indices are held fixed. For the directional strains and any fitted offset, the reported covariance adds G C₀ Gᵀ. G is the derivative of the refitted parameters with respect to each independent CIF cell coordinate, including the change in director and reciprocal-vector projections. C₀ contains the reported reference variances.
 
-**Series.** The selected range and stride refer to individual physical frames. Starting near the indexed frame, track each accepted ring in both directions. The Series centroid initializes a Gaussian on a linear background fitted to native radial intensities with their σ. The search half-width is the larger of 2.5 indexed FWHM and five radial sampling steps, limited by midpoints between neighbouring peaks in the indexed frame. Each frame uses its own fitted qⱼ, σⱼ and covariance. A provisional fit to the tracked orders sets the metric and offset for checking every visible phase against the measured peak widths. Only isolated families that retain their tracked identity enter the final fit. An unresolved or missing peak is left out; an undetermined frame leaves a gap in the plot.
+**Series.** The selected range and stride refer to individual physical frames. Each accepted ring is tracked in both directions, starting near the indexed frame. The Series centroid initializes a Gaussian on a linear background fitted to native radial intensities with their σ. The search half-width is the larger of 2.5 indexed FWHM and five radial sampling steps, limited by midpoints between neighbouring peaks in the indexed frame. Each frame uses its own fitted qⱼ, σⱼ and covariance. A provisional fit to the tracked orders sets the metric and offset for checking every visible phase against the measured peak widths. Only isolated families that retain their tracked identity enter the final fit. An unresolved or missing peak is left out; an undetermined frame leaves a gap in the plot.
 
 ## 8. GISAXS automatic analysis
 
 For a GISAXS frame the automatic analysis places the horizontal cut at the Yoneda band, moves the beam-centre column
 to the mirror axis of the cut, decides which halves of the cut to use, gives the length scale 2π/q* of a side maximum
-or shoulder (a length the curve shows, not necessarily the particle spacing), and fits the prepared cut with
-Predict parameters (section 8.5). It runs from **Run Automatic Analysis** in
+or shoulder (section 8.4), and fits the prepared cut with Predict parameters (section 8.5). It runs from **Run Automatic Analysis** in
 Analyze and from the command line. The technique and the frames are chosen as in section 7.1.
 
 Units: q_y and q_z in Å⁻¹ in Analyze; the fit converts to nm⁻¹ (q_nm = 10 q_Å); lengths in nm.
@@ -2175,7 +2126,7 @@ Implementation: `src/gimap/features/assistant/application/gisaxs_procedure.py`
 
 Section 6.7 defines the horizontal Yoneda-row band and the off-rod vertical band. Each gives one point per occupied detector line with the standard errors of section 6.4. Gaps between measured lines remain gaps.
 
-The Yoneda search of section 6.7 is purely empirical: **no critical angle of any material is used**, and the brightest diffuse row between `α_f = −0.2°` and `α_f = 1.5°` is taken, whatever its origin. The report gives r_Y and its exit angle α_f(r_Y) from (2.14). When the window holds no valid pixels, the cut is placed 10 px above the horizon, with a warning and a *Needs attention* item (check α_i).
+The Yoneda search of section 6.7 is empirical: it takes the brightest diffuse row between `α_f = −0.2°` and `α_f = 1.5°`, whatever its origin. The report gives r_Y and its exit angle α_f(r_Y) from (2.14). When the window holds no valid pixels, the cut is placed 10 px above the horizon, with a warning and a *Needs attention* item (check α_i).
 
 Implementation: `src/gimap/features/analyze/domain/gisaxs.py`
 
@@ -2221,11 +2172,10 @@ coarse axis, the best grid point, the minimiser and the initial centre (when ins
 lowest E wins. The result is given in canonical pixel coordinates (centre of column j at j + 0.5).
 
 **No uncertainty is reported for the centre.** The 10⁻⁴ px tolerance is a numerical stopping rule, and E is not a
-probability. A shift of more than 20 px from the calibrated centre is put under *Needs attention*. In the automatic
-analysis a shift of more than 100 px is not applied at all: a calibration of the measurement is off by a few pixels,
-so the run keeps the calibrated centre and reports that the calibration does not match the frame; an axis that
-could not be found is an open item as well. The report's *asymmetry a → b* is E at the calibrated and at the
-refined axis.
+probability. A shift of more than 20 px from the calibrated centre is put under *Needs attention*. The automatic
+analysis does not apply a shift of more than 100 px, since the calibration of a measurement is off by a few pixels at
+most: it keeps the calibrated centre and reports that the calibration does not match the frame. An axis that cannot be
+found is an open item too. The report's *asymmetry a → b* is E at the calibrated and at the refined axis.
 
 Implementation: `src/gimap/features/analyze/domain/symmetry.py`, `src/gimap/features/analyze/domain/symmetry_coarse.py`
 
@@ -2254,12 +2204,10 @@ Example (invented): q* = 0.020 Å⁻¹ gives D* = 314 Å = 31.4 nm.
 
 **Why D\* is not called a spacing.** A side maximum of I(q_y) can come from the interparticle correlation, but the
 knee of a form factor and the tail of the direct beam make a shoulder too, and with the paracrystal model of chapter 9
-the fitted D differs from 2π/q* when the disorder is large. On BornAgain 24.1 simulations of BornAgain's documented
-model of the GALAXI frame, placed on the measured q grid, the search found a shoulder at 2π/q* = 73.9 nm for a peak
-distance of 53.6 nm, and a shoulder at 60.6 nm for the same particles without interference. On 14 simulated cuts with
-known parameters, 2π/q* was within 10 % of the true distance in 1 of 10 cuts with interference, and a maximum or
-shoulder was found on all 4 cuts without interference. D* is therefore a result of its own: the fit of section 8.5
-needs no start and does not take one from it. The records keep its value under the earlier key (`spacing.distance_nm`).
+the fitted D differs from 2π/q* when the disorder is large. On 14 BornAgain simulations with known parameters, 2π/q*
+was within 10 % of the true distance in 1 of 10 cuts with interference, and a maximum or shoulder appeared on all 4
+cuts without interference. D* is therefore a result of its own, and the fit of section 8.5 takes no start from it. The
+records keep its value under the key `spacing.distance_nm`.
 
 Implementation: `src/gimap/features/assistant/domain/gisaxs_cut.py`, `src/gimap/features/assistant/application/gisaxs_tools.py`
 
@@ -2276,14 +2224,15 @@ Process with AI and the MCP tool `fit_horizontal_cut`, and on the command line (
 the automatic fit uses four-term DWBA if the session or frame metadata identifies the substrate (level 4).
 Otherwise it uses the Born term at the cut's vacuum q_z = (2π/λ)(sin α_i + sin α_f), in nm⁻¹ for λ in nm
 (level 2, section 9.13). When either angle is unknown, it uses the effective interface at q_z = 0 (level 1).
-The report states the level under *Decisions*. Other model settings follow Fitting's defaults, with sizes Gaussian
+The report states the level under *Decisions*. The other model settings are Fitting's defaults: sizes Gaussian
 by number, the paracrystal of section 9.5 in the LMA, the beam tail A / (1 + (q/w)^ν) and a constant background (9.1).
-Without a given composition (as in Run Automatic Analysis) the network chooses among one
-or two populations of spheres and upright cylinders, each with or without a paracrystal (the head's four most
-probable of these, and its most probable of one and of two populations). A given composition (1 sphere, 2 random cylinder, 3 vertical cylinder, each population with a
-paracrystal: Batch Export's **Model**, the `components` of the tool) is fitted whole; random cylinders are fitted only
-then, since they take far longer. The network needs no start: nothing is taken from D* of section 8.4, which stays a
-result of its own. The fit needs at least 8 points; a cut of more than 1000 points is merged first (section 6.9).
+
+Without a given composition (as in Run Automatic Analysis) the network chooses among one or two populations of
+spheres and upright cylinders, each with or without a paracrystal (the head's four most probable of these, and its
+most probable of one and of two populations). A given composition (1 sphere, 2 random cylinder, 3 vertical cylinder,
+each population with a paracrystal: Batch Export's **Model**, the `components` of the tool) is fitted whole. Random
+cylinders and three populations are fitted only then; random cylinders take far longer. The network needs no start.
+The fit needs at least 8 points; a cut of more than 1000 points is merged first (section 6.9).
 
 **Scores.** For each solution, with r_i = (I_model(q_i) − I_i)/σ_i:
 
@@ -2295,79 +2244,67 @@ logRMSE = √( mean over I_i > 0 of ( ln(I_model,i / I_i) )² )                 
 N counts the points Predict parameters fitted and k its free values (the scales included); σ is the curve's own.
 Predict leaves out the points below the network's q window (q < q_max/300, section 9.13) and those without a usable
 value, and every report says how many (*596 of 598 points; 2 below the network's q window*; `points` of a solution:
-`fitted`, `given`, `below_window`, `unusable`). It is Fitting's χ²_red (9.23) of the same solution on those points,
-and the one number shown for a solution on the Fit page, in the automatic analysis's table, report, CSV and JSON
-and in Batch Export's table (until 0.2.0's release preparation the reports gave a mean over all points handed
-over, χ²/N, which differed from the Fit page's value). The probability p of a solution is its
-composition's posterior probability times the solution's share of it (section 9.13); the solutions are sorted by p,
-most probable first, and the five most probable are kept. Probabilities are relative to the compositions that
-were tried: the single solution of a composition that was given shows none. A solution's "weight" `a_j / Σ a` is a normalised
-amplitude, not a probability or a volume fraction.
+`fitted`, `given`, `below_window`, `unusable`). χ²ᵣ is Fitting's χ²_red (9.23) of the same solution on those points.
+It is the one number shown for a solution on the Fit page, in the automatic analysis's table, report, CSV and JSON,
+and in Batch Export's table.
+
+The probability p of a solution is its composition's posterior probability times the solution's share of it
+(section 9.13). The solutions are sorted by p, most probable first, and the five most probable are kept.
+Probabilities are relative to the compositions tried; the single solution of a given composition shows none. A
+solution's "weight" `a_j / Σ a` is a normalised amplitude, not a probability or a volume fraction.
 
 **Values at a bound.** The least squares of Predict parameters keep every population inside the box of the network's
 prior (section 9.13: R from 0.5/q_max to 5/q_min, σR/R, σh/h and σnn/D 0.02–0.5, D and h within the prior's D/2R and
 h/2R ranges at the current radius, the tail's ν 1.8–2.2 and w at most 30 q_min). A free shape or tail value
-within 10⁻⁴ of its range of a bound has *ended on the bound*; the solution names it in `at_bounds` (parameter, lower
-or upper bound, component; the keys `sigma_Res` and `nu_Res` are the tail's w and ν, which every text calls
-Tail w and Tail ν, the names of Fitting's Model table: `shared/fit_names.py` holds the one name of every quantity
-and the sentence of every flag). With Tail A = 0 the tail is absent and its w and ν are not listed, nor flagged; the
-same holds for the values of a population whose Scale is 0. A value on a bound is not determined by the
-curve: the bound, not the data, holds it. These are the non-linear values only. The linear terms a_j, BG and A are
-solved by non-negative least squares and are not in `at_bounds`: one at 0 is held by that limit (a background the
-curve would want below zero, a beam tail that is absent, so that w and ν no longer change the curve), and the report
-names it for the reported solution among the *Decisions* (*fit caveat*: *Background at 0, the non-negativity
-limit*).
+within 10⁻⁴ of its range of a bound has *ended on the bound*, and the solution names it in `at_bounds` (parameter,
+lower or upper bound, component). The keys `sigma_Res` and `nu_Res` are the tail's w and ν, which every text calls
+Tail w and Tail ν, the names of Fitting's Model table; `shared/fit_names.py` holds the one name of every quantity
+and the sentence of every flag. With Tail A = 0 the tail is absent, and its w and ν are neither listed nor flagged;
+the same holds for the values of a population whose Scale is 0. The linear terms a_j, BG and A are solved by
+non-negative least squares and are not in `at_bounds`. One at 0 is held by that limit (a background the curve would
+want below zero, or an absent beam tail, so that w and ν no longer change the curve); the report names it for the
+reported solution among the *Decisions* (*fit caveat*: *Background at 0, the non-negativity limit*).
 
 **The solution the automatic analysis reports** is the most probable one, the first. The fit record keeps its index
-(`chosen`), the Results tab selects it, and `fit_curve.csv` holds its curve. The report's *Decisions* give it
-(*fit*: model, the R of every population and the D of those with a paracrystal in the order of the radii,
-`R = 3.06 / 6.02 nm, D = 49.4 / – nm`, χ²ᵣ and probability), the refined R, h and D of every population with their
-68 % intervals (*fit intervals*: `R (1) 3.17 [3.04, 3.26] nm`, the refined value and then its interval — the
-posterior given the σ of the points, sampled around the solution, or the least-squares errors when the sampling did
-not converge; the geometry and the choice of model are not in it), the notes of the fit (the flags of section 9.13
-as sentences, one per kind; those about the background, the beam tail and the resolution in one line after those
-about the particles) and its values at a bound (*fit caveat*).
+(`chosen`), the Results tab selects it, and `fit_curve.csv` holds its curve. The report's *Decisions* give:
+
+- *fit*: the model, the R of every population and the D of those with a paracrystal in the order of the radii
+  (`R = 3.06 / 6.02 nm, D = 49.4 / – nm`), χ²ᵣ and the probability;
+- *fit intervals*: the refined R, h and D of every population, each followed by its 68 % interval
+  (`R (1) 3.17 [3.04, 3.26] nm`), from the posterior sampled around the solution, or the least-squares errors when the
+  sampling did not converge (section 8.6, *uncertainties*);
+- the notes of the fit: the flags of section 9.13 as sentences, one per kind, with those about the background, the
+  beam tail and the resolution in one line after those about the particles;
+- *fit caveat*: its values at a bound.
+
 Further rules of the report (`gisaxs_choice.py`):
 
 - If another composition has probability or BIC weight ≥ 0.2, *Needs attention* (**model**) lists the reported
   composition and each such alternative with its composition probability or BIC weight. Each composition is represented
-  by its most probable solution. The report identifies representatives whose D is within 15 % of D* (section 8.4).
-  For a model with multiple solutions, the fit decision gives both the model's total weight and the reported solution's weight.
-- For each other solution of the reported composition with solution weight ≥ 0.2, compare the refined R, h and D
-  of each population. The two solutions agree when the 68 % intervals of every applicable value overlap: two starts
-  that ended in one mode. The fit decision records this overlap. If the intervals of a value do not overlap or
-  an interval is missing, *Needs attention* (**values**) names the parameter and shows the estimates and available intervals.
-- A value of the reported solution at a bound: *Needs attention* (**fit**) says that those values are not determined
-  by the curve.
-- D ≥ 250 nm in the reported solution: it has no interparticle correlation in the q range, and D is not determined by
-  the curve.
-- A reported solution with χ²ᵣ > 10 is a **poor fit** (*Needs attention*, **fit**): it misses the curve by far more
-  than the σ of its points, so none of the compositions tried describes the cut and its R and D are not measurements.
-  The limit is that of Fitting's poor fits of a series (χ²_red > 10; User Manual, section 6.5).
+  by its most probable solution, and the report marks representatives whose D is within 15 % of D* (section 8.4).
+  For a model with several solutions, the fit decision gives both the model's total weight and the reported solution's weight.
+- Each other solution of the reported composition with solution weight ≥ 0.2 is compared with the reported one on the
+  refined R, h and D of each population. When the 68 % intervals of every applicable value overlap, the two starts
+  ended in one mode, and the fit decision records this. When the intervals of a value do not overlap or an interval is
+  missing, *Needs attention* (**values**) names the parameter and shows the estimates and the available intervals.
+- A value of the reported solution at a bound: *Needs attention* (**fit**) says that the curve does not determine it.
+- D ≥ 250 nm in the reported solution: there is no interparticle correlation in the q range, and the curve does not
+  determine D.
+- A reported solution with χ²ᵣ > 10 is a **poor fit** (*Needs attention*, **fit**): none of the compositions tried
+  describes the cut, and its R and D are not measurements. Fitting uses the same limit for the poor fits of a series
+  (User Manual, section 6.5).
 
 The table and *Needs attention* use the same fit record. Where a 68 % interval is available, its half-width sets the decimal place for R, h and D. **Save Fit Table…** writes one line per
 population of each solution: rank, model, χ²ᵣ (`chi2`; a `#` line gives the fitted points), probability, log RMSE, the parameters (nm; the spreads relative), the
 68 % intervals of R, h and D, `at_bounds` (`name:upper` or `name:lower`) and `chosen`.
 
-**GALAXI.** On the public GALAXI frame (α_i = 0.463°, `galaxi_bornagain.poni`) the earlier first-level fit reported an upright cylinder
-with a paracrystal next to a second upright cylinder, R = 3.17 / 6.15 nm, D = 44 / – nm, χ²ᵣ = 1.07 over 596 of 598
-points, probability 0.39. In the worked example in User Manual section 10.7, the leading model has a sphere with a
-paracrystal and an upright cylinder. Its probability rounds to 1.00, shared by two solutions whose 68 % intervals
-overlap (R (1) 3.267–3.441 and 3.294–3.471 nm), so that the report records one mode and asks nothing about the values.
-The cut's broad log-normal sizes and its low-q rise are described by two populations; the sample's
-particles are spheres (BornAgain's model, section 9.10), which a fit with a sphere in Model and the particles of
-Model as the composition describes (section 9.13). The choice of model is the user's: the automatic analysis
-describes the cut and gives Fitting a start.
-
-**Until 0.2.0** the analysis fitted the cut with a quick numerical fit (no network; the same fit was Fitting's *Find
-the particle shape (no AI)*, section 9.9): single-component spheres, vertical and random cylinders from fixed starts
-(one with D = D*), ranked by a robust misfit (the mean Huber loss of r, Huber 1964), the reported solution the
-best-ranked one free of bounds within 10 % of the first's χ²/N, and no ± for R, h or D. On 14 BornAgain simulations
-of cuts of Ag spheres with known parameters (the GALAXI model with R, scale, D and disorder varied, Poisson noise at
-the data's count level) it ranked a random cylinder first in 12 and a sphere in 1, 10 first-ranked solutions had a
-value at a bound, the best sphere's R was a median 11 % above the R⁶-weighted mean radius (−29 % to +26 %), and D and
-the disorder were not recovered. On the GALAXI frame it reported a random cylinder with χ²/N = 1.05 and D at its lower
-bound.
+**GALAXI.** On the public GALAXI frame (α_i = 0.463°, `galaxi_bornagain.poni`; the worked example of User Manual
+section 10.7) the leading model is a sphere with a paracrystal and an upright cylinder. Its probability rounds to 1.00,
+shared by two solutions whose 68 % intervals overlap (R (1) 3.267–3.441 and 3.294–3.471 nm), so the report records one
+mode and asks nothing about the values. The two populations describe the cut's broad log-normal sizes and its low-q
+rise. The sample's particles are spheres (BornAgain's model, section 9.10); a fit with a sphere in Model and the
+particles of Model as the composition describes them (section 9.13). The choice of model is the user's: the automatic
+analysis describes the cut and gives Fitting a start.
 
 Implementation: `create_curve_fit()` in `src/gimap/features/fitting/bootstrap.py` (Predict parameters as a function:
 `domain/posterior/refine.py`, the rows of `infrastructure/adapters/posterior_job.py`), the choice and its texts in
@@ -2376,33 +2313,30 @@ Implementation: `create_curve_fit()` in `src/gimap/features/fitting/bootstrap.py
 
 ### 8.6 What the GISAXS analysis does not model
 
-- The automatic fit uses a single vacuum q_z for a Yoneda band of known angles (section 8.5). It omits reflected
-  paths, refraction and the variation of the Yoneda enhancement across the band.
+- With the Born term (level 2, section 8.5) the fit uses a single vacuum q_z for the Yoneda band; reflected paths,
+  refraction and the change of the Yoneda enhancement across the band are left out.
 - The term `A / (1 + (q/w)^ν)` is an additive empirical tail of the direct and reflected beam; no resolution
   convolution is applied.
-- The Yoneda row is found without αc; the beam-centre row is not refined; the centre has no uncertainty.
-- Without a given composition the network chooses among one or two populations of spheres and upright cylinders;
-  random cylinders and three populations are fitted only when given as the composition (section 8.5).
+- The Yoneda row is found without αc, and the beam-centre row is not refined (sections 8.1, 8.2).
 
 Like the GIWAXS report (section 7.9), the GISAXS report's *Decisions* always say what its numbers are:
 
-- *q*: kinematic, no refraction correction. Near the critical angle refraction mostly shifts q_z, that of the Yoneda
-  band (α_f ≈ α_c) most, by an amount of the order of k sin α_i, and the line gives that number for the frame
-  (`2π/λ · sin α_i`; 0.0379 Å⁻¹ for the public GALAXI frame at α_i = 0.463°, λ = 1.34 Å); q_y and 2π/q* barely change.
-  With the film's critical angle given (section 2.6) it reads *q_z corrected for refraction in the film (αc = …)*;
-- *uncertainties*: statistical only — the σ of the cuts' points, by which χ²ᵣ is normalised, with the error model of
-  the frame (Poisson counting statistics, or the pixel scatter of each bin); the geometry and refraction are not
-  included. The 68 % intervals of R, h and D (*fit intervals*, section 8.5) are those of the posterior within the
-  model given these σ: the choice of model is not in them.
+- *q*: kinematic, no refraction correction. Near the critical angle refraction mostly shifts q_z, most of all on the
+  Yoneda band (α_f ≈ α_c), by about k sin α_i; the line gives that number for the frame (`2π/λ · sin α_i`; 0.0379 Å⁻¹
+  for the public GALAXI frame at α_i = 0.463°, λ = 1.34 Å). q_y and 2π/q* barely change. With the film's critical
+  angle given (section 2.6) it reads *q_z corrected for refraction in the film (αc = …)*;
+- *uncertainties*: statistical only, from the σ of the cut's points (which normalise χ²ᵣ) with the error model of the
+  frame (Poisson counting statistics, or the pixel scatter of each bin). The geometry and refraction are not included.
+  The 68 % intervals of R, h and D (*fit intervals*, section 8.5) are those of the posterior within the model given
+  these σ; the choice of model is not in them.
 
 ## 9. Model fitting of 1D curves (Fitting)
 
 Fitting fits one curve, or every frame of a series, with its own model. The Fit step has three methods: the
 numerical *Refine the values in Model* (Refine) and *Search the ranges, then refine* (Search), described in this
-chapter, and *Predict parameters*, GIMaP's network and the posterior of this model (section 9.13), which also fits
-the cut of the GISAXS automatic analysis (section 8.5); the 1D Predict window is chapter 10. *Find the particle shape
-(no AI)* and *Predict parameters (fit1d)* were removed in 0.2.0, so that Fitting has one network method; sections 9.9
-and 9.12 keep what they were.
+chapter, and *Predict parameters*, GIMaP's network and the posterior of this model (section 9.13). Predict parameters
+also fits the cut of the GISAXS automatic analysis (section 8.5); the 1D Predict window is chapter 10. *Find the
+particle shape (no AI)* and *Predict parameters (fit1d)* were removed in 0.2.0 (sections 9.9 and 9.12).
 
 **Units: Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ (an Analyze `_fit_input.dat`) is multiplied by 10.
 Sizes and distances are in nm, w in nm⁻¹, the spreads σ_R/R, σ_h/h, σnn/D are relative.
@@ -2416,32 +2350,27 @@ uses q_z = 0. Run Automatic Analysis takes αf from the Yoneda band and αi and 
 ### 9.1 Points that are fitted
 
 **Text-table input.** The import preview shows the header and the first ten rows of a `.dat` or `.txt` file.
-The confirmed single-curve layout reads `q I [sigma]`; the shared-q layout reads `q I1 I2 …` as independent
-curves, each paired with the first q column. Clear column names such as `q I1 I2` can suggest the second layout,
-but an unlabelled three-column table is ambiguous and keeps the single-curve default until the user chooses
-otherwise. Analyze's marked exports and its `q I sigma pixels` schema remain one curve; the sigma and pixel-count
-columns cannot be imported as separate intensities. Named uncertainty columns (including `sigma1`, `sigma2`)
-also disable shared-q splitting. Interleaved `q I1 sigma1 I2 sigma2 …` tables are not supported as multiple
-curves; single-curve import can read their first q/I/sigma triple only. The unit stated in the file takes precedence over the
-setting for files without a unit; contradictory unit declarations remain an error.
-Explicit import refuses to use a named intensity column as sigma; a table such as `q I1 I2 sigma` must be
-rearranged into a supported layout instead of silently using I2 as the uncertainty.
+The single-curve layout reads `q I [sigma]`. The shared-q layout reads `q I1 I2 …` as separate curves, each paired
+with the first q column. Column names such as `q I1 I2` suggest the shared-q layout; an unlabelled three-column table
+stays single-curve until you choose otherwise. Analyze's marked exports and its `q I sigma pixels` schema are always
+one curve. Named uncertainty columns (such as `sigma1`, `sigma2`) also turn off shared-q splitting. An interleaved
+`q I1 sigma1 I2 sigma2 …` table is read as one curve, from its first q/I/sigma triple. A unit stated in the file
+overrides the setting for files without a unit; contradictory unit declarations are an error. A named intensity
+column is never used as sigma: rearrange a table such as `q I1 I2 sigma` into a supported layout.
 
-Reading keeps each selected q, I and optional sigma from the same row, then removes rows whose selected values
-are missing, invalid or non-finite. A missing I1 does not remove a valid I2 at that q when the table retains its
-column positions (for example, an empty comma-separated cell or `nan`). A shortened whitespace-separated row
-cannot identify the missing column and is omitted instead of shifting the remaining values. Missing sigma
-stays absent: importing a shared-q table does not synthesize counting errors. The legacy single-curve reader
-also rejects a malformed sigma row as a whole; a later sigma can no longer become paired with an earlier q/I.
-Valid legacy q/I/sigma values are unchanged.
+Each curve takes its q, I and optional sigma from the same row. Rows whose selected values are missing, unreadable or
+not finite are dropped from that curve. When the table keeps its column positions (an empty comma-separated cell or
+`nan`), a missing I1 leaves a valid I2 at that q. A whitespace-separated row with too few values is skipped, since the
+missing column cannot be identified. Missing sigma stays missing; no counting errors are added. The legacy
+single-curve reader also skips a row whose sigma is malformed.
 
-Each imported curve keeps its physical source file, selected column indexes, original column names when present,
-table width and whether sigma came from a column. Projects and fit records retain this mapping. A changed header
-or missing selected column is reported and requires importing the table again; it is not silently remapped.
+Each imported curve records its source file, the selected column indexes, the original column names (if any), the
+table width and whether sigma came from a column. Projects and fit records keep this mapping. When the header has
+changed or a selected column is missing, the program reports it and asks you to import the table again.
 
 A curve with signed q (a horizontal GISAXS cut) is fitted on one of: the mean of both halves (6.16)–(6.17), both halves on
 `abs(q)`, or one half. Then the fitting range and points left out apply. Of these points only `abs(q) > 0` with finite
-values are kept. With file weighting, usable intensity uncertainties must be finite and positive.
+values are kept. With file weighting, only finite, positive intensity uncertainties are used.
 If the selection has no usable σ, its positive intensities are fitted in ln I (9.7).
 
 Implementation: `src/gimap/features/fitting/application/curve_sources.py`, `src/gimap/features/fitting/infrastructure/adapters/curve_tables.py`, `src/gimap/features/fitting/infrastructure/adapters/scattering_curve_files.py`, `src/gimap/features/fitting/application/single_fit.py`, `src/gimap/features/fitting/domain/fit_engine.py`
@@ -2456,53 +2385,42 @@ T_i = P_i · S_i  (LMA)   or   P_i + C_i (S_i − 1)  (DA),   P_i(0) = 1
 Int_i is the scale of component i. Every family is normalised to P(0) = 1 (section 9.4), so Int_i is the intensity
 of component i at q = 0 (times S_i(0)). BG is a constant background (not multiplied by k), A, w and ν the amplitude,
 width and exponent of the beam-tail term, and k an overall factor fixed at 1 by default. By default the model depends on
-`abs(q)` only: spheres are evaluated at q_z = 0, the effective interface approximation. Given the angles of the cut,
-spheres can instead use the direct and the exit-reflected path of the DWBA (section 9.10). The beam-tail term is additive, not a resolution convolution. With w ≤ 0 or ν ≤ 0 the term is 1.
+`abs(q)` only: spheres are evaluated at q_z = 0, the effective interface approximation. With the angles of the cut
+entered, spheres use the direct and the exit-reflected path of the DWBA instead (section 9.10). The beam-tail term is
+additive, not a resolution convolution. With w ≤ 0 or ν ≤ 0 the term is 1.
 
 **q resolution (σ_q, off by default).** With σ_q > 0 each particle term `Int_i·T_i` is convolved with a Gaussian
 of standard deviation σ_q in q; the beam-tail term and BG are not. The terms are made on a uniform grid from
 max(0, q_min − 5σ_q) to q_max + 5σ_q, at most σ_q/5 apart, folded at q = 0 (the cut is symmetric: I(−q) = I(q)),
-convolved with the Gaussian cut at ±5σ_q and interpolated back to the points. A test compares the result with a
-direct convolution of the symmetric cut (within 10⁻³). Smearing matters for well-ordered films: when σ_q is above
-about 0.3 of the width of the structure peak, the fitted σnn/D otherwise takes up the resolution as disorder.
+convolved with the Gaussian cut at ±5σ_q and interpolated back to the points (within 10⁻³ of a direct convolution).
+Set σ_q for well-ordered films: when σ_q is above about 0.3 of the width of the structure peak, a fit without it takes
+up the resolution as disorder in σnn/D.
 
-**Resolution from the file (Refine and Search).** For a measured Gaussian standard deviation dQᵢ,
-replace each particle term T(qᵢ) in (9.1) by E[T(|qᵢ + dQᵢ Z|)], Z ∼ N(0,1). A zero width gives T(|qᵢ|).
+**Resolution from the file (Refine and Search).** For a measured Gaussian standard deviation dQᵢ, each particle term
+T(qᵢ) in (9.1) becomes E[T(|qᵢ + dQᵢ Z|)], Z ∼ N(0,1); a zero width gives T(|qᵢ|).
 The integral uses the normalized Gaussian over −7 ≤ Z ≤ 7, with adaptive Gauss–Legendre quadrature and explicit
 subdivision at sharp 1D paracrystal peaks. Each scale column uses the same convolution. BG and the beam tail
-retain their values at the measured qᵢ. A named dQ or sigma_q text column, or a Gaussian NXcanSAS Qdev,
+keep their values at the measured qᵢ. A named dQ or sigma_q text column, or a Gaussian NXcanSAS Qdev,
 supplies one finite, nonnegative standard deviation in inverse length per fitted point. With both halves
-on |q| each measurement retains its width. For their mean, the two Gaussian responses are approximated by
+on |q| each measurement keeps its width. For their mean, the two Gaussian responses are approximated by
 one Gaussian with the mean of their variances, interpolating variances as needed. Where only one side contributes
-its width is used. Fitting works in nm⁻¹ throughout.
+its width is used.
 
-The plot's **Components** are these additive intensities: `k·Int_i·T_i`, the scaled beam-tail term and
-`BG`; their sum is the total model. They are not normalised population fractions. Component visibility and axis limits do not change the
-fit, residuals or numerical exports. Zero and negative values are omitted only from logarithmic display.
+The plot's **Components** are the additive intensities `k·Int_i·T_i`, the scaled beam-tail term and `BG`; their sum
+is the total model. Component visibility and axis limits change only the plot. A logarithmic axis leaves out zero and
+negative values.
 
-**One forward model.** Fitting now computes (9.1) with `cut_model`, GIMaP's one implementation of a 1D cut,
-which the proposal network's training and refinement are to use as well. Before, the same physics existed four times
-with different conventions: Fitting's model, the quick fit of the automatic analysis (which used 1D Predict's
-forward model; removed in 0.2.0), the fit1d kit's tables (removed in 0.2.0) and 1D Predict V5's own forward model. `cut_model` was checked against each of them, against an
-independent implementation and against BornAgain (`tools/benchmarks/cut_model_checks.py` and `cut_model_bornagain.py`,
-q = 0.02–3 nm⁻¹, the largest relative deviation over the curve):
-
-| Reference | Cases | Largest deviation |
-|---|---|---|
-| `tools/benchmarks/yoneda_truth.py` (no shared code; its size rule refined to 1500 nodes) | spheres R 4–6 nm and upright cylinders, σR/R 0.2–0.3, paracrystal; Born at the cut's q_z and four-term DWBA on Si; LMA and DA | 2.7 · 10⁻⁵ (the tables of section 9.3; the direct quadrature 1.4 · 10⁻⁶) |
-| fit1d's tables (sizes by number, Hosemann paracrystal) | spheres, upright and random cylinders, R 2–10 nm, Born at q_z; spheres in the four-term DWBA | 3.5 · 10⁻⁵ |
-| 1D Predict V5's forward model | one size with a paracrystal | 6 · 10⁻¹⁴ |
-| Fitting's earlier formulas on 20001 nodes | spheres R 2–20 nm, σR/R 0.05–0.4; DA; two paths | 2 · 10⁻⁶ to 1.8 · 10⁻³ (the fine rectangle rule's own error) |
-| BornAgain 24, average layer materials off | spheres and upright cylinders on Si in the four-term DWBA, σR/R 0.2 (BornAgain gets the same radii and number weights) | 3.9 · 10⁻⁴ (sphere), 2.8 · 10⁻⁴ (cylinder) |
-
-For one size BornAgain and `cut_model` agree to 10⁻³ (median), more only at the zeros of the form factor, where both
-curves go to zero. BornAgain's default gives the layer holding the particles their volume-averaged refractive index,
-which changes the reflection the DWBA terms carry: for spheres R = 4 nm on a paracrystal of D = 14 nm (about 17 % of
-the layer) the curve then differs by 32 % (median). `cut_model`, like `yoneda_truth.py` (and fit1d), uses the reflection
-of the specified substrate with air around the particles. In this comparison the substrate is bare Si.
-The free effective r of the two-path model can take up such a difference (section 9.10). One
-core computes 1000 curves of 500 points (R 1–15 nm, σR/R 0.05–0.4) in 1.4 s (spheres), 1.2 s (upright cylinders)
-and 11 s (random cylinders).
+**One forward model.** Fitting computes (9.1) with `cut_model`, GIMaP's one implementation of a 1D cut, which the
+proposal network's training and refinement are to use as well. On q = 0.02–3 nm⁻¹ its largest relative deviation over a
+curve is 2.7 · 10⁻⁵ from an independent implementation (`tools/benchmarks/yoneda_truth.py`, no shared code) and
+3.9 · 10⁻⁴ from BornAgain 24 for spheres and upright cylinders on Si in the four-term DWBA with σR/R = 0.2
+(`tools/benchmarks/cut_model_checks.py`, `cut_model_bornagain.py`; [README](../tools/benchmarks/README.md)).
+`cut_model` uses the reflection of the specified substrate with air around the particles, so BornAgain's *average
+layer materials* is off in this comparison. BornAgain's default gives the particle layer its volume-averaged
+refractive index, which changes the reflection the DWBA terms carry: for spheres R = 4 nm on a paracrystal of
+D = 14 nm (about 17 % of the layer) the curve then differs by 32 % (median). The free effective r of the two-path
+model takes up such a difference (section 9.10). One core computes 1000 curves of 500 points (R 1–15 nm, σR/R
+0.05–0.4) in 1.4 s (spheres), 1.2 s (upright cylinders) and 11 s (random cylinders).
 
 **Conventions of the earlier models** (`cut_model/conventions.py` is the one place that converts them):
 
@@ -2533,13 +2451,13 @@ P(q) = Σ_j n_j V_j² |A_j(q)|² / Σ_j n_j V_j²,     C(q) = | Σ_j n_j V_j A_j
 ```
 
 A_j is the amplitude of a particle of size x_j normalised to A(0) = 1 (section 9.4) and V_j its volume, so P(0) = 1
-whatever the law. The Gaussian by number is the size distribution of `tools/benchmarks/yoneda_truth.py` (and of fit1d),
-cut at ±4σ; the cut is part of the definition: weighted by R⁶ the upper cut removes about 1.5 % of a sphere's
-intensity at σR/R = 0.35, more above. In the **older mean-parameterized log-normal** R and σR/R are the number mean and relative standard
-deviation; it is integrated from 4s below its median to 4s above the median of its V²-weighted form (a log-normal of
-the same s with the median times exp(p s²), V² ∝ R^p), so its largest particles, which dominate the intensity of a
-broad distribution, are not cut off. The Gaussian by intensity is Fitting's earlier distribution for spheres and
-random cylinders: every size scatters the same at q = 0.
+whatever the law. The Gaussian by number is cut at ±4σ, as in `tools/benchmarks/yoneda_truth.py`. The cut is part of
+the definition: weighted by R⁶, the upper cut removes about 1.5 % of a sphere's intensity at σR/R = 0.35, more above.
+The **older mean-parameterized log-normal** takes R and σR/R as the number mean and relative standard deviation. It is
+integrated from 4s below its median to 4s above the median of its V²-weighted form (a log-normal of the same s with
+the median times exp(p s²), V² ∝ R^p), so its largest particles, which dominate the intensity of a broad
+distribution, are included. The Gaussian by intensity is Fitting's earlier distribution for spheres and random
+cylinders: every size scatters the same at q = 0.
 
 For (9.2), R and σ = R·w are the Gaussian centre and standard deviation before truncation. The reported
 number mean and relative width are ⟨x⟩ and √(⟨x²⟩ − ⟨x⟩²)/⟨x⟩ of the retained population.
@@ -2553,7 +2471,7 @@ integration in ln x extends from ln M − 6.5s to ln M + p s² + 6.5s. For Schul
 quantile at shape k and the upper-tail 10⁻¹⁰ quantile at shape k+p, both at scale θ. Here p accounts for
 the forward intensity (6 for sphere radius, 4 for cylinder radius, 2 for cylinder height). The quadrature
 weights are normalized before computing (9.4). Independent integrations of the sphere intensity check all
-three laws through relative width 0.5 to relative tolerance 10⁻⁴.
+three laws up to relative width 0.5 within a relative tolerance of 10⁻⁴.
 
 **Quadrature.** Composite Gauss–Legendre with 8 nodes per panel. A form factor squared oscillates in x with
 period π/q, so the panels are the number of such periods across the distribution at the largest q of the curve,
@@ -2565,41 +2483,37 @@ q_cut = 6/σ on it is negligible, and the average is that of the envelope of |F|
 9(1 + x²)/(2x⁶) for a sphere (for two DWBA paths (9/(2ab)) Re[h₁(a)h₁(b)*] with the spherical Hankel function h₁),
 2(J₁² + Y₁²)/x² for a disc and 2/x² for the height factor of a cylinder. Between q_cut and 2·q_cut the average goes over
 smoothly (a smoothstep in q) from the resolved one to the envelope's, so the model stays a smooth function of R and σ,
-and the rule only has to resolve 2·q_cut; the coherent term C fades to 0 with the same step (it is damped by
-e^{−(qσ)²/2}). What the envelope leaves out is the ringing of the hard cut at R + 4σ of the Gaussian by number, an
-artefact of the cut: compared with the fully resolved average the curve differs by at most 3 · 10⁻⁵ for σR/R ≤ 0.2,
-10⁻³ at 0.35 and 10⁻² at 0.5 (tests). A Gaussian by intensity keeps much weight at small R; it is always fully resolved.
+and the rule only has to resolve 2·q_cut. The coherent term C fades to 0 with the same step (it is damped by
+e^{−(qσ)²/2}). The envelope leaves out the ringing of the hard cut at R + 4σ of the Gaussian by number, an artefact
+of the cut: compared with the fully resolved average the curve differs by at most 3 · 10⁻⁵ for σR/R ≤ 0.2, 10⁻³ at
+0.35 and 10⁻² at 0.5. A Gaussian by intensity keeps much weight at small R; it is always fully resolved.
 
 **Tables for Predict and earlier models.** For sizes by number (a Gaussian or a log-normal with 0.02 ≤ σR/R ≤ 1) and one scattering
 path (the effective interface, or Born at the cut's q_z), the averages come from small tables (`cut_model/tables.py`,
 3.4 MB, built by `tools/ml1d/build_tables.py` and checked against a fresh build). Each form factor splits exactly into
 a smooth part and a smooth amplitude times an oscillation, f(x)² = env(x) + Re[G(x) e^{iωx}] (ω = 2 for the sphere and
-the disc, 1 for the height factor); averaged over sizes, ⟨env⟩/env(x̄) and ⟨G e^{iωx̄(t−1)}⟩/G(x̄) (t = R/R̄) are smooth in
-ln x̄ (respectively u = q·σ) and ln(σR/R) and are interpolated with four-point Lagrange polynomials; the width grid
-has a node at σR/R = 0.25, where the Gaussian starts to be cut at R = 0. The tables carry the definition above (resolved
-below q_cut, the envelope beyond) and agree with the direct quadrature to 10⁻⁴ (typically 2 · 10⁻⁵); for broad
-distributions (σR/R ≥ 0.45) they are closer to a fully resolved reference than the direct quadrature. One evaluation of
-a sphere or an upright cylinder then takes about 1 ms at 750 points, whatever R and σ. Spheres with two paths
-(A = c₁ f(aR) e^{−iQ₁R} + c₂ f(bR) e^{−iQ₂R}, a = √(q² + Q₁²), b = √(q² + Q₂²)) are the two Born terms from the
-tables and a cross term X = ⟨f(aR) f(bR) e^{−i(Q₁−Q₂)R}⟩, P̂ = |c₁|²⟨f(aR)²⟩ + |c₂|²⟨f(bR)²⟩ + 2 Re(c₁c₂* X). With
-f(x) = Re[A(x) e^{ix}], A(x) = −3/x² − 3i/x³ exactly, X is a sum of four terms e^{iωR̄} times exact powers of aR̄ and bR̄
-times the moments m_k(ν) = ⟨n t^{6−k} e^{iν(t−1)}⟩/⟨n t⁶⟩ (k = 4, 5, 6, ν = ωR̄, ω = ±a ± b − (Q₁ − Q₂)), which depend
-on ν and σR/R only; they are tabulated on the nodes of the direct quadrature (3.6 MB more) and interpolated in the
-same way. As in the direct quadrature, the terms the envelope of the pair leaves out (ω ≈ ±(a + b) − (Q₁ − Q₂)) fade
-with the smoothstep of the in-plane q, and below bR̄ = 2 X is taken on the nodes. A row comes from these tables
-when the direct quadrature would need 16 panels (128 nodes) or more; on fewer the direct quadrature is as fast and
-is kept. On random rows (R from 0.3 to 400 nm, σR/R 0.02–0.8, both laws, k_i above and below k_f; 800 rows) the
-result differs from the direct quadrature by at most 1.4 · 10⁻³ of the curve's largest value (99 % within
-4.2 · 10⁻⁵; the rows left to the direct quadrature not at all); with the tables for every row, by 3.5 · 10⁻⁶
-(median), 99 % within 4.4 · 10⁻⁴ and up to 6 · 10⁻³ where |r| ≈ 1 with a phase near π and the two paths cancel to
-10⁻³ of either (there 10⁻⁵ of each path). Two paths are 23 times faster on these rows, 1.6–2 times on small
-spheres of moderate width (R 2–10 nm, σR/R 0.1–0.35) and up to 130 times on broad log-normal distributions. Narrower distributions
-(below x̄ = qR̄ = 2 too), sizes by intensity, the DWBA, two paths in the decoupling approximation and the coherent term
-at q_z ≠ 0 use the direct quadrature.
-Earlier, Fitting used rectangle rules of fixed size (25 radii of a sphere, 13 radii and 13 heights
-of a random cylinder, 26 radii over ±3σ of a vertical cylinder). They alias at large q·R·σ: on q ≤ 3 nm⁻¹ a sphere
-of R = 5 nm and σR/R = 0.2 is off by up to 1.8 %, R = 10 nm and 0.3 by 26 %, R = 20 nm and 0.4 by 67 %
-(`tools/benchmarks/cut_model_checks.json`). Fits of large or broad particles to high q therefore change with this version.
+the disc, 1 for the height factor). Averaged over sizes, ⟨env⟩/env(x̄) and ⟨G e^{iωx̄(t−1)}⟩/G(x̄) (t = R/R̄) are smooth
+in ln x̄ (respectively u = q·σ) and ln(σR/R); they are interpolated with four-point Lagrange polynomials. The width grid
+has a node at σR/R = 0.25, where the Gaussian starts to be cut at R = 0. The tables carry the definition above
+(resolved below q_cut, the envelope beyond) and agree with the direct quadrature to 10⁻⁴ (typically 2 · 10⁻⁵). One
+evaluation of a sphere or an upright cylinder then takes about 1 ms at 750 points, whatever R and σ.
+
+Spheres with two paths (A = c₁ f(aR) e^{−iQ₁R} + c₂ f(bR) e^{−iQ₂R}, a = √(q² + Q₁²), b = √(q² + Q₂²)) are the two Born
+terms from the tables and a cross term X = ⟨f(aR) f(bR) e^{−i(Q₁−Q₂)R}⟩, P̂ = |c₁|²⟨f(aR)²⟩ + |c₂|²⟨f(bR)²⟩ + 2 Re(c₁c₂* X).
+With f(x) = Re[A(x) e^{ix}], A(x) = −3/x² − 3i/x³ exactly, X is a sum of four terms e^{iωR̄} times exact powers of aR̄
+and bR̄ times the moments m_k(ν) = ⟨n t^{6−k} e^{iν(t−1)}⟩/⟨n t⁶⟩ (k = 4, 5, 6, ν = ωR̄, ω = ±a ± b − (Q₁ − Q₂)), which
+depend on ν and σR/R only. They are tabulated on the nodes of the direct quadrature (3.6 MB more) and interpolated in
+the same way. As in the direct quadrature, the terms the envelope of the pair leaves out (ω ≈ ±(a + b) − (Q₁ − Q₂)) fade
+with the smoothstep of the in-plane q, and below bR̄ = 2 X is taken on the nodes. A row comes from these tables when the
+direct quadrature would need 16 panels (128 nodes) or more; on fewer panels the direct quadrature is as fast and is
+kept. On 800 random rows the result differs from the direct quadrature by at most 1.4 · 10⁻³ of the curve's largest
+value, and two paths are about 23 times faster. Narrower distributions (and points below x̄ = qR̄ = 2), sizes by
+intensity, the DWBA, two paths in the decoupling approximation and the coherent term at q_z ≠ 0 use the direct
+quadrature.
+
+Earlier versions used fixed rectangle rules, which alias at large q·R·σ: on q ≤ 3 nm⁻¹ a sphere of R = 20 nm and
+σR/R = 0.4 was off by up to 67 % (`tools/benchmarks/cut_model_checks.json`). Fits of large or broad particles to high
+q therefore change with this version.
 
 **By number and by intensity.** After a fit the results give each particle's mean radius and relative spread both
 ways (*Sizes by number | by intensity*; `derived` in the exported record: `R_number_mean_nm`, `sigma_R_number_rel`,
@@ -2609,9 +2523,9 @@ is a log-normal with the same width and the mean R (1 + (σR/R)²)^p.
 
 The number distribution of a Gaussian by intensity is G(R)/R⁶ for spheres. It has a maximum only for
 σR/R < 1/√24 ≈ 0.20 (1/√16 = 0.25 for cylinders); above that it rises towards small R, and its mean would be set by
-where the distribution is cut. GIMaP then writes *not defined*: the condition is that the largest number weight lies
-inside the range and the smallest node holds less than 10 % of it. A broad intensity-weighted sphere distribution
-therefore does not say how many small particles there are.
+where the distribution is cut. GIMaP gives the number mean only when the largest number weight lies inside the range
+and the smallest node holds less than 10 % of it; otherwise it writes *not defined*. A broad intensity-weighted sphere
+distribution therefore does not say how many small particles there are.
 
 New components have sizes by number; models saved in earlier versions keep the sizes they had (section 9.2).
 
@@ -2635,19 +2549,20 @@ P_cyl(q) = ∫₀¹ du  ⟨R⁴ (2 J_1(q R √(1−u²)) / (q R √(1−u²)))²
 ```
 
 For the manual size laws the two independent size averages are tabulated on a grid linear near q = 0 and
-logarithmic at large q. For broad Gamma and log-normal cylinders the oscillatory factors can be integrated
+logarithmic at large q. For broad Gamma and log-normal cylinders the oscillatory factors are integrated
 on a rotated size contour where they decay. The axial Gamma factor also has an analytic characteristic function.
 
-⟨ ⟩ are averages by number (9.4). The orientation average is taken in α on [0, π/2] with weights sin α (u = cos α
-is uniform for an isotropic orientation; q sin α and q cos α are smooth in α, whereas in u the radius argument
-q√(1 − u²) oscillates ever faster towards u = 1), by composite Gauss–Legendre with one panel per period
-π/(q · max(R, h/2)). The radius average depends on q sin α only and the height average on q cos α only. For legacy size laws each is made once
-on a uniform 1D grid with 64 points per period of the largest size and taken at every (α, q) by four-point
-interpolation; with the envelope of section 9.3 the grids and the orientation rule end at 2·q_cut, and beyond it the
-envelope averages are taken directly. For one size the result agrees with adaptive quadrature to 10⁻⁵. With sizes by number the radius and height averages on the grids come from the tables of
-section 9.3, the orientation rule then follows the characteristic size of the intensity-weighted distribution; a
-random cylinder takes 15–200 ms to evaluate once (a broad log-normal up to 0.8 s), much more than a sphere. Earlier the orientation average was a 24-point rectangle rule in α with sin α weights; it is off
-by up to 18 % (R = 3 nm, h = 10 nm) and 55 % (R = 5 nm, h = 30 nm) at q ≤ 3 nm⁻¹.
+⟨ ⟩ are averages by number (9.4). The orientation average is taken in α on [0, π/2] with weights sin α, by composite
+Gauss–Legendre with one panel per period π/(q · max(R, h/2)). In α the arguments q sin α and q cos α are smooth; in
+u = cos α the radius argument q√(1 − u²) oscillates ever faster towards u = 1. The radius average depends on q sin α
+only and the height average on q cos α only. For legacy size laws each is made once on a uniform 1D grid with 64
+points per period of the largest size and taken at every (α, q) by four-point interpolation; with the envelope of
+section 9.3 the grids and the orientation rule end at 2·q_cut, and beyond it the envelope averages are taken directly.
+For one size the result agrees with adaptive quadrature to 10⁻⁵. With sizes by number the radius and height averages
+on the grids come from the tables of section 9.3, and the orientation rule follows the characteristic size of the
+intensity-weighted distribution. A random cylinder takes 15–200 ms to evaluate once (a broad log-normal up to 0.8 s),
+much more than a sphere. Earlier versions used a 24-point rectangle rule in α, off by up to 55 % at q ≤ 3 nm⁻¹
+(R = 5 nm, h = 30 nm).
 
 **Vertical cylinder** at q_z = 0 (cylinders standing on the substrate, q in the plane; V ∝ R² at a fixed height):
 
@@ -2656,13 +2571,13 @@ P_vc(q) = ⟨R⁴ (2 J_1(q R)/(q R))²⟩ / ⟨R⁴⟩,   P_vc(0) = 1           
 ```
 
 For independent radii and heights, the horizontal scale absorbs the axial factor in P_vc. The DA also needs the
-coherent height average (section 9.5). Earlier, Fitting's vertical cylinder was not normalised, `P_vc = 10⁻⁶ ⟨R⁴ (2 J_1(qR)/(qR))²⟩/4`
-(R in nm; 1.56 · 10⁻⁴ at R = 5 nm, 1.94 · 10⁻⁴ with σR/R = 0.2), so its Int was in other units than a sphere's; a model
-saved then is converted (section 9.2).
+coherent height average (section 9.5). Earlier versions did not normalise the vertical cylinder
+(`P_vc = 10⁻⁶ ⟨R⁴ (2 J_1(qR)/(qR))²⟩/4`, R in nm), so its Int had other units than a sphere's; a model saved then is
+converted when read (section 9.2).
 
 In the two-path or DWBA geometry the sphere's amplitude is the sum of its paths (9.29, 9.27). Random cylinders are
-averaged at |q| = √(q² + q_z²): with q_z = 0 in the effective interface and the two-path model (as in earlier versions), with the
-cut's vacuum q_z in the Born and DWBA geometries of `cut_model` (as fit1d did).
+averaged at |q| = √(q² + q_z²): with q_z = 0 in the effective interface and the two-path model, with the cut's vacuum
+q_z in the Born and DWBA geometries of `cut_model`.
 
 Implementation: `src/gimap/features/fitting/domain/cut_model/shapes.py`
 
@@ -2675,18 +2590,17 @@ GISAXS see Renaud et al., 2009):
 S(q) = ( 1 − p² ) / ( 1 − 2 p cos(q D) + p² ),   p = exp( −q² σ_nn² / 2 ),   σ_nn = (σnn/D) · D             (9.12)
 ```
 
-σnn/D is the relative standard deviation of the distance between neighbours, a Gaussian of mean D; fit1d (section 9.12) called it w/D.
+σnn/D is the relative standard deviation of the distance between neighbours, a Gaussian of mean D.
 S is evaluated as `−expm1(2 ln p) / (expm1(ln p)² + 4p sin²(qD/2))`, without cancellation at small q, and
 `S(0) = (σnn/D)²`. Otherwise S = 1.
 
-In **earlier versions** Fitting's parameter was σD/D with `p = exp(−π q² σ_D²)`, σ_D = (σD/D)·D: the same function for
+Earlier versions used σD/D with `p = exp(−π q² σ_D²)`, σ_D = (σD/D)·D. This is the same function for
 
 ```text
 σ_nn = √(2π) · σ_D,   i.e.   σnn/D = √(2π) · σD/D ≈ 2.507 · σD/D                                       (9.13)
 ```
 
-(identical within 10⁻¹⁴). A model saved by an earlier version is converted when read, its limits too. Example (invented):
-σD/D = 0.2 of an old model is σnn/D = 0.50.
+A model saved by an earlier version is converted when read, its limits too: σD/D = 0.2 becomes σnn/D = 0.50.
 
 D is kept at or above 2R by the fits (section 9.6).
 
@@ -2698,27 +2612,21 @@ LMA:  I = P(q) · S(q)                                                          
 DA:   I = P(q) + C(q) (S(q) − 1)                                                                   (9.14b)
 ```
 
-- LMA (the default, and the only one before 0.2) takes every size among neighbours of its own size. DA takes sizes
-  and positions as independent.
+- LMA (the default) takes every size among neighbours of its own size. DA takes sizes and positions as independent.
 - C = |⟨VA⟩|²/⟨V²⟩ is the coherent term of (9.4), the amplitude averaged by number (random cylinders also over
-  orientation). A test checks the sphere against a direct average by number (10⁻⁶).
+  orientation).
 - For upright cylinders with an explicit height distribution, let G(H) = H Σₚ cₚ sinc(QₚH/2) exp(−iQₚH/2)
   on the paths of the horizontal row. Its scale absorbs ⟨|G|²⟩. The coherent radial term is therefore multiplied
   by |⟨G⟩|²/⟨|G|²⟩, averaging the complex amplitudes by number. At q_z = 0 this factor is ⟨H⟩²/⟨H²⟩.
-  A single height gives a factor of one wherever the row scatters. Level 4 of Predict parameters can carry a given
+  A single height gives a factor of one wherever the row scatters. Level 4 of Predict parameters carries a given
   height distribution into the DA. With fixed height, or with the LMA, the radial model suffices.
 - With one size, DA and LMA are the same curve for spheres and vertical cylinders; randomly oriented cylinders differ,
   their orientation being a disorder of its own. With a size spread, DA keeps the part `P − C` free of the spacing:
   more intensity below the structure peak, a weaker peak. At σR/R = 0.2 and σnn/D = 0.75, the low-q intensity of
   spheres is about 1.5 times that of the LMA with a Gaussian by intensity, 1.2 times with a Gaussian by number.
 - This is the part that a same-size population without a structure factor takes up in a three-population fit
-  (section 9.11). On the simulated films of 9.11 (spheres R = 4 nm, four-term DWBA, resolution, beam tail and
-  roughness; main population and a large one, low-q term free; fitted with Fitting's earlier model), a film made in
-  the DA is fitted with χ²ᵣ ≈ 2.5 in DA and 8.3 in LMA; a film made in the LMA with 11 in LMA and 32 in DA. The curve
-  therefore tells the two apart. A third, same-size population brings the DA film to 1.1–1.4 in LMA as well, because
-  it also takes up the difference of the sphere's shape (section 9.10). D and σnn/D stay within 0.3 % and 0.005 in
-  every case.
-- fit1d (section 9.12) used the LMA.
+  (section 9.11). On simulated films the curve tells the two couplings apart (a film made in the DA: χ²ᵣ ≈ 2.5 in DA,
+  8.3 in LMA), and D and σnn/D come out within 0.3 % and 0.005 of the true values with either coupling.
 
 Implementation: `src/gimap/features/fitting/domain/cut_model/structure.py`, `src/gimap/features/fitting/domain/cut_model/model.py`
 
@@ -2758,17 +2666,16 @@ with S(q), its **Coupling**.
 particles of the mean radius do not overlap. With R and D both free, D is searched between max(D_min, 2R) and
 D_max at every R; with R fixed, D's minimum is raised to 2R; with D fixed, R's maximum is lowered to D/2. A D that
 ends at 2R is reported at its lower bound (section 9.8): the particles touch, and the curve does not hold D there.
-Values that are not fitted are left as they are. For a random cylinder 2R is the smallest in-plane size, so the
-limit is a minimum, not its contact distance. Before 0.2, D could fall below 2R (on the GALAXI cut of 9.10 to 1 nm).
-The contact is the switch **Particles do not overlap** of the Model step (on by default; 9.15); for core–shell spheres
-and hard spheres it is the inequality of 9.14.
+Values that are not fitted are left as they are. For a random cylinder 2R is the smallest in-plane size, so the limit
+is a lower bound of its contact distance. The contact is the switch **Particles do not overlap** of the Model step (on
+by default; 9.15); for core–shell spheres and hard spheres it is the inequality of 9.14.
 
 **The beam tail in Refine and Search.** With the generic ranges of the table (A ≥ 0 without an upper limit, w
-0.001–0.1 nm⁻¹, ν 1–20) a fit can trade a tail of huge A and a width far below the first point for a power law over
-the curve: in Search A ran to 10¹⁷–10²² with no defined error and ν at 20. The tail's ranges are therefore tied to the
-curve where a model meets one — when a curve is opened with the starting model (or with the ranges the page set for
-the previous curve), when Refine or Search starts from the generic ranges (said in the status line; a step of Undo),
-and for every frame of a series whose start model has them:
+0.001–0.1 nm⁻¹, ν 1–20), a tail of huge A and a width far below the first point acts as a power law over the whole
+curve, with no defined error. The tail's ranges are therefore tied to the curve where a model meets one: when a curve
+is opened with the starting model (or with the ranges the page set for the previous curve), when Refine or Search
+starts from the generic ranges (said in the status line; a step of Undo), and for every frame of a series whose start
+model has them:
 
 ```text
 0 ≤ A ≤ 10 · max(I) / k,    0.3 q_min ≤ w ≤ min(30 q_min, q_max),    1 ≤ ν ≤ 6       (over the fitted points)
@@ -2776,11 +2683,11 @@ and for every frame of a series whose start model has them:
 
 The w window is that of Predict's prior (9.13). A starting model also takes w = q_min and ν = −(slope of the first six
 points in log–log) when that slope is below −1 (else 3; at most 6); A is then solved with the scales (9.17). Ranges typed
-in Model are kept, and the fit itself never changes a range (9.8). After Refine or Search a tail in use (A above the
-lower edge of its range) is flagged when A, w or ν is at an edge of its range or has no finite error: a warning in the
-Results step and in the report, and in a series the frame counts as **flagged** (as does a frame with any value
-without a finite error; the series record lists them under `flagged`). Predict parameters keeps its own prior's ranges
-(w ≤ 30 q_min, ν 1.8–2.2): a solution of it does not have the generic ranges and is never changed.
+in Model are kept, and the fit itself never changes a range (9.8). After Refine or Search, a tail in use (A above the
+lower edge of its range) is flagged when A, w or ν is at an edge of its range or has no finite error. The Results step
+and the report then show a warning. In a series the frame counts as **flagged**, as does a frame with any value
+without a finite error; the series record lists them under `flagged`. Predict parameters keeps its own prior's ranges
+(w ≤ 30 q_min, ν 1.8–2.2), and its solutions are left unchanged.
 
 Implementation: `src/gimap/features/fitting/domain/fit_model.py`, `domain/beam_tail.py`,
 `application/single_fit.py` (`tail_for_curve`)
@@ -2799,8 +2706,8 @@ m_i is the model (9.1). The fit minimises Σ r_i².
 For **Refine** and **Search**, **σ from the file** uses the measured intensity uncertainty in (9.15).
 If no usable σ is available, it uses (9.16). **Relative** sets σᵢ = Iᵢ and **Poisson** sets σᵢ = √Iᵢ in (9.15).
 **None** uses (9.16) with equal log weights. The last three choices use only Iᵢ > 0. With positive measured
-σᵢ, negative and zero intensities can contribute to (9.15). A reduced sum of squares from relative weights
-or log residuals measures lack of fit in that metric. A statistical reduced χ² requires a suitable noise model.
+σᵢ, zero and negative intensities enter (9.15) too. With relative weights or log residuals the reduced sum of squares
+measures the misfit in that metric; it is a statistical reduced χ² only with a suitable noise model.
 The fit record stores both the selected weight and the residual that was used.
 
 **Scales by bounded least squares (variable projection).** The intensity is linear in Int_i, BG and A. Those of
@@ -2811,7 +2718,7 @@ set, the columns `k P_i S_i`, `1` and `k / (1 + (q/w)^ν)` form the matrix X, th
 c = argmin_{l ≤ c ≤ u} ‖ W ( X c − (I − m_fixed) ) ‖²,   W = diag(1/σ_i), or diag(1/I_i) without σ        (9.17)
 ```
 
-Solved with bounded linear least squares (`scipy.optimize.lsq_linear`, BVLS, `tol=1e-10`, at most 100 times the number of free linear terms iterations). Columns are normalised by their norms to reduce sensitivity to scale differences. l and u are the Model limits, default [0, ∞). Without σ, (9.17) still minimises relative residuals while the outer objective is logarithmic (9.16): this remains an approximate profile, not exact elimination under the log likelihood.
+Solved with bounded linear least squares (`scipy.optimize.lsq_linear`, BVLS, `tol=1e-10`, at most 100 times the number of free linear terms iterations). Columns are scaled to unit norm. l and u are the Model limits, default [0, ∞). Without σ, (9.17) minimises relative residuals while the outer objective is logarithmic (9.16), so there the elimination is approximate.
 
 Implementation: `src/gimap/features/fitting/domain/fit_engine.py`
 
@@ -2835,22 +2742,26 @@ them non-linear, the budget is B = 150 (p + 1) evaluations, unless *Evaluations 
 max_nfev = max( 5, ⌊ max(20, B) / (n_nl + 1) ⌋ )                                                   (9.20)
 ```
 
-so that with the finite-difference Jacobian a start uses about B evaluations. The model returned is the best one
-evaluated during the whole run, not the last iterate. "Converged" means the solver ended on a convergence criterion.
-The starting curve competes too, by the reported objective. When it beats every curve the fit tried by more than a
-fraction 10⁻⁶ of its Σr² — without σ the scales are solved with relative weights while the objective is ln I, so a
-start whose scales suit ln I can stay ahead — the start values are returned unchanged and the result says so
-(`start_kept`, *did not improve on the start values*): it is not called converged, and Refine and Search give no
-errors for it, since no minimum was found. A manual fit (Refine, Search, a frame of an In-situ series refined)
-then **goes on from its own result**: the same least squares is run again from the values it returned, while each run
-lowers χ²ᵣ by more than a share 10⁻³ of itself, at most 5 times (`REFINE_RESTARTS`, `RESTART_TOLERANCE`); the
-result says how often it improved (`restarts` in the record and the report, a line in the Run Log). A run in a long,
-narrow valley of χ² (values correlated near ±1) ends on `ftol` while its trust region is small; a new run starts with
-the first steps of `x_scale` again. A fit already at its minimum is returned as it was. The least squares that gives
-a solution of Predict parameters its errors and χ² (Predict each frame, the chain's restart) is not run again, and
-Predict's own refinement (9.13) calls the engine directly: its numbers are unchanged. Refine and Search refuse a curve
-with no more points than free values and one without an intensity above zero. With σ in the file, points whose σ is zero, negative or not a number are
-left out and counted (`sigma_invalid` among the curve's notes); σ is dropped only when no point has one.
+so that with the finite-difference Jacobian a start uses about B evaluations. Refine returns the best model evaluated
+during the whole run, which need not be the last iterate. "Converged" means the solver ended on a convergence
+criterion.
+
+The starting curve competes too, by the reported objective. When it beats every curve the fit tried by more than
+10⁻⁶ of its Σr², the start values are returned unchanged and the result says so (`start_kept`, *did not improve on the
+start values*). Such a fit is not called converged and has no errors, since no minimum was found. Without σ a start
+can stay ahead this way, because the scales are solved with relative weights (9.17) while the objective is in ln I.
+
+A manual fit (Refine, Search, a frame of an In-situ series refined) then **goes on from its own result**: the same
+least squares runs again from the values it returned, as long as each run lowers χ²ᵣ by more than 10⁻³ of itself, at
+most 5 times (`REFINE_RESTARTS`, `RESTART_TOLERANCE`). The result says how often it improved (`restarts` in the record
+and the report, a line in the Run Log). In a long, narrow valley of χ² (values correlated near ±1) a run ends on `ftol`
+with a small trust region; the next run starts again with the first steps of `x_scale`. The least squares that gives a
+solution of Predict parameters its errors and χ² (Predict each frame, the chain's restart) is not run again, and
+Predict's own refinement (9.13) calls the engine directly.
+
+Refine and Search refuse a curve with no more points than free values and one without an intensity above zero. With
+σ in the file, points whose σ is zero, negative or not a number are left out and counted (`sigma_invalid` among the
+curve's notes); σ is dropped only when no point has one.
 
 **Search** (`method = global`). Differential evolution (Storn & Price, 1997; `scipy.optimize.differential_evolution`)
 over the unit cube of the non-linear parameters, then Refine from the best three distinct members. With the default
@@ -2888,30 +2799,25 @@ C = G [ (J G)ᵀ (J G) ]⁺ G · s²      ( = (JᵀJ)⁻¹ s² when JᵀJ is inv
 ```
 
 ⁺ is the pseudo-inverse. The errors are linearised (Wald) 1σ errors, not profile intervals. They are **always scaled
-by s² = χ²_red**, so they also shrink when χ²_red is below 1, unlike the peak fits of chapter 7, which only inflate (7.12).
+by s² = χ²_red**, so they also shrink when χ²_red is below 1 (the peak fits of chapter 7 only inflate, (7.12)).
 Pairs with `abs(ρ) ≥ 0.95` are listed as strongly correlated. A non-linear parameter within 10⁻³ of either end of its
 (log-)unit range, and a scale at either of its limits, is listed as at a bound; its error is not meaningful.
 
 Implementation: `src/gimap/features/fitting/domain/fit_engine.py`
 
-**Values at the edge of their range.** Model's fixed values and limits are hard constraints. Refine and Search report boundary diagnostics without widening ranges or fixing free parameters automatically. The returned curve has the smallest residual sum of squares among the feasible starting curve and the evaluated curves, so refinement cannot replace a better feasible start. The values still at an edge are named under **Fit details…**
-(*… is still at the … edge of its range: the curve does not determine it beyond there*); there is no option to widen
-the ranges automatically.
+**Values at the edge of their range.** Model's fixed values and limits are hard constraints: Refine and Search never
+widen a range or fix a free parameter. The values still at an edge are named under **Fit details…**
+(*… is still at the … edge of its range: the curve does not determine it beyond there*).
 
 Implementation: `src/gimap/features/fitting/domain/fit_engine.py`, `src/gimap/features/fitting/domain/fit_edges.py`,
 `src/gimap/features/fitting/application/single_fit.py` (`fit_resolving`)
 
 ### 9.9 Find the particle shape (removed in 0.2.0)
 
-Until 0.2.0 the Fit step had a fourth method, *Find the particle shape (no AI)*: the quick numerical fit that the
-GISAXS automatic analysis used then (a variable-projection fit of sphere, vertical cylinder and random cylinder from
-the starts R = 1.5 nm and 4.0 nm, and R = 4.0 nm with Model's D; at most 5 solutions, sorted by Fitting's χ²_red), its
-solutions converted into Fitting's model (Int solved again against the solution's own curve, the largest relative
-deviation reported). It and *Predict parameters (fit1d)* (section 9.12) were removed in 0.2.0, so that Fitting has
-one network method, *Predict parameters* (section 9.13), beside Refine and Search. The automatic analysis fits its cut
-with Predict parameters as well (section 8.5); a solution of it sent with **Show in Fitting** is taken over as it is
-(its values are in Fitting's own conventions, its amplitudes become the Int). `native_solution.py` still converts the
-quick fit's solutions of records made before 0.2.0.
+Until 0.2.0 the Fit step had a fourth method, *Find the particle shape (no AI)*, the quick numerical fit that the GISAXS
+automatic analysis then used. *Predict parameters* (section 9.13) replaces it in Fitting and in the automatic analysis
+(section 8.5), whose solutions **Show in Fitting** takes over unchanged; `native_solution.py` still converts the quick
+fit's solutions in records made before 0.2.0.
 
 Implementation (now): `src/gimap/features/fitting/application/single_fit.py` (`model_from_solution`,
 `cut_model_solution`), `src/gimap/features/fitting/domain/native_solution.py`
@@ -2971,9 +2877,9 @@ with the right family:
 - For the cuts in this table the EIA radius is within about 5 % up to q₊R ≈ 1.7 for spheres and ≈ 1.2 for
   hemispheres. Section 9.13 gives the distribution of errors over simulated cuts.
 - Beyond that the error depends on the unknown substrate, sign included, so it cannot be corrected afterwards.
-  χ²ᵣ usually shows it, but not always (hemispheres of 2 nm on PS: −4 % at χ²ᵣ = 1.0; of 3 nm: −7 % at 1.5). For
-  hemispheres the polymer film sets the limit: on bare Si they stay within 3 % up to q₊R ≈ 2.0.
-- D and σ_nn/D stay within 1 % in every case: the spacing comes from the structure factor, not from the form factor.
+  χ²ᵣ usually shows it, though not for the hemispheres on PS in the table. On bare Si hemispheres stay within 3 % up
+  to q₊R ≈ 2.0.
+- D and σ_nn/D stay within 1 % in every case: the spacing comes from the structure factor.
 - With α_i and α_f entered, Fitting shows q₊R of every sphere under the result, as information. Predict parameters
   fitted at q_z = 0 flags a sphere above q₊R 1.7 when it knows the cut's angles (*qzR*, section 9.13).
 
@@ -2985,10 +2891,9 @@ A = f(√(q²+q₊²)R) e^{−iq₊R} + r f(√(q²+q₋²)R) e^{−iq₋R},   r
 |A|² = f₊² + |r|² f₋² + 2|r| f₊ f₋ cos(arg r + 2k_f R)
 ```
 
-r is a free effective coefficient, so the substrate is still not needed; only the measured angles are. Free |r|
-and arg r to fit them. On the simulated cuts above it brings the radius of spheres and hemispheres with q₊R ≥ 2
-back to within a few percent on both substrates, and also on a dense particle film whose own layer changes the
-reflection. Its limits:
+r is a free effective coefficient, so the model needs the measured angles but not the substrate. Free |r| and arg r
+to fit them. On the simulated cuts above it brings the radius of spheres and hemispheres with q₊R ≥ 2 back to within a
+few percent on both substrates, and also on a dense particle film whose own layer changes the reflection. Its limits:
 
 - Below q₊R ≈ 1.5 the two paths differ too little: r and R trade against each other (R off by +15 % to +38 % at
   R = 2 nm). Use the EIA there.
@@ -2996,7 +2901,7 @@ reflection. Its limits:
   compare a second start with arg r shifted by π.
 - r is an effective number: it also takes up r_i, the particle layer and the phase convention. It is not the
   reflectivity of the substrate (a dense film needed |r| > 1; the default range stops at 1).
-- With the angles entered and |r| fixed at 0 the sphere is the Born term at the vacuum q_z. That is not better than
+- With the angles entered and |r| fixed at 0 the sphere is the Born term at the vacuum q_z. It does no better than
   q_z = 0: on Si it is worse from R = 4 nm, because the exit-reflected path pulls the effective q_z below q₊.
 - Upright cylinders of one height retain the radial shape (9.28). Random cylinders stay at |q|.
 
@@ -3006,25 +2911,20 @@ Section 9.17 gives the Fresnel coefficient of a bare interface and the Parratt c
 Implementation: `src/gimap/features/fitting/domain/fit_model.py` (`grazing`, `qz_plus_r`),
 `src/gimap/features/fitting/domain/scattering_model.py` (`sphere_two_path_pd`)
 
-**A measured cut: GALAXI against BornAgain's model of it.** BornAgain's example of the public GALAXI frame (r23,
-`hardcode_galaxi.py`) uses monodisperse Ag spheres of radius 5.75 nm, buried 18.5 nm deep in HMDSO on PTFE on Si.
-It evaluates a radial paracrystal (D = 53.6 nm, disorder 10.5 nm) with size–spacing coupling κ = 17.5 in the DWBA
-of the layer stack. The benchmark also enables the example's optional log-normal distribution (median 5.75 nm,
-σ of ln R = 0.4). With this distribution, BornAgain 24.1 describes the
-Yoneda cut of Analyze with one scale and one background at χ²_red = 2.1 above q = 0.3 nm⁻¹, and without it at 22
-(its monodisperse spheres have a minimum at 0.78 nm⁻¹ the cut does not have).
+**A measured cut: GALAXI against BornAgain's model of it.** BornAgain's example of the public GALAXI frame (BornAgain
+r23, `hardcode_galaxi.py`) has Ag spheres of radius 5.75 nm, buried 18.5 nm deep in HMDSO on PTFE on Si, on a radial
+paracrystal (D = 53.6 nm, disorder 10.5 nm) with size–spacing coupling κ = 17.5, in the DWBA of the layer stack. With
+the example's optional log-normal sizes (median 5.75 nm, σ of ln R = 0.4), BornAgain 24.1 describes the Yoneda cut of
+Analyze with one scale and one background at χ²_red = 2.1 above q = 0.3 nm⁻¹; with one size, at 22.
 
 - Fitting describes the measured cut with a sphere and a paracrystal at χ²_red ≈ 1.1 (EIA or two paths, LMA or
-  DA): R = 9.4 to 11.5 nm, σ_R/R = 0.17 to 0.35. On BornAgain's model of the frame, simulated on the same cut
-  with the counts of the measurement, it finds the same: R = 8.5 to 10.0 nm, σ_R/R = 0.18 to 0.35 (one of 12 fits,
-  with two paths, at 23 nm). Fitting reads the measured cut as it reads the model of it.
-- These R are not a mean of the log-normal: by number it is 6.2 nm, weighted by R⁶ 16.3 nm. A Gaussian on
-  intensity weights fitted to a broad log-normal lies between them; σ_R/R is close to the log-normal's relative
-  spread, 0.42.
-- D is not determined by this cut, measured or simulated: it shows no correlation peak, and the fitted D ends
-  anywhere from about 200 to 3000 nm, on the simulated cut from 74 to 2500 nm (before D ≥ 2R of section 9.6, also
-  at 1 to 7 nm, overlapping particles). With D and the disorder held at BornAgain's values, χ²_red rises to
-  6 to 22: the paracrystal of (9.12) has no size–spacing coupling, which damps BornAgain's S strongly at κ = 17.5.
+  DA): R = 9.4 to 11.5 nm, σ_R/R = 0.17 to 0.35. On BornAgain's model, simulated on the same cut with the counts of
+  the measurement, it finds the same: R = 8.5 to 10.0 nm, σ_R/R = 0.18 to 0.35.
+- These R lie between the number mean of the log-normal (6.2 nm) and its R⁶-weighted mean (16.3 nm), as a Gaussian on
+  intensity weights fitted to a broad log-normal does; σ_R/R is close to the log-normal's relative spread, 0.42.
+- The cut shows no correlation peak and does not determine D: the fitted D ends anywhere from about 200 to 3000 nm.
+  With D and the disorder held at BornAgain's values, χ²_red rises to 6 to 22: the paracrystal of (9.12) has no
+  size–spacing coupling, which damps BornAgain's S strongly at κ = 17.5.
 
 The scripts are `physics/galaxi_bornagain.py` and `physics/galaxi_ba_model.py` of the GIMaP paper's materials.
 
@@ -3064,67 +2964,10 @@ then Refine):
 ### 9.12 fit1d (removed in 0.2.0)
 
 Until 0.2.0 the Fit step and the 1D Predict window offered *Predict parameters (fit1d)*, a separate kit
-(`utils/gisaxs1d_gui_kit`, about 62 MB) with a model of its own: a network proposed starting values, a least-squares
-fit refined them. It was removed in 0.2.0, with *Find the particle shape* (section 9.9), so that Fitting has one
-network method, *Predict parameters* (section 9.13). Its record stays here because section 9.13 is compared with it;
-the kit remains in the history of the repository.
-
-**The model.**
-
-```text
-I(q) = Σ_j A_j F_j(q) S_j(q) + B + C / (1 + (q/w)^ν),      A_j, B, C ≥ 0                            (9.30)
-```
-
-Up to four populations, each a sphere evaluated at |q| = √(q_∥² + q_z²) with the q_z of the cut (*Cut qz*; q_z = 0:
-the EIA of section 9.10), optionally in a four-term DWBA on Si, or an upright cylinder evaluated at q_∥; sizes a
-number-weighted Gaussian cut at ±4σ; S_j the Hosemann paracrystal in the LMA with spread w = (σ_nn/D)·D; the amplitudes
-by non-negative least squares (variable projection); ν fixed at 2 unless freed. Its network (eight heads of starting
-values, trained on 2.05 million curves of (9.30); `general` and `au_np_si`) ran in numpy. The best heads were refined by
-Levenberg–Marquardt, with a robust search when a check fired; the errors were the local covariance scaled by
-max(1, χ²/dof). With *auto*, every candidate composition was fitted and ranked by
-
-```text
-BIC = χ² + k ln N                                                                                    (9.31)
-```
-
-(k free parameters, N points); compositions within ΔBIC ≤ 10 of the lowest were reported as indistinguishable.
-
-**Benchmark.** 200 curves fit1d had never seen, made with an independent forward model (`yoneda_truth.py`, no shared
-code): one sphere, one upright cylinder, two spheres, or a sphere and a cylinder; R 1.2–10 nm, σ_R/R 0.1–0.35, D/2R
-1.3–2.5, σ_nn/D 0.1–0.3, 10³–10⁵ counts at the peak, q 0.02–2 nm⁻¹; half with fit1d's own physics, half with a
-resolution of 0.005 nm⁻¹, a beam tail and roughness. The true composition given, median / 90th percentile over all
-populations:
-
-| | network alone | after the fit |
-|---|---|---|
-| R (relative) | 14 % / 48 % | 0.7 % / 13 % |
-| D (relative) | 3 % / 33 % | 0.1 % / 0.3 % |
-| σ_R/R (absolute) | 0.06 / 0.18 | 0.006 / 0.08 |
-| σ_nn/D (absolute) | 0.011 / 0.049 | 0.001 / 0.005 |
-| time per curve (one core) | 0.12 s | 3.5 s |
-
-On the cuts with fit1d's own physics 61–70 % of the values lay within their 1σ, with the beam tail and roughness
-26–43 %; *auto* (up to two populations) found the true composition in 69 % and 30 % of the cuts.
-
-**GALAXI.** On the Yoneda cut of the public GALAXI frame and on BornAgain's model of it (section 9.10: log-normal
-radii, number mean 6.2 nm, relative spread 0.42; radial paracrystal D = 53.6 nm, σ_nn/D = 0.196), simulated with the
-counts of the measurement (three noise draws; `tools/benchmarks/galaxi_fit1d.py`):
-
-| | one sphere, Born at the cut's q_z | one sphere, DWBA (Si substrate) |
-|---|---|---|
-| BornAgain's model: χ²/N | 6.1–6.5 | 1.7–1.8 |
-| R by number, σ_R/R | 4.9 nm, 0.15–0.16 | 4.2 nm, 0.50 (at its upper limit) |
-| D ± 1σ, σ_nn/D | 56.9–57.6 nm, 0.41–0.42 | 53.8–55.1 ± 1.3 nm, 0.50 (at its upper limit) |
-| measured cut: χ²/N, R, D | 14.4, 5.2 nm, 56.4 nm | 2.0, 4.8 nm, 43.1 ± 0.9 nm |
-
-With the DWBA, D of BornAgain's model came back within about 1σ, while the widths stopped at the upper limit of
-fit1d's range. *auto* (up to three spheres) added a sphere of R ≈ 0.18 nm, a background term, on two of the three
-simulated cuts.
-
-The benchmarks still run with a copy of the kit: `tools/benchmarks/fit1d_recovery.py` (the stored summary is
-`tools/benchmarks/history/fit1d_recovery_summary.json`) takes it from the environment variable `GISAXS1D_KIT_HOME`, and
-`tools/benchmarks/galaxi_fit1d.py` from `utils/gisaxs1d_gui_kit` of a checkout that still has it;
-`tools/benchmarks/recovery_cases.py` holds the held-out curves that fit1d and Predict parameters are both scored on.
+(`utils/gisaxs1d_gui_kit`) with its own model, network and least-squares fit; *Predict parameters* (section 9.13)
+replaces it. Its benchmark on the held-out curves of `tools/benchmarks/recovery_cases.py`, which section 9.13 compares
+with, runs with a copy of the kit in `GISAXS1D_KIT_HOME` (`tools/benchmarks/fit1d_recovery.py`, stored summary
+`tools/benchmarks/history/fit1d_recovery_summary.json`; [README](../tools/benchmarks/README.md)).
 
 ### 9.13 Predict parameters
 
@@ -3133,34 +2976,32 @@ compositions and starting values. Bounded least squares refines them. Importance
 of a composition give one estimate of its evidence. Each solution receives a share of its composition's weight.
 When sampling fails, the comparison uses the lowest BIC found for each composition.
 
-**Compositions and values.** A composition is one to three populations, listed by increasing mean radius, each a
-sphere, an upright cylinder or a random cylinder, with or without the paracrystal of section 9.5 — 258 compositions.
-Sizes are Gaussian by number (section 9.3), the coupling is the LMA. A population has R, σR/R, h/2R and σh/h (random
-cylinders), D/2R and σnn/D (with a paracrystal); the cut adds the beam tail's width w and exponent ν (section 9.2), the
-Gaussian resolution σ_q of the particle terms and the amplitude τ of a smooth multiplicative model error
-exp(Σ_k b_k B_k(x)), b_k ~ N(0, τ²), over 8 cubic B-splines in x = ln(q/q_min)/ln(q_max/q_min). The scales (every
-population's Int, the tail's A, the background) are not proposed: they are solved for every set of the others.
+**Compositions and values.** A composition is one to three populations, listed by increasing mean radius. Each is a
+sphere, an upright cylinder or a random cylinder, with or without the paracrystal of section 9.5: 258 compositions in
+all. Sizes are Gaussian by number (section 9.3), and the coupling is the LMA. A population has R and σR/R, h/2R and
+σh/h (random cylinders), and D/2R and σnn/D (with a paracrystal). The cut adds the beam tail's width w and exponent ν
+(section 9.2), the Gaussian resolution σ_q of the particle terms and the amplitude τ of a smooth multiplicative model
+error exp(Σ_k b_k B_k(x)), b_k ~ N(0, τ²), over 8 cubic B-splines in x = ln(q/q_min)/ln(q_max/q_min). The network
+does not propose the scales (every population's Int, the tail's A, the background): they are solved for every set of
+the other values.
 
 **What the network sees.** Everything is dimensionless: q̃ = q/q_max, lengths × q_max. The model depends on q·R only
-(given q_z/q_max and σ_q/q_max), so one network serves cuts of any distance and energy. The window is the measured q
-range, at most ρ = q_max/q_min = 300 (lower points are left out and counted) and at least 10. The curve is binned on
-128 logarithmic points (the σ-weighted mean of the measured points in each bin, a bin without points masked); the
-network reads ln I relative to its median, ln(σ/I), the mask and the position, and is told ln ρ, q₊/q_max and q₋/q_max
-and whether both angles are known (q₊ = k_i + k_f and q₋ = k_i − k_f, vacuum, encoding 4). The training curves
-with both angles have two sphere paths and a free r (section 9.10). On a known substrate the same network proposes
-values and the four-path likelihood below weights them.
+(given q_z/q_max and σ_q/q_max), so one network serves cuts at any distance and energy. The window is the measured q
+range, with ρ = q_max/q_min at most 300 and at least 10; points below the window are left out and counted. The curve
+is binned on 128 logarithmic points: a bin holds the σ-weighted mean of its measured points, and a bin without points
+is masked. The network reads ln I relative to its median, ln(σ/I), the mask and the position. It is also told ln ρ,
+q₊/q_max and q₋/q_max and whether both angles are known (q₊ = k_i + k_f and q₋ = k_i − k_f, vacuum, encoding 4). The
+training curves with both angles have two sphere paths and a free r (section 9.10). On a known substrate the same
+network proposes values, and the four-path likelihood below weights them.
 
-**The prior.** The parameter coordinates are uniform over their ranges. R̃ is log-uniform from 0.5 to 5ρ
-(every population above the previous one, by stick-breaking),
-σR/R 0.02–0.5, h/2R 0.1–10 with h̃ ≤ 200 and R̃ ≤ 50 for random cylinders, D/2R 1–20, σnn/D 0.02–0.5, w from 0.3 to
-30 q_min (log), ν 1.8–2.2, σ_q/q_max 10⁻⁴–10⁻² (log), and τ 0.003–0.15 (log).
-For a sphere at level 3 the complex reflection coefficient r is uniform in area on |r| ≤ 1.
-An equal-area map takes the flow's two square coordinates onto this disk. The prior density in (Re r, Im r)
-is 1/π there, or 2a for the magnitude a = |r| with an independent uniform phase. The scales are uniform from 0 to
-10 times the curve's maximum. The tail is held to the Lorentzian wings of a beam profile (∝ q⁻², as fit1d's ν = 2): with ν free in
-1–6 a wide tail takes over the particles' own scattering at low q (on BornAgain's GALAXI model D fell to 14–22 nm), and
-a tail capped at 3 q_min (encoding 2) cannot describe a low-q rise (D rose to about 105 nm); with ν near 2 least
-squares from different starts reaches one solution there (D 51 nm, true 53.6 nm). GALAXI was used to find this.
+**The prior.** The parameter coordinates are uniform over their ranges. R̃ is log-uniform from 0.5 to 5ρ, every
+population above the previous one (by stick-breaking). The other ranges: σR/R 0.02–0.5; h/2R 0.1–10, with h̃ ≤ 200
+and R̃ ≤ 50 for random cylinders; D/2R 1–20; σnn/D 0.02–0.5; w from 0.3 to 30 q_min (log); ν 1.8–2.2; σ_q/q_max
+10⁻⁴–10⁻² (log); τ 0.003–0.15 (log). The scales are uniform from 0 to 10 times the curve's maximum. For a sphere at
+level 3 the complex reflection coefficient r is uniform in area on |r| ≤ 1. An equal-area map takes the flow's two
+square coordinates onto this disk. The prior density in (Re r, Im r) is 1/π there, or 2a for the magnitude a = |r|
+with an independent uniform phase. The exponent of the beam tail stays near 2, the Lorentzian wings of a beam profile.
+With a free exponent, a wide tail would take over the particles' own scattering at low q.
 
 **The network** (`src/gimap/features/fitting/domain/posterior/flow.py`):
 
@@ -3172,67 +3013,69 @@ squares from different starts reaches one solution there (D 51 nm, true 53.6 nm)
   to a standard normal. Values a composition does not have are set to 0 before every conditioner and never moved, so
   the density of the others is exact; sampling runs the couplings backwards.
 
-It was trained by maximum likelihood (neural posterior estimation) with the cross-entropy of the head on 5 million
-simulated cuts of `cut_model` (`tools/ml1d`, `prior_v2.json`): 40 % at the effective interface, 18 % at the Born term
-of a q₊/q_max from 0 to 1 and 42 % with two paths (q₋ = q₊ × U(−0.5, 0.9), real and imaginary r drawn from
-the original training square [−1, 1]²); every population's
-term on 8 points per bin (then averaged, as a
-measured bin is), convolved with the cut's resolution; for every batch anew the populations' shares (2.5 decades),
-the tail, the background, the model error, 100–1000 measured points (linear or logarithmic in q), Poisson counts
-(10²–10⁷ at the highest point) and gaps. 30 epochs (2 h) on one GPU; the weights (13 MB, float32) come with GIMaP with
-their SHA-256 and model card, and GIMaP evaluates them with numpy: neither PyTorch nor TensorFlow is needed.
+It was trained by maximum likelihood (neural posterior estimation), with the cross-entropy of the head, on 5 million
+simulated cuts of `cut_model` (`tools/ml1d`, `prior_v2.json`). Of these, 40 % are at the effective interface, 18 % at
+the Born term of a q₊/q_max from 0 to 1 and 42 % with two paths (q₋ = q₊ × U(−0.5, 0.9), real and imaginary r drawn
+from [−1, 1]²). Every population's term is computed on 8 points per bin, averaged as a measured bin is, and convolved
+with the cut's resolution. Every batch draws anew the populations' shares (2.5 decades), the tail, the background,
+the model error, 100–1000 measured points (linear or logarithmic in q), Poisson counts (10²–10⁷ at the highest point)
+and gaps. Training took 30 epochs (2 h) on one GPU. The weights (13 MB, float32) come with GIMaP with their SHA-256
+and model card. GIMaP evaluates them with numpy, so neither PyTorch nor TensorFlow is needed.
 
 **From the proposals to the solutions** (`posterior/infer.py`, `laplace.py`, `refine.py` `predict`). The Fit step
-has one path; **Particles** chooses the compositions: *The particles in Model* (their families and whether each has
+has one path. **Particles** chooses the compositions: *The particles in Model* (their families and whether each has
 the paracrystal, in the order of their radii; with an empty Model it takes the next choice), *Spheres and upright
 cylinders (1–2)* or *Any particles (1–3)*.
 
 1. The compositions: that of Model, or the head's four most probable among the choice and its most probable of every
-   number of populations among them (`infer.PER_COUNT`): the head often prefers one number of populations, and a
-   composition that is not tried cannot be chosen (on the development curves this raised the share of curves whose
-   composition is chosen right from 57 %/47 % to 63 %/62 % with one to three populations, *model*/*measured*).
-2. For each, N = 1000 samples of the flow (300 for a composition with a random cylinder). Per sample, the terms of
-   cut_model on the measured points (with the sample's resolution), the scales by non-negative least squares, and the
-   likelihood (on a cut with two paths every sphere sample with its own r): Gaussian in σ, the model error integrated
-   out exactly (Woodbury identity), the scales integrated out under their uniform priors (Laplace for the positive ones, a half Gaussian for those at 0). Weights L·π/q. For a
+   number of populations among them (`infer.PER_COUNT`). The head often prefers one number of populations, and a
+   composition that is not tried cannot be chosen.
+2. For each composition, N = 1000 samples of the flow (300 for a composition with a random cylinder). For each
+   sample, the terms of cut_model are computed on the measured points (with the sample's resolution) and the scales
+   by non-negative least squares. On a cut with two paths, every sphere sample has its own r. The likelihood is
+   Gaussian in σ, with the model error integrated out exactly (Woodbury identity) and the scales integrated out under
+   their uniform priors (Laplace for the positive ones, a half Gaussian for those at 0). The weights are L·π/q. On a
    bright curve the likelihood is far narrower than any proposal amortised over all curves: the weights sit on a few
-   samples (effective sample size of order 1), which therefore only point at the modes. Without σ in the file, σ is a
-   relative error from the scatter of ln I about its local trend (the robust second difference; at least 1 %).
-3. The samples fall into modes (radii and distances 10 % apart, spreads 0.05 apart start a new one); the up to three
-   heaviest modes of each composition are refined by least squares from their heaviest sample (section 9.8; σ_q free;
-   every population held to the prior's box: R from 0.5/q_max to 5/q_min, the spreads 0.02–0.5, D/2R and h/2R in the
-   prior's ranges at the current radius, with the same random-cylinder size limits and radius order as in sampling).
-   So are the up to three
-   modes of the weights tempered to 50 effective samples (w^β, the largest β ≤ 1 that gives them) whose heaviest sample
-   is another: on a bright curve the weights sit on one or two samples, and a mode the network proposed with a
-   slightly lower likelihood would otherwise never be refined. On a cut with two paths, r is free in least squares
-   (|r| ≤ 1, its phase within ±π of the start's) and goes with the solution's model into Model; the sampled |r| and phase are summarized for sphere fits with two paths. Phase quantiles
-   use the 2π branch centred on the refined phase. For the two best compositions (by BIC) of two or three
-   populations, two more starts come from each of their two best solutions (`posterior/moves.py`): a population's paracrystal
-   peak fixes its D to a fraction of a per cent while its form factor fixes R only loosely, so another R at the same
-   D, or the paracrystals of two populations exchanged, often describe the curve as well, and the network seldom
-   proposes them. Every population's R × 0.5 and × 2 at its D and every pair's (D, σnn/D) exchanged (where the order
-   of the radii and D ≥ 2R still hold) are scored by χ² with the scales solved; the best two are refined. A
-   composition with a random cylinder gets neither the tempered modes nor the moves: its least-squares fits take
-   20–30 s each, and the benchmarks below have no random cylinders. When no
-   solution of one of the two best compositions
-   (by BIC) refines below χ²/N = 2 (the network's proposals miss the curve, as on GALAXI), one search of the ranges
-   (section 9.8) started from its 16 heaviest samples is added. The network weights and initial least-squares fits
-   use the counting errors. The reported χ²ᵣ is evaluated with those errors.
+   samples (effective sample size of order 1), which only point at the modes. Without σ in the file, σ is a relative
+   error from the scatter of ln I about its local trend (the robust second difference; at least 1 %).
+3. The samples fall into modes: radii and distances 10 % apart, or spreads 0.05 apart, start a new one. Least
+   squares (section 9.8; σ_q free) refines the up to three heaviest modes of each composition from their heaviest
+   sample. It also refines the up to three modes of the weights tempered to 50 effective samples (w^β, the largest
+   β ≤ 1 that gives them) whose heaviest sample is another one. On a bright curve the weights sit on one or two
+   samples, and a mode the network proposed with a slightly lower likelihood would otherwise never be refined. Every
+   population is held to the prior's box: R from 0.5/q_max to 5/q_min, the spreads 0.02–0.5, D/2R and h/2R in the
+   prior's ranges at the current radius, with the random-cylinder size limits and the radius order of sampling.
+
+   On a cut with two paths, r is free in least squares (|r| ≤ 1, its phase within ±π of the start's) and goes with
+   the solution's model into Model. For sphere fits with two paths the sampled |r| and phase are summarized; phase
+   quantiles use the 2π branch centred on the refined phase.
+
+   Two more kinds of start are added. The moves (`posterior/moves.py`): a population's paracrystal peak fixes its D to
+   a fraction of a per cent, while its form factor fixes R only loosely. Another R at the same D, or the paracrystals
+   of two populations exchanged, often describe the curve as well, and the network seldom proposes them. For the two
+   best compositions (by BIC) of two or three populations, each of their two best solutions gives two more starts.
+   Every population's R × 0.5 and × 2 at its D, and every pair's (D, σnn/D) exchanged (where the radius order and
+   D ≥ 2R still hold), are scored by χ² with the scales solved; the best two are refined. The search: when no solution
+   of one of the two best compositions (by BIC) refines below χ²/N = 2, the network's proposals have missed the curve.
+   One search of the ranges (section 9.8), started from its 16 heaviest samples, is then added.
+
+   A composition with a random cylinder gets neither the tempered modes nor the moves: its least-squares fits take
+   20–30 s each. The network weights and these first least-squares fits use the counting errors. The reported χ²ᵣ is
+   evaluated with those errors.
 4. From here on the σ of every point includes a model error of 5 % of its intensity, σ_m² = σ² + (0.05 I)²
-   (`refine.MODEL_ERROR_FLOOR`; *The model error* below). Each candidate is refitted using σ_m. Its score
-   BIC = χ²_m + k ln N uses the minimized sum of squared residuals in σ_m, the number k of free values including
-   the scales, and the number N of fitted data points. The solutions are ranked by this score. Those more than 20
-   above the best are dropped, and around each of the others (at most four) the posterior is sampled: a Student t (5
-   degrees of freedom) over the values the curve constrains, its scale from the Gauss–Newton curvature of the
-   residuals plus the prior's, inflated by 1.4 (and by √(χ²/N) on a curve the model does not describe within σ); the
-   others (an absent tail, a resolution at its bound, τ) from piecewise densities that a scan of the likelihood along
-   each sets. That is the first of up to eight rounds of 400 samples (population Monte Carlo; three for a composition
-   with a random cylinder), run until 200 samples are effective at that start. Each later round is a Student t over all values
-   together, the scanned ones and τ included, with the mean and the covariance (inflated by 1.4) of all samples so
-   far, their weights tempered to two effective samples per value: it follows a posterior that lies away from the
+   (`refine.MODEL_ERROR_FLOOR`; *The model error* below). Each candidate is refitted with σ_m and ranked by
+   BIC = χ²_m + k ln N, where χ²_m is the minimized sum of squared residuals in σ_m, k the number of free values
+   including the scales, and N the number of fitted data points. Solutions more than 20 above the best are dropped.
+   Around each of the others (at most four) the posterior is sampled by population Monte Carlo, in rounds of 400
+   samples. The first round is a Student t (5 degrees of freedom) over the values the curve constrains. Its scale
+   comes from the Gauss–Newton curvature of the residuals plus the prior's, inflated by 1.4 (and by √(χ²/N) on a
+   curve the model does not describe within σ). The other values (an absent tail, a resolution at its bound, τ) come
+   from piecewise densities that a scan of the likelihood along each sets. Each later round is a Student t over all
+   values together, the scanned ones and τ included, with the mean and the covariance (inflated by 1.4) of all samples
+   so far, their weights tempered to two effective samples per value. It follows a posterior that lies away from the
    least-squares optimum, or along a direction the first round has no width in (a spread at its bound that trades
-   against the radius).
+   against the radius). Up to eight rounds run (three for a composition with a random cylinder), until 200 samples
+   are effective at that start.
 5. Pool all the draws for each composition c. Index the sampling rounds over *every* retained start by j.
    Proposal qⱼ generated mⱼ draws, and M = Σⱼ mⱼ. In the sampler coordinates z, use the same mixture density
    at every draw (deterministic-mixture multiple importance sampling).
@@ -3254,59 +3097,56 @@ solutions. Normalize exp(−B_c/2) across compositions. Within c, normalize exp[
 solutions to divide that weight. Finding the same optimum twice leaves B_c unchanged. On this branch the flag
 is *bic* and the reported intervals use the least-squares errors with σ_m (section 9.8).
 
-**What the reported numbers measure.** The composition weight includes every retained solution, including those
-below the display cutoff. The record identifies the comparison and the interval source separately.
-Intermediate results pool the starts sampled so far and normalize over the compositions available at that point.
-Evidence uses the original weights. Pooled ESS = (Σw)²/Σw² governs the composition comparison. For a solution
-with conditional ESS below 50, its sampled quantiles use tempered weights.
-Beside the least-squares value and its reported interval, **posterior median** gives the weighted 50th percentile
-with the original 16th and 84th percentiles, before the interval is extended to the optimum. Where sampling produced
-no local posterior, these entries are empty. Scales and background are solved for each sample and have no sampled marginal.
+**What the reported numbers measure.** The composition weight includes every retained solution, also those below the
+display cutoff. The record names the comparison and the interval source separately. Intermediate results pool the
+starts sampled so far and normalize over the compositions available at that point. The evidence uses the original
+weights, and the pooled ESS = (Σw)²/Σw² governs the composition comparison. A solution with a conditional ESS below
+50 takes its sampled quantiles from tempered weights. Beside the least-squares value and its reported interval,
+**posterior median** gives the weighted 50th percentile with the original 16th and 84th percentiles, before the
+interval is extended to the optimum. These entries are empty where sampling gave no local posterior. Scales and
+background are solved for each sample and have no sampled marginal.
 
-For each bootstrap replicate, resample mⱼ corrected weights with replacement within each proposal round j and
-compute Z*_c as their pooled mean. Repeat 200 times with seed 7529. The sample standard deviation of log Z*_c
-estimates Monte Carlo error conditional on the proposals observed. Normalize the Z*_c across compositions in
-each replicate. The 16th and 84th percentiles of the resulting probabilities give the Monte Carlo range.
-This range excludes variation due to missed modes or a different set of adaptive proposals. Where a local sampler
-is missing, the record identifies the network estimate using counting errors. BIC weights have no evidence-based
+The Monte Carlo range of a composition's probability comes from a bootstrap. In each replicate, resample mⱼ
+corrected weights with replacement within each proposal round j, compute Z*_c as their pooled mean and normalize the
+Z*_c across compositions. Repeat 200 times with seed 7529. The 16th and 84th percentiles of the resulting
+probabilities give the Monte Carlo range; the sample standard deviation of log Z*_c estimates the Monte Carlo error.
+Both hold for the proposals observed: they leave out missed modes and other sets of adaptive proposals. Where a local
+sampler is missing, the record names the network estimate using counting errors. BIC weights have no evidence-based
 probability range.
 
-The 5 % model-error floor was calibrated on a **linear grid** of 397 points from 0.02 to 2 nm⁻¹,
-with Δq = 0.005 nm⁻¹. The average over those two decades is 198.5 points per decade. To compare sampling at
-a feature, the report gives the point count in the fitted window and Δq at its measured intensity maximum,
-in nm⁻¹ and as a multiple of 0.005 nm⁻¹. This Δq is the mean of the gaps to the nearest distinct |q| on
-each side, or the one available gap at an endpoint. A log-binned cut can have several times the validation
-spacing near its maximum. Below 80 fitted points, check that the features are resolved. Above 400,
-importance sampling may fall back to a BIC comparison. Try rebinning to 150–250 log-spaced points.
-In the paper's Table S6, 68 % interval widths changed by about 20–30 % from 79 to 160 points and little
-from 160 to 240. With 582 native points the sampler had five effective samples and the comparison used BIC.
+**Solutions and flags.** Every solution with a normalized weight of at least 1 % is returned, in descending order.
+Each carries the refined values with their least-squares errors (9.8), the posterior median and intervals, χ²ᵣ, its
+probability and flags. The most probable goes into Model, the others to **Other solutions**. The displayed fit
+normally uses the counting errors. When it falls outside the sampled 95 % limits and a refit with σ_m puts more of
+its population parameters within those limits, the refit is selected and flagged *model_error*. An interval always
+holds the displayed value: it is extended to the displayed optimum. A value the curve does not see at all (the shape
+of a population whose amplitude is 0) has no least-squares error. The flags:
 
-Every solution with normalized weight at least 1 % is returned in descending order. Each carries the refined
-values with their least-squares errors (9.8), the posterior median and intervals, χ²ᵣ, its probability and flags. An
-interval always holds the refined value. The displayed fit normally uses the counting errors. If it falls outside
-the sampled 95 % limits, a refit with σ_m can be selected when more of its population parameters lie within those
-limits. The report then flags *model_error*. The reported interval is extended to the displayed optimum. A value the
-curve does not see at all (the shape of a population whose amplitude is 0) has no least-squares error. The flags: a
-value at a bound of its range; *unconstrained* when its 68 % interval covers more than 0.7 of the prior's range;
-strongly correlated pairs (beyond ±0.95); few effective samples (below 50: the intervals are then taken with the
-weights raised to the largest power β ≤ 1 that gives 50 effective samples, which moves them towards the wider
-proposal); *bic*; *large* and *small* for a population whose size the measured q range does not show (q_min·R ≥ 0.7:
-its Guinier region lies at or below the lowest q, and the decay the curve shows is also what roughness or a rise at low
-q produce — on the *measured* benchmark curves the solution chosen has such an extra population, which takes up the
-roughness, on 10 of 100 and 20 of 300 curves; q_max·R < 1: it acts as a smooth background, as fit1d named such a population);
-and *qzR* for a sphere or random cylinder fitted at q_z = 0 whose q₊R at the cut is above 1.7 (below). The most
-probable goes into Model, the others to **Other solutions**. Predict searches its prior range for each proposed
-parameter and keeps supplied level-4 upright-cylinder heights and widths fixed. **Refine the values in Model**
-afterwards uses Model's fixed values and ranges. Time per curve on one core: about 6 s
-with the composition given and about 26 s choosing among one or two populations (24 held-out cuts, one worker,
-Intel Core i9-13900HX; `tools/benchmarks/posterior_timing_summary.json`); on development curves with earlier
-versions, 30–70 s among one to three of spheres and upright cylinders, a few minutes when random cylinders are
-among the choice, and with both angles (two paths) about 2.4 times as long.
+- a value at a bound of its range;
+- *unconstrained*: its 68 % interval covers more than 0.7 of the prior's range;
+- strongly correlated pairs (beyond ±0.95);
+- few effective samples (below 50): the intervals are then taken with the weights raised to the largest power β ≤ 1
+  that gives 50 effective samples, which moves them towards the wider proposal;
+- *bic*: the composition weights are BIC weights (above);
+- *large* and *small* for a population whose size the measured q range does not show. *large* (q_min·R ≥ 0.7): its
+  Guinier region lies at or below the lowest q, and the decay the curve shows is also what roughness or a rise at low
+  q produce; on simulated curves with roughness, such an extra population sometimes takes up the roughness. *small*
+  (q_max·R < 1): it acts as a smooth background;
+- *model_error*: the displayed fit is the refit with σ_m;
+- *qzR* and the other flags of the substrate levels (below).
 
-Model's coupling (DA) and legacy size law (mean-parameterized log-normal) are used in steps 2–4. For the new
-manual number distributions, Predict uses its original Gaussian except for upright cylinders supplied with a
-height distribution at level 4. The network, trained on the LMA and Gaussian
-sizes, is then only a proposal, which the weights correct.
+Predict searches its prior range for each proposed parameter and keeps supplied level-4 upright-cylinder heights and
+widths fixed. **Refine the values in Model** afterwards uses Model's fixed values and ranges.
+
+Time per curve on one core (Intel Core i9-13900HX): about 6 s with the composition given and about 26 s choosing
+among one or two populations (`tools/benchmarks/posterior_timing_summary.json`). Choosing among one to three spheres
+and upright cylinders takes roughly 30–70 s, a few minutes when random cylinders are among the choice, and about 2.4
+times as long with both angles (two paths).
+
+Steps 2–4 use Model's coupling (DA) and legacy size law (the log-normal parameterized by its mean). For the other
+number distributions of manual fitting, Predict uses its Gaussian, except for upright cylinders given a height
+distribution at level 4. The network, trained on the LMA and Gaussian sizes, then only proposes, and the weights
+correct it.
 
 **Substrate levels and the flag *qzR*.** The information available about the cut determines its scattering model.
 
@@ -3336,12 +3176,11 @@ For larger widths the two stages use the same convolution table over the fitted 
 For randomly oriented cylinders, sampling and refinement both average the form factor at |q| = q at
 levels 1 and 3, and at |q| = √(q² + q₊²) at levels 2 and 4 (q is the in-plane magnitude).
 Level 4 includes only the direct Born path for these cylinders. It omits their reflected-wave interference.
-For spheres, the archived level-1 fits with composition supplied had a median radius error within about
-5 % up to q₊R ≈ 1.7. Individual fits can exceed 5 % in this range. On the
-four-term DWBA curves on Si above (`posterior_dwba_pairs.json`) the median error of R at level 1 is 15 %, 20 % and
-29 % at q₊R 1.7–2.3, 2.3–3.5 and above 3.5; at level 3 it is 4.0 %, 6.7 % and 7.0 %; level 2 gives 4.0 %, 11 % and
-40 %. DWBA programs such as BornAgain and IsGISAXS evaluate the terms with the substrate's refractive index and need
-no such approximation, so GIMaP says when it matters:
+
+For spheres at level 1, the median radius error stays within about 5 % up to q₊R ≈ 1.7; single fits can exceed it.
+Above q₊R 1.7, on simulated four-term DWBA cuts on Si, the median error of R is 15–29 % at level 1, 4–40 % at level 2
+and 4–7 % at level 3. DWBA programs such as BornAgain and IsGISAXS evaluate the terms with the substrate's refractive
+index and need no such approximation, so GIMaP says when it matters:
 
 - A solution fitted at level 1 whose sphere or random cylinder has q₊R above 1.7 (R its radius, the populations
   numbered as for *large*) gets the flag *qzR* (`refine.interface_flags`, `refine.QZR_LIMIT`): *R (n): q_z·R is
@@ -3349,293 +3188,52 @@ no such approximation, so GIMaP says when it matters:
   usually too small; give both angles of the cut (αi, αf) so that spheres are fitted with the exit-reflected path
   (random cylinders stay at q_z = 0)*. This flag applies only at level 1.
 - Automatic analysis uses level 4 when it knows the substrate, α_i, λ and the cut's Yoneda exit angle α_f. With the
-  same geometry and an unknown substrate it uses level 2. For a cut away from the Yoneda band or without α_i, the fit uses level 1
-  and has no measured q₊ for these flags. The report records the level and the source of q₊ (section 14.10).
+  same geometry and an unknown substrate it uses level 2. For a cut away from the Yoneda band or without α_i, the fit
+  uses level 1 and has no measured q₊ for these flags. The report records the level and the source of q₊ (section
+  14.10).
 - The Fit page and the 1D Predict window take the level from the angles they are given. A curve file does not carry
-  the angles of its cut. At level 1, users can enter the measured q₊ separately for flags on reflected-beam data. The fit still evaluates the effective interface at q_z = 0.
-- For a sphere or random cylinder on a reflected-beam cut fitted at level 1 or 2, `qzR_cov:R_n` warns above
-  q₊R = 1.2. In the sphere coverage table below (`posterior_dwba_pairs.json`), nominal 68 % intervals cover the
-  true radius on only 33 % (level 1) and 18 % (level 2) of DWBA cuts in the 1.2–1.7 bin. Level 2 adds
-  `qzR_fail:R_n` above 2, the approximate onset of strong model error in that comparison. Use level 3 or a
-  four-term DWBA fit. Level 3 also raises `qzR_cov:R_n` above q₊R = 1.7. These sphere coverage thresholds
-  also apply to random cylinders as a precaution.
-- At levels 2–4, an upright cylinder with fitted q₊R > 2 receives `cyl_sphere:R_n`. Its radial profile can fit
-  scattering from spheres of a similar radius. This substitution also occurred on simulated Si cuts fitted with
-  the known substrate at level 4 (see the [paired benchmark results](../tools/benchmarks/README.md)).
-  The horizontal cut alone leaves the cylinder height undetermined.
-  At any level, a random or upright cylinder with a known height also receives this flag when
+  the angles of its cut. At level 1 the measured q₊ can be entered separately for the flags on reflected-beam data;
+  the fit still evaluates the effective interface at q_z = 0.
+- For a sphere or random cylinder on a reflected-beam cut fitted at level 1 or 2, `qzR_cov:R_n` marks the intervals
+  as not calibrated above q₊R = 1.2: on simulated DWBA cuts at q₊R 1.2–1.7, the 68 % intervals held the true radius
+  in only 18–33 % of cases. Level 2 adds `qzR_fail:R_n` above 2, where its model error becomes strong: use level 3 or
+  a four-term DWBA fit. Level 3 raises `qzR_cov:R_n` above q₊R = 1.7. These sphere thresholds also apply to random
+  cylinders, as a precaution.
+- At levels 2–4, an upright cylinder with fitted q₊R > 2 receives `cyl_sphere:R_n`: its radial profile can fit the
+  scattering of spheres of a similar radius, also at level 4 with the known substrate (see the
+  [paired benchmark results](../tools/benchmarks/README.md)). The horizontal cut alone leaves the cylinder height
+  undetermined. At any level, a random or upright cylinder with a known height also receives this flag when
   q₊R > 1.2 and 0.8 ≤ h/(2R) ≤ 1.25.
+- At level 3, a curve without a reflected wave can be described as well by a sphere of about half the radius with a
+  strong r. At the Yoneda angle of the substrate |r_f| is near 1 and the reflected wave strong; on a cut well above
+  the critical angle it is weak, and a solution with a large |r| and a small sphere there is suspect. Fix `refl_amp`
+  to the substrate's |r_f|, or to 0, and refine. With broad sizes and α_f at the critical angle (the public GALAXI
+  cut), the free r can also take up what the sizes and the paracrystal should describe. Check such solutions, which
+  carry flags (*at bound*, *large*, *unconstrained*), against what is known of the sample.
 - The Born-approximation flags apply to levels 1–3. Level 4 already includes the reflected sphere amplitudes.
-- Predict assigns the flags after fitting. The fitted values, intervals and probabilities depend on the substrate level used.
+- Predict assigns the flags after fitting. The fitted values, intervals and probabilities depend on the substrate
+  level used.
 
-**The model error.** Without it (steps 4–5 with the counts' σ), the 68 % intervals held the truth in 60–64 % of the
-curves of Fitting's own model (fit1d's 200 development curves drawn in `cut_model`, the composition given:
-`posterior_recovery.py --truth own`) and in 49–57 % with two or three populations, where the sampling around a
-solution sees only part of a curved posterior. On the independent truth model with a resolution, a beam tail and
-roughness (*measured*, section 9.12) they held it in 41–46 %: there Fitting's model is close to the curve but not
-exact, and the values that make up the difference — above all D and σnn/D, which the peak fixes to 0.1 % — move by
-more than the counts' σ allows (their errors were 1.6–2.4 times the half-widths of the intervals). A model error per
-point says how well the model can describe a measured cut. On the development curves (seeds 20260601: 200 of fit1d's
-kind and 300 of the extended set; never the held-out ones; runs made while the method was developed, not kept),
-floors of 0, 3, 5 and 8 % gave 68 % intervals holding the
-truth in 61/46, 78/63, 82/67 and 87/77 % (*model*/*measured*, fit1d's kind) and 51/45, 68/59, 71/67 and 78/70 %
-(extended), with the same fits; 5 % is the smallest that brings both levels to 68 % or above. The composition was chosen
-right more often on the *measured* curves (56 % instead of 41 %, 43 % instead of 36 %) and as often on the others
-(88 % and 57 %), at about 5 % more time. Applied to every step (the network's weights and the least-squares fits too),
-the same floor gave similar intervals but led the fits of some curves into other modes (χ²/N 4–7 where 1–2 was
-reachable), so steps 1–3 keep the counts' σ. On curves of Fitting's own model the 68 % intervals are then
-conservative: with the final code they hold the truth in 72–94 % (one or two populations, the development seeds;
-`posterior_own_summary.json`). The held-out curves with floors of 3 % and 8 % are in the benchmark below.
+**The model error.** A model error per point says how well the model can describe a measured cut. Without it, the
+68 % intervals were too narrow on simulated curves that Fitting's model describes closely but not exactly: the values
+the curve fixes sharply, above all D and σnn/D, moved by more than the counting errors allow. 5 % is the smallest
+floor at which the 68 % intervals held the truth in at least 68 % of the cases, both on curves of Fitting's own model
+and on curves with added effects. Steps 1–3 keep the counting errors, because the floor there led some fits into
+other modes. On curves that the model describes exactly, the 68 % intervals are therefore conservative.
 
-**Calibration in the model.** On 2000 simulated cuts not trained on (`tools/ml1d/evaluate_flow.py`, the true
-composition given, 1000 samples each), the network's own 68 % and 95 % intervals hold the truth in 66–70 % and
-92–95 % of the cases, for every value; the ranks of the truth among the samples are uniform within the statistics
-(χ² of 20 rank bins 9–29, 19 degrees of freedom). The head ranks the true composition first in 20 % of the cuts:
-many of the 258 compositions describe a cut about equally well (a paracrystal on a weak population, two populations
-of similar size), and the likelihood decides among the head's most probable (four in GIMaP's Predict parameters, and
-the best of every number of populations).
+The floor was calibrated on a **linear grid** of 397 points from 0.02 to 2 nm⁻¹ (Δq = 0.005 nm⁻¹; on average 198.5
+points per decade). To compare the sampling at a feature, the report gives the number of points in the fitted window
+and Δq at the measured intensity maximum, in nm⁻¹ and as a multiple of 0.005 nm⁻¹. This Δq is the mean of the gaps to
+the nearest distinct |q| on each side, or the one gap at an endpoint. A log-binned cut can have several times the
+validation spacing near its maximum. Below 80 fitted points, check that the features are resolved. Above 400,
+importance sampling may fall back to a BIC comparison: rebin to 150–250 log-spaced points.
 
-**Benchmark.** The 200 held-out curves of fit1d's benchmark (the independent truth model `yoneda_truth.py`; section
-9.12), with the same scoring (`tools/benchmarks/posterior_recovery.py`, `--cut born`: Predict is given the cut's q_z,
-the truth's Born term): half of them in fit1d's own physics (*model*), half with a resolution, a beam tail and
-roughness (*measured*). Medians and 90th percentiles of the errors over all populations, R and D relative, the
-spreads absolute. Errors use the refined least-squares estimates (`values.best`) with the true composition given.
-The "68 %" and "95 %" columns give how often that interval of the
-solution holds the truth (fit1d: ±1 least-squares error). The composition is chosen among spheres and upright
-cylinders, one or two populations. In these archived tables, *true composition most probable* counts cuts whose
-first listed solution has the true unordered families (`composition.exact` in the original summaries); *listed*: a solution with
-a probability of at least 0.05 has them (`true_in_equivalent_set`). *Truth's mode*, with the true composition given:
-every R and D of the most probable solution (*first*), or of a solution with a probability of at least 0.05
-(*listed*), lies within 20 % of the truth (`truth_mode`).
-
-The recovery, coverage and composition-selection results below predate the pooled evidence,
-composition-level BIC and substrate corrections. They describe the archived implementations.
-The first and extended sets were fitted at commit 2eb0243 and the three earlier DWBA comparisons at 7179b85.
-They used the same fitting code (git tree 7e68831a of `src/gimap/features/fitting/domain`) and the network
-`flow_v1`. Their summaries are `tools/benchmarks/posterior_*_summary.json`. The tables below retain their
-historical scoring. The per-cut files in `tools/benchmarks/per_cut/` store the leading solution and selected
-alternatives. For new archives, `summary_tables.py --per-cut` reads the full composition weights.
-Runs of earlier versions of the code are in `tools/benchmarks/history/`; they are not the numbers given here.
-fit1d's columns are its record on the same 200 curves (`history/fit1d_recovery_summary.json`).
-
-| level | value | Predict: median / P90 | Predict: 68 % | Predict: 95 % | fit1d: median / P90 | fit1d: 68 % |
-|---|---|---|---|---|---|---|
-| model | R | 0.5 % / 10 % | 70 % | 87 % | 0.5 % / 7.1 % | 61 % |
-| model | σR/R | 0.005 / 0.074 | 76 % | 95 % | 0.005 / 0.062 | 69 % |
-| model | D | 0.0 % / 0.4 % | 91 % | 94 % | 0.0 % / 0.2 % | 70 % |
-| model | σnn/D | 0.000 / 0.005 | 89 % | 95 % | 0.000 / 0.002 | 68 % |
-| measured | R | 0.7 % / 14 % | 65 % | 83 % | 1.0 % / 19 % | 34 % |
-| measured | σR/R | 0.008 / 0.090 | 69 % | 89 % | 0.010 / 0.101 | 36 % |
-| measured | D | 0.1 % / 0.4 % | 78 % | 95 % | 0.1 % / 0.3 % | 43 % |
-| measured | σnn/D | 0.002 / 0.006 | 58 % | 91 % | 0.001 / 0.006 | 26 % |
-|  | true composition most probable (model / measured) | 88 % / 65 % |  |  | 69 % / 30 % |  |
-|  | true composition listed (model / measured) | 96 % / 84 % |  |  | 77 % / 41 % |  |
-|  | truth's mode first (model / measured) | 89 % / 89 % |  |  | – |  |
-|  | truth's mode listed (model / measured) | 94 % / 92 % |  |  | – |  |
-
-**Independent rerun.** The first, extended and third archived sets share draws because their generators used
-`base_seed + index`. The `fresh` set contains 150 model-only cuts and 150 cuts with added effects. Each cut has
-separate parameter and counting-noise streams keyed by set and case. For an integrated central intensity A and a
-resolution density K with Σ K(qᵢ) Δq = 1, the broadened beam contributes A K(q) to the intensity. The archived
-generator included an extra factor Δq in this term.
-
-New runs group all retained modes by the composition used by Predict, before applying the display threshold.
-For composition c the weight is Σ wₘ over modes m of c. A correct choice requires the highest-weight composition
-to match every true particle family and paracrystal flag in increasing radius order. Reliability bins report
-correct and total cuts separately for evidence and BIC. The original archives omit some mode weights.
-
-Revision 15 fixes the Predict code at commit `65a640b0`. Search uses the same 200 first-set curves.
-For the recovery rows in Table 3, a cut contributes radius errors when its fitted and true population
-counts agree. Pair the populations in increasing radius order and take |R_fit/R_true − 1| for each pair.
-The median and 90th percentile describe those errors. For coverage, either endpoint of the reported
-interval counts as containing the true radius. For composition choices with winning weight ≥ 0.99,
-the table reports correct/total for evidence and BIC separately. [Round-7 sources and verification](../tools/benchmarks/README.md#round-7-reruns-r15)
-
-For a parameter interval, let Hᵢ of Nᵢ eligible populations on cut i contain the true value. The measured coverage
-is Σ Hᵢ / Σ Nᵢ. To obtain its 68% uncertainty interval, resample whole cuts with replacement within each level,
-recompute the ratio, and take the 16th and 84th percentiles. Each draw keeps all populations of the sampled cut.
-[Benchmark commands and archive fields](../tools/benchmarks/README.md)
-
-The archived extended set contains 600 curves (`heldout_cases.py`,
-seed0 20261201): one to three populations, the LMA or the DA (given to Predict), the composition chosen among one to
-three populations (`posterior_extended_summary.json`):
-
-| level | value | Predict: median / P90 | Predict: 68 % | Predict: 95 % |
-|---|---|---|---|---|
-| model | R | 1.5 % / 28 % | 81 % | 89 % |
-| model | σR/R | 0.011 / 0.148 | 84 % | 93 % |
-| model | D | 0.1 % / 2.0 % | 86 % | 90 % |
-| model | σnn/D | 0.001 / 0.016 | 86 % | 92 % |
-| measured | R | 2.1 % / 45 % | 67 % | 81 % |
-| measured | σR/R | 0.016 / 0.180 | 71 % | 87 % |
-| measured | D | 0.1 % / 6.2 % | 79 % | 89 % |
-| measured | σnn/D | 0.002 / 0.013 | 77 % | 91 % |
-|  | true composition most probable (model / measured) | 69 % / 58 % |  |  |
-|  | true composition listed (model / measured) | 81 % / 75 % |  |  |
-|  | truth's mode first (model / measured) | 80 % / 75 % |  |  |
-|  | truth's mode listed (model / measured) | 90 % / 83 % |  |  |
-
-What this says:
-
-- **Composition.** The most probable solution has the true composition in 88 % and 65 % of the curves of fit1d's
-  set (*model* and *measured*; fit1d 69 % and 30 %) and in 69 % and 58 % of the extended set; a listed solution has
-  it in 96 % and 84 %, and in 81 % and 75 %.
-- **Errors.** With the composition given, the median errors are as small as fit1d's or smaller (R 0.5 % and 0.7 %
-  against 0.5 % and 1.0 %). The P90 of R is 10 % and 14 % (fit1d 7.1 % and 19 %), and 28 % and 45 % on the extended
-  set. The large errors are solutions in another mode than the truth's: on fit1d's set 13 of the 150 populations of
-  either level are off by more than 20 % in R (`posterior_dwba_pairs.json`, run `born`).
-- **Several solutions.** The truth's mode is the most probable solution in 89 % of the curves of fit1d's set (both
-  levels) and in 80 % and 75 % of the extended set, and among the listed solutions in 94 % and 92 %, and in 90 % and
-  83 %. Where no listed solution is in the truth's mode, the search did not reach it; step 3's tempered modes and
-  moves were added for these curves. Drawing half of the network's samples from a base normal of width 2
-  (`infer.PROPOSAL_WIDTHS`) was tried on the development curves and is not used.
-- **Intervals.** The 68 % intervals hold the truth in 70–91 % (*model*) and 58–78 % (*measured*) of the cases on
-  fit1d's set, and in 81–86 % and 67–79 % on the extended set; the 95 % intervals in 87–95 % and 83–95 %, and in
-  89–93 % and 81–91 %. fit1d's ±1 errors hold it in 61–70 % and 26–43 %. Read the intervals as including a model
-  error of 5 % per point (*The model error*, above): a population whose solution is in another mode is not covered
-  by any interval.
-- **The model error floor and the amplitude range.** The same 200 curves with a floor of 3 % and of 8 % instead of
-  5 % (`--model-error-floor`; `posterior_floor03_summary.json`, `posterior_floor08_summary.json`) and with an
-  amplitude range of 100 instead of 10 (`--constant infer.AMPLITUDE_RANGE=100`;
-  `posterior_amplitude100_summary.json`); each cell is *model* / *measured*:
-
-  | run | curves | 68 % intervals (four values) | 95 % intervals (four values) | R: median | R: P90 | R: 68 % | composition most probable | composition listed | mode first | mode listed |
-  |---|---|---|---|---|---|---|---|---|---|---|
-  | model error floor 3 % | 200 | 63–87 % / 55–64 % | 85–94 % / 79–91 % | 0.5 % / 0.7 % | 9.2 % / 14 % | 64 % / 56 % | 90 % / 57 % | 96 % / 76 % | 91 % / 90 % | 95 % / 92 % |
-  | model error floor 5 % (default) | 200 | 70–91 % / 58–78 % | 87–95 % / 83–95 % | 0.5 % / 0.7 % | 10 % / 14 % | 70 % / 65 % | 88 % / 65 % | 96 % / 84 % | 89 % / 89 % | 94 % / 92 % |
-  | model error floor 8 % | 200 | 78–93 % / 71–91 % | 89–95 % / 83–97 % | 0.5 % / 0.7 % | 9.4 % / 18 % | 78 % / 71 % | 86 % / 68 % | 96 % / 88 % | 89 % / 87 % | 94 % / 90 % |
-  | amplitude range 100 | 200 | 70–91 % / 58–78 % | 87–95 % / 83–95 % | 0.5 % / 0.7 % | 10 % / 14 % | 70 % / 65 % | 88 % / 66 % | 96 % / 84 % | 89 % / 89 % | 94 % / 92 % |
-
-  The intervals widen with the floor, the median errors do not move (the P90 of R on the *measured* curves is
-  14 %, 14 % and 18 %), and the true composition is most probable more often
-  on the *measured* curves (57 %, 65 % and 68 %) and a little less often on the others (90 %, 88 % and 86 %). The
-  amplitude range changes the composition chosen for one curve and nothing else in the table.
-- **Time.** 6.2 s per curve with the composition given and 26 s choosing among one or two populations (medians of
-  24 cuts of fit1d's set, one worker, Intel Core i9-13900HX; `posterior_timing_summary.json`); the network alone
-  0.35 s. fit1d took 3.5 s and 6.3 s on the computer of its record. The other runs of this section ran ten workers at
-  once on that processor, so the times in their summaries are not those of a curve fitted alone.
-- **Roughness.** The measured curves have roughness falling as q⁻³ at low q, which the tail (ν near 2) cannot take
-  up: there the true composition is most probable less often (65 % against 88 % in fit1d's own physics), and on 10 of
-  the 100 *measured* curves of fit1d's set and 20 of the 300 of the extended set the chosen solution has one
-  population more than the truth and the flag *large* (`summary_tables.py --only large`, from the per-cut files).
-
-**The waves the surface reflects.** Both archived sets use the Born term at the cut's q_z. The DWBA comparison
-reuses the same 200 particle draws, count targets and noise seeds. Expected counts and Poisson realizations
-change with the truth model. Curves drawn with all four terms on
-bare Si (`--scattering dwba --substrate si`; the cut at the Si Yoneda angle, q₊ = 0.577 nm⁻¹, so q₊R = 1.7 at
-R = 2.9 nm) pair curve by curve with the first table. Predict is given both angles (`--cut two_path`: the two paths
-with a free r; `posterior_dwba_tp_summary.json`), q_z alone (`--cut born`; `posterior_dwba_born_summary.json`) or
-neither (`--cut eia`, the effective interface; `posterior_dwba_eia_summary.json`). Each cell is *model* /
-*measured*:
-
-| run | curves | 68 % intervals (four values) | 95 % intervals (four values) | R: median | R: P90 | R: 68 % | composition most probable | composition listed | mode first | mode listed |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Born-term truth, given q_z | 200 | 70–91 % / 58–78 % | 87–95 % / 83–95 % | 0.5 % / 0.7 % | 10 % / 14 % | 70 % / 65 % | 88 % / 65 % | 96 % / 84 % | 89 % / 89 % | 94 % / 92 % |
-| DWBA on Si, given q_z | 200 | 26–57 % / 26–57 % | 40–70 % / 37–74 % | 5.3 % / 5.9 % | 48 % / 39 % | 26 % / 26 % | 37 % / 29 % | 48 % / 45 % | 70 % / 75 % | 71 % / 75 % |
-| DWBA on Si, given both angles | 200 | 60–97 % / 55–80 % | 78–100 % / 67–99 % | 2.0 % / 3.4 % | 15 % / 23 % | 60 % / 55 % | 80 % / 59 % | 100 % / 86 % | 94 % / 80 % | 100 % / 93 % |
-| DWBA on Si, given neither | 200 | 39–65 % / 36–61 % | 50–85 % / 46–89 % | 4.7 % / 5.1 % | 30 % / 32 % | 39 % / 36 % | 44 % / 30 % | 63 % / 46 % | 68 % / 57 % | 73 % / 60 % |
-
-By the sphere's q₊R (`posterior_dwba_pairs.json`, written by `tools/benchmarks/posterior_pairs.py` from the per-cut
-files), the error of R of the spheres with the true composition given: median (bias) · share off by more than 20 % ·
-share whose 68 % interval holds the truth:
-
-| q₊R of the sphere | spheres | Born-term truth, given q_z | DWBA on Si, given q_z | DWBA on Si, given both angles | DWBA on Si, given neither |
-|---|---|---|---|---|---|
-| up to 1.2 | 10 | 0.6 % (0 %) · 0 % · 70 % | 1.6 % (-2 %) · 0 % · 60 % | 2.9 % (0 %) · 10 % · 90 % | 1.5 % (0 %) · 10 % · 70 % |
-| 1.2–1.7 | 45 | 0.4 % (0 %) · 0 % · 80 % | 2.2 % (-1 %) · 0 % · 18 % | 2.3 % (-1 %) · 16 % · 60 % | 3.6 % (-2 %) · 18 % · 33 % |
-| 1.7–2.3 | 42 | 0.5 % (0 %) · 12 % · 67 % | 4.0 % (-2 %) · 2 % · 14 % | 4.0 % (-3 %) · 10 % · 36 % | 15 % (-15 %) · 43 % · 7 % |
-| 2.3–3.5 | 58 | 0.7 % (0 %) · 5 % · 71 % | 11 % (-11 %) · 19 % · 7 % | 6.7 % (0 %) · 14 % · 48 % | 20 % (-13 %) · 50 % · 22 % |
-| above 3.5 | 45 | 5.5 % (0 %) · 36 % · 49 % | 40 % (-30 %) · 87 % · 0 % | 7.0 % (+2 %) · 16 % · 53 % | 29 % (-29 %) · 67 % · 40 % |
-
-In the two-path run (`si_tp_new`), coverage falls from 60 % to 36 % across q₊R = 1.7 and reaches 48 % in
-the next bin. This motivates the level-3 coverage warning. The upright-cylinder shape warning uses q₊R > 2
-as a practical threshold near the onset of strong shape confusion. The public GALAXI cut illustrates this
-ambiguity at q₊R ≈ 3.1. The table measures radius coverage for a given composition.
-
-The curves by their largest sphere's q₊R: true composition most probable · truth's mode listed · median χ²/N:
-
-| largest sphere's q₊R | curves | Born-term truth, given q_z | DWBA on Si, given q_z | DWBA on Si, given both angles | DWBA on Si, given neither |
-|---|---|---|---|---|---|
-| up to 1.7 or no sphere | 74 | 78 % · 100 % · 1.09 | 82 % · 100 % · 1.09 | 76 % · 99 % · 1.09 | 77 % · 96 % · 1.09 |
-| 1.7–2.3 | 26 | 85 % · 92 % · 1.06 | 8 % · 85 % · 1.60 | 50 % · 100 % · 1.07 | 31 % · 54 % · 1.52 |
-| above 2.3 | 100 | 73 % · 88 % · 1.08 | 3 % · 50 % · 2.25 | 70 % · 94 % · 1.07 | 9 % · 48 % · 1.37 |
-
-The curves on which a sphere's R is off by more than 10 %, and whether χ²/N marks them:
-
-| run | spheres off by more than 10 %: curves | of them χ²/N > 2 | their median χ²/N |
-|---|---|---|---|
-| Born-term truth, given q_z | 23 | 30 % | 1.17 |
-| DWBA on Si, given q_z | 80 | 64 % | 5.03 |
-| DWBA on Si, given both angles | 54 | 6 % | 1.08 |
-| DWBA on Si, given neither | 94 | 32 % | 1.46 |
-
-- **Given q_z alone**, spheres above q₊R 2.3 come out too small: the median error of R is 11 % at q₊R 2.3–3.5 and
-  40 % above (bias −11 % and −30 %), their 68 % intervals hold the truth in 7 % and 0 %, and the true composition
-  is most probable for 3 % of the curves whose largest sphere is above q₊R 2.3 (73 % with the Born-term truth).
-- **Given both angles**, the median error of R of the spheres above q₊R 1.7 is 4.0–7.0 % (bias within 3 %) and
-  their 68 % intervals hold the truth in 36–53 %; the true composition is most probable for 50 % of the curves whose
-  largest sphere is at q₊R 1.7–2.3 and for 70 % above, and the truth's mode is listed for 100 % and 94 % of them.
-  Over all curves the true composition is most probable in 80 % and 59 % (88 % and 65 % with the Born-term truth)
-  and the P90 of R is 15 % and 23 %.
-- Below q₊R 1.7 the two paths are a little worse than q_z alone: 16 % of the 45 spheres at q₊R 1.2–1.7 are off by
-  more than 20 % (none given q_z alone), and the true composition of the curves without a larger sphere is most
-  probable in 76 % against 82 %.
-- **χ²/N does not point at these spheres** when both angles are given: it is above 2 for 6 % of the 54 curves with
-  a sphere off by more than 10 % (for 64 % of the 80 such curves given q_z alone). What is left fits the curve within
-  its errors.
-- **Given neither** (the effective interface), R of the spheres at q₊R 1.7–3.5 is low by 13–15 % (median error
-  15 % and 20 %), and the true composition is most probable in 44 % and 30 % of all curves.
-- An upright cylinder of fixed height has the in-plane shape exactly in the four-term DWBA (section 9.10), so these runs test
-  the spheres.
-- **Two paths where the curve has none.** Given both angles on a curve without a reflected wave, a sphere of about
-  half the radius with a strong r can describe the curve as well. At the Yoneda angle of the substrate |r_f| is near
-  1 and the reflected wave strong; on a cut well above the critical angle it is weak, and a solution with a large
-  |r| and a small sphere there is suspect (fix `refl_amp` to the substrate's |r_f|, or to 0, and refine).
-
-**Earlier runs.** `tools/benchmarks/history/` keeps the summaries of earlier versions of the code: the first rules
-(`posterior_*_first_summary.json`, the network flow_v3), the DWBA curves on Si and on 100 nm polystyrene on Si for
-both sets (`posterior_dwba_*_fit1d_summary.json`, `posterior_dwba_*_extended_summary.json` and their pairs), the
-own-model curves of the extended kind and fit1d's run on 1200 curves of the extended set
-(`fit1d_heldout_summary.json`). None of them was made with the code of the tables above, and the extended set of
-that time had 1200 curves, so they are not compared here.
-
-fit1d was nevertheless removed from GIMaP in 0.2.0, so that Fitting has one network method: its benchmark stays the
-reference (section 9.12). 1D Predict V5, on the same 200 curves, had median errors of 32 % (R) and 22 % (D)
-(chapter 10).
-
-**GALAXI.** The cut of the public GALAXI frame and three Poisson draws of BornAgain's model of it (log-normal radii,
-number mean 6.24 nm, radial paracrystal of 53.6 nm; four-term DWBA; α_i = 0.463°, α_f = 0.18°, near the critical
-angle of Si), as in section 9.12 (`tools/benchmarks/galaxi_posterior.py`, `galaxi_posterior.json`). One sphere
-population with a paracrystal, Born at the cut's q_z:
-
-| source | Predict: R (nm) | Predict: D (nm), 68 % | χ²/N | fit1d: R, D (nm) | χ²/N |
-|---|---|---|---|---|---|
-| BornAgain's model, three draws | 4.84–4.88 | 49.2 [39.7, 61.0] on one draw; 676 and 1350 (*unconstrained*) on the others | 4.4–5.4 | 4.88–4.93, 56.9–57.6 | 6.1–6.5 |
-| the same, log-normal sizes | 4.84–4.90 | 49.3–51.3, intervals [41–43, 59–62], each holds 53.6 | 4.2–4.4 | | |
-| measured cut | 5.16 | 46.4 [40.0, 53.9] | 8.8 | 5.20, 56.4 | 14.4 |
-
-With the network that came before this one (Born term only) the Gaussian sizes gave D 49.2–52.1 nm on all three draws
-(intervals [41–44, 59–63], each holding 53.6). With the composition chosen among one to three sphere populations,
-Predict now takes one sphere with a paracrystal on the measured cut (R 5.16 nm, D 46.4 nm), and on the draws a sphere
-with a second one whose paracrystal is at a bound or unconstrained (twice) or three spheres, one of R 0.21 nm flagged
-*small* (D of the second 51.2 nm); before: two spheres on two draws and one on the third, D 42–53 nm. fit1d chose a
-sphere of R 0.18 nm on one of the draws. All these solutions were compared by BIC (the model does not describe the cut
-within σ: χ²/N 4–9), and their intervals are least-squares errors with the model error: the cut has a shoulder, not a
-resolved peak, so D is fixed to ±7–10 nm (±3 nm without the model error). fit1d's four-term DWBA
-described the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm).
-
-*Both angles* (two paths, r free). The two paths describe these cuts within their errors (χ²/N 0.96–1.55 against
-4.2–8.8), but they do not recover the particles: with one sphere population, R 8.4 nm on the measured cut and 500 nm
-(at the bound, flagged *large*), 110 nm and 16 nm on the draws, D 460–6700 nm instead of 53.6 nm; with the composition chosen
-among one to three spheres, two spheres on the measured cut (R 6.06 nm with D 43.8 nm [31.1, 61.7], and 8.8 nm), on
-one draw R 5.0 nm with D 104 nm [68, 159] and a sphere of 525 nm at the bound, on the other two one sphere of
-15.5–16.1 nm without a paracrystal; the fitted |r| 0.31–1.0 at phases spread over the whole circle. On this cut
-(broad log-normal sizes, α_f at the critical angle) the free r takes up what the sizes and the paracrystal should
-describe; the solutions it gives carry flags (*at bound*, *large*, *unconstrained*) and should not be taken without
-them being checked against what is known of the sample. Time (this PC): 12–14 s per variant with one sphere and 46–63 s
-for the choice at the Born term; 12–26 s and 97–139 s with two paths (56 min for the choice on the measured cut
-before the cross term was tabulated, section 9.3). GALAXI was used to set the tail's prior and the rules of steps 3
-and 5, so this is no independent test.
+**Benchmark.** On 200 simulated cuts that the network was not trained on, half in Fitting's own model and half with
+a resolution, a beam tail and roughness, the most probable solution has the true composition in 83 % and 65 % of the
+cuts. With the composition given, the median error of R is 0.4 % and 1.9 %, and the 68 % intervals hold the true R in
+79 % and 45 % of the cases. The head alone often ranks another composition first: many compositions describe a cut
+about equally well, and the likelihood decides among the head's most probable. The runs, their summaries and the
+scripts are in `tools/benchmarks/` ([README](../tools/benchmarks/README.md)).
 
 Implementation: `src/gimap/features/fitting/domain/posterior/`, `application/single_predict.py`,
 `infrastructure/adapters/posterior_job.py`; training and checks: `tools/ml1d/`; benchmarks:
@@ -3644,12 +3242,12 @@ Implementation: `src/gimap/features/fitting/domain/posterior/`, `application/sin
 
 ### 9.14 Models for manual fitting
 
-Refine and Search also fit the models below. Predict parameters proposes only the families it was trained on
-(sphere, random cylinder, vertical cylinder, each with or without the 1D paracrystal, 9.13): a model with one of these
-is for Refine and Search. In the Model step they are the family **Core–shell sphere** and, with **S(q)** on, the
-**Interference** choices **2D hexagonal paracrystal** and **Hard spheres (Percus–Yevick)**. The LMA and the DA (9.5)
-apply to every interference function. Each is unit-scale like the others: a form factor is 1 at q = 0, a structure
-factor → 1 at large q.
+Refine and Search also fit the models below. Predict parameters does not propose them: it knows only the families it
+was trained on (sphere, random cylinder, vertical cylinder, each with or without the 1D paracrystal, 9.13). In the
+Model step they are the family **Core–shell sphere** and, with **S(q)** on, the **Interference** choices
+**2D hexagonal paracrystal** and **Hard spheres (Percus–Yevick)**. The LMA and the DA (9.5) apply to every
+interference function. Each is unit-scale like the others: a form factor is 1 at q = 0, a structure factor → 1 at
+large q.
 
 **Core–shell sphere.** A core of radius R (its size distribution as chosen in **Sizes**, 9.3) inside a shell of fixed
 thickness t; the core's scattering contrast is ρc/ρs times the shell's (0: a hollow shell; 1: a homogeneous sphere of
@@ -3699,9 +3297,9 @@ midpoint rule with 3 points per half-width (1 − p)/(q D) of its narrowest peak
 the error of the rule falls as e^(−2π·3)). As in BornAgain and IsGISAXS, this product form rises as 1/(q D) towards
 q = 0; fit windows with q D ≳ 1.
 
-**Contact.** With **Particles do not overlap** (9.15, on by default), while both are fitted: the paracrystal's D at
-least 2(R + t) for a core–shell sphere, R_HS at least the outer radius R (+ t), applied as inequalities (9.15); for
-the other families D ≥ 2R as in 9.6.
+**Contact.** With **Particles do not overlap** on (the default, 9.15) and both values fitted, the paracrystal's D is
+at least 2(R + t) for a core–shell sphere, and R_HS at least the outer radius R (+ t). Both act as inequalities
+(9.15). The other families keep D ≥ 2R (9.6).
 
 **Checks** (`tests/test_fit_model_library.py`):
 
@@ -3746,14 +3344,13 @@ constraints*) keeps a fitted non-linear value on one side of an expression of th
 acts by a change of variables like the contact D ≥ 2R (9.6): with the other values set, the value is searched between
 max(l, bound) and u (≥), or between l and min(u, bound) (≤), on a log scale when its range is; constraints act in the
 order listed, after the contact. A constraint on a fixed value or a scale does not act (it stays in the model). A
-value that ends at its bound is reported at a bound (9.8). **Particles do not overlap** switches the contact of 9.6 and
-9.14 off, for models where touching or interpenetrating particles are meant.
+value that ends at its bound is reported at a bound (9.8). Clearing **Particles do not overlap** switches the contact
+of 9.6 and 9.14 off, for models where touching or interpenetrating particles are meant.
 
 Links, constraints and the contact switch are saved with the model (a parameter's `tie`, `constraints`, `contact`;
-written only when used, so that a model without them reads as in earlier versions) and in the fit's record (`links`).
-Removing a component drops the links and constraints that read it and renumbers the names of the later ones. A model
-without links or constraints is fitted exactly as before (the same code path: Predict parameters gives the same
-numbers). Predict parameters does not use links: its proposals are complete solutions of the families it knows.
+written only when used) and in the fit's record (`links`). Removing a component drops the links and constraints that
+read it and renumbers the names of the later ones. Predict parameters does not use links: its proposals are complete
+solutions of the families it knows.
 
 Implementation: `src/gimap/features/fitting/domain/fit_links.py`, `linked_fit.py`, `fit_engine.py`
 
@@ -3762,7 +3359,7 @@ Implementation: `src/gimap/features/fitting/domain/fit_links.py`, `linked_fit.py
 **Correlation matrix.** The covariance C of (9.25) is kept with the fit (its parameter order with it) and shown in
 **Results ▸ Uncertainty and Report…** as the correlation matrix ρ_kl (9.26): a heat map with the values (blue −1, white
 0, red +1; grey for a direction the curve does not see, whose error is not defined), beside every free and linked value
-with its 1σ error and relative error. The pairs with |ρ| > 0.9 are listed (the Results step's own warning keeps 0.95).
+with its 1σ error and relative error. The pairs with |ρ| > 0.9 are listed; the Results step's own warning uses 0.95.
 The record of **Save Data and Fit…** holds the same (`fit.correlation`, `fit.covariance`, `fit.correlated_above_0.9`).
 
 **Values not determined.** A free value whose 1σ error is not finite, or — for sizes, spreads, distances and the
@@ -3779,10 +3376,10 @@ other free values fitted again by Refine, from the neighbouring grid point outwa
 ```
 
 The 68 % interval is where Δχ² ≤ 1 (linear interpolation between grid points; *open* on a side where the grid ends
-first). With χ²_red = 1 this is the usual Δχ² = 1 rule; in units of s² it is the interval that the covariance errors,
-scaled by χ²_red (9.8), linearise, so the two agree for a well-determined value, and the profile shows where they do
-not (an asymmetric or open interval). A grid point with Δχ² < 0 means the fit had not reached its minimum: Refine again.
-The profile runs in the background; **Stop** keeps the points done.
+first). With χ²_red = 1 this is the usual Δχ² = 1 rule. In units of s², the covariance errors scaled by χ²_red (9.8)
+are the linear approximation of this interval: the two agree for a well-determined value, and the profile shows where
+they do not (an asymmetric or open interval). A grid point with Δχ² < 0 means the fit had not reached its minimum:
+Refine again. The profile runs in the background; **Stop** keeps the points done.
 
 **Fit report.** Markdown, HTML or plain text (**Copy**, **Save Report…**), made from the same record as **Save Data
 and Fit…**: the data file with its SHA-256, the points, their q range, halves and weighting; the model (families,
@@ -3808,8 +3405,8 @@ r(α) = (k_z − k_z,s) / (k_z + k_z,s),   k_z = k sin α,   k_z,s = k √(sin²
 The four terms in (9.40) use the reflection amplitudes at αi and αf. Equation (9.41) gives the bare-interface
 amplitude and (9.41a) below gives it for a layered substrate. Both coefficients are fixed by the optical inputs.
 Random cylinders are averaged at |q| = √(q² + (k_i + k_f)²) using only the direct Born path.
-The likelihood and refinement both omit their reflected-wave interference. Upright cylinders with a height distribution use these four paths for the horizontal DA
-(sections 9.5, 9.10). Core–shell spheres stay at q_z = 0.
+The likelihood and refinement both omit their reflected-wave interference. Upright cylinders with a height
+distribution use these four paths for the horizontal DA (sections 9.5, 9.10). Core–shell spheres stay at q_z = 0.
 The size average uses the quadrature of section 9.3. For batches of resolved sphere intensities, six-point
 interpolation in radius lets the size distributions share one table. On a densely sampled cut, a single
 distribution can be evaluated on a grid in q and interpolated with eight points. The largest lateral separation
@@ -3853,13 +3450,12 @@ Insert R₀(α_i) and R₀(α_f) in (9.40). For m = 0 this gives the bare Fresne
 The implementation propagates the field and its normal derivative, an equivalent form that also handles a zero
 normal wavevector. Independent simultaneous matching at all interfaces checks the complex amplitude below, near
 and above the critical angles for one and two layers (`tests/test_layered_substrate.py`). The interfaces are
-smooth and the particle layer has the optical constants of air. A horizontal cut supplies no independent
-estimate of the layer thickness or optical constants in this fit.
+smooth and the particle layer has the optical constants of air. The fit takes the layer thicknesses and optical
+constants as given: a horizontal cut does not determine them.
 
 **Predict parameters.** The fourth level uses these same coefficients in the likelihood and bounded refinement
-(section 9.13). The fitted model records the substrate and any layers for subsequent evaluation. The recovery
-benchmark compares the same simulated cuts on Si and on a 100 nm polystyrene film over Si, keeping the cut
-at the Si Yoneda angle on both surfaces. The per-cut comparisons are grouped by q₊R. [Benchmark results](../tools/benchmarks/README.md)
+(section 9.13). The fitted model records the substrate and any layers for subsequent evaluation.
+[Benchmark results](../tools/benchmarks/README.md) compare simulated cuts on Si and on a 100 nm polystyrene film on Si.
 
 **Checked against BornAgain 24.1** (`tools/benchmarks/joint_dwba_bornagain.py`, average layer materials off as in
 section 9.2; Si of the table at λ = 0.1045 nm, δ = 3.46 · 10⁻⁶, β = 3.74 · 10⁻⁸; αi = 0.40°, the horizontal cut at the
@@ -3872,7 +3468,7 @@ Yoneda row αf = 0.151°; Fitting's model with the substrate known; q = 0.05–2
 | sphere, one size, radial paracrystal D = 14 nm, σnn = 2.8 nm | 2.6 · 10⁻² (at the zero) | 1.0 · 10⁻³ |
 | upright cylinder R = 4 nm, H = 6 nm, one size | at the zeros only | 1.2 · 10⁻³ |
 
-the level the checks of `cut_model` reached (section 9.2).
+This is the level the checks of `cut_model` reached (section 9.2).
 
 Implementation: `src/gimap/features/fitting/domain/substrates.py`, `domain/fit_model.py` (`grazing`),
 `application/substrate_level.py`, `presentation/single/substrate_row.py`
@@ -3884,8 +3480,8 @@ joint fit of a q_y and a q_z cut of the same frame). Every curve c has its own m
 same values, freedom and ranges, its own background, beam tail, factor k and cut geometry. A free non-linear value is
 **shared** (fitted once; by default every particle value: R, σR/R, h, σh/h, D, σnn/D …) or each curve's own (by default
 the tail's width and exponent). The scales (Int of every population, background, tail A) are always each curve's own
-and solved exactly for that curve at every step ((9.17), section 9.7): every curve has its own scale and background,
-and with several populations their ratio is not tied between the curves.
+and solved exactly for that curve at every step ((9.17), section 9.7). With several populations, their ratio is not
+tied between the curves.
 
 ```text
 χ² = Σ_c Σ_i r_c,i²(θ_shared, θ_c, scales_c),   r as (9.15) or (9.16) for each curve                            (9.43)
@@ -3894,8 +3490,8 @@ and with several populations their ratio is not tied between the curves.
 
 Refine and Search are those of section 9.8 on the joint vector of the free non-linear values; the errors come from
 the Jacobian of all residuals with respect to every free value (shared, per curve and the scales), (9.24)–(9.26). The
-summary gives χ²_red and every curve's Σr²/N; curves weighted differently (some by σ, some by ln I) are said to be
-not comparable. For a vertical cut with file or Poisson standard deviations, the report also gives its reduced
+summary gives χ²_red and every curve's Σr²/N, and marks curves weighted differently (some by σ, some by ln I) as not
+comparable. For a vertical cut with file or Poisson standard deviations, the report also gives its reduced
 χ² = Σᵢr_c,i² / [N_c − tr(H_cc)]. Here H = JJ⁺ projects onto the columns of the weighted joint Jacobian J. The
 diagonal block H_cc assigns the cut its share of the fitted parameters, including shared ones.
 
@@ -3961,31 +3557,24 @@ The tests compare the four paths with an independent sum, the cylinder averages 
 heights (2 · 10⁻⁵), and fit a simulated horizontal and vertical cut of upright cylinders (R = 4 nm, h = 6 nm, Poisson
 noise): the joint fit finds h within its error, which the horizontal cut alone does not determine.
 
-The joint fit assumes a dilute particle layer and independent heights and radii. **Needs attention** warns
-at vertical reduced χ² > 3 for supplied or Poisson uncertainties. This statistic divides the vertical
-residual sum of squares by the vertical cut's effective degrees of freedom.
-For a fitted upright-cylinder height, a second joint fit uses the full valid vertical range and keeps the
-horizontal data and parameter links. If the selected range is already the full cut, the check uses 2α_c.
-With heights h and h′ on the selected and comparison ranges, respectively, **Needs attention** flags
-|h − h′| > 2√(σ_h² + σ_h′²) or |h − h′| > 0.02|h|. The quadrature sum is a diagnostic scale for
-overlapping fits. The relative threshold also works when a fit has no finite standard error.
+**Warnings.** The joint fit assumes a dilute particle layer and independent heights and radii. **Needs attention**
+shows two warnings:
 
-**BornAgain height benchmark.** The shipped model averages the coherent cylinder amplitude over height in the DA.
-With BornAgain's average layer off, the noise-free D = 14 nm baseline recovered σ_R/R = 0.150005 and h = 5.9997 nm
-for inputs 0.15 and 6 nm at the default cutoff. Earlier fits used the radial coherent term alone. With the average
-layer on, their whole-cut heights were about 3% low at 10% Si-like coverage and 13–60% low at 10–40% Au-like
-coverage. From 2α_c the Au-like heights were 6–20% low. In the noise-free fits, changing the range shifted h
-by 7.6% for 10% Au and 12.0% for 40% Si, relative to the height from 2α_c. For H = 1.5R, both ranges
-overestimated h by about 14%. The original sweep and the later baseline are archived in
-`tools/benchmarks/history/vertical_height_bias.json`.
+- the vertical cut's reduced χ² is above 3 (with supplied or Poisson uncertainties). This statistic divides the
+  vertical residual sum of squares by the vertical cut's effective degrees of freedom;
+- the fitted height of an upright cylinder depends on the range. A second joint fit uses the full valid vertical
+  range, with the horizontal data and parameter links kept (from 2α_c when the selected range is already the full
+  cut). With heights h and h′ on the selected and comparison ranges, the warning shows when
+  |h − h′| > 2√(σ_h² + σ_h′²) or |h − h′| > 0.02|h|. The quadrature sum is a diagnostic scale for overlapping fits;
+  the relative threshold also works when a fit has no finite standard error.
 
-`tools/benchmarks/vertical_height_bias.py` writes the shipped model's results to `vertical_height_bias.json`.
-For each case, both fits use the same counts, first without noise and then for each Poisson seed. Each range
-records the fractional bias (fitted/input − 1) for h, R and D, the vertical reduced χ², the two height estimates
-and their uncertainties (`height_range_rows`), and the program's `needs_attention` messages. For each case,
-`warning_fractions.default` gives the fractions of Poisson draws that triggered the vertical χ² warning, the
-height-range warning or either warning at the page's default cutoff. The noise-free fits have their own warning
-records. The archived sweep predates these measurements of the program's warnings.
+**BornAgain height benchmark** (`tools/benchmarks/vertical_height_bias.py`, the shipped model, ten noise draws per
+case). With BornAgain's average layer off, the noise-free fit recovers σ_R/R = 0.150005 and h = 5.9997 nm for inputs
+of 0.15 and 6 nm. The average layer, which the model leaves out, lowers the height from the whole vertical cut by 3 %
+for a Si-like layer of 10 % coverage, by 17 % at 40 % coverage and by 13–60 % for Au-like layers of 10–40 % coverage.
+From 2α_c, the default, the Au-like heights are 6–20 % low and the dense Si-like height 5.5 % low. The two warnings
+above flag every case with the average layer in every noise draw. Heights correlated with the radii (H = 1.5R) come
+out about 14 % high in both ranges and are not flagged.
 
 Implementation: `src/gimap/features/fitting/domain/joint_fit.py`, `domain/vertical_cut.py`,
 `application/joint_fit.py`, `presentation/single/joint_fit_dialog.py`, `features/analyze/application/both_cuts.py`
@@ -3994,9 +3583,9 @@ Implementation: `src/gimap/features/fitting/domain/joint_fit.py`, `domain/vertic
 
 **Results ▸ Uncertainty and Report… ▸ Posterior check (MCMC)** compares intervals for the solution in Model.
 For Predict parameters it samples the same composition likelihood and prior, starting from the selected solution.
-The reference intervals use draws assigned to that solution (§9.13). Chains that visit another peak can therefore
-give different intervals. Agreement measures sampling accuracy conditional on the assumed
-model. The held-out DWBA coverage in section 9.13 tests how often an interval contains the true radius.
+The reference intervals use the draws assigned to that solution (§9.13), so chains that visit another peak can give
+different intervals. Agreement measures the sampling accuracy for the assumed model. How often an interval holds the
+true value is measured by the benchmarks of section 9.13.
 
 **What is sampled.**
 
@@ -4044,23 +3633,12 @@ R̂. The verdict is *converged* when the kept steps n per ensemble are at least 
 below 1.05. The estimated effective sample count is 2Wn/τ. A ⚠ marks a value whose 68 % interval does not overlap
 the reference. Agreement between ensembles can still miss a mode that neither visited.
 
-**Short two-ensemble check.** With 4000 steps per ensemble, the four-dimensional Gaussian converged both
-before and after the composition and substrate corrections. Its largest marginal quantile error was 0.062σ.
-On the synthetic sphere cut, the manual-fit check reached a maximum R̂ of 1984 and the Predict check reached
-60.0 in both runs. The ensembles failed to converge in both checks, so their quantiles cannot validate the
-intervals. This benchmark initializes both checks from the prior. The separate, single-start importance estimate
-for the Predict comparison had 234.30 effective samples in both versions. [Before and after results](../tools/benchmarks/predict_composition_checks.json)
-
-**Checks of the earlier single-ensemble sampler** (`tools/benchmarks/mcmc_check.json` at commit `73035836`): on a correlated Gaussian in four dimensions (16 walkers, 4000 steps)
-every quantile within 0.11 σ of the exact one; on a synthetic sphere cut (R = 4 nm, σR/R = 0.2, Poisson noise, 120
-points), the check of a Refine fit of R and σR/R against the same posterior integrated on a 241 × 241 grid: the 2.5,
-16, 50, 84 and 97.5 % quantiles within 0.05 σ (R: 68 % interval 3.952–4.000 nm against 3.952–3.999 nm; the fit's
-± 1σ: 3.952–4.000 nm); on the same cut, Predict's posterior of the solution against Predict's own importance sampling
-around it (`posterior.laplace`): the quantiles of R and σR/R within 0.16 of a half 68 % interval (R: 3.928–4.015 nm
-against 3.932–4.016 nm); the beam tail the curve does not need is held by the prior only and its long upper tail
-differs at 97.5 %. On one core a sphere population takes about 1.5 ms per evaluation of a manual fit and 1 ms of
-Predict's likelihood per row: 4000 steps of 16 walkers about 90 s, of 24 walkers on Predict's posterior about 130 s; a
-random cylinder takes 15–200 ms per evaluation, so a check of it takes hours.
+**Checks.** With two ensembles of 4000 steps, the quantiles of a correlated four-dimensional Gaussian are within
+0.062σ of the exact ones. On a synthetic sphere cut, both checks started from the prior did not converge (largest R̂
+1984 for a manual fit and 60 for Predict): read the verdict before the intervals. [Results](../tools/benchmarks/predict_composition_checks.json)
+On one core a sphere population takes about 1.5 ms per evaluation of a manual fit and 1 ms of Predict's likelihood per
+row: 4000 steps of 16 walkers about 90 s, of 24 walkers on Predict's posterior about 130 s. A random cylinder takes
+15–200 ms per evaluation, so a check of it takes hours.
 
 Implementation: `src/gimap/features/fitting/domain/mcmc.py`, `domain/posterior_check.py`,
 `application/posterior_check.py`, `presentation/single/posterior_check.py`
@@ -4079,8 +3657,8 @@ Implementation: `src/gimap/features/fitting/infrastructure/adapters/workflow_v5.
 ### 10.1 Input
 
 Each side of a signed curve is fitted separately (no folding). A side needs 8–1000 points with strictly increasing
-`q > 0`; q = 0 is dropped, nothing is interpolated or invented. q in Å⁻¹ is multiplied by 10; a file whose header
-states no unit is read in the setting (Å⁻¹ by default, the default of the Fit page too). Without σ the curve gets
+`q > 0`; q = 0 is dropped, and nothing is interpolated. q in Å⁻¹ is multiplied by 10; a file whose header states no
+unit is read in the unit of the setting (Å⁻¹ by default, as on the Fit page). Without σ the curve gets
 the estimate of Predict parameters on the Fit page (section 9.13, step 2): the
 points with I ≤ 0 are left out, since ln I has no value there, and
 
@@ -4102,36 +3680,15 @@ number of populations. **Cut geometry and substrate…** selects level 4 with a 
 Otherwise **Cut qz (nm⁻¹)** selects the Born term when ticked and the effective interface when clear.
 The eight most probable solutions of a half are its candidates, with
 the stage *Network + posterior*; each carries its probability, its posterior intervals and flags (`solutions.json`:
-`probability`, `posterior`, `warnings`, `ess`). The run writes the files it wrote before 0.2.0 (`request.json`,
-`batch_summary.json`, `top20_candidates.json`, `fitting_run_summary.json`, and per half `solutions.json`,
-`display.npz`, `fitting_curves.csv`).
+`probability`, `posterior`, `warnings`, `ess`). The run writes `request.json`, `batch_summary.json`,
+`top20_candidates.json` and `fitting_run_summary.json`, and per half `solutions.json`, `display.npz` and
+`fitting_curves.csv`.
 
 ### 10.3 Workflow V5, removed in 0.2.0
 
-Until 0.2.0 the window's default was *General V5*, a TensorFlow workflow (`modules/Fitting_1D_Model/Workflow_v5/
-conditional_v2`) whose networks proposed one of 34 compositions of 1–4 components and their values, which four damped
-Gauss–Newton steps then corrected; *Single RC specialist* (`stable_blue_rc_v1`) did the same for one random cylinder
-and native detector counts. Its validation (its model card) covered simulated curves with the composition and the
-resolution given, and measured a curve-fit rate, not parameters: 114 of 128 curves within logRMSE 0.05.
-
-Both were removed when *Predict parameters* recovered the parameters better on every benchmark. On the 200 held-out
-curves of fit1d's benchmark (section 9.12; `tools/benchmarks/v5_recovery.py`, the true composition given, V5's
-default options, the q > 0 half, sizes compared in V5's convention; V5's record is
-`tools/benchmarks/history/v5_recovery_summary.json`, Predict's column the final run of section 9.13 and its time
-that of `posterior_timing_summary.json`; printed by `tools/benchmarks/summary_tables.py --only v5`):
-
-| level | value | Predict: median / P90 | V5: median / P90 |
-|---|---|---|---|
-| model | R | 0.5 % / 10 % | 31 % / 141 % |
-| model | σR/R | 0.005 / 0.074 | 0.144 / 0.358 |
-| model | D | 0.0 % / 0.4 % | 39 % / 311 % |
-| measured | R | 0.7 % / 14 % | 34 % / 87 % |
-| measured | σR/R | 0.008 / 0.090 | 0.156 / 0.423 |
-| measured | D | 0.1 % / 0.4 % | 15 % / 274 % |
-|  | seconds per curve | 6.2 | 19.8 |
-
-V5 also gave no probability and no interval. The code, the weights and their records remain in the repository's
-history (the last commit that has them: 06e7395), and `v5_recovery.py` runs there.
+Until 0.2.0 the window's default was *General V5*, a TensorFlow workflow, with *Single RC specialist* for one random
+cylinder. *Predict parameters* (section 10.2) replaces both; it recovers the parameters better on fit1d's benchmark
+(`tools/benchmarks/v5_recovery.py`).
 
 ## 11. Series
 
@@ -4141,10 +3698,10 @@ Units follow the source of the curves. In Analyze the x of a map is q (Å⁻¹),
 
 ### 11.1 The series map
 
-Each row of the map is one frame, or one group of summed frames, in list order. Each column is one x value. The cut found on the chosen frame is held for every frame. The map keeps measured values; it does not resample them when it can avoid it.
+Each row of the map is one frame, or one group of summed frames, in list order. Each column is one x value. The cut found on the chosen frame is held for every frame. The map keeps the measured values and resamples only when it must (case 3).
 
 1. When all curves have the same x, the rows are stacked as they are.
-2. When the curves were measured on the same points but some points are missing in some frames (valid detector columns that differ between frames), the union of all x is the grid, and every value goes to the column of its own x. A value that occurs twice at one x (both halves of a signed cut on |x|) gets two columns. This is used only when the union holds at most 1.5 times as many points as the longest curve.
+2. When the curves were measured on the same points but some points are missing in some frames (valid detector columns that differ between frames), the union of all x is the grid, and every value goes to the column of its own x. A value that occurs twice at one x (both halves of a signed cut on |x|) gets two columns. This is used when the union holds at most 1.5 times as many points as the longest curve.
 3. Otherwise the curves are put on one even grid from the lowest to the highest x of all curves, with the median of the curves' usual steps. Each curve is linearly interpolated onto it, never beyond its own ends and never across a hole of its own: an interval wider than 2.5 times the median of the 9 steps around it (a detector gap, the beam stop). Cells outside or inside a hole stay empty (NaN).
 
 A signed cut can be stacked as measured, as either half, folded onto |x|, or as the mean of the halves (6.16) on the |x| of the `x > 0` half. The map carries no σ.
@@ -4167,7 +3724,7 @@ Implementation: `src/gimap/features/analyze/domain/series_map.py`, `src/gimap/fe
 
 Under the map (Analyze ▸ Series), a vertical band selects an x window `[x_lo, x_hi]`. The trace is either the mean intensity in the window or a property of the peak in it.
 
-**Mean intensity.** For every row, the mean of the finite values in the columns with `|x − x_0| ≤ h`, where `x_0` is the window centre and `h` its half width (at least half the median grid step; one grid step by default). When no column lies inside, the nearest point is used, unless the window lies in a hole or beyond the ends of the map; then every row has no value. No value is made up.
+**Mean intensity.** For every row, the mean of the finite values in the columns with `|x − x_0| ≤ h`, where `x_0` is the window centre and `h` its half width (at least half the median grid step; one grid step by default). When no column lies inside, the nearest point is used, unless the window lies in a hole or beyond the ends of the map; then every row has no value.
 
 **Default position.** The first window is put at the x where the last quarter of the rows differs most from the first quarter, in units of the noise of that column:
 
@@ -4194,7 +3751,7 @@ h_pk = max_j z_j                                                                
 
 `(x̄_L, ȳ_L)` and `(x̄_R, ȳ_R)` are the means of the first and of the last `n_e` finite points. So the background line uses 1 point at each end for windows of 5–9 points, 2 for 10–14 points and 3 from 15 points. `z_j` is the net intensity and `w_j` its positive part. A row without anything above the background gives no value. The area uses the unclipped net intensity on the row's own, unevenly spaced x. Position and width are in the unit of the map's x; the area is intensity × that unit.
 
-The window is the same for every row. It does not follow the peak, and no position is predicted from earlier rows. `FWHM_m` is a moment width: the FWHM of a Gaussian that lies well inside the window. It grows with the window (tails, a sloping wing) and has no error. A fitted FWHM with its error comes from the batch fit (section 11.3). The CSV export says this in its header.
+The window is the same for every row and does not follow the peak. `FWHM_m` is a moment width; it equals the FWHM of a Gaussian that lies well inside the window. It grows with the window (tails, a sloping wing) and has no error; the batch fit (section 11.3) gives a fitted FWHM with its error. The CSV export says this in its header.
 
 Implementation: `src/gimap/features/analyze/domain/series_map.py`, `src/gimap/features/analyze/application/series_map.py`
 
@@ -4208,7 +3765,7 @@ Batch Export ▸ Fit ▸ Peaks of the ring regions fits one peak per cut region 
 W = [ max(0, 2 q_lo − q_hi), 2 q_hi − q_lo ]                                                   (11.15)
 ```
 
-The reason in the code: a window of only ± one FWHM leaves too little background to tell it from the tails of a pseudo-Voigt. With the frame's q maps, I(q) is binned straight from the valid pixels above the sample horizon in the region's χ range, at the detector's own q step (at least 10 bins; the width/100 when the step is unknown). The uncertainty is Poisson when the frame holds counts (an integer frame without a background file and without mirror filling, section 6.4); otherwise it is the pixel scatter. With an active intensity correction the variance is scaled as in section 5.5. Without q maps, the region's own I(q) curve is used (2θ converted to q).
+A window of only ± one FWHM would leave too little background to tell it from the tails of a pseudo-Voigt. With the frame's q maps, I(q) is binned straight from the valid pixels above the sample horizon in the region's χ range, at the detector's own q step (at least 10 bins; the width/100 when the step is unknown). The uncertainty is Poisson when the frame holds counts (an integer frame without a background file and without mirror filling, section 6.4); otherwise it is the pixel scatter. With an active intensity correction the variance is scaled as in section 5.5. Without q maps, the region's own I(q) curve is used (2θ converted to q).
 
 **Model.** The single-peak fit of Analyze's cut regions:
 
@@ -4239,7 +3796,7 @@ The start centre is clipped into the window. A failed fit is not remembered, so 
 
 The table gives per frame and peak: q (Å⁻¹) and its error, d (Å), FWHM (Å⁻¹) and its error, area and its error, height, η, χ²_red and the note.
 
-For GISAXS frames, the batch fit instead sends each frame's horizontal cut (the halves chosen) to Predict parameters, as the automatic analysis does (section 8.5): the network chooses among one or two populations of spheres and upright cylinders, with or without a paracrystal, or **Model** gives the composition (a sphere, a random cylinder or a vertical cylinder, with a paracrystal). It needs no starting values, so the starting-value rule applies to the peaks only and every frame is predicted from its own data; nothing is carried from frame to frame. The table has the most probable solution of each frame with its probability, χ²ᵣ (8.6) and log RMSE; lengths are in nm, q in nm⁻¹. From some seconds to a few minutes per frame, depending on the number of points and the computer.
+For GISAXS frames, the batch fit sends each frame's horizontal cut (the halves chosen) to Predict parameters, with the compositions of the automatic analysis (section 8.5); **Model** can give the composition (a sphere, a random cylinder or a vertical cylinder, with a paracrystal). Every frame is predicted from its own data, so the starting-value rule applies to the peaks only. The table has the most probable solution of each frame with its probability, χ²ᵣ (8.6) and log RMSE; lengths are in nm, q in nm⁻¹. A frame takes some seconds to a few minutes, depending on the number of points and the computer.
 
 Implementation: `src/gimap/features/analyze/application/batch_fit.py`, `src/gimap/features/analyze/domain/peak_fit.py`, `src/gimap/features/analyze/domain/regions.py`
 
@@ -4255,7 +3812,7 @@ y_{f,b} ← median_f y_{f,b}         where missing (kept bins only)             
 x_{f,b} = y_{f,b} − ȳ_f            (shape only, default);   x_{f,b} = y_{f,b} otherwise         (11.27)
 ```
 
-Fewer than 3 kept bins is an error ("widen the q range"). Non-positive values (gap codes, zero counts) are missing, not zero. A missing value filled with the median of its bin cannot make a frame look odd. With *shape only* an overall change of intensity (beam current, thickness, exposure) is not a change of structure; the level `ȳ_f` is kept and exported separately.
+Fewer than 3 kept bins is an error ("widen the q range"). Non-positive values (gap codes, zero counts) are missing, not zero. A missing value filled with the median of its bin cannot make a frame look odd. With *shape only* an overall change of intensity (beam current, thickness, exposure) does not count as a change of structure; the level `ȳ_f` is exported separately.
 
 Implementation: `src/gimap/shared/series_stages/comparable.py`
 
@@ -4290,7 +3847,7 @@ T_f     = the n_top bins of largest c², n_top = max(3, round(0.01 N_b))        
 odd  ⇔  RMS_{b∈T_f} c_{f,b} / μ_f > 8,        z = that ratio                                    (11.39)
 ```
 
-`N_b` is the number of kept bins. At an end of the series `c = d` of the one side. A steady change lies between its neighbours and gives `c = 0`; a step matches one side. The threshold 8 is higher than 5 because these bins are the largest of the frame: in noise alone they reach about 3.5 times their usual step (stated in the code as measured on Gaussian and few-count Poisson series of 5–3200 frames). Over the whole curve a spike is diluted: a hot column 25 times too bright in 1 % of the bins is 1.4 in log10 there but only about 0.14 RMS.
+`N_b` is the number of kept bins. At an end of the series `c = d` of the one side. A steady change lies between its neighbours and gives `c = 0`; a step matches one side. The threshold 8 is higher than 5 because these bins are the largest of the frame: in noise alone they reach about 3.5 times their usual step. The spike test is needed because a spike is diluted over the whole curve: a hot column 25 times too bright in 1 % of the bins is 1.4 in log10 there but only about 0.14 RMS.
 
 **Detector or sample.** The difference is called *narrow* ("probably the detector, not the sample") when its `n_top` largest bins hold more than 80 % of its squared sum. The reported q is the median q of those bins.
 
@@ -4350,7 +3907,7 @@ The factor 6 is the variance of a second difference of white noise.
 C_{M−1} − C_M ≥ max( 0.05 · C_1,  P )                                                           (11.48)
 ```
 
-and stop at the first `M` that fails; there is no look-ahead. The 5 % is of the *one-stage* residual `C_1`, not of the residual still left. The reason in the code: real curves are not exactly piecewise straight, so a noise criterion alone would keep splitting. Invented example: with `C_1 = 100`, `C_2 = 17`, `C_3 = 1.0`, `C_4 = 0.45` and `P = 0.3`, the gains are 83, 16 and 0.55 against the bar 5, so 3 stages are suggested. The share `C_M / C_1` is recorded for every `M` (`unexplained_by_stages`), and the person may choose another number of stages.
+and stop at the first `M` that fails, without look-ahead. The 5 % is of the *one-stage* residual `C_1`, not of the residual still left: real curves are not exactly piecewise straight, so a noise criterion alone would keep splitting. Invented example: with `C_1 = 100`, `C_2 = 17`, `C_3 = 1.0`, `C_4 = 0.45` and `P = 0.3`, the gains are 83, 16 and 0.55 against the bar 5, so 3 stages are suggested. The share `C_M / C_1` is recorded for every `M` (`unexplained_by_stages`), and the person may choose another number of stages.
 
 **What changes between stages.** For each stage, the mean of `log10 I` over its kept rows on the compared bins (unfilled values). Between stage `s−1` and `s`:
 
@@ -4361,7 +3918,7 @@ change in percent = 100 · (10^{Δ_b} − 1)                                    
 
 Up to 3 q of the largest positive `Δ` ("grows most") and of the most negative ("falls most") are listed, each more than 2 % of the compared q span from the others. The change is relative to the rest of the curve. Compare shows them in the tooltip of its folded *Odd frames and stages of every series* and writes them into its JSON record (`stage_details`: each `x` with its `percent` of (11.50)). The representative frame of a stage is its kept frame nearest (least squares) to the stage's mean `x`.
 
-A stage is a description, not a phase: a smooth change is also cut where its pace bends. What grows or falls between stages says whether a boundary is structural. Boundaries have no uncertainty attached.
+A stage is a description, not a phase: a smooth change is also cut where its pace bends. What grows or falls between stages says whether a boundary is structural.
 
 Implementation: `src/gimap/shared/series_stages/stages.py`, `src/gimap/features/analyze/application/series_stages.py`
 
@@ -4433,11 +3990,9 @@ Implementation: `src/gimap/features/compare/domain/comparison.py`, `src/gimap/fe
 ### 11.11 Limits of the series methods
 
 - Stages and odd frames are found in frame order. With uneven time steps (skipped frames, a paused acquisition), a change that is steady in time is not straight in frame order and may be cut.
-- Only positive intensities enter (log scale). A q bin with data in fewer than 95 % of the frames is not compared; a long gap in some frames can remove a q region from the comparison.
-- *Shape only* removes the overall level. A real change of the total scattered amount is then only in the level column of the exports.
-- The thresholds (5, 8, 0.8, 5 %, 2×, 2 %) are working choices stated in the code, not derived from a noise model of the user's detector. Stage boundaries, odd-frame flags and groups carry no confidence values.
-- The peak in a window (section 11.2) is a moment estimate with a fixed straight background; its width depends on the window.
-- Compare interpolates linearly in I onto the first series' points. A series measured on a much finer grid is compared only at those points.
+- A long gap in some frames removes its q region from the comparison (the 95 % rule of section 11.4).
+- The thresholds (5, 8, 0.8, 5 %, 2×, 2 %) are working choices stated in the code; no noise model of the user's detector gives them. Stage boundaries, odd-frame flags and groups carry no confidence values.
+- A series measured on a much finer grid than the first series is compared only at the first series' points (section 11.10).
 
 ### 11.12 The timeline: how far each frame is from its neighbour and from a reference frame
 
@@ -4493,16 +4048,9 @@ w(i,j) = exp[−d²(i,j)/(2s²)] × ε(s)^[composition changes]
 
 A composition change means a change in the number of populations of any family or paracrystal status. The penalty is 0.01 at the default log step s = 0.1 (about 10% per selected frame). Larger s permits larger simultaneous changes. At s → ∞ every transition has unit weight, so the path reduces to independent choices. The pair weights are symmetric. Forward–backward sums the globally normalized path probabilities to give the marginal probability of every state, and Viterbi chooses the single most probable path. A state on that path can differ from the largest marginal at its frame. A frame without a prediction separates segments. Choosing a fresh start at each stage also splits the path at the stage boundary.
 
-**Reading the results.** The table and exports distinguish the kept fit from each attempted Predict restart and give the selection rule, single-frame rank, chosen p, maximum p and, for the HMM, the chosen state's marginal. The record identifies the candidate populations and stores all the marginals in single-frame rank order. The trend shows the median and central 68% posterior interval of the selected mode. Its small open symbol, when enabled, marks the mode's least-squares value. These intervals describe uncertainty within that mode. They exclude uncertainty in choosing the mode.
+**Reading the results.** The table and exports distinguish the kept fit from each attempted Predict restart and give the selection rule, single-frame rank, chosen p, maximum p and, for the HMM, the chosen state's marginal. The record identifies the candidate populations and stores all the marginals in single-frame rank order. The trend shows the median and central 68% posterior interval of the selected mode. Its small open symbol, when enabled, marks the mode's least-squares value. These intervals describe the uncertainty within that mode; the choice of the mode is not in them.
 
-**Time per frame on synthetic detectors.** Eight local int32 TIFF frames per size were reduced on an Intel Core i9-13900HX with one worker and one numerical-library thread. Each cut supplied 369 fitted points. One sphere with a paracrystal changed radius from 5 to 7 nm at the prescribed stage boundary, frame 5. Predict ran once per series.
-
-| Detector | Reduction (s/frame) | Cuts (s/frame) | Chained fit (s/frame) | Predict (s/call) | Predict (s/frame, averaged over all 8) |
-|---|---:|---:|---:|---:|---:|
-| 1000 × 1000 | 0.0718 | 0.00467 | 0.167 | 2.58 | 0.323 |
-| 2000 × 2000 | 0.265 | 0.00583 | 0.103 | 2.47 | 0.309 |
-
-Reduction includes TIFF reading and bad-pixel detection. Cuts include the Yoneda search and horizontal and vertical extraction. Fit time includes refinement after a restart. Predict was timed separately in process. The timing excludes frame generation, polling, display, export and process startup. [Benchmark settings and per-frame times](../tools/benchmarks/insitu_online.json)
+**Time per frame on synthetic detectors.** On eight int32 TIFF frames of 1000 × 1000 and of 2000 × 2000 pixels (Intel Core i9-13900HX, one worker and one numerical-library thread, 369 fitted points per cut), reduction, cuts and chained fit together took 0.24–0.37 s per frame, and one Predict call about 2.5 s. [Benchmark settings and per-frame times](../tools/benchmarks/insitu_online.json)
 
 ### 11.14 The results database
 
@@ -4562,15 +4110,11 @@ Implementation: `src/gimap/features/sputter/domain/real_space.py`, `src/gimap/fe
 
 ## 13. Tool windows and Labs
 
-The tools of this chapter work beside the Analyze → Fitting pipeline. Each keeps its own conventions, and some
-of them differ from Analyze on purpose. This chapter states, for each tool, what is computed, in which units and
-pixel convention, what is assumed and what is not corrected. Lengths on the detector are in pixels unless a unit
-is given.
+The tools of this chapter work beside the Analyze → Fitting pipeline and keep their own conventions. For each
+tool this chapter states what is computed, in which units and pixel convention, what is assumed and what is not
+corrected. Lengths on the detector are in pixels unless a unit is given.
 
 ### 13.1 XRR Series Extractor
-
-Integer negative gap codes, non-finite pixels and the detector reader mask are excluded from the ROI; floating negative data remain valid. Motor units support degrees, rad, mrad and urad (µrad/μrad); unknown units and non-finite angles are rejected. The transformed NeXus header centre follows the same displayed coordinates as Analyze.
-
 
 **Purpose and assumptions.** The extractor turns an angle series of area-detector frames into a specular
 reflectivity curve, one point per frame (Tools ▸ XRR Series Extractor). It assumes one geometry:
@@ -4586,7 +4130,8 @@ reflectivity curve, one point per frame (Tools ▸ XRR Series Extractor). It ass
 q_z = 4π sin θ / λ                                                               (13.1)
 ```
 
-This is the specular wavevector transfer (Als-Nielsen & McMorrow, 2011). q_z is in Å⁻¹. It is the vacuum value: refraction in the film is not taken into account.
+This is the specular wavevector transfer (Als-Nielsen & McMorrow, 2011), in Å⁻¹. It is the vacuum value, without
+refraction in the film.
 
 **Position of the specular beam.** A sample turned by θ sends the specular beam to a scattering angle 2θ from the
 direct beam. With rotations, the ROI follows the intersection of the detector plane with the ray `(cos 2θ, 0, −s_dir sin 2θ)` in laboratory (along, right, up) coordinates. The pixel axes convert this intersection to fractional column and row. For the perpendicular detector in orientation 3 this gives
@@ -4604,7 +4149,7 @@ y_s = y_b + s_dir · L · tan(2θ) / p_y                                        
 | s_dir | −1 for **Up in the laboratory frame** (default), +1 for **Down in the laboratory frame** | — |
 | E | photon energy | keV (default 12 keV) |
 
-The horizontal pixel size p_x is recorded but not used: x_s does not change with θ.
+In (13.2) the horizontal pixel size p_x does not enter: x_s does not change with θ.
 
 **Integration window.** The intensity of a point is read in a circular region of interest (ROI) of radius r
 around (x_s, y_s). Pixel (row i, column j) belongs to the ROI when
@@ -4614,8 +4159,8 @@ r = 0:   j = ⌊x_s + ½⌋ and i = ⌊y_s + ½⌋   (the single nearest pixel) 
 r > 0:   (j − x_s)² + (i − y_s)² ≤ r²                                             (13.5)
 ```
 
-Here x_s and y_s are 0-based pixel-centre indices (see below). A pixel is used only when it is finite and not
-in the reader's invalid mask. The point's intensity is then
+Here x_s and y_s are 0-based pixel-centre indices (see below). Invalid pixels, defined below, are left out. The
+point's intensity is then
 
 ```text
 I_sum  = Σ_{valid ROI pixels} I_ij                                               (13.6)
@@ -4626,10 +4171,10 @@ I_mean = I_sum / N_valid                                                        
 valid pixel gives no intensity (an empty CSV cell). A circle of r = 2 centred on a pixel holds 13 pixels; one of
 r = 1 holds 5. The ROI is clipped at the frame edges.
 
-Which pixels are invalid is the reader's decision (section 4.1): in a CBF frame, negative values
-and non-finite values; in a NeXus/HDF5 frame, the rejected `pixel_mask` bits, the maximum of an unsigned type,
-and the parts of a stitched canvas that no module covers. The extractor does not apply Analyze's bad-pixel
-search, drawn masks or thresholds. The XRR adapter additionally excludes negative codes in signed-integer frames; floating negative values remain data.
+A pixel is invalid when it is not finite, when it is negative in an integer frame (a gap code), or when the
+reader masks it (section 4.1); in a NeXus/HDF5 frame the reader masks the rejected `pixel_mask` bits, the maximum
+of an unsigned type and the parts of a stitched canvas that no module covers. Negative values in floating-point
+frames stay data. Analyze's bad-pixel search, drawn masks and thresholds are not applied.
 
 **θ of each frame.** Either a linear sequence or a motor dataset in the NeXus file:
 
@@ -4638,7 +4183,9 @@ search, drawn masks or thresholds. The XRR adapter additionally excludes negativ
 θ_n = v_n · c_unit,         c_unit = 180/(1000π) for "mrad", 180/π for "rad", 1 otherwise   (13.9)
 ```
 
-Defaults: θ_start = 0°, Δθ = 0.01°. In (13.9) the `units` attribute of the dataset decides; `deg`/`degree`/`degrees`, `rad`, `mrad` and `urad` (also µrad/μrad) are supported. Missing units retain the documented degree default; unknown units are rejected.
+Defaults: θ_start = 0°, Δθ = 0.01°. In (13.9) the `units` attribute of the dataset decides:
+`deg`/`degree`/`degrees`, `rad`, `mrad` and `urad` (also µrad/μrad) are read, and a dataset without units is in
+degrees. Unknown units and non-finite angles stop the extraction.
 
 **Pixel coordinates.** The extraction works internally in 0-based pixel-centre indices (the index convention of
 section 1.3: the centre of the first pixel is (0, 0), x is the column, y the row, row 0 at the top). The window
@@ -4649,7 +4196,9 @@ shows and accepts canonical pixel coordinates, as Analyze and Geometry Calibrati
 **Where the geometry comes from.** Each value is tagged with its source. A value typed by the user is never
 replaced. Otherwise the metadata of the first frame (`file`) replaces the last applied Geometry Calibration
 (`calibration`), which replaces the built-in default (`default`). A calibration made on frames of another shape
-contributes only its energy. Without any beam centre, the frame centre is used (`image center`).
+contributes only its energy. Without any beam centre, the frame centre is used (`image center`). A beam centre
+from a NeXus header is taken in the displayed (transformed) coordinates, as in Analyze; a stitched module set has
+no single header centre.
 
 **Worked example (invented geometry).** E = 10 keV gives λ = 1.23984 Å by (1.1). For θ = 0.5°, (13.1) gives
 q_z = 0.0884475 Å⁻¹. With L = 2 m, p_y = 172 µm and s_dir = −1, (13.3) moves the specular beam by −202.97 px from the
@@ -4663,14 +4212,13 @@ extractor applies none of the following:
 - monitor, flux or exposure-time normalisation;
 - polarisation, absorption or resolution corrections;
 - refraction (q_z of (13.1) is the vacuum value);
-- a θ offset (sample misalignment) or detector tilt.
+- a θ offset (sample misalignment).
 
-No uncertainty is written. For photon counts and `Sum`, √I_sum is the Poisson estimate; GIMaP does not write it. No reflectivity model (for example Parratt, 1954) is fitted: the tool only produces the curve.
+No uncertainty is written; for photon counts and `Sum`, √I_sum is the Poisson estimate. No reflectivity model (for
+example Parratt, 1954) is fitted.
 
-Two limits of the inputs are known. The beam centre stored in the header of a NeXus file written by the Lambda
-server is taken without the transpose and flip applied to the frame, so it can be misplaced (User Manual,
-known limitations). A CBF frame without an energy in its header takes the energy of a NeXus file found in a
-sibling folder of the scan; the record then marks the energy as `file` without naming that file.
+A CBF frame without an energy in its header takes the energy of a NeXus file found in a sibling folder of the
+scan; the record then marks the energy as `file` without naming that file.
 
 Implementation: `src/gimap/features/xrr/domain/reflectometry.py` (equations), `src/gimap/features/xrr/application/use_cases.py`
 (θ, one frame at a time), `src/gimap/features/xrr/infrastructure/adapters/detector_series.py` (series, angle units),
@@ -4679,8 +4227,8 @@ Implementation: `src/gimap/features/xrr/domain/reflectometry.py` (equations), `s
 ### 13.2 SEM Particle Analysis
 
 **Purpose.** The tool measures projected particle sizes in an electron micrograph, or reads sizes measured
-elsewhere, and can compare their radius distribution with a distribution predicted by 2D Prediction (Tools ▸ SEM
-Particle Analysis). Measurements are made on the pixel grid of the original image.
+elsewhere, and compares their radius distribution with one predicted by 2D Prediction (Tools ▸ SEM Particle
+Analysis). Measurements are made on the pixel grid of the original image.
 
 **Image input.** Pillow reads the image. A palette image is first converted to RGB. A colour image becomes grey
 by Rec. 709 luminance, alpha ignored:
@@ -4789,10 +4337,9 @@ angle φ to the pixel rows (0 ≤ φ ≤ 45°) has length cos φ + (√2 − 1) 
 P / P_true → (4/π)(2√2 − 2) ≈ 1.0548,    C_disc → 1 / 1.0548² ≈ 0.899             (13.24)
 ```
 
-for large digitised discs. A synthetic check with discs of radius 5–100 px at random sub-pixel centres gave a
-median C of 0.90 at every radius, with a spread of 0.84–0.95 at 5 px, 0.89–0.92 at 20 px and ±0.002 at 100 px.
-A digitised square gives about 0.81 (ideal π/4 = 0.785). A minimum circularity above about 0.85 therefore
-rejects digitised discs as well.
+for large digitised discs. On synthetic discs of radius 5–100 px the median C is 0.90 at every radius (spread
+0.84–0.95 at 5 px). A digitised square gives about 0.81 (ideal π/4 = 0.785). A minimum circularity above about
+0.85 therefore rejects digitised discs too.
 
 **Rejection.** An object can be rejected for one or more reasons, all recorded:
 
@@ -4839,18 +4386,17 @@ The mass outside [r_min, r_max] is recorded. In the *Paper display* the SEM hist
 prediction is drawn on its own axis with its minimum subtracted and its peak scaled to the largest p_k of (13.27);
 the record then says `display_model_is_probability: false`.
 
-**The prediction handed over by 2D Prediction.** It is accepted only when the module's row axis has the key `r`
-and the unit `nm`. The radius distribution is the row marginal of the predicted matrix (equation (13.38)), on the
+**The prediction handed over by 2D Prediction.** It is accepted when the module declares its row axis with the key
+`r` and the unit `nm`. The radius distribution is the row marginal of the predicted matrix (equation (13.38)), on the
 bin centres of the module's axis (equation (13.37)). The comparison holds a frozen copy with the module, model
 path, preprocessing steps and settings, runtime and input files.
 
 **What is and is not computed.** GIMaP computes the counts (detected, accepted, rejected, invalid pixels), the
-per-particle values of (13.18)–(13.23) and the binned probabilities of (13.27) and (13.30). It computes no
-summary statistic: no mean, median, standard deviation, polydispersity index, distribution fit or confidence
-interval, and no test of agreement between SEM and prediction. Such numbers must be computed from
-`sem_particles.csv` and their method stated. The two distributions are also different quantities: SEM counts
-particles in a small field of view, the scattering prediction describes the illuminated area as the module's
-model defines it.
+per-particle values of (13.18)–(13.23) and the binned probabilities of (13.27) and (13.30). It computes no summary
+statistic (mean, median, standard deviation, polydispersity index, distribution fit, confidence interval) and no
+test of agreement between SEM and prediction; compute such numbers from `sem_particles.csv` and state the method.
+The two distributions are different quantities: SEM counts particles in a small field of view, and the scattering
+prediction describes the illuminated area as the module's model defines it.
 
 Implementation: `src/gimap/features/sem/domain/segmentation.py` (Otsu, watershed, measurements, perimeter),
 `src/gimap/features/sem/domain/label_measurements.py` (StarDist and existing labels),
@@ -4869,9 +4415,9 @@ NeXus/HDF5 container with one dataset per frame.
 
 **Pixels without data.** For each frame the converter first decides which pixels hold no data, with the validity
 rule (4.1) of Analyze: a pixel holds no data when its value is not finite, when the reader masks it, or when it is
-negative and the stored type is not floating point. The reader's mask holds the rejected NeXus `pixel_mask` bits, the maximum of an unsigned type, the parts of a
-stitched canvas that no module covers. Negative values in integer data are the gap and
-bad-pixel codes of counting detectors (Pilatus −1, −2).
+negative and the stored type is not floating point. The reader's mask holds the rejected NeXus `pixel_mask` bits,
+the maximum of an unsigned type and the parts of a stitched canvas that no module covers. Negative values in
+integer data are the gap and bad-pixel codes of counting detectors (Pilatus −1, −2).
 
 **Values and type.** The reader returns float32 values together with the stored type (`stored_dtype`). The data mode
 decides what is written:
@@ -4885,13 +4431,13 @@ decides what is written:
 
 In the default mode an integer frame keeps its stored type and values, its stored negative codes included. A pixel
 without data that has no stored code (NaN from the reader) is written as −1. An unsigned frame that needs such a
-code is written in the smallest signed type that holds its values, except in HDF5, where it keeps its type and the
-largest value of the type marks the pixel (the NeXus convention). A floating-point frame, or a frame whose values
-are no longer whole numbers, is written as float with NaN on every pixel without data. CBF holds integers only:
-there float values are truncated to int32 and a pixel without data is −1; a negative value (−1 or less) then reads
-back as a gap code under rule (4.1), so CBF suits counts only. `pixel_values` counts those pixels
-(`negative_data_read_as_gap_codes`), the values truncated (`values_truncated`) and every pixel that reads back
-without data (`pixels_read_back_without_data`).
+code is written in the smallest signed type that holds its values; in HDF5 it keeps its type, and the largest value
+of the type marks the pixel (the NeXus convention). A floating-point frame, or a frame whose values are no longer
+whole numbers, is written as float with NaN on every pixel without data. CBF holds integers only: float values are
+truncated to int32 and a pixel without data is −1. A negative value (−1 or less) then reads back as a gap code under
+rule (4.1), so CBF suits counts only. `pixel_values` counts those pixels (`negative_data_read_as_gap_codes`), the
+values truncated (`values_truncated`) and every pixel that reads back without data
+(`pixels_read_back_without_data`).
 
 ```text
 I_u16 = round(65534 · clip((I − I_min) / (I_max − I_min), 0, 1)),   65535 on pixels without data   (13.31)
@@ -4905,16 +4451,15 @@ without data, as the largest value of an unsigned type does in NeXus.
 An HDF5 output, and the one-file container while all frames have one size, also marks every pixel without data in
 the NeXus `pixel_mask` (bit 0, "gap") at `/entry/instrument/detector/pixel_mask`.
 
-**What reads back as it was.** On the repository's frame `TestSAXSdata/…_00005.cbf` (int32, 197 849 pixels with gap
-codes) a round trip through every output format gave:
+**What reads back as it was.** A round trip of the repository's frame `TestSAXSdata/…_00005.cbf` (int32 with gap
+codes) through every output format gives:
 
-- default mode: int32 with the codes −1 and −2 in HDF5, TIFF, CBF and NumPy; GIMaP reads the same 197 849 pixels as
-  without data;
+- default mode: int32 with the codes −1 and −2 in HDF5, TIFF, CBF and NumPy; GIMaP reads the same pixels as without
+  data;
 - 32-bit float: NaN on those pixels (CBF: int32 with −1); the same pixels read back as without data;
 - the uint16 modes: the pixels without data hold 65535. HDF5 reads them back as without data (its `pixel_mask` and
-  the NeXus convention): the same 197 849 pixels after (13.31); after (13.32) also the 334 pixels whose values were
-  clipped to 65535. TIFF, CBF and NumPy files carry no mask, and their readers take 65535 as a value: there
-  the pixels without data read back as valid pixels of 65535.
+  the NeXus convention); after (13.32) so are the pixels whose values were clipped to 65535. TIFF, CBF and NumPy
+  files carry no mask, so there the pixels without data read back as valid pixels of 65535.
 
 **Records.** The reader's metadata, with the source, the 1-based frame number, the output name, shape and type, goes
 into the header (`GIMaP_metadata`, ASCII JSON for CBF, EDF and TIFF) or the HDF5 attribute `metadata_json`, and into
@@ -4934,9 +4479,9 @@ shows what it predicts: a joint size distribution or a set of sample parameters 
 no geometry: no beam centre, no q map and no physical model enter the computation. The result is what the module's
 network was trained to output, on the axes the module declares.
 
-**Input.** Only CBF frames are read, directly with fabio (Knudsen et al., 2013), as float32 of the stored values. The shared reader is not
-used: there is no P03 transform, no header mask and no gap-code mask, and negative gap codes stay in the image. A
-stack of N consecutive files (sorted by name; in a folder batch, each group of *Files per prediction*) is summed:
+**Input.** Only CBF frames are read, directly with fabio (Knudsen et al., 2013), as float32 of the stored values.
+The shared reader of Analyze is bypassed: no P03 transform and no mask are applied, and negative gap codes stay in
+the image. A stack of N consecutive files (sorted by name; in a folder batch, each group of *Files per prediction*) is summed:
 
 ```text
 I = Σ_{f=1…N} I_f                                                                (13.33)
@@ -4944,7 +4489,7 @@ I = Σ_{f=1…N} I_f                                                            
 
 **Module.** A module is a folder under `modules/` with a `module.yaml` and its own `preprocess.py`. GIMaP calls the
 entry named in `preprocess.entry` with the image, the configured steps and parameters, and the module folder. The
-steps are therefore the module's code, not GIMaP's. The shipped modules use these steps:
+steps are the module's own code. The shipped modules use these steps:
 
 | Module folder | Steps (in order) | Model input | Output |
 |---|---|---|---|
@@ -5014,21 +4559,20 @@ a_i = min + (i + ½)(max − min)/n,    i = 0 … n − 1                       
 P_row(i) = Σ_j M_ij,    P_col(j) = Σ_i M_ij                                       (13.38)
 ```
 
-The marginals of (13.38) are not normalised. When a module declares no axes, GIMaP uses the key `r`, unit `nm` and
-0.05–15 nm for the rows, and the key `h` with 0.05–15 nm for the columns. For `Au_Silicon_15nm`, the YAML comment
-says the network was trained with rows = R and columns = H/2, and the column axis shows the full height H
-(0.1–30 nm).
+The marginals of (13.38) are not normalised. When a module declares no axes, GIMaP draws the rows with the key `r`,
+unit `nm` and 0.05–15 nm, and the columns with the key `h` and 0.05–15 nm; these placeholder axes are not a
+physical scale. For `Au_Silicon_15nm`, the YAML comment says the network was trained with rows = R and
+columns = H/2, and the column axis shows the full height H (0.1–30 nm).
 
 **Points to confirm with the model authors.**
 
-- The Ag and Cu distribution modules declare no axes, so they are shown, and handed to the SEM comparison, on the
-  default 0.05–15 nm axes that the module never stated.
-- The four SF parameters have no units in the YAML; nm for `t_Cu`, `t_polymer`, `D` and `sigma` is likely but not
-  stated.
+- The Ag and Cu distribution modules declare no axes, so they are shown on the placeholder axes and are not handed
+  to the SEM comparison.
+- The four SF parameters have no units in the YAML; nm for `t_Cu`, `t_polymer`, `D` and `sigma` is likely.
 
-**What is not done.** No uncertainty is given for a prediction. The input is not corrected (no flat field, no
-background, no transform), and the preprocessing differs between modules; a module is valid only for frames like
-those it was trained on.
+**What is not done.** A prediction has no uncertainty. The input is not corrected (no flat field, background or
+transform), and the preprocessing differs between modules. Use a module only for frames like those it was trained
+on.
 
 Implementation: `src/gimap/features/prediction/infrastructure/adapters/fabio_images.py` (input, stack sum),
 `src/gimap/features/prediction/infrastructure/adapters/module_preprocessing.py` (module entry, shape),
@@ -5038,7 +4582,8 @@ Implementation: `src/gimap/features/prediction/infrastructure/adapters/fabio_ima
 
 ### 13.5 Trainset Build (Labs)
 
-This workspace has been removed from GIMaP. Its simulation and training methods are not part of the released application. Existing research files are not changed.
+This workspace has been removed from GIMaP. Models are trained outside GIMaP and imported into 2D Prediction
+(section 13.4); existing research files are not changed.
 
 ## 14. Provenance and reproducibility
 
@@ -5065,9 +4610,9 @@ Every curve export of Analyze writes `<stem>_analysis.json` beside the curve fil
 |---|---|
 | Program and source | `software` (the record name `GIMaP Analyze 1`), `software_version` (the release, for example `GIMaP v0.2.0`; section 14.5), `source_file`, `frame_index`, `frame_count`, `frame` (1-based label), `summed_frames` (file and index of each frame added) |
 | Detector | `detector_name`, `frame_shape`, `measurement` (GISAXS or GIWAXS) |
-| AI assistant | When the assistant exports the curves, `assistant.provider` identifies the service and `assistant.model` identifies the model used in the run. |
-| Geometry | `geometry` (pixel sizes, distance, beam centre, wavelength, α_i; `rot1_rad`, `rot2_rad`, `rot3_rad`: the detector's rotations of section 3.7; the `dropped_…` and `flat_detector_…` fields of 0.1 are `null`), `geometry_convention` (canonical pixel-corner frame, row 0 at the top, kinematic (vacuum) grazing-incidence q of a flat detector, tilted by the rotations, in Å⁻¹), `instrument_profile` (name, source, time of update; the source begins with `automatic analysis:` when Run Automatic Analysis or `tools/gimap_agent.py` chose the geometry and with `assistant:` when the AI did, as it did for both before 0.2.0) |
-| Statistics and binning | `error_model` (`poisson`, `scaled_poisson`, `pixel_scatter` or `sigma_frame`, the model used for the frame as described in section 6.4; `null` without a reduction), `binning` (GIWAXS: `radial_bins`, `q_min`, `q_max`, `bin_width` and `unit` of the fixed-edge bins of every I(q), `bins_chosen`, `radial_points` (the points of I(q) after merging), `merge` (the rule of section 6.5), `chi_bin_deg` and `chi_merge`; GISAXS: one point per detector column or row, no merging) |
+| AI assistant | `assistant.provider` and `assistant.model`: the service and the model of the run, when the AI exported the curves |
+| Geometry | `geometry` (pixel sizes, distance, beam centre, wavelength, α_i; `rot1_rad`, `rot2_rad`, `rot3_rad`: the detector's rotations of section 3.7; the `dropped_…` and `flat_detector_…` fields of 0.1 are `null`), `geometry_convention` (canonical pixel-corner frame, row 0 at the top, kinematic (vacuum) grazing-incidence q of a flat detector, tilted by the rotations, in Å⁻¹), `instrument_profile` (name, source, time of update; the source begins with `automatic analysis:` when Run Automatic Analysis or `tools/gimap_agent.py` chose the geometry and with `assistant:` when the AI did; records before 0.2.0 write `assistant:` for both) |
+| Statistics and binning | `error_model` (`poisson`, `scaled_poisson`, `pixel_scatter` or `sigma_frame`: the model used for the frame, section 6.4; `null` without a reduction), `binning` (GIWAXS: `radial_bins`, `q_min`, `q_max`, `bin_width` and `unit` of the fixed-edge bins of every I(q), `bins_chosen`, `radial_points` (the points of I(q) after merging), `merge` (the rule of section 6.5), `chi_bin_deg` and `chi_merge`; GISAXS: one point per detector column or row, no merging) |
 | Time | `created`: the UTC time the record was written (ISO 8601, for example `2026-11-01T05:52:31+00:00`) |
 | Corrections | `corrections` (every setting; `flat_field`: file, path, SHA-256, normalisation mean, floor, pixels left out, shape and how it was applied, section 4.10, `null` without one), `intensity_corrections` (GIWAXS: how applied, formulas, parameters), `bad_pixels_left_out`, `drawn_mask_pixels`, `pixels_filled_from_mirror` |
 | Results | `markers` (beam centre, horizon row, cut bands, Yoneda estimate, I(χ) window, peaks …), `curves` (key, title, x label, region of each curve), `messages` |
@@ -5075,9 +4620,14 @@ Every curve export of Analyze writes `<stem>_analysis.json` beside the curve fil
 
 The numbers are those of the reduction; `geometry` is the geometry that was applied.
 
-`reproduction` identifies the source revision, input files and numerical settings for replay. Its reference columns preserve the original array type and bytes in little-endian order (zlib, then Base64). Replay reads the detector files, checks their SHA-256 digests, and runs the reduction with the recorded geometry and corrections.
+`reproduction` names the source revision, input files and numerical settings for replay. Its reference columns keep
+the original array type and bytes in little-endian order (zlib, then Base64). Replay reads the detector files,
+checks their SHA-256 digests and runs the reduction with the recorded geometry and corrections.
 
-A manual fit record preserves the starting model, the points in fit order, their units, uncertainties, per-point q resolution when supplied, and the weighting used. It records how many local restarts were accepted and their evaluation budget. A joint fit also stores the geometry of each vertical cut. Predict parameters uses the recorded seed, options and network weights.
+A manual fit record keeps the starting model, the points in fit order, their units and uncertainties, the per-point
+q resolution when supplied, and the weighting used. It records how many local restarts were accepted and their
+evaluation budget. A joint fit also stores the geometry of each vertical cut. Predict parameters uses the recorded
+seed, options and network weights.
 
 For a reference column `r` and a reproduced column `a`, the maximum relative difference is `max_i (|a_i − r_i| / |r_i|)`. Equal entries contribute zero, including matching infinities and paired NaNs. A nonzero value against a zero reference, or unmatched nonfinite values, give `"infinity"`. A missing column or unequal row count gives `null`. The separate `identical` test compares array types and bytes, so it distinguishes positive and negative zero. The record gives the Python, NumPy and SciPy versions used for the calculation.
 
@@ -5085,14 +4635,15 @@ An NXcanSAS export (`<stem>_nxcansas.h5`, NeXus definition NXcanSAS 1.1; Batch E
 line `curves_nxcansas.h5`) carries the same record, with the key `curve` (key, title, x label and region of that
 curve) added, as the JSON `data` of an NXnote `gimap_record` in each entry's SASprocess. Each SASentry holds one
 curve against q: `Q` in 1/angstrom exactly as reduced (a horizontal cut keeps its signed q_y; the entry's `title`
-says which q), `I` in `1/cm` for absolute intensity and `arbitrary` otherwise, `Idev` = statistical σ in the same units, and `mask` (1 where Q or I is not
-finite); SASinstrument holds the wavelength (`incident_wavelength`, angstrom), the sample–detector distance (`SDD`,
-m) and the pixel size, and SASsample `pitch` (degree) is αi, the rotation about the horizontal axis normal to the
-beam in NeXus axes. Curves against χ or 2θ are not written there: Q of NXcanSAS is a momentum transfer. Fitting's
-fits (Save ▸ Data and Fit, an In-situ series' Fits as NXcanSAS) write the points fitted and the model at their Q as two
-entries each, the SASentry attribute `gimap_role` saying `data` or `model` (an attribute NeXus allows beside the
-definition's; other readers ignore it); opened again, such a file offers its measured curves only (files written
-before say it by the ends of their titles, ": the points fitted" and ": the model").
+says which q), `I` in `1/cm` for absolute intensity and `arbitrary` otherwise, `Idev` = statistical σ in the same
+units, and `mask` (1 where Q or I is not finite). SASinstrument holds the wavelength (`incident_wavelength`,
+angstrom), the sample–detector distance (`SDD`, m) and the pixel size; SASsample `pitch` (degree) is αi, the
+rotation about the horizontal axis normal to the beam in NeXus axes. Curves against χ or 2θ are not written, since
+Q of NXcanSAS is a momentum transfer. Fitting's fits (Save ▸ Data and Fit, an In-situ series' Fits as NXcanSAS)
+write the points fitted and the model at their Q as two entries each; the SASentry attribute `gimap_role` says
+`data` or `model` (NeXus allows such an extra attribute, and other readers ignore it). Opened again, such a file
+offers its measured curves only (older files mark the two entries by the ends of their titles, ": the points
+fitted" and ": the model").
 
 Implementation: `src/gimap/features/analyze/application/export_record.py`, `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`;
 NXcanSAS: `src/gimap/shared/nxcansas.py`, `src/gimap/features/analyze/application/nxcansas_export.py`.
@@ -5111,8 +4662,8 @@ UTF-8 without a byte-order mark; GIMaP's own symbols are written in ASCII (`1/A`
   `# GIMaP Analyze fit input (q in 1/A)`, the source, frame and curve lines, `# observation:` (JSON) and
   `# columns:`. The observation says how the points were measured: `source` (`native_detector_columns` for
   GISAXS, `radial_bins` for GIWAXS), `file_format`, `intensity_unit` (`counts_per_pixel` by default, cm⁻¹ for absolute intensity), `counting_model_valid`
-  (true only for photon counts in the sense of section 6.4, without GIWAXS intensity corrections and without a
-  reference-peak normalisation; whether σ may be taken from Poisson statistics), `threshold_enabled` (a value range
+  (whether σ may be taken from Poisson statistics: true for photon counts in the sense of section 6.4, without
+  GIWAXS intensity corrections or a reference-peak normalisation), `threshold_enabled` (a value range
   was set), `gap_guard_px`, `summed_frames`, for GISAXS the halves a fit should take when they were chosen, and for a
   frame of a multi-frame source `frame_index` (0-based) and `frame_count`. The file is written under a temporary name
   and renamed when complete.
@@ -5218,17 +4769,19 @@ Where an algorithm draws random numbers, the seed is fixed, so the same input an
 StarDist inference and the 2D Prediction networks draw no random numbers in GIMaP. The seeds are part of the code
 or of the saved settings. Research run records state their seed policy; not every runtime exposes a controllable seed.
 
-The 1D Predict request and summary also record the SHA-256 of the network's record, which names the SHA-256 of the weights, checked when they are loaded. Requests preserve normalized options and state the random-seed policy: Predict parameters uses a fixed seed (0), so a run repeats with the same curve, settings and network. (The physical fit and fit1d, which used their runtime defaults without a fixed seed, were removed in 0.2.0.)
+The 1D Predict request and summary also record the SHA-256 of the network's record, which names the SHA-256 of the
+weights, checked when they are loaded. The request keeps the normalised options and states the seed policy:
+Predict parameters uses a fixed seed (0), so a run repeats with the same curve, settings and network.
 
 ### 14.9 What the records do not yet contain
 
-These gaps are known at the time of writing. A reader who needs the information must keep it separately.
+Keep the following information separately when you need it.
 
-- Current Sputter, AI assistant, CLI and 1D Predict run records include `software_version`. Older records may lack it. Fitting model files and masks/cuts settings still do not identify a release.
-- The 2D Prediction record has no hash of the model weights, the YAML file or `preprocess.py`, and it names the
-  steps but does not copy their parameters (crop margins, thresholds); these stay in the module's YAML file, which
-  can change later. Axes filled in by default (section 13.4) are not marked as such. The copy handed to the SEM
-  comparison does carry the parameters.
+- Fitting model files and masks/cuts settings name no release. Sputter, AI assistant, command-line and 1D Predict
+  run records name it (`software_version`); older records may lack it.
+- The 2D Prediction record has no hash of the model weights, the YAML file or `preprocess.py`. It names the steps
+  without their parameters (crop margins, thresholds), which stay in the module's YAML file and can change later;
+  the copy handed to the SEM comparison carries them. Axes filled in by default (section 13.4) are not marked.
 - The XRR record does not name the companion NeXus file from which a CBF series took its energy.
 - The SEM record holds no summary statistics, because none are computed (section 13.2).
 - The uint16 modes of the Format Converter write pixels without data as 65535; outside HDF5, which marks them in
@@ -5254,7 +4807,11 @@ window's records:
 | Results | the decisions with their reasons (`decisions`), the open questions (`needs_attention`), the steps, the peaks and rings (GIWAXS) or `gisaxs` (cuts, symmetry axis, halves, length scale, fit), `tables` and `folder` (the frame's folder, relative to the summary); in `summary.json` each frame also has `outputs` (the files written) |
 | Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²ᵣ (`chi2`, with `points`: `fitted`, `given`, `below_window`, `unusable`), `flags`, `warnings` and `more_warnings` (the flags as sentences: of the particles and the solution, and of background, beam tail and resolution) and `intervals` (median, 68 % and 95 % limits; the texts print the refined value with the 68 % limits); `fitted_points` repeats the points of the fit; `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points; `substrate_level` and `sphere_model` record the approximation used. At level 2 (`Born term at the cut's q_z`), `cut_qz` holds the vacuum `q_z_inv_nm` and its inputs `alpha_i_deg`, `alpha_f_deg` and `wavelength_A`. Level 4 also records `substrate` (material or optical constants and any layers) and `grazing` (angles and wavelength in nm). When the file optics cannot be used, `substrate_metadata_warning` and the Decisions entry explain why. At level 1 (`effective interface (q_z = 0)`), `cut_qz` is `null`. Section 9.13 explains the q_z·R flags |
 
-- With `gimap reproduce report.json --out check`, the original frames supply the measurements again. The comparison covers reduction columns, measured angles, and the structural sections present in the report. GIWAXS includes assignments, orientation verdicts and fitted parameters, and unit cells. GISAXS includes the fitted solutions and their evidence probabilities or BIC weights. Runtime and file relocation are excluded from the structural comparison. Each section has a digest in `comparison.json`; `reproduced_report.json` contains its values.
+- `gimap reproduce report.json --out check` measures the original frames again and compares the reduction columns,
+  the measured angles and the structural sections of the report: for GIWAXS the assignments, orientation verdicts,
+  fitted parameters and unit cells; for GISAXS the fitted solutions with their evidence probabilities or BIC
+  weights. Run times and relocated file paths are not compared. `comparison.json` gives a digest per section, and
+  `reproduced_report.json` holds the values.
 - `summary.json` is one object: `software_version`, `created`, `options`, `arguments` (one sentence per pattern or
   folder among the arguments: how many files it stood for) and `frames`, the list of the frame reports without
   `tables`, `analysis_record` and `options`. Before 0.2.0 the file was that list alone;
@@ -5266,8 +4823,7 @@ window's records:
   wavelength, α_i, detector tilt, and α_c when q_z is refracted). `fit_solutions.csv` then says what the table is
   and the units of its columns. One function writes these lines for the command line and for the files Analyze
   exports in the window (`export_record.provenance_lines`; there the first line reads `(Analyze)`).
-- `geometry` holds the values q was computed with, to 15 significant digits (the distance q was computed
-  with, not its four-digit rounding); `report.md` rounds them for reading. For GISAXS its `beam_center_px[0]` is
+- `geometry` holds the values q was computed with, to 15 significant digits; `report.md` rounds them for reading. For GISAXS its `beam_center_px[0]` is
   the symmetry axis the run moved the centre to. `calibration` and `tables.geometry_used` hold the calibration as
   it was read and first applied, before that refinement (`gisaxs.symmetry` has both: `initial_x_px`, `x_px`, and
   `not_applied` when the axis was too far to be used). `geometry.critical_angle_deg` is `null` when no critical
@@ -5292,48 +4848,90 @@ Implementation: `src/gimap/app/headless_record.py`, `src/gimap/features/assistan
 
 ## 15. What GIMaP does not model
 
-This chapter collects the limits stated in chapters 1 to 14, so that they can be checked in one place. Each item names the section that states it in full. An item is listed once, under the first heading it fits.
+This chapter lists the limits of chapters 1 to 14 in one place. Each item appears once, under the first heading it
+fits, and names the section that states it in full.
 
 ### 15.1 Scattering physics
 
-- **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value unless Analyze is given the film's critical angle (q_z of one film, section 2.6), and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
-Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10), the four-term DWBA on a known bare or layered substrate for a horizontal cut (section 9.17) and the vertical cut of a fit of several curves (section 9.18); these models assume smooth interfaces. The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). GIWAXS intensity corrections and orientation fits can use refracted waves in a uniform film (sections 5.4, 7.11). The XRR extractor uses vacuum q_z (section 13.1). The Sputter island height H(t) uses the refracted wavevector transfer for fringe minima (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
-- **Absolute intensity.** A secondary standard sets the absolute scale for its measurement conditions (section 4.12). In grazing incidence, footprint, illuminated volume and interface effects require a sample-specific treatment. The scale parameter Int in Fitting is an empirical amplitude because the form factors use P(0) = 1 (section 9.4).
+- **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value unless
+  Analyze is given the film's critical angle (q_z of one film, section 2.6). The reflected-wave terms of the
+  distorted-wave Born approximation are left out (sections 2.5, 8.6, 9.2), except in Fitting's optional two-path
+  sphere with a free effective reflection coefficient (section 9.10), the four-term DWBA on a known bare or layered
+  substrate for a horizontal cut (section 9.17) and the vertical cut of a fit of several curves (section 9.18);
+  these models assume smooth interfaces. The Yoneda band is located empirically (sections 6.7, 8.1). GIWAXS
+  intensity corrections and orientation fits can use refracted waves in a uniform film (sections 5.4, 7.11). The Sputter island height H(t) uses the refracted wavevector transfer for fringe minima (section 12.12). The GIWAXS
+  and GISAXS reports say in their *Decisions* that q is kinematic and give the q_z shift of up to about k sin α_i
+  that refraction causes near or below the film's critical angle; in GISAXS the Yoneda band shifts most (sections
+  7.9, 8.6).
+- **Absolute intensity.** A secondary standard sets the absolute scale for its own measurement conditions; in
+  grazing incidence the footprint, illuminated volume and interface effects need a sample-specific treatment
+  (section 4.12). Fitting's scale Int is an empirical amplitude, since the form factors use P(0) = 1 (section 9.4).
 - **Lorentz weighting.** The optional detector Jacobian applies to integrated crystalline intensities (§5.6).
-- **Texture.** The analysis assumes fibre symmetry. The systematic range tests the angular cuts, background, attenuation and edge fills (§§7.7, 7.11). A population concentrated beyond the measured angles can give f outside these scenarios.
+- **Texture.** The analysis assumes fibre symmetry. Its systematic range varies the angular cuts, background,
+  attenuation and edge fills; a population concentrated beyond the measured angles can give f outside that range
+  (§§7.7, 7.11).
 - **Phases.** No phase is assigned. Lamellar and hexagonal series are reported as hints (section 7.4).
-- **GISAXS models.** The 1D models of a horizontal cut depend on the magnitude of q_y only; q_z at the Yoneda row and the Yoneda enhancement are not modelled (sections 8.6, 9.2), except in the four-term DWBA with a known substrate (section 9.17). A vertical cut is modelled only in a fit of several curves, for spheres and upright cylinders, at one in-plane q and without a q resolution or the specular rod (section 9.18). The model adds the empirical beam tail after smearing the horizontal particle terms (sections 8.6, 9.2 and 9.13). Fitting and Predict parameters use sizes by number unless a component's Sizes says otherwise (sections 8.5, 9.3). Without a given composition the automatic analysis lets the network choose among one or two populations of spheres and upright cylinders; random cylinders and three populations only when given (section 8.6).
-- **Cylinder height from a joint fit.** The bare-substrate DWBA omits the particle layer's effective refractive index and assumes independent radii and heights. Dense or high-Z layers can give heights that are too low. Radius–height correlation can bias the height even with a good fit (section 9.18).
-- **Paracrystal spread.** Until 0.2.0 the quick fit and 1D Predict reported σ_D/D, √(2π) ≈ 2.51 times smaller than the relative standard deviation of the neighbour distance σnn/D that Fitting and Predict parameters now use (sections 9.5, 13.5); the 1D Predict window gives both.
+- **GISAXS models.** The 1D models of a horizontal cut depend on |q_y| only: q_z at the Yoneda row and the Yoneda
+  enhancement are not modelled (sections 8.6, 9.2), except in the four-term DWBA with a known substrate (section
+  9.17). A vertical cut is modelled only in a fit of several curves, for spheres and upright cylinders, at one
+  in-plane q, without q resolution or the specular rod (section 9.18). The empirical beam tail is added after the
+  horizontal particle terms are smeared (sections 8.6, 9.2, 9.13). Fitting and Predict parameters use sizes by
+  number unless a component's Sizes says otherwise (sections 8.5, 9.3). Without a given composition the automatic
+  analysis lets the network choose among one or two populations of spheres and upright cylinders; random cylinders
+  and three populations are fitted only when given (section 8.6).
+- **Cylinder height from a joint fit.** The bare-substrate DWBA leaves out the particle layer's effective
+  refractive index and assumes independent radii and heights. Dense or high-Z layers can give heights that are too
+  low, and radius–height correlation can bias the height even with a good fit (section 9.18).
+- **Paracrystal spread.** Results of the quick fit and 1D Predict written before 0.2.0 give σ_D/D, √(2π) ≈ 2.51
+  times smaller than the relative standard deviation of the neighbour distance σnn/D used now (section 9.5); the
+  1D Predict window gives both.
 
 ### 15.2 Instrument and geometry
 
-- **Detector tilt and rotation.** Rings weakly constrain tilt at SAXS distances (1σ of 0.15° for rot1 and 0.18° for rot2 on the public AgBh frame) and leave rot3 undetermined. Check rot3 against the observed GISAXS rod and horizon (section 3.7). The initial ring search uses circles. Automatic row bands warn when the horizon changes by more than half a row across the image. Mirror filling and XRR project rays onto the detector plane (sections 4.8, 13.1).
-- **Sample orientation.** A single image measures the sample roll relative to the calibrated detector axes. An error in detector rot3 can mimic sample roll. Ring symmetry measures the inclination of the fibre axis. Assigning this inclination to sample roll requires an independently resolved surface feature or a stated surface-normal fibre assumption (section 2.3).
+- **Detector tilt and rotation.** At SAXS distances rings constrain the tilt weakly (1σ of 0.15° for rot1 and
+  0.18° for rot2 on the public AgBh frame) and leave rot3 undetermined; check rot3 against the observed GISAXS rod
+  and horizon (section 3.7). The initial ring search uses circles. Automatic row bands warn when the horizon
+  changes by more than half a row across the image.
+- **Sample orientation.** A single image measures the sample roll relative to the calibrated detector axes, so an
+  error in rot3 looks like sample roll. Ring symmetry gives the inclination of the fibre axis; reading it as sample
+  roll needs an independently resolved surface feature or the stated assumption that the fibre axis is the surface
+  normal (section 2.3).
 - **Pixels.** A pixel is represented by its centre: there is no parallax, no sensor thickness and no pixel splitting (sections 2.5, 6.1).
-- **Beam.** Divergence, energy bandwidth and footprint are not modelled (section 2.5). The XRR extractor applies no footprint correction (section 13.1).
-- **Calibration.** Wavelength and pixel sizes are inputs. Calibrant constants are fixed without a temperature correction, and ring radii use a 1 px grid. Agreement with the calibration image alone cannot identify the correct calibration for the sample. `.poni` orientations 1–4 are supported (section 3.6).
-- **Instrumental broadening.** Run Automatic Analysis subtracts no instrumental width, so every automatic Scherrer size is a lower bound. Footprint, divergence, distance, pixel size, binning, strain and paracrystalline disorder all broaden a peak and none is subtracted (section 7.8).
+- **Beam.** Divergence, energy bandwidth and footprint are not modelled (section 2.5).
+- **Calibration.** Wavelength and pixel sizes are inputs. Calibrant constants are fixed without a temperature
+  correction, and ring radii use a 1 px grid. A good fit to the calibrant image does not show that the calibration
+  belongs to the sample's measurement. `.poni` orientations 1–4 are supported (section 3.6).
+- **Instrumental broadening.** Run Automatic Analysis subtracts no broadening (instrument, footprint, divergence,
+  distance, pixel size, binning, strain, paracrystalline disorder), so every automatic Scherrer size is a lower
+  bound (section 7.8).
 
 ### 15.3 Statistics and uncertainties
 
-The calibration record carries the standard-derived scale uncertainty. Curve files give the statistical error of each point conditional on that scale. Comparisons of data on the same scale share the calibration error σ_A_abs of equation (4.19) (section 4.12).
+Curve files give the statistical error of each point for a fixed absolute scale; the scale uncertainty from the
+standard is in the calibration record. Data on the same scale share its error σ_A_abs of equation (4.19) (section
+4.12).
 
 - **Choice of the error model.** Poisson errors (scaled when a flat field or the GIWAXS intensity corrections are on) are used only for frames stored as integers, with no background subtracted and no mirror filling. The choice follows the stored type, not the physical meaning of the values (sections 4.1, 6.4).
 - **Independence.** Pixels are taken as independent: charge sharing and correlated noise are not modelled, and no covariance between the points of a curve is computed (section 6.4).
 - **Pixel scatter.** Real structure inside a bin inflates the pixel-scatter error; after mirror filling it is somewhat too small (section 6.4).
 - **Maps.** q maps, the cake and the series maps carry no σ (sections 6.8, 11.1).
-- **Fitted parameters.** All parameter errors are linearised (Wald) errors, not profile intervals. The GIWAXS peak errors are only inflated by χ²_red, the Fitting errors are scaled by it in both directions (sections 7.4, 9.8). σ_f of the Hermans factor is statistical only: it propagates the bin errors (Poisson counting errors or the pixel scatter), not the background, the window, the geometry or the bins next to the sample horizon (section 7.7).
+- **Fitted parameters.** All parameter errors are linearised (Wald) errors, not profile intervals. χ²_red only
+  inflates the GIWAXS peak errors and scales the Fitting errors in both directions (sections 7.4, 9.8). σ_f of the
+  Hermans factor propagates only the bin errors (Poisson counting errors or the pixel scatter), not the background,
+  the window, the geometry or the bins next to the sample horizon (section 7.7).
 - **Geometry in the uncertainties.** No reported ± of a peak position, a d-spacing, a size or f contains the uncertainty of the beam centre, the distance or α_i, or the q_z shift of refraction; the GIWAXS report says so in *Decisions* (section 7.9).
 - **Quantities without an uncertainty.** The symmetry centre (section 8.2), the reference-peak position (section 6.10), the moment width of a peak in a window (section 11.2), stage boundaries, odd-frame flags and Compare groups (section 11.11), XRR points (section 13.1), 2D Prediction outputs (section 13.4).
-- **Scores.** The scores of the automatic analysis and the 1D Predict window (χ²ᵣ, RMS/σ, logRMSE) are not probabilities, and mixture weights are not volume or mass fractions. The probabilities and intervals of Predict parameters are those of Fitting's model and its prior (section 9.13): physics outside the model is not in them, and its benchmarks are simulated curves (an independent model, BornAgain). The Sputter reliability numbers come from simulation within the hemisphere model and are exploratory (sections 12.5, 12.14).
+- **Scores.** The scores of the automatic analysis and the 1D Predict window (χ²ᵣ, RMS/σ, logRMSE) are not
+  probabilities, and mixture weights are not volume or mass fractions. The probabilities and intervals of Predict
+  parameters hold within Fitting's model and its prior (section 9.13); its benchmarks are simulated curves of an
+  independent model (BornAgain). The Sputter reliability numbers come from simulation within the hemisphere model and are exploratory (sections 12.5, 12.14).
 - **SEM.** No summary statistic, distribution fit or test of agreement is computed (section 13.2).
 
 ### 15.4 Data preparation
 
 - **Bad pixels.** Only single hot and dead pixels and scattered pixels of defective lines are found; clusters and the bad pixels of a background frame are not searched for (section 4.4).
 - **Mirror filling** assumes a pattern symmetric in ±q_∥ (section 4.8).
-- **Gaps.** Analyze never interpolates across gaps (sections 6.1, 11.1). Compare does interpolate across a gap inside a frame (section 11.10).
+- **Gaps.** Analyze never interpolates across gaps (sections 6.1, 11.1); Compare interpolates across a gap inside a frame (section 11.10).
 - **Reference-peak corrections.** The peak position is limited by the bin width, and the distance scaling is a small-angle relation made exact by iteration (section 6.10).
 
 ### 15.5 Series and Sputter
@@ -5343,14 +4941,15 @@ The calibration record carries the standard-derived scale uncertainty. Curve fil
 
 ### 15.6 Tool windows and Labs
 
-- **XRR Series Extractor.** No background subtraction, footprint, monitor, polarisation, absorption, resolution or refraction correction, and no θ offset. Angle units and transformed header coordinates are checked as described in section 13.1.
+- **XRR Series Extractor.** No background subtraction, no footprint, monitor, polarisation, absorption, resolution
+  or refraction correction, and no θ offset (section 13.1).
 - **SEM Particle Analysis.** The scale comes only from the user. The default StarDist model is not validated for SEM. The circularity of a digitised disc is about 0.90, not 1. A SEM distribution and a scattering prediction are different quantities (section 13.2).
 - **Format Converter.** The uint16 modes lose the marking of pixels without data outside HDF5 (section 13.3).
 - **2D Prediction.** No geometry and no correction enter; the preprocessing is the module's own; axes that a module does not declare are filled in by default; the units of the SF parameters are not declared (section 13.4).
 
 ### 15.7 Records
 
-Analyze reduction records preserve the masks described in section 14.4. Fit records preserve the solver settings, including the seed for Predict parameters. Other tools and older exports have the limitations listed in section 14.9.
+What the records do not contain is listed in section 14.9.
 
 ## References
 
