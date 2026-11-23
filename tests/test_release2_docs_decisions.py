@@ -608,8 +608,8 @@ def test_the_estimated_distance_is_filled_in_as_the_documents_say(tmp_path: Path
     )
 
     section = " ".join(_part(_text(MANUAL), "## 4. Geometry and calibration").split())
-    for said in ("On a new installation the field starts at *Optional*", "replaces any typed value, including 0",
-                 "If neither source supplies a distance, a value you typed stays",
+    for said in ("On a new installation the field starts at *Optional*", "replaces a typed value, 0 included",
+                 "if neither gives a distance, your value stays",
                  "a NeXus file can; the distance in a CBF or EDF header is not used"):
         assert said in section, said
     fixed = " ".join(_part(_text(CHANGELOG), "### Fixed before the release", "### ").split())
