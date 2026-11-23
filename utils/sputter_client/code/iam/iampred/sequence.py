@@ -19,22 +19,52 @@ HUBER = 2.5
 SPAN = 0.5
 T_MIN = 0.25
 FAR = (2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64)
+FRINGE_QY = (0.1, 0.4)
+FRINGE_AF = (0.12, 1.0)
+FRINGE_MIN = 8
 
 _W = {}
 
 
+def fringe_setup(ctx):
+    'The fixed part of the fringe term of one window: the band, the measured profile and the detrend projection'
+    ok = ctx.f.ok
+    af, q = np.asarray(ctx.s.af, float), np.asarray(ctx.s.q, float)
+    E = np.where(ok, ctx.w["E"], 0.0)
+    band = (q > FRINGE_QY[0]) & (q < FRINGE_QY[1])
+    den = E[:, :, band].sum((0, 2))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        pd = np.where(ok, ctx.w["Y"], 0.0)[:, :, band].sum((0, 2)) / den
+    sel = np.isfinite(pd) & (pd > 0) & (af > FRINGE_AF[0]) & (af < FRINGE_AF[1])
+    n = int(sel.sum())
+    if n < FRINGE_MIN:
+        return None
+    X = np.vander(af[sel], 4)
+    return dict(band=band, den=den[sel], sel=sel, lpd=np.log(pd[sel]), P=np.eye(n) - X @ np.linalg.pinv(X), n=n, E=E)
+
+
+def fringe_rows(fr, mu, ok):
+    "The detrended log ratio measured / model of the fringe term (length fr['n']; rms = the fringe residual)."
+    pm = (np.where(ok, mu, 0.0) * fr["E"])[:, :, fr["band"]].sum((0, 2))[fr["sel"]] / fr["den"]
+    return fr["P"] @ (fr["lpd"] - np.log(np.maximum(pm, 1e-30)))
+
+
 def _open(args):
     'Worker: build the contexts of the windows this process owns (the raw bins are dropped afterwards).'
-    cfg, scan, times = args
+    cfg, scan, times, *rest = args
     from . import adapter as A
     sc = A.ScanContexts(cfg, scan, times)
     _W["ctx"] = {float(t): c for t, c in zip(times, sc.ctx)}
+    _W["fringe"] = float(rest[0]) if rest else 0.0
+    _W["fr"] = {float(t): fringe_setup(c) for t, c in zip(times, sc.ctx)} if _W["fringe"] > 0 else {}
     s = sc.scan
     meta = dict(t_dep=float(s.t_dep), rate_h=float(s.rate_h),
                 t_sput=(float(s.cfg["t_sput"]) if "t_sput" in s.cfg else None),
                 metal=str(getattr(s, "metal", "") or ""), sub=str(getattr(s, "sub", "") or ""))
     _W["meta"] = meta
-    wins = [dict(t=float(t), n=int(c.f.ok.sum()), t_mean=float(c.t_mean), h_nom=c.h_nom_ctx, names=list(c.names),
+    nfr = {t: (fr["n"] if fr is not None else 0) for t, fr in _W["fr"].items()}
+    wins = [dict(t=float(t), n=int(c.f.ok.sum()) + nfr.get(float(t), 0), n_ok=int(c.f.ok.sum()), n_fringe=nfr.get(float(t), 0),
+                 t_mean=float(c.t_mean), h_nom=c.h_nom_ctx, names=list(c.names),
                  lb=np.asarray(c.f.lb, float), ub=np.asarray(c.f.ub, float), mass=len(c.pnames) > len(c.names))
             for t, c in zip(times, sc.ctx)]
     return wins, meta
@@ -52,13 +82,16 @@ def _eval(args):
     'Worker: forward model of parameter sets of its windows.'
     scan, jobs, save, lite = args
     meta = _W["meta"]
+    lam = _W.get("fringe", 0.0)
     out = []
     for t, xs, sh in jobs:
         ctx = _W["ctx"][t]
         ok = ctx.f.ok
         n = int(ok.sum())
+        fr = _W.get("fr", {}).get(t)
+        nfr = fr["n"] if fr is not None else 0
         m_ = len(xs)
-        R = np.empty((m_, n)); rep = np.full((m_, len(ctx.cfg["reported"])), np.nan)
+        R = np.empty((m_, n + nfr)); rep = np.full((m_, len(ctx.cfg["reported"])), np.nan)
         d5 = np.full(m_, BIG); hh = np.full(m_, np.nan); good = np.zeros(m_, bool)
         for i in range(m_):
             try:
@@ -70,7 +103,9 @@ def _eval(args):
                 v, d = ctx.dev5(mu)
                 if not np.isfinite(v):
                     raise FloatingPointError("dev5 is not finite")
-                R[i] = (np.sign(ctx.w["Y"] - mu * ctx.w["E"]) * np.sqrt(d))[ok] / math.sqrt(n)
+                R[i, :n] = (np.sign(ctx.w["Y"] - mu * ctx.w["E"]) * np.sqrt(d))[ok] / math.sqrt(n)
+                if nfr:
+                    R[i, n:] = math.sqrt(lam / nfr) * fringe_rows(fr, mu, ok)
                 rep[i] = ctx.reported(mo, p, h); d5[i] = v; hh[i] = h; good[i] = True
                 if save and i == 0:
                     np.savez_compressed(Path(save) / "mu" / f"{scan}_{t:g}_seq.npz", mu=mu.astype(np.float32))
@@ -93,7 +128,7 @@ def dhuber(u):
 class Sequence:
     'The windows of one scan in persistent worker processes. cross(): forward model of complete parameter vectors'
 
-    def __init__(self, cfg, scan, times, workers, data=None, shadow=None, log=print):
+    def __init__(self, cfg, scan, times, workers, data=None, shadow=None, log=print, fringe_weight=0.0):
         import scipy.sparse as sp
         self.sp = sp
         self.scan, self.log = scan, log
@@ -105,7 +140,9 @@ class Sequence:
         self.owner = [k % n for k in range(W)]
         mpc = mp.get_context("spawn")
         self.pools = [mpc.Pool(1, initializer=runner._init, initargs=(env,)) for _ in range(n)]
-        res = [self.pools[i].apply_async(runner.Guard(_open), ((cfg, scan, [self.t[k] for k in range(W) if self.owner[k] == i]),))
+        self.fringe = max(float(fringe_weight), 0.0)
+        res = [self.pools[i].apply_async(runner.Guard(_open), ((cfg, scan, [self.t[k] for k in range(W) if self.owner[k] == i])
+                                                               + ((self.fringe,) if self.fringe > 0 else ()),))
                for i in range(n)]
         info = {}
         for r in res:
@@ -264,10 +301,23 @@ class Sequence:
         return np.concatenate(self._R + [self.pen_mono(self._rep), self.pen_far(self._rep), self.pen_smooth(self._rep),
                                          self.pen_prior(self._rep, self._h)])
 
+    def fringe_residuals(self):
+        'Per window the fringe residual of the current solution (None without fringe rows).'
+        out = []
+        for k, w in enumerate(self.win):
+            nf_ = w.get("n_fringe", 0)
+            out.append(float(np.sqrt(np.sum(self._R[k][w["n_ok"]:] ** 2) / self.fringe)) if nf_ and self.fringe > 0 else None)
+        return out
+
     def state(self):
         pm, pf, ps = self.pen_mono(self._rep), self.pen_far(self._rep), self.pen_smooth(self._rep)
         pp = self.pen_prior(self._rep, self._h)
-        return dict(sum_dev5=float(self._d5.sum()), median_dev5=float(np.median(self._d5)),
+        extra = {}
+        if self.fringe > 0:
+            fr = [v for v in self.fringe_residuals() if v is not None]
+            extra = dict(fringe_weight=self.fringe, median_fringe=float(np.median(fr)) if fr else None,
+                         penalty_fringe=float(self.fringe * sum(v * v for v in fr)))
+        return dict(**extra, sum_dev5=float(self._d5.sum()), median_dev5=float(np.median(self._d5)),
                     penalty=float(pm @ pm + pf @ pf + ps @ ps + pp @ pp), penalty_monotone=float(pm @ pm),
                     penalty_far=float(pf @ pf), penalty_smooth=float(ps @ ps), penalty_prior=float(pp @ pp))
 
@@ -393,6 +443,7 @@ class Sequence:
                  f"penalty monotone {s['penalty_monotone']:.3f} "
                  + (f"far {s['penalty_far']:.3f} " if self.sf > 0 else "") + f"smooth {s['penalty_smooth']:.3f}"
                  + (f" prior {s['penalty_prior']:.3f}" if self.prior is not None else "")
+                 + (f" fringe {s['penalty_fringe']:.3f} (median {s['median_fringe']:.3f})" if self.fringe > 0 and s.get("median_fringe") is not None else "")
                  + (f"  kappa {math.exp(sh[0]):.3f}  dt {sh[1]:+.2f} s" if ns else "") + f"  ({time.time() - self.t0:.0f} s)"
                  + (f"  columns {sum(len(c) for c in used)}/{W * nc}" if self.JAC_REFRESH > 1 else ""))
         if self.on_iter is not None:
@@ -427,6 +478,8 @@ def refine(sq, x0, reps, mono, tol, weight, smooth, smooth_weight, nfev, outdir,
         x = xs[k] if sh is None else np.r_[xs[k], math.log(sq._h[k] / max(sq.win[k]["h_nom"], 0.002))]
         wins[t] = dict(dev5=float(sq._d5[k]), reported=sq._rep[k].tolist(), x=np.asarray(x, float).tolist(),
                        h_m=float(sq._h[k]))
+        if sq.fringe > 0:
+            wins[t]["fringe"] = sq.fringe_residuals()[k]
     dec = {}
     for q, sc, name in sq.mono:
         d = sq.decrease(sq._rep, q)
@@ -456,6 +509,8 @@ def refine(sq, x0, reps, mono, tol, weight, smooth, smooth_weight, nfev, outdir,
         coupling.append("smooth in ln time: " + ", ".join(m for _, _, m in sq.smooth))
     if sq.prior is not None:
         coupling.append(f"growth-law prior of {sq.prior.system} ({sq.prior.n_scans} scans)")
+    if sq.fringe > 0:
+        coupling.append(f"fringe term (weight {sq.fringe:g})")
     summ = dict(n_windows=sq.W, workers=sq.n, max_nfev=int(nfev), nfev=int(r.nfev), njev=int(r.njev),
                 status=int(r.status), message=str(r.message), weight=float(weight),
                 monotone=[m for _, _, m in sq.mono], start=start, end=end, decreases=dec, far=far,
@@ -469,5 +524,8 @@ def refine(sq, x0, reps, mono, tol, weight, smooth, smooth_weight, nfev, outdir,
                                                               residuals=[round(float(v), 4) for v in sq.prior.residuals(float(sq._h[k]), sq._rep[k], bool(sq.after[k]))])
                                                          for k in range(sq.W)])
                        if sq.prior is not None else None),
+                fringe=(dict(weight=sq.fringe, q_y_nm=list(FRINGE_QY), alpha_f_deg=list(FRINGE_AF),
+                             windows_with_rows=int(sum(1 for w in sq.win if w.get("n_fringe", 0))))
+                        if sq.fringe > 0 else None),
                 seconds=time.time() - t0)
     return wins, summ

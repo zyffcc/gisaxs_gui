@@ -213,6 +213,23 @@ def figure(path, rows, main, title):
     plt.close(fig)
 
 
+def model_limits(family, rows):
+    'Lines of "模型没有描述的部分" (2026-11-23, results/iam/conform_20261123 rounds 5-9) for a metal on a polymer film'
+    kind = family.split("_")[0]
+    if kind not in ("cu", "polyag"):
+        return []
+    out = ["## 模型没有描述的部分", "",
+           "- **聚合物里的金属**：模型里没有扩散进聚合物的金属，侧视图也不画。"
+           + ("Cu／聚合物上检验过两种形式：膜下埋入聚合物的团簇在单窗拟合里改善不够；Cu-聚合物复合层＋Cu 分相在整条扫描"
+              "联合精修里数据不选用。这些数据分辨不出聚合物里的金属——不是说没有，而是这里的 GISAXS 定不了它。" if kind == "cu" else
+              "Ag／聚合物上没有检验过这一项。")]
+    if any(r.get("stage") == "film" for r in rows):
+        out.append("- **连续膜的厚度条纹**：成膜以后，图样上沿出射角的厚度干涉条纹（水平条纹）在整条扫描联合精修里没有模拟出来"
+                   "（试过：打开整膜密度起伏、加条纹代价、膜窗的起点变体）。这些窗的拟合偏差有一部分来自它；膜厚的读数直接来自条纹，"
+                   "不受影响，模型的底层厚度在这里是最接近的描述。")
+    return out + [""]
+
+
 def markdown(path, scan, fam_zh, rows, main, summ):
     keys = [("d_film_nm", "膜厚 (nm)", 1), ("h_grain_nm", "晶粒高度 (nm)", 1), ("density", "致密度 h/d", 2), ("yoneda_rel", "光学致密度 (α/α_c)²", 2),
             ("L_lateral_nm", "横向尺度 2π/q (nm)", 0)] + [(c, lab, 2 if not c.endswith("_nm") else 1) for c, lab in main]
@@ -263,6 +280,7 @@ def markdown(path, scan, fam_zh, rows, main, summ):
             "- **阶段**由读数划分：只有晶粒高度条纹是分立岛；两种条纹都有是聚并；只剩膜条纹是成膜。没有读数的窗按名义沉积量划分。",
             f"- 本扫描 {n} 个窗：拟合好 {ng}、一般 {nf}、差 {n - ng - nf}。",
             "- 逐窗数值在 `report.csv`（每个量四列：值、下限、上限、来源）；全部细节在 `windows.csv`。", ""]
+    txt += model_limits(summ.get("family", ""), rows)
     Path(path).write_bytes("\n".join(txt).encode("utf-8"))
 
 

@@ -84,6 +84,8 @@ SPUTTER_ZH = {
     "film": "膜",
     "side view (cut)": "侧视（截面）",
     "polymer (thickness not to scale)": "聚合物（厚度不按比例）",
+    "Metal inside the polymer: not resolved by these data, not drawn": "聚合物里的金属：这些数据分辨不出，没有画",
+    "Metal inside the polymer: not in the model, not drawn": "聚合物里的金属：模型里没有，没有画",
     "top view": "俯视",
     "not measured": "未测得",
     # -- Details: the tabs about the result shown (views/sputter_page_view.py, result_tabs.py) ------------------------

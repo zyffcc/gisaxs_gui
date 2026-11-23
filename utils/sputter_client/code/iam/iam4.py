@@ -277,6 +277,9 @@ class Model4c(Model4b):
     rough = None
 
 
+    conform = None
+
+
     pfilm = os.environ.get("IAM_PFILM", "0") == "1"
 
 
@@ -316,13 +319,19 @@ class Model4c(Model4b):
         nt = m.n_top if getattr(m, "n_top", None) is not None else len(slab)
         if self.rough is None or len(slab) <= nt:
             return 0.0
-        kzs, A, B, ts = stack(self.a_all, slab + self._below(), self.d_sub)
+        below = self._below()
+        kzs, A, B, ts = stack(self.a_all, slab + below, self.d_sub)
         Et = A[nt + 1] + B[nt + 1]
-        P = np.abs(Et[0] * Et[1:]) ** 2
         dd = slab[nt][0] - (slab[nt - 1][0] if nt > 0 else 0.0)
         Ar, xi, H = self.rough
         C = Ar * xi ** 2 / (1 + (self.q * xi) ** 2) ** (1 + H)
-        return RE ** 2 * abs(dd / M.pref(M.LAM)) ** 2 * P[:, None] * C[None, :]
+        if self.conform is None:
+            P = np.abs(Et[0] * Et[1:]) ** 2
+            return RE ** 2 * abs(dd / M.pref(M.LAM)) ** 2 * P[:, None] * C[None, :]
+        Eb = A[len(slab) + 1] + B[len(slab) + 1]
+        d_under = below[0][0] if below else self.d_sub
+        amp = dd * (Et[0] * Et[1:]) + float(self.conform) * (d_under - slab[-1][0]) * (Eb[0] * Eb[1:])
+        return RE ** 2 * (np.abs(amp / M.pref(M.LAM)) ** 2)[:, None] * C[None, :]
 
     def _nodes(self, m, slab0):
         nt = m.n_top if getattr(m, "n_top", None) is not None else len(slab0)

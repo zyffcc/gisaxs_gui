@@ -46,6 +46,13 @@ ROUGH = os.environ.get("IAM_ROUGH", "0") == "1"
 if ROUGH:
     PAR = PAR + [("lnAr", np.log(1e-4), np.log(1e4), np.log(float(os.environ.get("IAM_AR0", "1")))),
                  ("lnxi", np.log(5.0), np.log(500.0), np.log(50.0)), ("Hr", 0.1, 1.0, 0.5)]
+
+
+CONFORM = os.environ.get("IAM_CONFORM", "0") == "1"
+if CONFORM and not ROUGH:
+    raise SystemExit("IAM_CONFORM needs IAM_ROUGH=1")
+if CONFORM:
+    PAR = PAR + [("kc", 0.0, 1.0, float(os.environ.get("IAM_KC0", "0.0")))]
 if SCALE:
     PAR = PAR + [("nut", 0.0, 1.0, 1.0)]
 if SCALE2:
@@ -198,6 +205,8 @@ class Fit:
             self.mdl.nu_L = p["nul"]
         if ROUGH:
             self.mdl.rough = (float(np.exp(p["lnAr"])), float(np.exp(p["lnxi"])), float(p["Hr"]))
+        if CONFORM:
+            self.mdl.conform = float(p["kc"])
         if BASE:
             self.mdl.bg = p["bg"]
         if BASEVOID:

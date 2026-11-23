@@ -9,7 +9,8 @@ line says whether the grains are separate, coalescing or a connected network. A 
 layer, or grains joined into a network across the view - is drawn as the film itself, not as grain outlines: the top
 view is the height of the metal (base plus the caps; darker = higher) with the holes of a network in the colour of
 what is under it, the side view the cut through the film along the middle of the top view, and the line says the
-film's thickness and the grains on top (or that the network crosses the view).
+film's thickness and the grains on top (or that the network crosses the view). On a polymer film a line under the
+views says that no metal inside the polymer is drawn (the model has none; for Cu the data did not resolve it).
 
 **A porous TiO₂ layer.** Left a cross-section of the layer to scale: TiO₂ particles of the model's radius, the metal in
 the pores as a tint whose strength follows its Gaussian in depth, the cap layer on the share of the particle tops it
@@ -52,6 +53,12 @@ X_LABEL = "x (nm)"
 Y_LABEL = "y (nm)"
 HEIGHT_LABEL = "height (nm)"
 POLYMER_NOTE = "polymer (thickness not to scale)"
+# 2026-11-23: the model has no metal inside the polymer, so none is drawn; for Cu on polymer two forms were tested with
+# the analysis package's research code (buried clusters, a composite base with Cu domains) and the data resolved neither
+POLYMER_METAL = {"tested": "Metal inside the polymer: not resolved by these data, not drawn",
+                 "untested": "Metal inside the polymer: not in the model, not drawn"}
+TESTED_IN_POLYMER = ("Cu",)
+"""Metals whose metal-inside-the-polymer forms were tested on polymer films."""
 BASE_NOTE = "continuous layer {thickness} nm"
 DRAWN_NOTE = ("Grains placed at random around the distance D; radius, size distribution, height and base layer are "
               "those of the solution: {name}")
@@ -74,8 +81,8 @@ POROUS_NOTE = ("Of the {deposited} nm deposited, as dense-metal thickness: islan
                "pores {pores} nm. TiO₂ particles of {particle} nm radius; positions drawn at random: {name}")
 NO_GRAINS = ("This solution has no arrangement to draw: the package gave neither a grain radius and distance nor where "
              "the metal sits in a porous layer.")
-TEMPLATES = (SIDE_TITLE, TOP_TITLE, X_LABEL, Y_LABEL, HEIGHT_LABEL, POLYMER_NOTE, BASE_NOTE, DRAWN_NOTE, GROWN_NOTE,
-             CHANNEL_FILM, CHANNEL_NETWORK,
+TEMPLATES = (SIDE_TITLE, TOP_TITLE, X_LABEL, Y_LABEL, HEIGHT_LABEL, POLYMER_NOTE, *POLYMER_METAL.values(), BASE_NOTE,
+             DRAWN_NOTE, GROWN_NOTE, CHANNEL_FILM, CHANNEL_NETWORK,
              *ARRANGEMENTS.values(), ON_LAYER, *GRAINS_ON_LAYER.values(), LAYER_TITLE, ZOOM_TITLE, DEPTH_LABEL, PORE_NOTE, CAP_NOTE, NO_CAP,
              POROUS_NOTE, NO_GRAINS)
 RELIEF = 0.25
@@ -211,7 +218,7 @@ class RealSpacePicture:
         self.arrangement = arrangement(space, grains)
 
         if space.continuous or self.arrangement == "network":   # a connected film: the film itself, not grain outlines
-            self._film(space, grains, side, top, fill, edge, polymer, substrate, name, growing, ceiling)
+            self._film(space, grains, side, top, fill, edge, polymer, substrate, name, growing, ceiling, metal)
             return
 
         # side view: substrate (or polymer film), base layer, grains (touching caps as one piece)
@@ -257,9 +264,10 @@ class RealSpacePicture:
         figure.text(0.96, 0.93, words, ha="right", va="bottom", fontsize=8.5, fontweight="bold")
         note = GROWN_NOTE if growing is not None else DRAWN_NOTE
         figure.text(0.07, 0.03, text(note, name=name), ha="left", va="bottom", fontsize=7.5)
+        self._polymer_metal(polymer, metal)
 
     def _film(self, space, grains, side, top, fill, edge, polymer, substrate, name, growing=None,
-              ceiling: float = 0.0) -> None:
+              ceiling: float = 0.0, metal: str = "") -> None:
         """A connected film: the top view is the height of the metal (darker = higher), the holes of a network in the
         colour of what is under it; the side view is the cut through the film along the middle of the top view."""
         from matplotlib.colors import LinearSegmentedColormap
@@ -305,6 +313,13 @@ class RealSpacePicture:
         figure.text(0.96, 0.93, words, ha="right", va="bottom", fontsize=8.5, fontweight="bold")
         note = GROWN_NOTE if growing is not None else DRAWN_NOTE
         figure.text(0.07, 0.03, text(note, name=name), ha="left", va="bottom", fontsize=7.5)
+        self._polymer_metal(polymer, metal)
+
+    def _polymer_metal(self, polymer: bool, metal: str) -> None:
+        """On a polymer film, the line under the views that says the metal inside the polymer is not drawn and why."""
+        if polymer:
+            words = POLYMER_METAL["tested" if metal in TESTED_IN_POLYMER else "untested"]
+            self.figure.text(0.07, 0.075, tr(words), ha="left", va="bottom", fontsize=7.5, style="italic")
 
     # -- a porous TiO₂ layer ----------------------------------------------------------------------------------------
     def _porous(self, space, metal: str, name: str) -> None:

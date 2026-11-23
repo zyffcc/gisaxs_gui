@@ -826,6 +826,23 @@ def test_coalescing_grains_and_a_porous_layer_are_drawn_as_they_are(tmp_path):
     _close(page)
 
 
+def test_the_side_view_says_that_metal_inside_a_polymer_is_not_drawn(tmp_path):
+    """On a polymer film a line under the views says that no metal inside the polymer is drawn: for Cu the data did not
+    resolve it (tested with the analysis package), for the other metals the model has none; on Si no such line."""
+    page = _page(tmp_path)
+    page.show()
+    cases = (("Cu", "PEO", "Metal inside the polymer: not resolved by these data, not drawn"),
+             ("Ag", "PS", "Metal inside the polymer: not in the model, not drawn"), ("Ag", "Si", None))
+    for metal, substrate, line in cases:
+        folder = write_result(tmp_path / f"{metal}_{substrate}", metal=metal, substrate=substrate)
+        assert page.open_client_result(folder)
+        page.image_switch.button(1).click()
+        texts = _picture_texts(page)
+        said = [words for words in texts if words.startswith("Metal inside the polymer")]
+        assert said == ([line] if line else []), (metal, substrate, texts)
+    _close(page)
+
+
 def test_the_real_space_picture_speaks_chinese_after_a_switch(tmp_path):
     from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
 

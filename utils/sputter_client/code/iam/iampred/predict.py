@@ -111,9 +111,10 @@ def _render(args):
     'The candidates of every window of ``items`` drawn by the model (best one kept), then - with ``refine`` - each'
     cfg, scan, items, refine, outdir = args[:5]
     total = args[5] if len(args) > 5 else len(items)
+    var = args[6] if len(args) > 6 else None
     from . import adapter as A
     s = A.get_scan(scan)
-    rows, todo = [], []
+    rows, todo, vtodo = [], [], []
     seen = [0]
     for it in items:
         t = it["t"]
@@ -147,6 +148,8 @@ def _render(args):
                          shown[cands.index(b)])
             if refine > 0:
                 todo.append((row, t, row["best"]["x"]))
+            if var:
+                vtodo += [(row, t, v) for v in _variants(ctx, b["x"], var, row)]
         rows.append(row)
         LV.progress("render", len(rows), total, force=len(rows) == len(items), family=cfg["family"], images=seen[0])
     seen = [0]
@@ -170,7 +173,46 @@ def _render(args):
         _live_window(cfg, ctx, s, t, "refined", "refined", mu, d5, _wanted_live(cfg, ctx, xr, m, p, h, rep.tolist()))
         LV.progress("refine", n + 1, total, force=True, family=cfg["family"], evaluations=seen[0], current=0,
                     budget=budget)
+    for row, t, v in vtodo:
+        ctx = A.Context(cfg, s, t)
+        nf = len(ctx.names)
+        t0 = time.time()
+        try:
+            xv = np.asarray(v["x"], float)
+            ctx.render(xv)
+            xr, _ = ctx.f.run(np.clip(xv[:nf], ctx.f.lb + 1e-9, ctx.f.ub - 1e-9), var["refine"])
+            xr = np.r_[xr, xv[nf:]]
+            (mu, _, _), m, p, h = ctx.render(xr)
+            d5, _ = ctx.dev5(mu)
+            v["refined"] = dict(dev5=d5, reported=ctx.reported(m, p, h).tolist(), x=xr.tolist(), h_m=h,
+                                seconds=time.time() - t0, nfev=var["refine"])
+        except (Exception, SystemExit) as e:
+            v["refined"] = dict(dev5=float("nan"), error=str(e)[:120])
     return rows
+
+
+def _variants(ctx, x_best, var, row):
+    "--variant: copies of the window's best candidate with the given parameters set (free parameters clipped into"
+    ix = {n: i for i, n in enumerate(ctx.pnames)}
+    xb = np.asarray(x_best, float)
+    if var["min_fb"] > 0 and "fb" in ix and not xb[ix["fb"]] >= var["min_fb"]:
+        return []
+    nf, out = len(ctx.names), []
+    for label, setv in var["variants"]:
+        xv = xb.copy()
+        for n_, v_ in setv:
+            xv[ix[n_]] = v_
+        xv[:nf] = np.clip(xv[:nf], ctx.f.lb + 1e-9, ctx.f.ub - 1e-9)
+        try:
+            (mu, _, _), m, p, h = ctx.render(xv)
+            d5, _ = ctx.dev5(mu)
+            e = dict(label=label, dev5=d5, reported=ctx.reported(m, p, h).tolist(), x=xv.tolist(), h_m=h)
+        except (Exception, SystemExit) as err:
+            e = dict(label=label, dev5=float("nan"), error=str(err)[:120], x=xv.tolist())
+        row.setdefault("variants", []).append(e)
+        if var["refine"] > 0 and np.isfinite(e["dev5"]):
+            out.append(e)
+    return out
 
 
 def _count_images(ctx, seen, report):
@@ -255,11 +297,19 @@ def scan_pools(sq, use, transplant, log=print):
     for (_, es), r in zip(pools, use):
         if "refined" in r and np.isfinite(r["refined"]["dev5"]):
             es.append(_entry(r["refined"], src="refined"))
+        for v in r.get("variants", ()):
+            if np.isfinite(v.get("dev5", np.nan)):
+                es.append(_entry(v, src=f"variant {v['label']}"))
+            rv = v.get("refined") or {}
+            if np.isfinite(rv.get("dev5", np.nan)):
+                es.append(_entry(rv, src=f"variant {v['label']} refined"))
     W = len(use)
     if not transplant or W < 2:
         return pools
     t0 = time.time()
     own = [r["refined"] if "refined" in r and np.isfinite(r["refined"]["dev5"]) else r["best"] for r in use]
+    own = [min([o] + [v["refined"] for v in r.get("variants", ()) if np.isfinite((v.get("refined") or {}).get("dev5", np.nan))],
+               key=lambda e: e["dev5"]) for o, r in zip(own, use)]
     nf = sq.nf
     jobs, src = {}, {}
     for k in range(W):
@@ -384,6 +434,52 @@ def _client_entry(cfg, a, data_root):
     return dict(metal=meta.get("metal", "?"), env=env, client=True), meta
 
 
+def parse_variants(specs, pnames, refine, min_fb):
+    '--variant NAME=VALUE,... (repeatable) -> dict(variants=[(label, [(name, value)])], refine, min_fb) for _render,'
+    if not specs:
+        return None
+    out = []
+    for spec in specs:
+        setv = []
+        for it in (x_ for x_ in spec.split(",") if x_):
+            n_, _, v_ = it.partition("=")
+            if n_ not in pnames:
+                raise SystemExit(f"--variant {n_}: not a parameter of the forward model ({', '.join(pnames)})")
+            setv.append((n_, float(v_)))
+        out.append(("+".join(n_ for n_, _ in setv), setv))
+    return dict(variants=out, refine=int(refine), min_fb=float(min_fb))
+
+
+def start_overrides(xs, times, pnames, start_file, fluct, notes):
+    'Start vectors of the whole-scan refinement after the research options (2026-11-23, conform_20261123):'
+    import hashlib
+    xs = [np.asarray(x, float).copy() for x in xs]
+    ix = {n: i for i, n in enumerate(pnames)}
+    if start_file:
+        raw = Path(start_file).read_bytes()
+        table = json.loads(raw.decode("utf-8"))
+        table = table.get("windows", table)
+        done = []
+        for k, t in enumerate(times):
+            got = table.get(f"{t:g}") or table.get(str(t)) or table.get(str(float(t)))
+            if got:
+                for n, v in got.items():
+                    if n in ix:
+                        xs[k][ix[n]] = float(v)
+                done.append(float(t))
+        notes["sequence_start"] = dict(file=Path(start_file).name, sha256=hashlib.sha256(raw).hexdigest(), windows=done)
+    if fluct:
+        if "lnRP" not in ix or "lnAP" not in ix or "fb" not in ix:
+            raise SystemExit("--fluct-start: the family has no whole-film density fluctuation (lnRP, lnAP) or no base share fb")
+        rp, ap_ = (float(v) for v in fluct.split(","))
+        on = []
+        for k, t in enumerate(times):
+            if xs[k][ix["fb"]] >= 0.5:
+                xs[k][ix["lnRP"]], xs[k][ix["lnAP"]] = np.log(rp), np.log(ap_)
+                on.append(float(t))
+        notes["fluct_start"] = dict(R_P_nm=rp, A_P=ap_, rule="fb >= 0.5 in the start", windows=on)
+    return xs
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("family")
@@ -416,6 +512,25 @@ def main():
     ap.add_argument("--far-weight", type=float, default=1.0, help="--sequence: weight of the no-decrease rule against "
                     "earlier windows (2 ... 64 places back, beyond one scale; dev5 units; 0 = neighbouring windows only; "
                     "default 1 since 2026-11-20: growth is additive)")
+    ap.add_argument("--fringe-weight", type=float, default=0.0, help="--sequence: weight lambda of the fringe term "
+                    "(iampred.sequence: each window costs dev5 + lambda x fringe residual^2, the detrended log ratio "
+                    "measured / model along the exit angle in q_y 0.1-0.4 nm^-1; 2026-11-23); 0 = off (default)")
+    ap.add_argument("--fluct-start", default=None, help="--sequence: R_P,A_P (nm, -): the whole-film density "
+                    "fluctuation set on in the start of every film-stage window (base share fb >= 0.5) of a family with "
+                    "lnRP / lnAP; the optimiser does not leave the off state by itself (iam_fit4); default: the start as "
+                    "chosen")
+    ap.add_argument("--sequence-start", default=None, help="--sequence: JSON {t: {parameter: value}} - start values "
+                    "of chosen windows that replace those of the time path (research warm starts); applied before "
+                    "--fluct-start")
+    ap.add_argument("--variant", action="append", default=[], help="NAME=VALUE,... (parameters in their stored "
+                    "transform, e.g. lnRP=1.7918,lnAP=0): in every window whose best candidate has fb >= --variant-min-fb, "
+                    "a copy of it with these values is drawn and (--variant-refine) refined on its own; the whole-scan "
+                    "time path chooses among them and the rest (a start rule for terms the optimiser does not switch on "
+                    "by itself; 2026-11-23, conform_20261123 round 9). Repeatable; default: none")
+    ap.add_argument("--variant-refine", type=int, default=0, help="--variant: refinement of each variant (as --refine); "
+                    "0 = drawn only")
+    ap.add_argument("--variant-min-fb", type=float, default=0.5, help="--variant: only windows whose best candidate has "
+                    "a base share fb at least this (film stage); 0 = every window")
     ap.add_argument("--transplant", type=int, default=1, help="--sequence: 1 = the solutions of neighbouring windows "
                     "join the pool of a window, 0 = candidates and own refined solution only")
     ap.add_argument("--no-network-step", action="store_true", help="a GUI's step tree: this run only refines (analyze "
@@ -548,8 +663,9 @@ def main():
         items = [dict(t=d["t"], cands=[dict(weight=c["weight"], x=c["x"].tolist()) for c in cs[:a.k * n_net]])
                  for d, cs in zip(okf, cands)]
         chunks = [items[i::nw] for i in range(nw)]
-        rows = sum(runner.run(cfg, [(cfg, a.scan, c, a.refine, str(out), len(items)) for c in chunks if c], _render, nw,
-                              data=a.data, shadow=a.shadow), [])
+        var = parse_variants(a.variant, info["pnames"], a.variant_refine, a.variant_min_fb)
+        rows = sum(runner.run(cfg, [(cfg, a.scan, c, a.refine, str(out), len(items)) + ((var,) if var else ())
+                                    for c in chunks if c], _render, nw, data=a.data, shadow=a.shadow), [])
         rows.sort(key=lambda r: r["t"])
         _dump(out / "state.json.gz", dict(key=key, info=info, q=q, rows=rows,
                                           feats=[{k: v for k, v in d.items() if k not in ("X", "S", "info")} for d in feats]))
@@ -585,7 +701,8 @@ def main():
             if it_:
                 LV.progress("sequence", int(it_.group(1)), a.sequence, family=cfg["family"])
 
-        sq = SQ.Sequence(cfg, a.scan, [r["t"] for r in use], a.workers, data=a.data, shadow=a.shadow, log=seq_log)
+        sq = SQ.Sequence(cfg, a.scan, [r["t"] for r in use], a.workers, data=a.data, shadow=a.shadow, log=seq_log,
+                         fringe_weight=a.fringe_weight)
 
 
         from .present import wanted as _wanted
@@ -612,6 +729,7 @@ def main():
                     total=int(a.sequence), phase=phase, done=int(done), windows=int(n), seconds=LV.rounded(seconds, 1))
 
         history = []
+        setup_notes = {}
         sq.on_iter, sq.on_progress = on_iter, on_progress
         try:
             LV.emit("joint_stage", family=cfg["family"], stage="pool", windows=len(use), total=int(a.sequence))
@@ -644,7 +762,14 @@ def main():
                                              jump_cost=a.jump_cost, smooth_weight=a.smooth_weight, monotone=mono,
                                              path_weight=a.path_weight, tol=TOL, pools=[es for _, es in pools],
                                              chosen=[path[t] for t, _ in pools]))
-            sw, seq = SQ.refine(sq, [chosen[t]["x"] for t, _ in pools], reps, mono, TOL, a.path_weight, scales,
+            x_start = start_overrides([chosen[t]["x"] for t, _ in pools], [t for t, _ in pools], list(info["pnames"]),
+                                      a.sequence_start, a.fluct_start, setup_notes)
+            if a.variant:
+                setup_notes["variants"] = dict(specs=list(a.variant), refine=a.variant_refine, min_fb=a.variant_min_fb,
+                                               windows=sorted(float(r["t"]) for r in use if r.get("variants")),
+                                               start_from={f"{t:g}": chosen[t].get("src") for t, _ in pools})
+            a._setup_notes = setup_notes
+            sw, seq = SQ.refine(sq, x_start, reps, mono, TOL, a.path_weight, scales,
                                 a.smooth_weight, a.sequence, out, a.far_weight, prior)
             sh_ = seq.get("shared") or {}
             LV.step("joint.fit", "done", detail="joint.json" if history else None,
@@ -803,7 +928,9 @@ def main():
                                                         min_scans=a.growth_prior_min_scans,
                                                         prior=getattr(a, "growth_prior_used", None))
                                                    if a.growth_prior else None),
-                                     transplant_offsets=list(OFFSETS) if a.transplant else [])
+                                     transplant_offsets=list(OFFSETS) if a.transplant else [],
+                                     **({"fringe_weight": a.fringe_weight} if a.fringe_weight > 0 else {}),
+                                     **(getattr(a, "_setup_notes", None) or {}))
                                 if seq else None),
                 n_seq_worse=len(worse) if seq and a.refine else None, seq_worse_t=worse if seq and a.refine else None,
                 n_seq_better=len(better) if seq and a.refine else None, reused_state=st is not None,

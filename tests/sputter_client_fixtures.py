@@ -121,7 +121,8 @@ def patterns(labels: list, seed: int = 0) -> dict:
 
 
 def write_result(folder: Path, *, windows=None, status: str = "ok", with_main: bool = True, report: bool = True,
-                 scan: str = "zz_invented_scan", metal: str = "Ag", family: str = "zz_family", wanted=None) -> Path:
+                 scan: str = "zz_invented_scan", metal: str = "Ag", family: str = "zz_family", wanted=None,
+                 substrate: str = "Si") -> Path:
     """An output folder as the package writes it (``analysis.json``, ``main/``); returns the folder."""
     folder = Path(folder)
     main = folder / "main"
@@ -150,7 +151,7 @@ def write_result(folder: Path, *, windows=None, status: str = "ok", with_main: b
                 Path(step["log"]).write_text("an invented first line\nthe invented reason of the failure\n",
                                              encoding="utf-8")
     (folder / "analysis.json").write_text(json.dumps(
-        {"status": status, "label": "gui_" + scan, "metal": metal, "substrate": "Si", "family": family,
+        {"status": status, "label": "gui_" + scan, "metal": metal, "substrate": substrate, "family": family,
          "mode": "quick", "steps": steps, "files": files, "note": "an invented note"}), encoding="utf-8")
     return folder
 

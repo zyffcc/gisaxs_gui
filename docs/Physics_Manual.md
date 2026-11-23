@@ -4456,6 +4456,8 @@ Implementation: `src/gimap/features/sputter/application/client.py` (`QCM_FACTOR`
 
 **Real Space** draws the solution shown at its size; the arrangement is an illustration. The top view is a square of 7 D. Grains sit on a hexagonal lattice of spacing D, each shifted by 0.12 D times a standard normal number in x and in y; the radius of each is r = R exp(σ z), with z standard normal clipped to ±2.5, and the height of its cap above the base layer is (H − b) r/R, b being the thickness of the continuous base layer (`base_nm`; a cap of height R without H). The side view is a cut 4 D long through one row of grains. The random numbers come from one fixed seed and are drawn in the same order for every solution, so another window or solution changes the sizes and not the positions.
 
+On a polymer film a line under the views says that no metal inside the polymer is drawn: the package's model has none. For Cu on polymer films the line says the data did not resolve it (two forms were tested with the package: clusters buried below the film, which improved single-window fits too little, and a Cu/polymer composite base layer with Cu domains, which the whole-scan fit did not take up); for the other metals it says the model has none.
+
 Two grains touch when their centres are no farther apart than the sum of their radii; touching grains form a cluster. The arrangement is *islands* when no two grains of the view touch, *network* when a cluster connects two opposite edges of the square (percolated), else *coalescing*. A solution with b > 0 is a closed film: the top view is the metal of the base layer over the whole square, with the grains as relief on it.
 
 Implementation: `src/gimap/features/sputter/domain/real_space.py`, `src/gimap/features/sputter/presentation/real_space_view.py`
@@ -5237,7 +5239,7 @@ The calibration record carries the standard-derived scale uncertainty. Curve fil
 ### 15.5 Series and Sputter
 
 - **Series.** Stages and odd frames are found in frame order, not in time; only positive intensities enter; a q bin with data in fewer than 95 % of the frames is not compared; *shape only* removes the overall level; the thresholds are working choices, not derived from a noise model of the detector (section 11.11).
-- **Sputter.** The values are the analysis package's (section 12.1): GIMaP neither computes nor grades them; the rate and t_0 are not measured by GISAXS, and the nominal deposit scales with the rate given; the range of usual rates is a check of the unit, not a limit (section 12.2); the real-space picture places the grains at random (section 12.3).
+- **Sputter.** The values are the analysis package's (section 12.1): GIMaP neither computes nor grades them; the rate and t_0 are not measured by GISAXS, and the nominal deposit scales with the rate given; the range of usual rates is a check of the unit, not a limit (section 12.2); the real-space picture places the grains at random (section 12.3). The package's model has no metal inside a polymer film (section 12.3), and its whole-scan fit does not reproduce the thickness fringes of a continuous film on a polymer along the exit angle: tried were the film-density fluctuation switched on, a cost on the detrended fringe residual and per-window starts with these terms; the report reads the film thickness from the fringes directly.
 
 ### 15.6 Tool windows and Labs
 
