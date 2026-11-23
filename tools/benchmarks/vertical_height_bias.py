@@ -29,16 +29,17 @@ resolution: a Gaussian detector resolution of σ = 0.01° in α_f and φ_f, and 
 correlated with radii, H = 1.5 R for every cylinder (GIMaP takes them independent); (f) everything at once: dense Au
 (40 %) with the average layer, σ = 1 nm and the coarser resolution.
 
-Each case is fitted noise-free (counts as expected, σ = √counts: the bias itself) and with Poisson noise (``--seeds``
-draws), the curves scaled to ``PEAK`` counts at their maximum on a background of ``BACKGROUND`` counts; once with the
-whole vertical cut and once with it from 2α_c(Si) = 0.30° (``WINDOWS``), the same counts. Starts near but not at
-the truth (``START``). Reported: R, h, D with their 1σ, χ²_r, the relative bias of h, R and D.
+Each case is fitted noise-free (expected counts, σ = √counts) and with Poisson noise (``--seeds`` draws).
+Each curve peaks at ``PEAK`` counts above ``BACKGROUND``. The two fits use the same counts, one with the page's
+default exit-angle limit (currently 2α_c(Si) = 0.30°) and one on the full cut.
+Each call includes the page's second-range height check. The record gives the R, h and D biases, the vertical
+reduced χ², the height comparisons and all Needs attention messages. The warning fractions count Poisson draws.
 
 BornAgain's average layer is checked first (``uniform_layer_check``): for one size in one slice its vertical cut has
 the shape of the four-term DWBA in a uniform layer of the average index on Si, written here from the layer's own
 reflection and transmission.
 usage: python tools/benchmarks/vertical_height_bias.py [--seeds 10] [--workers 2] [--cases NAME ...] [--out PATH]
-       (writes vertical_height_bias.json next to itself; needs BornAgain 24; about 3 minutes with two workers)
+       (writes vertical_height_bias.json next to itself and needs BornAgain 24)
 """
 from __future__ import annotations
 
@@ -79,9 +80,8 @@ N_ALPHA, ALPHA_RANGE = 300, (0.02, 1.2)
 PAD = 50
 """Pixels simulated beyond each end of a cut (the detector resolution needs them; the fit does not see them)."""
 PEAK, BACKGROUND = 1e4, 2.0
-WINDOWS = {"full": ALPHA_RANGE[0], "from_2ac": 2.0 * ALPHA_C}
-"""The lowest α_f (°) of the vertical cut fitted: all of it, or from twice α_c(Si) (above the Yoneda peak, where the
-effective layer and the resolution change the cut most)."""
+WINDOWS = {"default": japp.DEFAULT_MIN_EXIT_ANGLE_AC, "full": 0.0}
+"""Lower exit-angle limits in multiples of the substrate critical angle."""
 START = {"R": 4.3, "sigma_R": 0.2, "h": 6.6, "sigma_h": 0.2, "D": 1.07, "sigma_nn": 0.25}
 """Start of every fit: R and h in nm, D as a factor of the true D, the spreads relative."""
 
@@ -324,7 +324,7 @@ def page_model(case: Case) -> fm.FitModel:
 
 
 def fit(task) -> dict:
-    """One joint fit: the case's cuts as counts (``seed``), the vertical cut from ``WINDOWS[window]``."""
+    """Fit this draw using the same cutoff and second-range check as the joint-fit dialog."""
     case, cuts, seed, window = task
     y_h, s_h = counts(cuts["horizontal"], seed)
     y_v, s_v = counts(cuts["vertical"], None if seed is None else seed + 1000)
@@ -336,20 +336,39 @@ def fit(task) -> dict:
     ]
     model = page_model(case)
     result = japp.run_joint_fit(specs, model, SUBSTRATE, default_shared(model), method="local",
-                                min_exit_angle_ac=0.0 if window == "full" else 2.0)
+                                min_exit_angle_ac=WINDOWS[window])
+    messages = japp.needs_attention(result, specs)
+    templates = {template for template, _ in messages}
+    layer = japp.LAYER_WARNING in templates
+    height_range = japp.HEIGHT_RANGE_WARNING in templates
     fitted = result.models[0]
     row = dict(case=case.name, window=window, seed=seed, chi2_reduced=result.chi2_reduced,
                chi2_per_point={"horizontal": result.curve_chi2[0], "vertical": result.curve_chi2[1]},
+               vertical_chi2_reduced=finite_or_none(result.reduced_chi2_for(1)),
+               height_range_rows=japp.height_range_rows(result),
+               needs_attention=[template.format(**values) for template, values in messages],
+               warnings=dict(layer=layer, height_range=height_range, either=layer or height_range),
                points=list(result.points), converged=result.converged, evaluations=result.evaluations,
                seconds=result.seconds, at_bounds=[japp.key_name(key) for key in result.at_bounds])
     for key in ("R", "sigma_R", "h", "sigma_h", "D", "sigma_nn"):
         row[key] = float(fitted.get((0, key)).value)
-        row[key + "_err"] = float(result.errors.get((SHARED, (0, key)), math.nan))
+        row[key + "_err"] = finite_or_none(result.errors.get((SHARED, (0, key)), math.nan))
+    row["relative_bias"] = {key: row[key] / value - 1.0 for key, value in truth(case).items()}
     return row
+
+
+def finite_or_none(value: float) -> float | None:
+    return float(value) if math.isfinite(value) else None
 
 
 def truth(case: Case) -> dict:
     return {"R": RADIUS, "h": HEIGHT, "D": case.distance}
+
+
+def warning_fractions(rows: list[dict]) -> dict:
+    draws = [row["warnings"] for row in rows if row["seed"] is not None]
+    return {key: sum(draw[key] for draw in draws) / len(draws) if draws else None
+            for key in ("layer", "height_range", "either")}
 
 
 def summary(case: Case, rows: list[dict]) -> dict:
@@ -363,12 +382,13 @@ def summary(case: Case, rows: list[dict]) -> dict:
         entry = {}
         if exact:
             entry.update(noise_free=exact[0][key], noise_free_err=exact[0][key + "_err"],
-                         noise_free_bias=exact[0][key] / value - 1.0)
+                         noise_free_bias=exact[0]["relative_bias"][key])
         if noisy:
             values = np.array([r[key] for r in noisy])
+            errors = [r[key + "_err"] for r in noisy if r[key + "_err"] is not None]
             entry.update(seeds_mean=float(values.mean()), seeds_sd=float(values.std(ddof=1)) if values.size > 1 else None,
                          seeds_mean_bias=float(values.mean() / value - 1.0),
-                         seeds_mean_err=float(np.nanmean([r[key + "_err"] for r in noisy])))
+                         seeds_mean_err=float(np.mean(errors)) if errors else None)
         out[key] = entry
     out["chi2_reduced"] = dict(noise_free=exact[0]["chi2_reduced"] if exact else None,
                                seeds_mean=float(np.mean([r["chi2_reduced"] for r in noisy])) if noisy else None)
@@ -395,10 +415,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--seeds", type=int, default=10, help="Poisson draws per case (besides the noise-free fit)")
     parser.add_argument("--workers", type=int, default=2)
-    parser.add_argument("--cases", nargs="*", help="names of CASES (default: all)")
+    parser.add_argument("--cases", nargs="+", choices=[c.name for c in CASES], help="names of CASES (default: all)")
     parser.add_argument("--out", type=Path, default=HERE / "vertical_height_bias.json")
     args = parser.parse_args(argv)
+    if args.seeds < 0 or args.workers < 1:
+        parser.error("use --seeds >= 0 and --workers >= 1")
     cases = [c for c in CASES if not args.cases or c.name in args.cases]
+    code = _code_state("src/gimap/features/fitting")
     check = uniform_layer_check()
     print(f"BornAgain's average layer against a uniform-layer DWBA (one size): largest shape deviation "
           f"{check['average layer on']:.1e} (layer off {check['average layer off']:.1e})", flush=True)
@@ -417,9 +440,11 @@ def main(argv=None):
     out_cases, table = [], []
     for case in cases:
         summaries = {}
+        fractions = {}
         for window in WINDOWS:
             mine = [r for r in rows if r["case"] == case.name and r["window"] == window]
             summaries[window] = summary(case, mine)
+            fractions[window] = warning_fractions(mine)
             table.append(table_row(case, window, summaries[window]))
             t = table[-1]
             sd = math.nan if t["h_sd_seeds"] is None else 100 * t["h_sd_seeds"] / HEIGHT
@@ -430,14 +455,19 @@ def main(argv=None):
                   f"(draws {seeds_bias:+6.1f} ± {sd:.1f} %, 1σ {err:.1f} %)  R {t['R_bias_noise_free']:+5.1f} %  "
                   f"D {t['D_bias_noise_free']:+5.1f} %  chi2_r {t['chi2_reduced_noise_free']:.2f} / {seeds_chi2:.2f}",
                   flush=True)
+        if args.seeds:
+            rates = ", ".join(f"{key} {value:.0%}" for key, value in fractions["default"].items())
+            print(f"{case.name:16s} default warnings over {args.seeds} Poisson draws: {rates}", flush=True)
         out_cases.append(dict(**asdict(case), coverage=coverage(case), truth=truth(case), summary=summaries,
+                              warning_fractions=fractions,
                               fits=[r for r in rows if r["case"] == case.name],
                               bornagain_seconds=simulated[case.name]["seconds"]))
     out = dict(
-        code=_code_state(),
+        code=code,
         wavelength_nm=WAVELENGTH, alpha_i_deg=ALPHA_I, substrate="Si (GIMaP's table)", delta=DELTA, beta=BETA,
         horizontal_alpha_f_deg=ALPHA_C, horizontal_q_range=list(Q_RANGE), vertical_q_y=Q_Y,
-        vertical_alpha_f_deg=list(ALPHA_RANGE), windows_alpha_f_min_deg=WINDOWS,
+        vertical_alpha_f_deg=list(ALPHA_RANGE), windows_min_exit_angle_ac=WINDOWS,
+        windows_alpha_f_min_deg={name: max(ALPHA_RANGE[0], limit * ALPHA_C) for name, limit in WINDOWS.items()},
         truth=dict(R=RADIUS, H=HEIGHT, sigma_R_over_R=SPREAD, sigma_H_over_H=SPREAD, sigma_nn_over_D=SIGMA_NN,
                    bornagain_nodes=f"{NODES} x {NODES} Gauss-Legendre over +-4 sigma (correlated: {NODES})",
                    interference="BornAgain RadialParacrystal, Gaussian neighbour distance; DA (Mixture)",
@@ -451,7 +481,7 @@ def main(argv=None):
                  upright_height_coherence="squared number-average of the complex axial amplitude / mean axial intensity",
                  beam_tail="off", vertical_q_parallel=Q_Y, start=START),
         fit_seconds=time.perf_counter() - tick, table=table, cases=out_cases)
-    args.out.write_text(json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")
+    args.out.write_text(json.dumps(out, indent=1, ensure_ascii=False, allow_nan=False), encoding="utf-8")
 
 
 if __name__ == "__main__":

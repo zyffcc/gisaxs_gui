@@ -155,7 +155,7 @@ def test_joint_window_fits_a_horizontal_and_a_vertical_cut(tmp_path):
         dialog._summary()
         assert "Needs attention" in dialog.joint_summary.text() and "likely underestimated" in dialog.joint_summary.text()
         assert dialog.save_report_dialog(tmp_path / "poor-fit.md")
-        assert "6–20%" in (tmp_path / "poor-fit.md").read_text(encoding="utf-8")
+        assert "Physics and Methods §9.18" in (tmp_path / "poor-fit.md").read_text(encoding="utf-8")
         dialog.run()  # use the chosen zero limit and the cylinder height now set in Model
         _settle(page, dialog.tasks)
         assert dialog.result.points[1] == len(dialog.specs[1].q)

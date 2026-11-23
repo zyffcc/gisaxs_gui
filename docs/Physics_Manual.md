@@ -3961,19 +3961,31 @@ The tests compare the four paths with an independent sum, the cylinder averages 
 heights (2 · 10⁻⁵), and fit a simulated horizontal and vertical cut of upright cylinders (R = 4 nm, h = 6 nm, Poisson
 noise): the joint fit finds h within its error, which the horizontal cut alone does not determine.
 
-With BornAgain's average layer off, the noise-free baseline recovered σ_R/R = 0.150005 and h = 5.9997 nm
-for inputs 0.15 and 6 nm at the default cutoff. The original sweep with BornAgain's average layer on gave heights
-about 3% low for 10% Si-like coverage and 13–60% low for Au-like coverages of 10–40% over the full cut.
-At α_f ≥ 2α_c the Au-like biases were 6–20% low. The joint report states that h assumes a dilute layer and
-independent heights and radii. It warns at vertical reduced χ² > 3 for supplied or Poisson uncertainties.
+The joint fit assumes a dilute particle layer and independent heights and radii. **Needs attention** warns
+at vertical reduced χ² > 3 for supplied or Poisson uncertainties. This statistic divides the vertical
+residual sum of squares by the vertical cut's effective degrees of freedom.
 For a fitted upright-cylinder height, a second joint fit uses the full valid vertical range and keeps the
 horizontal data and parameter links. If the selected range is already the full cut, the check uses 2α_c.
 With heights h and h′ on the selected and comparison ranges, respectively, **Needs attention** flags
 |h − h′| > 2√(σ_h² + σ_h′²) or |h − h′| > 0.02|h|. The quadrature sum is a diagnostic scale for
 overlapping fits. The relative threshold also works when a fit has no finite standard error.
-In the stored noise-free fits, changing the range shifted h by 7.6 % for 10 % Au and 12.0 % for 40 % Si.
-For H = 1.5R, both ranges overestimated h by about 14 % at joint reduced χ² near 1.2 and the range check was silent.
-The simulations and per-fit results are in `tools/benchmarks/vertical_height_bias.py` and its JSON record.
+
+**BornAgain height benchmark.** The shipped model averages the coherent cylinder amplitude over height in the DA.
+With BornAgain's average layer off, the noise-free D = 14 nm baseline recovered σ_R/R = 0.150005 and h = 5.9997 nm
+for inputs 0.15 and 6 nm at the default cutoff. Earlier fits used the radial coherent term alone. With the average
+layer on, their whole-cut heights were about 3% low at 10% Si-like coverage and 13–60% low at 10–40% Au-like
+coverage. From 2α_c the Au-like heights were 6–20% low. In the noise-free fits, changing the range shifted h
+by 7.6% for 10% Au and 12.0% for 40% Si, relative to the height from 2α_c. For H = 1.5R, both ranges
+overestimated h by about 14%. The original sweep and the later baseline are archived in
+`tools/benchmarks/history/vertical_height_bias.json`.
+
+`tools/benchmarks/vertical_height_bias.py` writes the shipped model's results to `vertical_height_bias.json`.
+For each case, both fits use the same counts, first without noise and then for each Poisson seed. Each range
+records the fractional bias (fitted/input − 1) for h, R and D, the vertical reduced χ², the two height estimates
+and their uncertainties (`height_range_rows`), and the program's `needs_attention` messages. For each case,
+`warning_fractions.default` gives the fractions of Poisson draws that triggered the vertical χ² warning, the
+height-range warning or either warning at the page's default cutoff. The noise-free fits have their own warning
+records. The archived sweep predates these measurements of the program's warnings.
 
 Implementation: `src/gimap/features/fitting/domain/joint_fit.py`, `domain/vertical_cut.py`,
 `application/joint_fit.py`, `presentation/single/joint_fit_dialog.py`, `features/analyze/application/both_cuts.py`

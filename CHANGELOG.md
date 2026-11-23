@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- The joint-fit height benchmark records which vertical χ² and height-range warnings appear for each BornAgain case and Poisson draw. The vertical χ² warning points to *Physics and Methods* §9.18 for the measured height biases.
+
 - The Search baseline can use the same first-set or fresh curves as Predict and replay their archived predecessors. The Table 3 verifier defaults to revision 15 and checks its 25 rows against the supplied manuscript and benchmark records. Use `--revision 14` for the archived table.
 
 - Chained in-situ fits also retry a frame with **Predict parameters** when χ²ᵣ rises gradually above 2 and exceeds three times its value at the start of the current chain. The fit kept at that frame sets the new reference.

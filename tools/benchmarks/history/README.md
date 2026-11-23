@@ -1,11 +1,12 @@
 # Earlier benchmark results
 
-These summaries are from earlier versions of the code or from methods removed from GIMaP. They are not the numbers the
-GIMaP paper, Physics and Methods 9.13 or the model card quote: those are `../posterior_*_summary.json` and
-`../per_cut/` (`../README.md`).
+These records preserve results from earlier versions of the code and from methods removed from GIMaP.
+The Predict benchmarks cited in the paper, Physics and Methods §9.13 and the model card are documented
+in the [benchmark README](../README.md).
 
 | File | What it is |
 |---|---|
+| `vertical_height_bias.json` | Source for the revision 14 joint-fit height comparison. It contains the original BornAgain sweep and the later `height_averaged_da_baseline` check. The [current benchmark](../README.md#joint-fit-height-bias-and-warnings-on-the-shipped-model) records the warnings produced by the shipped model. |
 | `posterior_recovery_first_summary.json`, `posterior_extended_first_summary.json` | *Predict parameters* with the network flow_v3, before the rules of Physics and Methods 9.13 steps 3 and 5 (200 and 1200 curves) |
 | `posterior_dwba_si_fit1d_summary.json`, `posterior_dwba_ps100_fit1d_summary.json`, `posterior_dwba_si_born_fit1d_summary.json`, `posterior_dwba_si_eia_fit1d_summary.json` | earlier code on the 200 curves drawn with the four DWBA terms, on Si and on 100 nm polystyrene on Si (both angles given), and on Si with q_z alone or nothing given |
 | `posterior_dwba_si_extended_summary.json`, `posterior_dwba_ps100_extended_summary.json`, `posterior_dwba_si_born_extended_summary.json`, `posterior_dwba_si_eia_extended_summary.json` | the same on 1200 curves of the extended set |

@@ -3066,13 +3066,13 @@ An available 1σ fit error follows each value. Read the vertical reduced χ² an
 - **Save Report…** writes the fit summary and parameter values as Markdown. Both the record and report give the
   exit-angle limit in substrate critical angles and degrees. With supplied or Poisson uncertainties, **Needs attention**
   flags a vertical reduced χ² above 3. The model omits the particle layer’s effective refractive index, so the
-  fitted height is likely too low for a dense or high-Z layer. In the BornAgain benchmark, heights for Au-like
-  layers at 10–40% coverage were 13–60% low on the full cut and 6–20% low from 2 αc.
+  fitted height is likely too low for a dense or high-Z layer. The warning points to *Physics and Methods*
+  §9.18 for the height biases measured in the BornAgain benchmark.
   For a fitted cylinder height, the report also gives the height from a second fit using the full vertical range
   (from 2 αc if you selected the full range). A warning appears if the heights differ by over twice their
   combined standard error or by over 2% of the selected height. The report indicates when the two ranges
   contain the same usable points or the comparison fit fails. Both heights assume a dilute layer and
-  uncorrelated heights and radii. For simulated cylinders with H = 1.5 R, both fits gave a height about 14% too high.
+  uncorrelated heights and radii. If height and radius are correlated, both ranges can give similar, biased heights.
 
 **Fit Several Curves Together** warns when the exported vertical band crosses qy = 0 or its centre has |qy| below 0.02 nm⁻¹. The particle model excludes the specular reflection. If the band includes it, move the cut beside the ridge and send both curves again. The vertical-cut model and its check against BornAgain are described in
 [Physics and Methods, section 9.18](Physics_Manual.md#918-several-curves-fitted-together-the-vertical-cut).

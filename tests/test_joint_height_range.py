@@ -52,7 +52,8 @@ def test_vertical_chi2_warning_uses_vertical_degrees_of_freedom():
     assert result.chi2_reduced < 3 and result.curve_chi2[1] < 3 < result.reduced_chi2_for(1)
     record = joint.joint_record(result, specs, substrate)
     assert record["curves"][1]["chi2_reduced"] == pytest.approx(20 * 1.7**2 / 19)
-    assert "13–60%" in record["needs_attention"][0] and "6–20%" in record["needs_attention"][0]
+    warning, = record["needs_attention"]
+    assert "vertical reduced χ² of 3.04 (> 3)" in warning and "Physics and Methods §9.18" in warning
     on_limit = replace(result, curve_dof=(199, 20), curve_chi2=(100, 3))
     assert joint.needs_attention(on_limit, specs) == []
     log_fit = replace(result, weightings=("sigma", "relative"))

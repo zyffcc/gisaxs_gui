@@ -93,6 +93,40 @@ python tools/benchmarks/table3_sources.py --revision 15 --table Table3.tex --num
     --au-fit au_fit.json --sem-reference sem_reference.json
 ```
 
+## Joint-fit height bias and warnings on the shipped model
+
+The full run uses BornAgain 24 and fits 16 cases with ten Poisson draws per case.
+
+```bash
+python tools/benchmarks/vertical_height_bias.py --seeds 10 --workers 2
+```
+
+The script fits each horizontal and vertical cut together with the height-averaged cylinder amplitude in the
+DA. Each noise-free pair and each seeded pair is fitted twice. The `default` fit takes the page's exit-angle
+limit (currently 2α_c) and compares its height with a fit over the whole cut. The `full` fit selects all valid
+exit angles and uses the page's default cutoff for the comparison. Both use the same counts.
+
+The command writes `tools/benchmarks/vertical_height_bias.json`. Use `--cases NAME --out PATH` for a partial run.
+The `code` stamp gives the commit, the Git tree for `src/gimap/features/fitting` and whether that directory
+had local changes. In each case's `fits`, `window` and `seed` identify the result (`null` means noise-free).
+
+- `relative_bias` for h, R and D, as fitted/input − 1, and `vertical_chi2_reduced`, the vertical residual sum
+  of squares divided by the cut's effective degrees of freedom.
+- `height_range_rows` from the program, including the selected and alternate heights, their uncertainties,
+  their absolute difference and the range-warning decision. The warning fires when the difference exceeds
+  twice the combined standard error or 2% of the selected height.
+- `needs_attention`, the messages the program produced, and `warnings`, the Boolean flags `layer`
+  (`LAYER_WARNING` for vertical reduced χ² > 3), `height_range` (`HEIGHT_RANGE_WARNING`) and `either`.
+
+To report which cases the Fitting page flags, read `warning_fractions.default` in each case. Each fraction counts
+Poisson seeds that triggered that warning divided by the number of seeds. A draw that triggers both warnings
+counts once under `either`. The noise-free outcome is in its own fit record. `warning_fractions.full` gives the
+same fractions with the whole cut selected. With zero draws the fractions are `null`.
+
+The historical [JSON record](history/vertical_height_bias.json) contains the original sweep with the radial
+coherent term alone and the subsequent `height_averaged_da_baseline` check. The [historical results below](#the-height-from-a-vertical-cut-against-bornagain-with-what-the-model-leaves-out)
+come from that archive. Use the full-run command above to produce warning fractions for the shipped model.
+
 ## History of revision 14 and earlier
 
 The following sections document earlier benchmarks and their original results.
@@ -587,7 +621,7 @@ To read the archived level-4 parameter and timing results, use the four bundled 
 | `galaxi_bornagain_model.py` | BornAgain's model of the GALAXI frame on the same cut: how well it describes the measured cut, and what Fitting recovers from it (Physics and Methods 9.10). Needs BornAgain | `galaxi_bornagain_model.json` |
 | `cut_model_checks.py` | `cut_model`, GIMaP's one 1D forward model, against Fitting's formulas before 0.3, 1D Predict V5's forward, the fit1d kit's tables (when a copy of the kit is in `utils/gisaxs1d_gui_kit`) and the independent `yoneda_truth.py` (Born at the cut's q_z and four-term DWBA, LMA and DA); time of 1000 curves on one core (Physics and Methods 9.2) | `cut_model_checks.json` |
 | `cut_model_bornagain.py` | `cut_model` against BornAgain: spheres and upright cylinders on Si in the four-term DWBA, one size, a size distribution and a radial paracrystal (Physics and Methods 9.2). Needs BornAgain | `cut_model_bornagain.json` |
-| `vertical_height_bias.py` | the height of upright cylinders from a joint fit of a horizontal and a vertical cut (`application.joint_fit`, the vertical cut in the four-term DWBA on Si) when BornAgain's cuts hold what that model leaves out: the average layer at coverage 10–40 % with Si and Au particles, a rough substrate (σ 0.5 and 1 nm), the detector resolution and beam divergence, heights correlated with radii, all at once; each noise-free and with 10 Poisson draws, the whole vertical cut and from 2α_c (referee round 5, M8; section below). Needs BornAgain | `vertical_height_bias.json` |
+| `vertical_height_bias.py` | Height of upright cylinders from joint fits of BornAgain cuts on Si across average-layer, roughness, resolution, correlated-height and combined cases (referee round 5, M8). Historical results below. | `history/vertical_height_bias.json` |
 | `yoneda_truth.py` | the forward model of a horizontal GISAXS cut used by the fit1d benchmark: sphere or upright cylinder on a substrate, four-term DWBA, paracrystal, resolution, beam tail, roughness, counts. It shares no code with GIMaP or fit1d | – |
 
 The other scripts (the commands of the paper's Predict runs are above):
@@ -605,7 +639,6 @@ python tools/benchmarks/galaxi_fit.py
 python tools/benchmarks/galaxi_bornagain_model.py
 python tools/benchmarks/cut_model_checks.py            # on a clean checkout: add --out <file> (or --force)
 python tools/benchmarks/cut_model_bornagain.py   # in an environment with BornAgain 24
-python tools/benchmarks/vertical_height_bias.py  # with BornAgain 24; about 3 minutes with two workers
 python tools/benchmarks/evidence_integration_check.py   # about 25 minutes on one core
 ```
 
@@ -645,7 +678,7 @@ where the model holds. The table records the original sweep, before the horizont
 | 40 % Au, average layer, roughness 1.0 nm, resolution 0.02° + divergence 0.01° | 40 % | -59.6 % | +1.0 % | -0.6 % | 242.4 | -19.5 % | 10.3 |
 
 **Height consistency between fit ranges.** We paired the stored full-range and 2α_c fits in
-`vertical_height_bias.json` by case and Poisson seed. With h from the selected 2α_c range and h′ from the
+`history/vertical_height_bias.json` by case and Poisson seed. With h from the selected 2α_c range and h′ from the
 full cut, the warning fires if |h − h′| exceeds either 2√(σ_h² + σ_h′²) or 0.02|h|. The two fits
 share data, so the quadrature sum serves as a diagnostic scale. The counts below refer to this range check
 alone. The table above gives joint reduced χ². The separate χ² warning in the program uses the vertical cut.
@@ -672,8 +705,7 @@ by |⟨G⟩|²/⟨|G|²⟩. In the D = 14 nm baseline, with the average layer of
 σR/R = 0.150006 and h = 5.99987 nm. From 2α_c it recovered 0.150005 and 5.99967 nm. Inputs were 0.15 and 6 nm.
 Both fits retained all 471 horizontal points and respectively 300 and 228 vertical points.
 The mean joint χ²_r over three Poisson draws was 1.01 in each window.
-Run `python tools/benchmarks/vertical_height_bias.py --cases a_off_D14 --seeds 3 --workers 1 --out baseline.json`.
-The output is stored under `height_averaged_da_baseline` in `vertical_height_bias.json`.
+This three-seed run is stored under `height_averaged_da_baseline` in `history/vertical_height_bias.json`.
 
 ## Online GISAXS series
 

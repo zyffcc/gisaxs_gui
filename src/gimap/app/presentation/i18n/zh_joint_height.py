@@ -17,10 +17,9 @@ JOINT_HEIGHT_ZH = {
     "Vertical reduced χ² = {value}": "垂直切线的约化 χ² = {value}",
     "{name} has a vertical reduced χ² of {chi2} (> 3). The model omits the effective refractive index "
     "of the particle layer. For dense or high-Z layers the fitted height is likely underestimated. "
-    "In the BornAgain benchmark, heights for Au-like layers at 10–40% coverage were 13–60% low on "
-    "the full cut and 6–20% low from 2αc (Physics and Methods §9.18).":
+    "See Physics and Methods §9.18 for height biases in the BornAgain benchmark.":
         "{name} 的垂直切线约化 χ² 为 {chi2}（> 3）。模型未计入颗粒层的有效折射率，致密层或高原子序数元素层的拟合高度很可能偏低。"
-        "在 BornAgain 基准中，覆盖率为 10–40% 的类金颗粒层用整条切线拟合时高度偏低 13–60%，从 2αc 起拟合时偏低 6–20%（《物理与方法》9.18 节）。",
+        "BornAgain 基准中的高度偏差见《物理与方法》9.18 节。",
     "The angles and wavelength set the scattering paths for spheres and for upright cylinders with a height "
     "distribution in DA. Choose a substrate for the four-term DWBA. With an unknown substrate, |r| and arg r "
     "set the effective reflection coefficient.":

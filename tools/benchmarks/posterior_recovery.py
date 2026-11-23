@@ -365,7 +365,7 @@ def summary(results):
                 failed=failed)
 
 
-def _code_state() -> dict:
+def _code_state(folder: str = "src/gimap/features/fitting/domain") -> dict:
     """The commit of the run, the git tree of the fitting code (the same tree at two commits is the same code) and
     whether that code had uncommitted changes."""
     import subprocess
@@ -376,7 +376,6 @@ def _code_state() -> dict:
         except Exception:
             return ""
 
-    folder = "src/gimap/features/fitting/domain"
     return {"commit": git("rev-parse", "--short", "HEAD"), "fitting_tree": git("rev-parse", f"HEAD:{folder}"),
             "fitting_code_modified": bool(git("status", "--porcelain", "--", folder))}
 

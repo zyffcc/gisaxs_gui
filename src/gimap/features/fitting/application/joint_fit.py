@@ -50,8 +50,7 @@ HEIGHT_RANGE_WARNING = ("{height} depends on the vertical fit range. The change 
                         "height uncertainty or 2% of the selected height.")
 LAYER_WARNING = ("{name} has a vertical reduced χ² of {chi2} (> 3). The model omits the effective refractive index "
                  "of the particle layer. For dense or high-Z layers the fitted height is likely underestimated. "
-                 "In the BornAgain benchmark, heights for Au-like layers at 10–40% coverage were 13–60% low on "
-                 "the full cut and 6–20% low from 2αc (Physics and Methods §9.18).")
+                 "See Physics and Methods §9.18 for height biases in the BornAgain benchmark.")
 ON_SPECULAR = ("{name}: a vertical cut at q∥ = {q} nm⁻¹ lies on or near the specular rod, which the particles' model "
                "leaves out: take the vertical cut beside it in Analyze (Cuts step), e.g. at the structure peak.")
 CROSSES_ROD = ("The vertical band of {name} crosses the specular rod (qy = 0). The particle model excludes this "

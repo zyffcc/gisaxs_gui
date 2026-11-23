@@ -87,7 +87,7 @@ ROWS14 = {
     "dwba": (DWBA, RADIUS + "; median error over spheres with 2.3 <= q_z R < 3.5, levels 3/2/1", [7, 11, 20]),
     "galaxi": ([source("galaxi_posterior.json", "galaxi_posterior", commit="4ea7fb7")],
                "median(fits[BornAgain, born1].best.values.R_1.best); truth.R_number_mean", [4.9, 6.2]),
-    "height": ([source("vertical_height_bias.json", "vertical_height_bias")],
+    "height": ([source("history/vertical_height_bias.json", "vertical_height_bias")],
                "cases[name].summary.full.h.noise_free_bias; max absolute off, Si 10%, "
                "least/most negative of Au 10/30/40%. Full angular window, historical height model.", [0.1, -3, -13, -60]),
     "au": ([("@au-fit", "e14282d", "python series.py fit <cycle>"),
