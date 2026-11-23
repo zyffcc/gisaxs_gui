@@ -137,6 +137,14 @@ def reduce_row(key, inputs):
         return _dwba(inputs[0], inputs[1:])
     if key == "dwba4":
         return _dwba4(inputs[0])
+    if key == "height":
+        # The shipped height average fits the off-layer cases exactly to this digit: the table prints an upper
+        # bound to one decimal (at least 0.1 %), the other cells as in revision 14.
+        bias = {c["name"]: 100 * c["summary"]["full"]["h"]["noise_free_bias"] for c in inputs[0]["cases"]}
+        off = max(abs(bias["a_off_" + s]) for s in ("D14", "D24", "D12"))
+        au = [bias["b_avg_" + s + "_Au"] for s in ("10", "30", "40")]
+        return common.result([format(max(math.ceil(10 * off) / 10, 0.1), ".1f"), format(bias["b_avg_10_Si"], ".0f"),
+                              format(max(au), ".0f"), format(min(au), ".0f")])
     group, _, metric = key.partition(".")
     if group in ("first", "third", "extended", "network"):
         data = inputs[0]
