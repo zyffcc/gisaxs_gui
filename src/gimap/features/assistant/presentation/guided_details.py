@@ -28,7 +28,7 @@ from src.gimap.shared import fit_names
 from src.gimap.shared.numbers import format_number
 
 from ..application import bound_phrases, probability
-from ..application.gisaxs_choice import displayed_estimate
+from ..application.gisaxs_choice import composition_modes, displayed_estimate, model_probability, weight_text
 from ..application.pipeline_report import FLAG_WORDS
 from ..application.report_numbers import peak_value
 from .guided_text import ScaledPixmapLabel, label
@@ -282,14 +282,22 @@ class SolutionDetails(QWidget):
         for key, name, unit in GLOBAL_VALUES:
             if (solution.get("globals") or {}).get(key) is not None:
                 pairs.append((name, _parameter_text(solution, key, unit)))
-        chance = probability(solution)
         fitted = solution.get("points") or fit.get("fitted_points") or {}
         over = "" if fitted.get("fitted") is None else " (" + trf(
             "{fitted} of {given} points", fitted=fitted["fitted"], given=fitted.get("given", fitted["fitted"])) + ")"
         by_bic = fit_names.weight_key(solution) == "bic_weight"
-        pairs += [(fit_names.BIC_WEIGHT if by_bic else "probability", tr("only this composition was tried") if solution.get("alone")
-                   else "—" if math.isnan(chance) else format_number(chance)),
-                  ("χ²ᵣ", format_number(solution.get("chi2")) + over), ("log RMSE", format_number(solution.get("log_rmse"))),
+        weight = model_probability(solution)
+        weight_name = fit_names.BIC_WEIGHT if by_bic else "probability"
+        if solution.get("alone"):
+            pairs.append((weight_name, tr(fit_names.ONLY_ONE)))
+        else:
+            multiple = composition_modes(solution, fit.get("solutions") or []) > 1
+            if multiple:
+                weight_name = "model BIC weight" if by_bic else "model probability"
+            pairs.append((weight_name, weight_text(weight)))
+            if multiple:
+                pairs.append(("this solution", weight_text(probability(solution))))
+        pairs += [("χ²ᵣ", format_number(solution.get("chi2")) + over), ("log RMSE", format_number(solution.get("log_rmse"))),
                   ("converged", tr("yes") if solution.get("converged", True) else tr("no")),
                   ("time", "—" if solution.get("seconds") is None else f"{solution['seconds']:.1f} s")]
         for name, stat in (solution.get("posterior_summary") or {}).items():

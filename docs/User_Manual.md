@@ -165,15 +165,16 @@ straight to **Send to Fitting** (step 5).
 | Beam centre | x moved to the symmetry axis, x = 597.26 px | The documented direct beam is x = 597.1 px |
 | Halves | *Halves: Mean of both halves*, the reason in its tooltip | Both halves agree; otherwise the usable one is taken |
 | **Length scale 2π/q\*** | *2π/q\* = 55.6 nm at a shoulder of the cut (\|qy\| = 0.0113 Å⁻¹, no resolved peak): not necessarily the particle spacing.* | It is not the particle spacing: near the documented 53.6 nm by coincidence (a BornAgain simulation of the same particles without interference shows a shoulder too) |
-| **Fit of I(qy)** | A table of solutions, most probable first: model, p (the probability), R, h, D (nm) of every population in the order of the radii (a dash for D means that population has no paracrystal) and χ²ᵣ; a ⚠ marks values at a bound. The warning under the table names them, and the tooltip identifies the bound | Whether another solution is about as probable; what is at a bound |
+| **Fit of I(qy)** | A table of solutions, most probable first: model, p (the solution's probability), R, h, D (nm) of every population in the order of the radii (a dash for D means that population has no paracrystal) and χ²ᵣ; a ⚠ marks values at a bound. The warning under the table names them, and the tooltip identifies the bound | Which models compete, which values differ between solutions, and which values are at a bound |
 
 The fit is **Predict parameters** (section 6.4): GIMaP's network proposes one or two populations of spheres and
 upright cylinders, with or without a paracrystal, each solution is refined by least squares and weighted by its
 probability, and the most probable solution is reported. The screenshot shows the earlier first-level fit, which found an upright cylinder with a paracrystal next
-to a second, larger upright cylinder (R = 3.17 / 6.15 nm, D = 44 / – nm, χ²ᵣ 1.07, probability 0.39). Two more
-solutions are about as probable (0.32 and 0.30), so the Results tab shows a point to check, **Model choice**:
-*3 solutions have a probability of at least 0.2 (…): the curve alone does not decide the model.* The probabilities
-compare only the compositions that were tried. The cut's broad log-normal sizes and its rise at low q are described
+to a second, larger upright cylinder (R = 3.17 / 6.15 nm, D = 44 / – nm, χ²ᵣ 1.07, probability 0.39).
+In the worked example in section 10.7, the first two rows describe the same model, a sphere with a paracrystal
+and an upright cylinder. The model probability rounds to 1.00. The two solutions carry probabilities of 0.51 and
+0.49. The report flags the sphere radius for review because its rank-1 value falls below the rank-2 interval.
+The probabilities compare only the compositions that were tried. The cut's broad log-normal sizes and its rise at low q are described
 here by two populations. For this sample you know the particles are spheres: fit that model in Fitting (step 5).
 
 ![GISAXS results](manual_images/en/08_gisaxs_results.png)
@@ -1748,9 +1749,18 @@ q_z·R > 1.2 because its reported interval can underestimate the uncertainty (`q
 strong model error (`qzR_fail`). At levels 2 and 4, an upright cylinder above 2 is flagged as a possible sphere of similar radius
 (`cyl_sphere`), even when its height is unknown. For a level-2 cut, use **Send to Fitting** to include the
 exit-reflected path for spheres. Enter
-αi, αf and λ under Model ▸ **Spheres in grazing incidence** and run Predict parameters again. When another solution has a probability of 0.2 or more, the curve alone does not
-decide the model: a line under the table says so, and the Results tab asks which one you expect and names the
-solutions whose D is within 15 % of 2π/q\*. The report gives the refined R, h and D of the reported
+αi, αf and λ under Model ▸ **Spheres in grazing incidence** and run Predict parameters again.
+
+The Results tab asks you to choose a model only when another composition has a probability (or BIC weight) of at
+least 0.2. It names the competing models and gives the total probability or weight of each. It also identifies models
+whose most probable solution has D within 15 % of the cut's length scale 2π/q\*. When the reported model has several
+solutions, the fit decision also gives the reported solution's own probability or weight. For another solution of the same
+model with a probability or weight of at least 0.2, the analysis compares R, h and D for each population. When each refined value
+lies inside the other solution's 68 % interval in both directions, the decision records the overlap. If a value falls
+outside or an interval is missing, the report identifies the value to check. Refine from each starting solution in
+**Fitting** and compare the fits.
+
+The report gives the refined R, h and D of the reported
 solution with their 68 % intervals (*fit intervals: R (1) 3.17 [3.04, 3.26] nm …*: the refined value, then its
 interval; from the least-squares errors when the posterior's sampling did not converge). Every value has one name,
 that of Fitting's Model table, in the table, the notes, Fit details and the report: Tail A, Tail w and Tail ν for the
@@ -4085,7 +4095,10 @@ At q_z = 0.5226 nm⁻¹ the 5.98 nm upright cylinder has q_z·R = 3.13. *Needs a
 a possible sphere (`cyl_sphere:R_2`). The BornAgain reference uses spheres of radius 5.75 nm.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
 gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
-the candidate solutions and their weights. On the archive platform the leading composition had evidence probability 0.9995, divided between two solutions with weights 0.5126 and 0.4869. In `fit_curve.csv`, `sigma` gives the pointwise standard error and `fit_sigma` includes the correlation between points that share interpolated measurements. Exit code 2 means that an item needs attention in the report.
+the candidate solutions and their weights. On the archive platform the leading composition had evidence probability
+0.9995, divided between two solutions with weights 0.5126 and 0.4869. For the sphere radius R (1), the first gave
+3.278 [3.267, 3.441] nm and the second 3.310 [3.294, 3.471] nm. The first estimate falls below 3.294 nm, so the
+**values** item asks you to compare the two fits. In `fit_curve.csv`, `sigma` gives the pointwise standard error and `fit_sigma` includes the correlation between points that share interpolated measurements. Exit code 2 means that an item needs attention in the report.
 The same folder contains `qmap.png` and `report.json`. The run summaries are
 `fig4/summary.md` and `fig4/summary.json`.
 

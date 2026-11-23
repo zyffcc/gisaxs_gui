@@ -24,7 +24,8 @@ DIFFERS = "Differs from solution {other} in: {values}."
 THERE = "{name} {value} (there {other})"
 REFINE_POINTS = ("Refine fitted {refined} points; Predict parameters fitted {fitted} of {given} ({why}): the two χ²ᵣ "
                  "are not of the same points.")
-P_TIP = "p: the posterior probability of the solution; probabilities are relative to the compositions that were tried."
+P_TIP = ("p: the posterior probability of the solution; probabilities are relative to the compositions that were tried. "
+         "A model's probability is the sum of the probabilities of its solutions.")
 SIZES_TIP = "Every population's value, in the order of the radii; –: a population without a paracrystal."
 NO_ERROR = {
     "bound": "No error: the value is at a bound of its range.",

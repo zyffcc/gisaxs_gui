@@ -152,9 +152,9 @@ def _solution(row: dict) -> dict:
     }
 
 
-def _brief(solution: dict) -> str:
+def _brief(solution: dict, solutions=()) -> str:
     """Every population's R (and D), χ²ᵣ and the probability, as the report's decision says them."""
-    said = chance(solution)
+    said = chance(solution, solutions)
     return f"{solution['model']}, {sizes(solution)}, χ²ᵣ = {solution['chi2']:.3g}" + (f", {said}" if said else "")
 
 
@@ -353,11 +353,11 @@ class GisaxsToolsMixin:
             self.results.gisaxs["prediction"] = {key: plan[key] for key in ("options", "weights", "network_record")}
         by_bic = fit_names.weight_key(head) == "bic_weight"
         lead = "highest BIC weight" if by_bic else "most probable"
-        summary = f"{lead}: {_brief(head)}" + (f" ({bounds_text(head)})" if bounds_text(head) else "")
+        summary = f"{lead}: {_brief(head, solutions)}" + (f" ({bounds_text(head)})" if bounds_text(head) else "")
         others = rivals(solutions)
         if others:
             summary += ("; alternatives: " if by_bic else "; also probable: ") + "; ".join(
-                f"rank {item['rank']}, {_brief(item)}" for item in others)
+                f"rank {item['rank']}, {_brief(item, solutions)}" for item in others)
         return self._ok({"side": side, "curve": note, "points": int(x.size),
                          **({"substrate_metadata_warning": fallback} if fallback else {}), "solutions": solutions[:TOP_SOLUTIONS],
                          "chosen": head}, summary)

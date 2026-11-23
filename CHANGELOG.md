@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- Automatic GISAXS analysis asks you to choose a particle model only when another composition has a probability or BIC weight of at least 0.2. For two probable solutions of the same model, it reports agreement within their 68 % intervals or identifies the parameter to check.
+
 - **Predict parameters** pools all starts when estimating a composition's evidence. The BIC fallback compares the best fit of each composition with the model-error floor included. Refinement and sampling use the same resolution, shape bounds and substrate model, including the level-3 reflection disk and the finite Born transfer for random cylinders at levels 2 and 4.
 
 - The public P08 replay example now reproduces the zero-roll analysis with the revised PbI₂ CIF. Its resolved MAPbI₃ reflections (202 and 404) constrain only one combination of lattice parameters, so the report withholds the tetragonal cell.

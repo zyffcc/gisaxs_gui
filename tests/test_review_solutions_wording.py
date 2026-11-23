@@ -106,7 +106,7 @@ def test_the_headline_and_the_table_show_every_population_in_the_order_of_the_ra
                                         "D = 49 / – nm, χ²ᵣ = 1.05, probability 0.42")
     assert gisaxs_tools._brief(solution).startswith("upright cylinder (S) + upright cylinder, R = 3.06 / 6.02 nm, D = ")
     report = {"gisaxs": {"fit": {"solutions": [solution], "chosen": 0}}}
-    assert "R 3.06 / 6.02 nm, D 49 / – nm, χ²ᵣ 1.05, p 0.42" in gisaxs_batch_row(report)[2]
+    assert "R 3.06 / 6.02 nm, D 49 / – nm, χ²ᵣ 1.05, probability 0.42" in gisaxs_batch_row(report)[2]
     one = gisaxs_tools._solution(_row(components=_row()["components"][1:]))
     assert sizes(one) == "R = 3.06 nm, D = 49.4 nm"  # one population: as before
 

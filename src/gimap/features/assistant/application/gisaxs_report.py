@@ -8,7 +8,10 @@ from pathlib import Path
 from src.gimap.shared import fit_names
 from src.gimap.shared.numbers import format_number
 
-from .gisaxs_choice import ASK_PROBABILITY, LENGTH_SCALE, POOR_CHI2, bounds_text, chance, chosen, component_number, probability, sizes
+from .gisaxs_choice import (
+    ASK_PROBABILITY, LENGTH_SCALE, POOR_CHI2, bounds_text, chance, chosen, component_number,
+    composition_modes, model_probability, probability, sizes, weight_text,
+)
 from .report_table import batch_table, table_row
 from .report_language import ENGLISH, heading
 
@@ -92,11 +95,13 @@ def _all_parameters(solution: dict) -> str:
     return "; ".join(f"{i + 1}: {_parameters(solution, i)}" for i in range(len(components)))
 
 
-def _probability(solution: dict) -> str:
-    if solution.get("alone"):  # the one solution of a composition that was given: 1.00 would be no finding
+def _probability(solution: dict, solutions) -> str:
+    if solution.get("alone"):
         return fit_names.ONLY_ONE
-    value = probability(solution)
-    return "—" if math.isnan(value) else f"{value:.2f}"
+    text = weight_text(model_probability(solution))
+    if composition_modes(solution, solutions) > 1:
+        text += f" ({weight_text(probability(solution))})"
+    return text
 
 
 def fit_rows(fit: dict) -> list[str]:
@@ -107,6 +112,8 @@ def fit_rows(fit: dict) -> list[str]:
         return ["No fit solution."]
     index, _solution = chosen(fit)
     kind = fit_names.BIC_WEIGHT if fit_names.weight_key(_solution or {}) == "bic_weight" else "probability"
+    if any(composition_modes(row, solutions) > 1 for row in solutions):
+        kind = f"model {kind} (this solution)"
     lines = [f"| rank | model | {kind} | parameters | χ²ᵣ | note |", "|---|---|---|---|---|---|"]
     footnotes = []
     for number, row in enumerate(solutions):
@@ -115,7 +122,7 @@ def fit_rows(fit: dict) -> list[str]:
                  + ([] if row.get("converged", True) else ["not converged"])
                  + ([f"{more} more on background, beam tail and resolution (below)"] if more else []))
         rank = f"{row['rank']} (chosen)" if number == index else row["rank"]
-        cells = [rank, row["model"], _probability(row), _all_parameters(row), format_number(row.get("chi2")),
+        cells = [rank, row["model"], _probability(row, solutions), _all_parameters(row), format_number(row.get("chi2")),
                  "; ".join(note for note in notes if note)]
         lines.append(table_row(cells, footnotes, move_columns=(5, 3)))
     return lines + (["", *footnotes] if footnotes else [])
@@ -177,9 +184,11 @@ def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
     else:
         _, selected = chosen(fit)
         by_bic = fit_names.weight_key(selected or {}) == "bic_weight"
-        comparison = ("Evidence sampling failed. BIC weights compare the solutions by exp(−BIC/2), "
-                      "normalised over the solutions compared." if by_bic else
-                      f"Posterior probabilities compare the solutions by their evidences. {fit_names.RELATIVE}.")
+        comparison = ("Evidence sampling failed. Each model's lowest BIC sets its weight among the models. "
+                      "The fit divides that weight among the model's solutions according to their BIC values."
+                      if by_bic else
+                      "The fit compares models by their evidence and divides each model's probability among its "
+                      f"solutions. {fit_names.RELATIVE}.")
         diagnostics = fit_names.diagnostic_lines((selected or {}).get("diagnostics") or {}, (selected or {}).get("ess"))
         lines += [
             f"Curve: {fit.get('curve')} ({fit.get('points')} points, |qy| {_number((fit.get('q_range_inv_angstrom') or [None])[0], 3)}–"
@@ -196,8 +205,10 @@ def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
             "Predict parameters: GIMaP's network proposes compositions — one or two populations of spheres and "
             "upright cylinders with size dispersity, \"(S)\" with a paracrystal distance D — and their values; each "
             f"solution is refined by least squares. {comparison} The run reports the highest-weight solution (chosen), "
-            f"with its refined sizes and their 68 % intervals in the Decisions. Another solution with weight "
-            f"at least {ASK_PROBABILITY:g} is a point to check. "
+            f"with its refined sizes and their 68 % intervals in the Decisions. Another model with weight "
+            f"at least {ASK_PROBABILITY:g} prompts a model choice. For another solution of the reported model with "
+            f"weight at least {ASK_PROBABILITY:g}, the run checks whether each solution's R, h and D lie within "
+            "the other's 68 % intervals. Values that fail this check are listed under Needs attention. "
             f"{fit_names.CHI2_DEFINITION}; it is the number Fitting shows for the same solution. A "
             "non-linear value at a bound of its range (the note column) is not determined by the curve. The "
             "particle amplitudes (Scale), the Background and the beam tail's amplitude Tail A cannot go below 0; one "
@@ -262,7 +273,7 @@ def gisaxs_batch_row(report: dict) -> tuple[str, str, str]:
     _index, best = chosen(gisaxs.get("fit"))
     if best is None:
         return halves, spacing_text, "—"
-    said = chance(best, "p ")
+    said = chance(best, gisaxs["fit"]["solutions"])
     text = (f"{best['model']} {sizes(best, ' ')}, χ²ᵣ {format_number(best.get('chi2'))}"
             + (f", {said}" if said else ""))
     return halves, spacing_text, text + (f" ⚠ {bounds_text(best)}" if bounds_text(best) else "")

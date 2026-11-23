@@ -59,6 +59,7 @@ from .zh_round2_joint import ROUND2_JOINT_ZH
 from .zh_round2_resume import ROUND2_RESUME_ZH
 from .zh_round2_series import ROUND2_SERIES_ZH
 from .zh_sample_roll import SAMPLE_ROLL_ZH
+from .zh_same_model import SAME_MODEL_ZH
 from .zh_frame_incidence import FRAME_INCIDENCE_ZH
 from .zh_series_chain import SERIES_CHAIN_ZH
 from .zh_series_selection import SERIES_SELECTION_ZH
@@ -79,6 +80,7 @@ FEATURES_ZH = {
     **ANALYZE_NUMBERS_ZH, **FITTING_NUMBERS_ZH, **REPORT_NUMBERS_ZH,
     **CELL_REFINEMENT_ZH, **CELL_ORIENTATION_ZH, **CELL_SERIES_ZH,
     **SAMPLE_ROLL_ZH,
+    **SAME_MODEL_ZH,
     **FRAME_INCIDENCE_ZH,
     **ROUND2_ANALYZE_ZH,
     **ROUND2_JOINT_ZH,

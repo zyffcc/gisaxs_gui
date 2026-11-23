@@ -5,7 +5,8 @@ After the geometry and the frames (shared with GIWAXS): the horizontal cut at th
 halves chosen with their reason, the length scale 2π/q* of a side maximum or shoulder of I(qy)
 (a length the curve shows, not necessarily the particle spacing), and — when a fitter is
 available — Predict parameters on the curve: the most probable solution is reported with its
-probability and intervals, and when another solution is probable too the person chooses the model.
+model probability and intervals. Competing compositions prompt a model choice. Solutions of the
+reported composition are checked against each other's size intervals.
 Each step is a tool call, so the GUI shows it and the AI could do the same. Like the GIWAXS run, the
 report always says what its numbers are (q kinematic, uncertainties statistical only:
 ``giwaxs_decisions``), and a reported fit far from its curve (χ²ᵣ above Fitting's poor-fit limit),
@@ -22,7 +23,6 @@ from src.gimap.shared import fit_names
 from ..domain.notes import substrate_from_notes
 from ..domain.substrate_optics import substrate_record
 from .gisaxs_choice import (
-    ASK_PROBABILITY,
     INTERVAL_KEYS,
     LENGTH_SCALE,
     LINEAR_TERMS,
@@ -31,13 +31,16 @@ from .gisaxs_choice import (
     bounds_text,
     chance,
     chosen,
+    compare_same_model,
     component_estimate,
     component_number,
     interface_caveat,
     interval,
+    model_probability,
     poor_fit,
     rivals,
     sizes,
+    weight_text,
     zero_terms,
 )
 from .gisaxs_report import cut_locations
@@ -86,11 +89,14 @@ POOR_FIT_HINT = (
     "off the Yoneda band or a second population give such a misfit. Refine a model you expect in Fitting."
 )
 """A converged reported solution with χ²ᵣ above ``POOR_CHI2`` (the limit of Fitting's poor fit)."""
-PROBABLE = "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model."
+PROBABLE = "The curve alone does not decide the model. Model probabilities: {models}."
 BIC_DECISION = "Predict parameters on {curve} compared the solutions by BIC weight after evidence sampling failed."
-BIC_RIVALS = "{n} solutions have a BIC weight of at least {limit} ({solutions})."
+BIC_RIVALS = "The curve alone does not decide the model. Model BIC weights: {models}."
 PROBABLE_HINT = "Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves."
-"""Another solution is probable too (``gisaxs_choice.rivals``): the person chooses the model."""
+OVERLAP = "{n} solutions of this model with overlapping 68 % intervals."
+DIFFERENT_VALUES = "Two solutions of the same model give {name} values of {first_value} and {second_value}."
+VALUES_UNDECIDED = "The curve does not decide between these values."
+VALUES_HINT = "In Fitting, refine from each start and compare the fitted curves and parameter values."
 SPACING = "length scale"
 """The decision about 2π/q* (the report's key)."""
 UNCORRELATED_D_NM = 250.0
@@ -104,10 +110,10 @@ def _distance(solution: dict) -> Optional[float]:
     return float(components[0]["D"]) if components and components[0].get("D") is not None else None
 
 
-def _solution_text(solution: dict) -> str:
+def _solution_text(solution: dict, solutions=()) -> str:
     """Formatted once, from the fit record (the tool's answer is rounded to 4 significant digits: 48.3484 → 48.35,
     which ``.3g`` then made 48.4 while the table said 48.3). D only for a solution with a paracrystal."""
-    said = chance(solution)
+    said = chance(solution, solutions)
     return f"{solution['model']}: {sizes(solution)}, χ²ᵣ = {solution['chi2']:.3g}" + (f", {said}" if said else "")
 
 
@@ -276,7 +282,11 @@ class GisaxsProcedureMixin:
         over = fit_names.points_text(best.get("points") or fit.get("fitted_points"))
         by_errors = fit_names.weight_key(best) == "bic_weight"
         reason = BIC_DECISION if by_errors else PREDICTED
-        self._decide("fit", _solution_text(best), reason.format(curve=fit.get("curve"), points=f" ({over})" if over else ""))
+        overlap, differences = compare_same_model(solutions, best)
+        decision = _solution_text(best, solutions)
+        if overlap > 1:
+            decision += ". " + OVERLAP.format(n=overlap)
+        self._decide("fit", decision, reason.format(curve=fit.get("curve"), points=f" ({over})" if over else ""))
         ranges = _interval_text(best)
         if ranges:  # the refined values with their intervals; from the errors when the sampling did not converge
             self._decide("fit intervals", (INTERVALS_BIC if by_errors else INTERVALS).format(values=ranges),
@@ -299,9 +309,13 @@ class GisaxsProcedureMixin:
                 "fit caveat", f"D = {component_number(best, 'D', 0)} nm: this solution has no interparticle correlation in the q range",
                 "a structure factor that is flat here; D itself is not determined by the curve",
             )
-        others = rivals(solutions)
+        others = rivals(solutions, best)
         if others:
-            self._model_question([best, *others])
+            self._model_question([best, *others], solutions)
+        if differences:
+            details = [DIFFERENT_VALUES.format(name=name, first_value=first, second_value=second)
+                       for name, first, second in differences]
+            self._attention("values", " ".join([*details, VALUES_UNDECIDED]), None, VALUES_HINT)
         if bounds_text(best):
             self._attention("fit", AT_BOUND.format(model=best["model"], bounds=bounds_text(best)), None, AT_BOUND_HINT)
         if not best.get("converged", True):
@@ -320,9 +334,8 @@ class GisaxsProcedureMixin:
             self._attention("fit", POOR_FIT.format(model=best["model"], chi2=f"{best['chi2']:.3g}", limit=f"{POOR_CHI2:g}"),
                             None, POOR_FIT_HINT)
 
-    def _model_question(self, probable: list[dict]) -> None:
-        """Another solution is about as probable: the person chooses (the probabilities said, and the solutions
-        whose D is close to 2π/q* named — a length scale, not necessarily a spacing)."""
+    def _model_question(self, probable: list[dict], solutions: list[dict]) -> None:
+        """Name the competing compositions and keep the spacing comparison tied to their representative fits."""
         spacing = self.catalog.results.gisaxs.get("spacing")
         agree = [
             item for item in probable
@@ -331,12 +344,11 @@ class GisaxsProcedureMixin:
         hint = ""
         if agree:
             hint += (f"Solutions whose D is within {SAME_D:.0%} of 2π/q* of the cut: "
-                     + "; ".join(_solution_text(item) for item in agree)
+                     + "; ".join(_solution_text(item, solutions) for item in agree)
                      + " (2π/q* is a length scale, not necessarily the particle spacing). ")
-        listed = "; ".join(f"rank {item['rank']}, {_solution_text(item)}" for item in probable)
+        listed = ", ".join(f"{item['model']} ({weight_text(model_probability(item))})" for item in probable)
         template = BIC_RIVALS if fit_names.weight_key(probable[0]) == "bic_weight" else PROBABLE
-        self._attention("model", template.format(n=len(probable), limit=f"{ASK_PROBABILITY:g}", solutions=listed),
-                        None, hint + PROBABLE_HINT)
+        self._attention("model", template.format(models=listed), None, hint + PROBABLE_HINT)
 
     def _gisaxs_report(self) -> Optional[dict]:
         results = self.catalog.results

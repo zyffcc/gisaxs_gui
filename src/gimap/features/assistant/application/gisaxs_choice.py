@@ -4,8 +4,9 @@ value at a bound of its range is said.
 Predict parameters (Fitting's ``create_curve_fit``) gives the distinct solutions of a cut most probable first: GIMaP's
 network proposes compositions and values, each solution is refined by least squares and weighted by its posterior
 probability. The run reports the most probable solution (the first; the fit record keeps its index, ``chosen``).
-When another solution is probable too — its probability at least ``ASK_PROBABILITY`` — the curve alone does not
-decide the model and the run asks the person to choose (``rivals``). A non-linear value that ended on a bound of its
+When another composition has weight at least ``ASK_PROBABILITY``, the run asks the person to choose the model
+(``rivals``). For probable solutions of the same composition, it compares R, h and D with their 68 % intervals.
+A non-linear value that ended on a bound of its
 range (``at_bounds`` of a solution, e.g. D at its upper bound) is not determined by the curve: a point to check.
 
 The linear terms — the particle amplitudes, the Background and the beam tail's amplitude Tail A — cannot go below 0 and
@@ -24,8 +25,7 @@ from src.gimap.shared import fit_names
 from src.gimap.shared.numbers import format_number
 
 ASK_PROBABILITY = 0.2
-"""A solution after the first with at least this posterior probability makes the run ask the person to choose the
-model: the curve does not tell the two apart well enough for the run to decide."""
+"""Minimum weight for a competing composition or an alternative set of values within the reported composition."""
 BOUND_NAMES = {key: fit_names.NAMES[key] for key in ("R", "sigma_R", "h", "sigma_h", "D", "sigma_D", "sigma_nn",
                                                       "sigma_Res", "nu_Res")}
 """How a value at a bound is named: the names of Fitting's Model table (``shared/fit_names``; Tail w, Tail ν: the
@@ -59,19 +59,57 @@ INTERVAL_KEYS = ("R", "h", "D")
 """The values whose posterior intervals the report gives (per component: ``R_1``, ``h_2`` … of ``intervals``)."""
 
 
-def probability(solution: Optional[dict]) -> float:
-    """The numeric comparison weight. Older BIC records stored it under 'probability'."""
-    row = solution or {}
+def _finite(value) -> float:
     try:
-        value = float(row.get(fit_names.weight_key(row), row.get("probability")))
+        value = float(value)
     except (TypeError, ValueError):
         return math.nan
     return value if math.isfinite(value) else math.nan
 
 
-def rivals(solutions: list[dict]) -> list[dict]:
-    """The solutions after the first whose probability is at least ``ASK_PROBABILITY`` (empty: the run decides)."""
-    return [item for item in solutions[1:] if probability(item) >= ASK_PROBABILITY]
+def probability(solution: Optional[dict]) -> float:
+    """The solution's own weight. Older BIC records stored it under 'probability'."""
+    row = solution or {}
+    return _finite(row.get(fit_names.weight_key(row), row.get("probability")))
+
+
+def model_probability(solution: Optional[dict]) -> float:
+    """The recorded weight of this composition, or the solution's own weight in older records."""
+    row = solution or {}
+    diagnostics = row.get("diagnostics") or {}
+    weight = diagnostics.get("composition_" + fit_names.weight_key(row))
+    return probability(row) if weight is None else _finite(weight)
+
+
+def weight_text(weight: float) -> str:
+    """Show the recorded weight to two decimals, or a dash if the record has none."""
+    return f"{weight:.2f}" if math.isfinite(weight) else "—"
+
+
+def composition_modes(solution: dict, solutions=()) -> int:
+    """Include modes omitted from the solution list when the fit recorded their count."""
+    recorded = (solution.get("diagnostics") or {}).get("composition_modes") or 1
+    model = solution.get("model")
+    listed = sum(row.get("model") == model for row in solutions) if model else 0
+    return max(recorded, listed)
+
+
+def rivals(solutions: list[dict], reported: Optional[dict] = None) -> list[dict]:
+    """One representative per competing model, selected by its solution weight."""
+    if not solutions:
+        return []
+    model = (reported or solutions[0]).get("model")
+    if not model:
+        return []
+    representatives = {}
+    for row in solutions:
+        other = row.get("model")
+        if not other or other == model or not model_probability(row) >= ASK_PROBABILITY:
+            continue
+        previous = representatives.get(other)
+        if previous is None or math.isnan(probability(previous)) or probability(row) > probability(previous):
+            representatives[other] = row
+    return list(representatives.values())
 
 
 def poor_fit(solution: Optional[dict]) -> bool:
@@ -117,7 +155,10 @@ def component_estimate(solution, key, index):
     precise = solution.get("least_squares_values") or {}
     name = f"{key}_{index + 1}"
     value = precise.get(name)
-    return solution["components"][index].get(key) if value is None else value
+    components = solution.get("components") or ()
+    if value is None and index < len(components):
+        value = components[index].get(key)
+    return value
 
 
 def displayed_estimate(solution, key, index=None):
@@ -166,21 +207,72 @@ def sizes(solution: Optional[dict], equals: str = " = ") -> str:
     return f"R{equals}{radii} nm" + ("" if spacing == "—" else f", D{equals}{spacing} nm")
 
 
-def chance(solution: Optional[dict], name: str = "probability ") -> str:
-    """``probability 0.42``; ``only this composition was tried`` for the one solution of a composition that was
-    given (its probability of 1 is no finding); "" when the fit gave none."""
-    if (solution or {}).get("alone"):
-        return fit_names.ONLY_ONE
-    value = probability(solution)
-    if fit_names.weight_key(solution or {}) == "bic_weight":
-        name = fit_names.BIC_WEIGHT + " "
-    return "" if math.isnan(value) else f"{name}{value:.2f}"
+def chance(solution: Optional[dict], solutions=(), *, render=str.format) -> str:
+    """The composition's weight, with the solution's own share when the composition has several modes."""
+    row = solution or {}
+    if row.get("alone"):
+        return render(fit_names.ONLY_ONE)
+    weight = model_probability(row)
+    if math.isnan(weight):
+        return ""
+    by_bic = fit_names.weight_key(row) == "bic_weight"
+    if composition_modes(row, solutions) > 1:
+        template = ("model " + fit_names.BIC_WEIGHT + " {weight} (this solution {share})" if by_bic else
+                    "model probability {weight} (this solution {share})")
+        return render(template, weight=weight_text(weight), share=weight_text(probability(row)))
+    template = fit_names.BIC_WEIGHT + " {weight}" if by_bic else "probability {weight}"
+    return render(template, weight=weight_text(weight))
 
 
 def interval(solution: Optional[dict], key: str, component: int = 0, level: int = 68) -> Optional[tuple[float, float]]:
     """``(low, high)`` of the ``level`` % posterior interval of a component's value (``key``: R, h, D; ``component``
     from 0), or ``None`` when the fit gave none."""
     return _bounds(((solution or {}).get("intervals") or {}).get(f"{key}_{component + 1}"), level)
+
+
+def _estimate_text(value, bounds):
+    if bounds is None:
+        return f"{format_number(value)} nm (68 % interval unavailable)"
+    return fit_names.interval_text(value, *bounds, "nm")
+
+
+def _value_differences(reported, other):
+    count = max(len(reported.get("components") or ()), len(other.get("components") or ()), 1)
+    for index in range(count):
+        for key in INTERVAL_KEYS:
+            first = component_estimate(reported, key, index)
+            second = component_estimate(other, key, index)
+            if key != "R" and first is None and second is None:
+                continue  # h and D exist only for components that fit them
+            first, second = _finite(first), _finite(second)
+            a, b = interval(reported, key, index), interval(other, key, index)
+            if a and b and a[0] <= second <= a[1] and b[0] <= first <= b[1]:
+                continue
+            name = fit_names.display_name(f"{key}_{index + 1}", count > 1)
+            yield name, _estimate_text(first, a), _estimate_text(second, b)
+
+
+def compare_same_model(solutions: list[dict], reported: Optional[dict] = None) -> tuple[int, list[tuple[str, str, str]]]:
+    """Count solutions consistent with the reported one (including itself), and list differences for the others.
+
+    A probable solution agrees only if every refined R, h and D is in the corresponding 68 % interval of the
+    other solution, in both directions. The comparison uses full precision before formatting the differences.
+    """
+    if not solutions:
+        return 0, []
+    reported = reported or solutions[0]
+    overlapping = 1
+    differences = []
+    for other in solutions:
+        if other is reported or not reported.get("model") or other.get("model") != reported["model"]:
+            continue
+        if probability(other) >= ASK_PROBABILITY:
+            distinct = list(_value_differences(reported, other))
+            if distinct:
+                differences.extend(distinct)
+            else:
+                overlapping += 1
+    return overlapping, differences
 
 
 def _bounds(found, level):
@@ -238,6 +330,7 @@ def interface_caveat(solution: Optional[dict], cut: Optional[dict]) -> str:
 
 __all__ = [
     "ASK_PROBABILITY", "AT_LOWER", "AT_UPPER", "BOUND_NAMES", "INTERVAL_KEYS", "LENGTH_SCALE", "LINEAR_TERMS", "POOR_CHI2",
-    "QZ_R", "QZ_R_HINT", "QZ_R_LIMIT", "bound_phrases", "bounds_text", "chance", "chosen", "interface_caveat",
-    "interval", "poor_fit", "probability", "rivals", "sizes", "zero_terms",
+    "QZ_R", "QZ_R_HINT", "QZ_R_LIMIT", "bound_phrases", "bounds_text", "chance", "chosen", "compare_same_model",
+    "composition_modes", "interface_caveat", "interval", "model_probability", "poor_fit", "probability", "rivals",
+    "sizes", "weight_text", "zero_terms",
 ]

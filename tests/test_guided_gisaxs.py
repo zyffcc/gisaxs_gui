@@ -62,7 +62,7 @@ class BoundFitter(FakeFitter):
         self.calls.append({"points": len(q), "components": components, "q_min": float(np.min(q))})
         upper_d = [{"parameter": "D", "bound": "upper", "component": 0},
                    {"parameter": "sigma_h", "bound": "upper", "component": 0}]
-        return [
+        rows = [
             _row(q, intensity, sigma, 1, "random_cylinder", 8.5961, 500.0, 1.26, upper_d, probability=0.55,
                  flags=["at_bound:D_1", "unconstrained:sigma_h_1"]),
             _row(q, intensity, sigma, 2, "random_cylinder", 6.0117, 30.862, 1.279,
@@ -71,6 +71,9 @@ class BoundFitter(FakeFitter):
             _row(q, intensity, sigma, 4, "vertical_cylinder", 7.7732, 30.8046, 1.45,
                  [{"parameter": "nu_Res", "bound": "upper", "component": None}], probability=0.05),
         ]
+        for row in rows[:2]:
+            row["diagnostics"] = {"composition_probability": 0.80, "composition_modes": 2}
+        return rows
 
 
 def _row(q, intensity, sigma, rank, model, radius, distance, chi2, at_bounds=(), *, probability=1.0, warnings=None,
@@ -156,7 +159,7 @@ def test_the_shoulder_gives_a_length_scale_that_is_never_called_the_spacing(gala
 
 def test_the_fit_reports_the_most_probable_and_asks_for_the_model_when_another_is_probable(galaxi_run) -> None:
     """Predict parameters needs no start (no D from 2π/q*); the run reports the most probable solution with its
-    intervals, and asks for the model when another solution has a probability of at least 0.2."""
+    intervals, and asks for the model when another composition has a probability of at least 0.2."""
     session, report = galaxi_run
     call = session.catalog.fitter.calls[-1]
     assert call["components"] == () and 500 <= call["points"] <= 1000 and call["q_min"] >= 0  # the network chooses
@@ -173,9 +176,7 @@ def test_the_fit_reports_the_most_probable_and_asks_for_the_model_when_another_i
     assert any(item["what"] == "fit caveat" and "no interparticle correlation" in item["decision"] for item in report["decisions"])
     model = next(item for item in report["needs_attention"] if item["item"] == "model")
     assert model["why"] == (
-        "2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 6.10 nm, D = 398 nm, χ²ᵣ = 1.22, "
-        "probability 0.62; rank 2, sphere: R = 9.40 nm, D = 53.4 nm, χ²ᵣ = 1.31, probability 0.38): the curve alone "
-        "does not decide the model.")
+        "The curve alone does not decide the model. Model probabilities: random_cylinder (0.62), sphere (0.38).")
     assert "sphere" in model["hint"] and "53.4" in model["hint"]  # the solution that agrees with the spacing
     compact = compact_report(report)
     assert "data" not in compact["gisaxs"]["fit"] and "curves" not in compact["gisaxs"]["fit"]
@@ -189,7 +190,7 @@ def test_a_close_second_solution_below_the_limit_is_not_a_question() -> None:
     from src.gimap.features.assistant.application.gisaxs_choice import ASK_PROBABILITY, probability, rivals
 
     assert ASK_PROBABILITY == 0.2
-    solutions = [{"probability": 0.7}, {"probability": 0.2}, {"probability": 0.19}, {"probability": None}]
+    solutions = [{"model": f"model {i}", "probability": p} for i, p in enumerate([0.7, 0.2, 0.19, None])]
     assert rivals(solutions) == [solutions[1]] and rivals(solutions[:1]) == []
     assert rivals([{"chi2": 1.2}, {"chi2": 1.21}]) == []  # a record without probabilities: nothing to ask
     assert probability({"probability": "x"}) != probability({"probability": "x"})  # NaN
@@ -233,6 +234,7 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     assert section.fit_plot.figure_state()["curves"][1][0] == "fit 2: sphere"
     assert section.fit_table.columnCount() == 6 and section.fit_table.item(0, 0).text() == "random cylinder"
     assert section.fit_table.horizontalHeaderItem(1).text() == "p" and section.fit_table.item(0, 1).text() == "0.62"
+    assert "sum of the probabilities of its solutions" in section.fit_table.horizontalHeaderItem(1).toolTip()
     assert section.fit_table.horizontalHeaderItem(5).text() == "χ²ᵣ"  # the reduced χ² Fitting shows for the solution
     assert section.fit_plot.log_x_check.isChecked()
     curve = Path(section.save_curve(str(tmp_path / "curve.csv")))
@@ -267,11 +269,12 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     state, line = automatic_outcome(report)
     assert state == "ok" and line.startswith("GISAXS — halves: mean of both halves, 2π/q* = ")
     assert line.endswith("; 1 point(s) to check.") and "question" not in line and "both_abs" not in line
-    assert "most probable fit random cylinder R 6.10 nm (p 0.62, χ²ᵣ 1.22)" in line
+    assert "most probable fit random cylinder R 6.10 nm (probability 0.62, χ²ᵣ 1.22)" in line
     texts = [item.text() for item in panel.findChildren(QLabel)]
     assert texts[0].startswith("GISAXS — halves: mean of both halves") and not any("question" in text for text in texts)
     assert "1 point(s) to check — see below" in texts and any(text.startswith("Model choice: ") for text in texts)
-    assert any(text.startswith("2 solutions have p ≥ 0.2: the curve alone does not decide the model.") for text in texts)
+    assert ("Competing models and their probabilities: random cylinder (0.62), sphere (0.38). "
+            "Select a row to compare their fits.") in texts
     # The decision on the line, its reason in the tooltip (2026-11 small-text review).
     halves = panel.findChild(QLabel, "guidedHalves")
     assert halves.text() == "Halves: Mean of both halves" and halves.toolTip() and " — " not in halves.text()
@@ -554,25 +557,28 @@ def test_the_most_probable_solution_is_reported_and_its_values_at_a_bound_are_a_
     # the fit's own warning for D at its bound is said once, by at_bounds (which bound); the others pass on
     assert fit["solutions"][0]["warnings"] == [UNCONSTRAINED]
     decision = _decision(report, "fit")
-    assert decision["decision"] == "random_cylinder: R = 8.60 nm, D = 500 nm, χ²ᵣ = 1.26, probability 0.55"
+    assert decision["decision"] == ("random_cylinder: R = 8.60 nm, D = 500 nm, χ²ᵣ = 1.26, "
+                                    "model probability 0.80 (this solution 0.55)")
     assert any(item["what"] == "fit caveat" and item["decision"] == "D at its upper bound, σh/h at its upper bound"
                for item in report["decisions"])
     assert any(item["what"] == "fit caveat" and item["decision"] == UNCONSTRAINED for item in report["decisions"])
     point = next(item for item in report["needs_attention"] if item["item"] == "fit")
     assert point["why"] == ("The reported solution (random_cylinder) has D at its upper bound, σh/h at its upper "
                             "bound: those values are not determined by the curve.")
-    model = next(item for item in report["needs_attention"] if item["item"] == "model")
-    assert model["why"].startswith("2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 8.60 nm")
-    assert "rank 2, random_cylinder: R = 6.01 nm, D = 30.9 nm, χ²ᵣ = 1.28, probability 0.25" in model["why"]
-    assert "rank 3" not in model["why"]  # p 0.15: below the limit
+    assert all(item["item"] != "model" for item in report["needs_attention"])
+    values = next(item for item in report["needs_attention"] if item["item"] == "values")
+    assert "give D values of 500 [450, 550] nm and 30.9 [27.8, 33.9] nm" in values["why"]
     text = pipeline_markdown(report)
     assert f"- [1] D at its upper bound, σh/h at its upper bound; {UNCONSTRAINED}" in text
     assert all(len(line) < 100 for line in text.splitlines() if line.startswith("|"))
     # The interval sets the displayed precision for R and D. Relative dispersities here have no interval.
     assert "| 3 | sphere | 0.15 | R 9.44 nm, σR/R 0.3, D 48.3 nm, σD/D 0.4 | 1.36 |  |" in text
-    assert "| 1 (chosen) | random_cylinder | 0.55 | R 8.60 nm, " in text and "D 500 nm" in text
+    assert "| model probability (this solution) |" in text
+    assert "| 1 (chosen) | random_cylinder | 0.80 (0.55) |" in text
+    assert "R 8.60 nm" in text and "D 500 nm" in text
     assert gisaxs_batch_row(report)[2] == (
-        "random_cylinder R 8.60 nm, D 500 nm, χ²ᵣ 1.26, p 0.55 ⚠ D at its upper bound, σh/h at its upper bound")
+        "random_cylinder R 8.60 nm, D 500 nm, χ²ᵣ 1.26, model probability 0.80 (this solution 0.55) "
+        "⚠ D at its upper bound, σh/h at its upper bound")
     table = fit_solutions_csv(fit).splitlines()
     assert table[2].startswith("rank,model,chi2,probability,") and table[2].endswith(",at_bounds,chosen")
     assert "R_low68,R_high68,h_low68,h_high68,D_low68,D_high68" in table[2]
@@ -601,24 +607,24 @@ def test_the_results_tab_selects_the_reported_solution_and_names_the_bounds(boun
                                 "its upper bound; 2: σh/h at its lower bound; 4: Tail ν at its upper bound.")
     texts = [item.text() for item in panel.findChildren(QLabel)]
     assert not any(text.startswith("Reported: rank") for text in texts), texts
-    assert any(text.startswith("2 solutions have p ≥ 0.2") for text in texts)
+    assert not any(text.startswith("Competing models") for text in texts)
     assert any(text.startswith("2π/q* = ") and text.endswith("not necessarily the particle spacing.") for text in texts)
     fitted = next(text for text in texts if text.startswith("Fitted: "))
     assert fitted.endswith(" · R, h and D in nm.")  # (what the fits are: the tooltip of “Fit of I(qy)”)
     heading = next(label for label in panel.findChildren(QLabel) if label.text() == "Fit of I(qy)")
     assert heading.toolTip().startswith("Predict parameters: GIMaP's network proposes the particles")
     assert "⚠ D at its upper bound" in section.solution_details.warnings.text()
-    assert ("most probable fit random cylinder R 8.60 nm (p 0.55, χ²ᵣ 1.26) ⚠ D at its upper bound, σh/h at its upper "
-            "bound") in automatic_outcome(report)[1]
+    assert ("most probable fit random cylinder R 8.60 nm (model probability 0.80 (this solution 0.55), χ²ᵣ 1.26) "
+            "⚠ D at its upper bound, σh/h at its upper bound") in automatic_outcome(report)[1]
     panel.gisaxs.dispose()
     panel.deleteLater()
     point = next(item for item in report["needs_attention"] if item["item"] == "fit")
-    model = next(item for item in report["needs_attention"] if item["item"] == "model")
+    values = next(item for item in report["needs_attention"] if item["item"] == "values")
     apply_language("zh")
     try:  # by its form; the values at a bound as a list, the warnings of Predict parameters too
         assert words(point["why"]) == "报告的解（random_cylinder）：D 处于搜索上界、σh/h 处于搜索上界；这些数值不由曲线确定。"
-        assert words(model["why"]).startswith("2 个解的概率都不低于 0.2（rank 1, random_cylinder: R = 8.60 nm")
-        assert words(model["hint"]) == "请选择你预期的粒子形状，在拟合中精修这个模型，并比较拟合曲线。"
+        assert "同一模型的两个解给出的 D" in words(values["why"])
+        assert words(values["hint"]) == "在拟合工作区分别从各初值开始精修，比较拟合曲线和参数值。"
         assert words(UNCONSTRAINED) == "曲线对 σh/h 约束很少（其 68 % 区间覆盖了允许范围的大部分）"
     finally:
         apply_language(DEFAULT_LANGUAGE)
@@ -710,3 +716,102 @@ def test_a_reported_fit_far_from_its_curve_is_a_point_to_check() -> None:
         assert "χ²ᵣ = 472，大于 10" in words(point["why"]) and words(point["hint"]).startswith("请对照曲线查看拟合")
     finally:
         apply_language(DEFAULT_LANGUAGE)
+
+
+def _weighted_row(rank, model, weight, model_weight, modes, weight_key, *, composition_count):
+    # Invented values for two populations. Only the sphere has D and only the cylinder has h.
+    return {
+        "rank": rank, "composition": model, weight_key: weight, "best_chi2_weighted": 1.1,
+        "diagnostics": {"composition_" + weight_key: model_weight, "composition_modes": modes,
+                        "composition_count": composition_count},
+        "components": [{"type": "sphere", "params": {"R": 3.0, "D": 50.0}},
+                       {"type": "vertical_cylinder", "params": {"R": 6.0, "h": 8.0}}],
+        "posterior": {
+            "R_1": [3, 3, 2, 4, 1, 5], "D_1": [50, 50, 40, 60, 30, 70],
+            "R_2": [6, 6, 5, 7, 4, 8], "h_2": [8, 8, 7, 9, 6, 10],
+        },
+    }
+
+
+def _fit_report(rows):
+    """Run the automatic procedure's fit step and report on an in-memory horizontal cut."""
+    from src.gimap.features.assistant.application import (
+        GOALS, PERMISSION_AUTO, AnalysisGoals, RunResults, StandardPipeline, ToolCatalog,
+    )
+    from tests.assistant_fakes import FakeWorkbench, q_curve
+
+    class CutWorkbench(FakeWorkbench):
+        def curve(self, key):
+            assert key == "horizontal"
+            return q_curve(key, 2)
+
+    workbench = CutWorkbench(measurement="gisaxs")
+    catalog = ToolCatalog(workbench, AnalysisGoals(tuple(GOALS), permission=PERMISSION_AUTO),
+                          RunResults(status=workbench.status()), fitter=lambda *args, **kwargs: rows)
+    pipeline = StandardPipeline(catalog)
+    pipeline._fit()
+    report = pipeline._report()
+    assert report["steps"][-1]["tool"] == "fit_horizontal_cut" and not report["steps"][-1]["error"], report["steps"]
+    assert report["gisaxs"]["fit"]["chosen"] == 0
+    return report
+
+
+@pytest.mark.parametrize("weight_key,label", [("probability", "probability"), ("bic_weight", "BIC weight")])
+def test_same_model_reports_mutual_overlap_and_both_weights(weight_key, label):
+    model = "sphere (S) + upright cylinder"
+    rows = [_weighted_row(i, model, weight, 1.0, 2, weight_key, composition_count=2)
+            for i, weight in enumerate((0.55, 0.45), 1)]
+    rows[1]["least_squares_values"] = {"R_1": 3.1, "D_1": 51.0, "R_2": 6.1, "h_2": 8.1}
+    report = _fit_report(rows)
+    assert report["needs_attention"] == []
+    decision = _decision(report, "fit")["decision"]
+    assert f"model {label} 1.00 (this solution 0.55)" in decision
+    assert "2 solutions of this model with overlapping 68 % intervals" in decision
+    assert [row[weight_key] for row in report["gisaxs"]["fit"]["solutions"]] == [0.55, 0.45]
+
+
+@pytest.mark.parametrize("missing_interval", [False, True], ids=["one-way-containment", "missing-interval"])
+def test_same_model_flags_only_the_unresolved_parameter(missing_interval):
+    model = "sphere (S) + upright cylinder"
+    rows = [_weighted_row(i, model, weight, 1.0, 2, "probability", composition_count=2)
+            for i, weight in enumerate((0.8, 0.2), 1)]
+    if missing_interval:
+        del rows[1]["posterior"]["h_2"]
+    else:
+        # The intervals overlap and contain 50. Only the second interval contains the refined value 65.
+        rows[1]["least_squares_values"] = {"D_1": 65.0}
+        rows[1]["posterior"]["D_1"] = [65, 65, 45, 85, 25, 105]
+    report = _fit_report(rows)
+    point, = report["needs_attention"]
+    assert point["item"] == "values"
+    if missing_interval:
+        assert "h (2)" in point["why"] and "68 % interval unavailable" in point["why"]
+    else:
+        for text in ("D (1)", "50 [40, 60] nm", "65 [45, 85] nm"):
+            assert text in point["why"]
+    assert "Fitting" in point["hint"] and "each start" in point["hint"] and "compare" in point["hint"]
+    assert "overlapping" not in _decision(report, "fit")["decision"]
+
+
+@pytest.mark.parametrize("weight_key,label", [("probability", "probability"), ("bic_weight", "BIC weight")])
+def test_competing_models_are_listed_by_composition_weight_once(weight_key, label):
+    from src.gimap.features.assistant.application.gisaxs_choice import rivals
+
+    first_model = "sphere (S) + upright cylinder"
+    second_model = "upright cylinder (S) + upright cylinder"
+    rows = [_weighted_row(1, first_model, 0.60, 0.60, 1, weight_key, composition_count=2)]
+    for rank, weight in enumerate((0.18, 0.14, 0.08), 2):
+        row = _weighted_row(rank, second_model, weight, 0.40, 3, weight_key, composition_count=2)
+        row["components"][0]["type"] = "vertical_cylinder"
+        rows.append(row)
+    report = _fit_report(rows)
+    point, = report["needs_attention"]
+    assert point["item"] == "model" and point["why"].count(second_model) == 1
+    assert f"{first_model} (0.60)" in point["why"] and f"{second_model} (0.40)" in point["why"]
+    if weight_key == "bic_weight":
+        assert "BIC weights" in point["why"] and "probabilit" not in point["why"]
+    assert "Choose the particle shape" in point["hint"]
+    assert _decision(report, "fit")["decision"].endswith(f"{label} 0.60")
+    solutions = report["gisaxs"]["fit"]["solutions"]
+    assert [row[weight_key] for row in solutions] == [0.60, 0.18, 0.14, 0.08]
+    assert rivals([solutions[0], *reversed(solutions[1:])]) == [solutions[1]]

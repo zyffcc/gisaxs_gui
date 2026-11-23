@@ -123,8 +123,11 @@ proposes compositions (one or two populations of spheres and upright cylinders, 
 paracrystal distance D) and values, each solution is refined by least squares, and the solutions come \
 in order of probability, or BIC weight if evidence sampling failed. Report the chosen solution's least-squares \
 values, posterior medians where available, interval kind and diagnostics. Call bic_weight a BIC weight. \
-When another solution's weight is 0.2 or more, give both weights and leave the choice to the user (or to what the notes \
-say about the sample). χ²ᵣ is the reduced χ² over the fitted points ('points': fitted of given, the rest below the network's q window). A value in at_bounds ended on a \
+Give the model's weight and, for a model with several solutions, the reported solution's share. Ask the user to choose \
+a model only when another composition has weight 0.2 or more. For another solution of the reported model with weight \
+at least 0.2, check each refined R, h and D against the other solution's 68 % interval in both directions. Ask about \
+the values if this comparison fails or an interval is missing. χ²ᵣ is the reduced χ² over the fitted points ('points': \
+fitted of given, the rest below the network's q window). A value in at_bounds ended on a \
 bound of its range and is not determined by the curve: say so. A distance D of hundreds of nm means \
 no correlation in the q range, not a measured distance. The model is confirmed in Fitting.
 - Moving a cut, the halves or the centre is the user's call when it changes the result: suggest \

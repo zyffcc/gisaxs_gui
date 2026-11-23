@@ -23,7 +23,6 @@ from src.gimap.shared.numbers import format_number
 from src.gimap.shared.export_text import export_text
 
 from ..application import (
-    ASK_PROBABILITY,
     bound_phrases,
     chosen_solution,
     cut_spans,
@@ -34,7 +33,7 @@ from ..application import (
     probability,
     rivals,
 )
-from ..application.gisaxs_choice import component_number, population_values
+from ..application.gisaxs_choice import chance, component_number, model_probability, population_values, weight_text
 from ..application.operations import halves_label
 from .guided_details import SolutionDetails
 from .guided_text import GOOD, NOTE, WARN, ask_save_path, badge, label, listed, save_failed_toast, saved_toast, table
@@ -46,9 +45,8 @@ COLUMNS = (("R", "R (nm)"), ("h", "h (nm)"), ("D", "D (nm)"))
 FIT_HEADERS = (("model", "The particles of the solution: one or two populations; (S): with a paracrystal distance D. "
                           "⚠: a warning of the fit. A value marked ⚠ ended on a bound of its range, which the curve does "
                           "not determine (listed under the table; Fit details below: every parameter)."),
-               ("p", "p: the posterior probability of the solution, relative to the compositions that were tried; the "
-                     "solutions are sorted by it, most probable first. Another solution with p of 0.2 or more: the "
-                     "curve alone does not decide the model."),
+               ("p", "p is the posterior probability of this solution among the compositions tried. The most probable "
+                     "solution is listed first. A model's probability is the sum of the probabilities of its solutions."),
                ("R", "R (nm): the particle radius of every population, in the order of the radii."),
                ("h", "h (nm): the cylinder height of every population, in the order of the radii (– for a sphere)."),
                ("D", "D (nm): the paracrystal distance of every population, in the order of the radii (– without a "
@@ -67,22 +65,19 @@ BOUNDS_WHOLE = "Values at a search bound, not determined by the curve — {rows}
 """The values of the solutions that ended on a bound of their range: a warning with their names by rank, which bound
 in its tooltip."""
 FIT_TIP = ("Predict parameters: GIMaP's network proposes the particles (one or two populations of spheres and upright "
-           "cylinders) and their values; each solution is refined by least squares, p is its posterior probability. "
-           "Choose the model from what you know of the sample and refine it in Fitting.")
+           "cylinders) and their values. Each solution is refined by least squares. Select a solution to see its "
+           "fitted curve.")
 """The tooltip of “Fit of I(qy)”: what the fits are and are not."""
-PROBABLE_NOTE = ("{n} solutions have p ≥ {limit}: the curve alone does not decide the model. Compare their fits (select "
-                 "a row) and choose from what you know of the sample.")
+PROBABLE_NOTE = "Competing models and their probabilities: {models}. Select a row to compare their fits."
 BIC_TIP = "Evidence sampling failed. The solutions are ranked by normalised BIC weights."
-BIC_NOTE = "{n} solutions have BIC weights ≥ {limit}. Select a row to compare their fits."
-BIC_OUTCOME = "{model} R {radius} nm (BIC weight {p}, χ²ᵣ {chi2})"
-"""Under the table when another solution is probable too (``gisaxs_choice.rivals``)."""
+BIC_NOTE = "Competing models and their BIC weights: {models}. Select a row to compare their fits."
 
 
 def model_name(model: str) -> str:
     return str(model or "").replace("_", " ")
 
 
-def _details(row: dict) -> str:
+def _details(row: dict, solutions: list[dict]) -> str:
     """Every parameter and warning of a solution (the row's tooltip), its words in the interface language."""
     components = row.get("components") or [{}]
     values = "; ".join(
@@ -90,10 +85,9 @@ def _details(row: dict) -> str:
         + ", ".join(f"{tr(name)} {component_number(row, key, number - 1)}{unit}" for key, name, unit in DETAILS if component.get(key) is not None)
         for number, component in enumerate(components, start=1))
     notes = list(row.get("warnings") or ()) + ([] if row.get("converged", True) else ["not converged"])
-    label = tr(fit_names.BIC_WEIGHT) if fit_names.weight_key(row) == "bic_weight" else "p"
-    chance = "" if _probability(row) == "—" else f"; {label} {_probability(row)}"
+    weight = chance(row, solutions, render=trf)
     more = [words(note) for note in row.get("more_warnings") or ()]
-    return (f"{model_name(row['model'])}: {values}; χ²ᵣ {_number(row['chi2'])}{chance}"
+    return (f"{model_name(row['model'])}: {values}; χ²ᵣ {_number(row['chi2'])}" + (f"; {weight}" if weight else "")
             + "".join(f"\n⚠ {words(note)}" for note in notes) + "".join(f"\n⚠ {phrase}" for phrase in bound_words(row))
             + ("\n" + trf(fit_names.MORE, notes="; ".join(more)) if more else ""))
 
@@ -101,8 +95,7 @@ def _details(row: dict) -> str:
 def _probability(row: dict) -> str:
     if row.get("alone"):  # the one solution of a composition that was given: its 1.00 is no finding
         return "—"
-    chance = probability(row)
-    return "—" if chance != chance else f"{chance:.2f}"  # NaN: the fit gave none
+    return weight_text(probability(row))
 
 
 def bound_words(row: dict) -> list[str]:
@@ -146,14 +139,18 @@ def outcome_summary(report: dict) -> str:
     if spacing:
         gap = "" if current_language() == "zh" else " "  # a Chinese full-width bracket needs no space before it
         parts.append(f"2π/q* = {spacing['distance_nm']:.3g} nm" + ("" if spacing.get("kind") == "maximum" else gap + tr("(shoulder)")))
-    _index, best = chosen_solution(gisaxs.get("fit"))
+    fit = gisaxs.get("fit") or {}
+    _index, best = chosen_solution(fit)
     if best is not None:
         values = {"model": model_name(best["model"]), "radius": population_values(best, "R"),
                   "chi2": _number(best["chi2"])}
-        chance = _probability(best)  # a report written before Predict parameters gives none
-        parts.append(trf("best fit {model} R {radius} nm (χ²ᵣ {chi2})", **values) if chance == "—" else
-                     trf(BIC_OUTCOME, p=chance, **values) if fit_names.weight_key(best) == "bic_weight" else
-                     trf("most probable fit {model} R {radius} nm (p {p}, χ²ᵣ {chi2})", p=chance, **values))
+        weight = chance(best, fit["solutions"], render=trf)
+        if best.get("alone") or not weight:
+            parts.append(trf("best fit {model} R {radius} nm (χ²ᵣ {chi2})", **values))
+        else:
+            template = ("{model} R {radius} nm ({weight}, χ²ᵣ {chi2})" if fit_names.weight_key(best) == "bic_weight" else
+                        "most probable fit {model} R {radius} nm ({weight}, χ²ᵣ {chi2})")
+            parts.append(trf(template, weight=weight, **values))
         if bound_words(best):  # values the curve does not determine
             parts[-1] += " ⚠ " + _joined(bound_words(best))
     return listed(parts) if parts else tr("the horizontal cut is ready")  # Chinese: its own comma
@@ -270,7 +267,7 @@ class GisaxsResults(QWidget):
         layout.addWidget(self.fit_plot)
         rows, bounded, named = [], [], []
         for row in solutions:
-            details = _details(row)
+            details = _details(row, solutions)
             bounds = bound_words(row)  # a value at a bound is not determined by the curve: ⚠ on its cell too
             ended = {item.get("parameter") for item in row.get("at_bounds") or ()}
             flagged = bool(row.get("warnings")) or not row.get("converged", True) or bool(bounds)
@@ -294,11 +291,11 @@ class GisaxsResults(QWidget):
             bounds_label.setObjectName("guidedFitBounds")
             bounds_label.setToolTip(trf(BOUNDS_WHOLE, rows=separator.join(bounded)))
             layout.addWidget(bounds_label)
-        index, _best = chosen_solution(self.fit)
-        others = rivals(solutions)
-        if others:  # another solution about as probable: the person chooses the model
-            layout.addWidget(badge(trf(BIC_NOTE if by_bic else PROBABLE_NOTE, n=len(others) + 1,
-                                       limit=f"{ASK_PROBABILITY:g}"), WARN, self))
+        index, best = chosen_solution(self.fit)
+        others = rivals(solutions, best)
+        if others:
+            models = _joined(f"{model_name(row['model'])} ({weight_text(model_probability(row))})" for row in [best, *others])
+            layout.addWidget(badge(trf(BIC_NOTE if by_bic else PROBABLE_NOTE, models=models), WARN, self))
         layout.addWidget(label(trf(
             "Fitted: {curve} ({points} points) · R, h and D in nm.",
             curve=parts(self.fit.get("curve")), points=self.fit.get("points")), self, role="muted",

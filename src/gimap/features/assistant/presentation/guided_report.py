@@ -14,7 +14,6 @@ from __future__ import annotations
 import base64
 import html
 import io
-import math
 import time
 from typing import Callable, Optional
 
@@ -31,11 +30,10 @@ from ..application import (
     fit_on,
     peak_markers,
     pipeline_markdown,
-    probability,
     ring_overlays,
     series_markdown,
 )
-from ..application.gisaxs_choice import population_values
+from ..application.gisaxs_choice import chance, population_values
 from ..application.run_record import run_record
 from ..application.report_language import CHINESE, ENGLISH, heading
 from .guided_words import words
@@ -213,14 +211,13 @@ def fit_png(report: dict, width: int = 1000) -> Optional[bytes]:
         radii = population_values(top, "R")
         name = str(top.get("model") or "").replace("_", " ")
         detail = f" R {radii} nm" if radii != "—" else ""
-        chance = probability(top)
+        weight = chance(top, solutions)
         by_bic = fit_names.weight_key(top) == "bic_weight"
-        which = "best fit" if math.isnan(chance) or by_bic else "most probable fit"
-        kind = fit_names.BIC_WEIGHT if by_bic else "p"
+        which = "best fit" if not weight or top.get("alone") or by_bic else "most probable fit"
         bounds = ", ".join(bound_phrases(top))
         axes.loglog(q[fitted], model[fitted], "-", color=FIT_COLOURS[1], linewidth=1.4,
                     label=f"{which}: {name}{detail} ("
-                    + ("" if math.isnan(chance) else f"{kind} {chance:.2f}, ")
+                    + (f"{weight}, " if weight else "")
                     + f"χ²ᵣ {float(top.get('chi2') or 0):.3g})" + (f" ⚠ {bounds}" if bounds else ""))
     axes.set_xlabel("|qy| (Å⁻¹)")
     axes.set_ylabel("Intensity")

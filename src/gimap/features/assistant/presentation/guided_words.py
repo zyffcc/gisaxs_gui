@@ -16,6 +16,8 @@ from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, current_language, 
 from src.gimap.shared import fit_names
 from src.gimap.shared.orientation_notes import COVERAGE_WARNING
 
+from ..application.gisaxs_procedure import BIC_RIVALS, DIFFERENT_VALUES, OVERLAP, PROBABLE
+
 SENTENCES = (
     "The estimate draws {weight}% of its weight from {feature}.",
     "{reference} and frame αi = {value}° ({method}) differ by more than 3σ.",
@@ -64,8 +66,16 @@ SENTENCES = (
     "Born term at the cut's q_z = {qz} nm⁻¹",
     "four-term DWBA on {substrate}",
     "Unsupported substrate material {material}.",
-    "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model.",
-    "{n} solutions have a BIC weight of at least {limit} ({solutions}).",
+    PROBABLE, BIC_RIVALS, OVERLAP, DIFFERENT_VALUES,
+    "Model probabilities: {models}.",
+    "Model BIC weights: {models}.",
+    "{fit_values}. {n} solutions of this model with overlapping 68 % intervals.",
+    "{model}: {sizes}, χ²ᵣ = {chi2}, {fit_weight}",
+    "model probability {weight} (this solution {share})",
+    "model BIC weight {weight} (this solution {share})",
+    "probability {weight}",
+    "BIC weight {weight}",
+    "{value} nm (68 % interval unavailable)",
     "Predict parameters on {curve} compared the solutions by BIC weight after evidence sampling failed.",
     fit_names.MC_ERROR, fit_names.ESS_TEXT, fit_names.DENSITY_NOTICE, fit_names.PEAK_SPACING, fit_names.COMPOSITION_RANGE,
     "The reported solution ({model}) has χ²ᵣ = {chi2}, above {limit}: it misses the curve by far more than the σ of "
@@ -168,7 +178,8 @@ SENTENCES = (
 """English templates of the sentences a run writes; ``{name}`` is a value written as it is (or ``NESTED``).
 The fixed sentences (no values) are plain keys of the table. The form with the most fixed text is tried first,
 so a short form never takes a sentence of a longer one ("clear: … beats …")."""
-NESTED = frozenset({"texture", "agree", "extend", "now", "place", "feature", "method"})
+NESTED = frozenset({"texture", "agree", "extend", "now", "place", "feature", "method", "first_value", "second_value",
+                    "fit_values", "fit_weight"})
 """Values that are sentences themselves (a texture, whether the halves agree, how far one goes on, "no frame",
 where the search found a file)."""
 LISTS = frozenset({"bounds"})
@@ -178,6 +189,8 @@ _SENTENCE_BREAK = re.compile(r"(?<=[.。])\s+(?=[A-Z])")
 """Between two sentences of a text that has no form of its own (a hint made of several sentences)."""
 
 _SAVED_SENTENCES = (
+    "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model.",
+    "{n} solutions have a BIC weight of at least {limit} ({solutions}).",
     "Both halves are usable (points in {a} and {b} of their |qy| ranges) and {agree}: they are averaged where both "
     "exist, which halves the noise{extend}.",
     "no clear preferred orientation (f − f_iso = {f}, within ±{margin}): the ring is strongest at |χ| ≈ {chi}° but "

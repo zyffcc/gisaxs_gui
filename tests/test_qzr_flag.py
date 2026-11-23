@@ -142,7 +142,7 @@ def test_bic_gisaxs_report_preserves_weights_and_flags_and_names_their_kind():
                 posterior_summary={"R_1": {"median": 5.8, "low68": 5.5, "high68": 5.9}},
                 least_squares_values={"R_1": 6.}, ess=24., diagnostics={"compared_by": "bic", "posterior_kind": "tempered"})
     solution = _solution(base)
-    legacy = {**base, "rank": 2, "probability": 0.3}
+    legacy = {**base, "rank": 2, "composition": "sphere", "probability": 0.3}
     del legacy["bic_weight"]
     fit = {"solutions": [solution, _solution(legacy)], "chosen": 0}
     report = {"gisaxs": {"fit": fit}}
@@ -162,7 +162,7 @@ def test_bic_gisaxs_report_preserves_weights_and_flags_and_names_their_kind():
     procedure._call = lambda name: fit
     procedure.catalog = SimpleNamespace(results=SimpleNamespace(gisaxs=report["gisaxs"]))
     procedure._fit()
-    assert any("BIC weight of at least 0.2" in item for item in attention)
+    assert any("Model BIC weights: cylinder (0.70), sphere (0.30)." in item for item in attention)
     assert all(fit_names.SENTENCES[flag.split(":")[0]].format(name="R") in attention for flag in flags[1:])
 
 
