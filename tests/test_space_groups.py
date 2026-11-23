@@ -334,5 +334,6 @@ def test_the_symmetry_column_keeps_the_warning_of_a_phase_without_operations(tmp
     derived = phase_from_cif(_write(tmp_path / "derived.cif", _without_operations(MAPI_CIF)))
     assert symmetry_text(derived) == ("I 4/m c m, 32 operations from the space group (none in the CIF); 3 atom sites: "
                                       "|F|² from the atoms")
-    assert phase_notes(derived).startswith("32 symmetry operations generated from the space group I 4/m c m")
+    # the test CIF lists Pb and I sites only, so the sum-formula check (C H6 I3 N Pb) warns first
+    assert "\n32 symmetry operations generated from the space group I 4/m c m" in phase_notes(derived)
     assert isinstance(PhaseSpec("typed", CUBIC).phase(), Phase)  # a typed cell keeps its centring
