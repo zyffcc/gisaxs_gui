@@ -3365,7 +3365,7 @@ GIMaP 从不改动你的数据文件。分析的导出默认写到**数据旁边
 gimap reproduce example_analysis.json --out check
 ```
 
-自动分析完成后，在同一对话框中选择其导出的 JSON，或运行 `gimap reproduce report.json --out check`。程序读取原始帧，重新测量角度并约化，再按记录中的设置执行结构分析。提供物相 CIF 时，比较 GIWAXS 物相归属、取向判定及参数、晶胞精修结果。GISAXS 拟合会比较报告中的各个解及其概率或 BIC 权重。`reproduced_report.json` 给出重算值，`comparison.json` 列出各项比较结果。
+自动分析完成后，在同一对话框中选择其导出的 JSON，或运行 `gimap reproduce report.json --out check`。程序读取原始帧，重新测量角度并约化，再按记录中的设置执行结构分析。如果原分析使用了 `--assume-fibre-normal`，复现时也会在测量样品滚转角时采用纤维轴沿表面法线的假设。提供物相 CIF 时，比较 GIWAXS 物相归属、取向判定及参数、晶胞精修结果，包括未能给出晶胞参数的原因。GISAXS 拟合会比较报告中的各个解及其概率或 BIC 权重。`reproduced_report.json` 给出重算值，`comparison.json` 列出各项比较结果。
 
 省略 `--out` 时，命令在 JSON 旁创建 `<记录主文件名>_reproduced/`。每次比较请选择新的输出位置。文件夹中有重新计算的各列数据（CSV）和 `comparison.json`，批量结果分在带序号的子文件夹中。**identical** 表示记录中的每一列数值都逐位相同，包括曲线所带的不确定度和像素数。**different** 时可查看各列的最大相对差。数值逐位相同时退出码为 0，有差异为 2，出错为 1。
 

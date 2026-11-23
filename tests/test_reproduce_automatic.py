@@ -92,10 +92,7 @@ def compare_archive(actual, expected, *, path=()):
         assert actual == expected, path
 
 
-@pytest.fixture(scope="module", params=["p08", "galaxi", "galaxi_positive"])
-def exported(request, tmp_path_factory):
-    case = request.param
-    folder = tmp_path_factory.mktemp(case)
+def export_public_frame(case, folder, *extra_options):
     spec = json.loads((ARCHIVE / f"{case}.json").read_text(encoding="utf-8"))
     inputs = folder / "inputs"
     inputs.mkdir()
@@ -122,7 +119,7 @@ def exported(request, tmp_path_factory):
     if "mask" in spec:
         command += ["--mask", str(inputs / spec["mask"])]
     env = dict(os.environ, OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1", OMP_NUM_THREADS="1")
-    result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, encoding="utf-8")
+    result = subprocess.run([*command, *extra_options], cwd=ROOT, env=env, capture_output=True, encoding="utf-8")
     assert result.returncode in (0, 2), (result.stdout, result.stderr)
     path = folder / "export" / frame.stem / "report.json"
     # A collaborator receives the unchanged export and byte-identical input files beside it.
@@ -131,10 +128,19 @@ def exported(request, tmp_path_factory):
     return case, path, spec, env
 
 
-def test_export_replays_structural_results_on_public_frame(exported, tmp_path, monkeypatch):
-    case, path, archive, env = exported
+@pytest.fixture(scope="module", params=["p08", "galaxi", "galaxi_positive"])
+def exported(request, tmp_path_factory):
+    return export_public_frame(request.param, tmp_path_factory.mktemp(request.param))
+
+
+def replay_export(path, folder, env, monkeypatch):
     for name in ("MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS"):
         monkeypatch.setenv(name, env[name])
+    return reproduce_record(path, folder)
+
+
+def test_export_replays_structural_results_on_public_frame(exported, tmp_path, monkeypatch):
+    case, path, archive, env = exported
     record = json.loads(path.read_text(encoding="utf-8"))
     recipe = record["reproduction"]
     assert recipe["kind"] == "automatic" and len(recipe["commit"]) == 40
@@ -143,6 +149,7 @@ def test_export_replays_structural_results_on_public_frame(exported, tmp_path, m
     assert recipe["angles"]["incidence"] == record["incidence_measurement"]
     assert recipe["angles"]["roll"] == record["sample_roll_measurement"]
     if case == "p08":
+        assert recipe["options"]["assume_fibre_normal"] is False
         assert [phase["source_sha256"] for phase in record["phase_assignment"]["phases"]] == [
             archive["input_sha256"][cif] for cif in archive["phases"]]
     else:
@@ -152,7 +159,7 @@ def test_export_replays_structural_results_on_public_frame(exported, tmp_path, m
         assert plan["network_record"]["sha256"] == hashlib.sha256(manifest.read_bytes()).hexdigest()
         assert fields(plan["options"], "seed shortlist samples local_samples") == {
             "seed": 0, "shortlist": 4, "samples": 1000, "local_samples": 400}
-    comparison = reproduce_record(path, tmp_path)
+    comparison = replay_export(path, tmp_path, env, monkeypatch)
     assert comparison["kind"] == "automatic"
     assert {ref["sha256"] for ref in comparison["relocated_inputs"].values()} == set(archive["input_sha256"].values())
     assert comparison["status"] == "identical", comparison.get("sections")
@@ -162,6 +169,23 @@ def test_export_replays_structural_results_on_public_frame(exported, tmp_path, m
     # Check both ends. The numerical archive is independent of this test run and of the replay comparator.
     for report in (record, replay):
         compare_archive(structural_results(report), archive["expected"])
+
+
+def test_p08_replays_with_fibre_normal_assumption(tmp_path, monkeypatch):
+    _, path, _, env = export_public_frame("p08", tmp_path, "--assume-fibre-normal")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["reproduction"]["options"]["assume_fibre_normal"] is True
+    roll = record["sample_roll_measurement"]
+    assert roll["method"] == "fibre assumption" and roll["significant"]
+    # Geometry in the report keeps 15 significant digits of the measured angle.
+    assert record["geometry"]["sample_roll_deg"] == pytest.approx(roll["deg"], rel=5e-15, abs=0)
+
+    out = tmp_path / "replay"
+    comparison = replay_export(path, out, env, monkeypatch)
+    assert comparison["status"] == "identical", comparison.get("sections")
+    replay = json.loads((out / "reproduced_report.json").read_text(encoding="utf-8"))
+    assert replay["reproduction"]["options"]["assume_fibre_normal"] is True
+    assert structural_results(replay) == structural_results(record)
 
 
 def test_replay_rejects_changed_structural_input(exported, tmp_path):

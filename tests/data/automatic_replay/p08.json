@@ -11,7 +11,7 @@
     "S121_MAI_A2_00841.tif": "d164df4cbb9b469a3105d2bbd89ec012fd4d77ef4ea2739d05a425bab1f0d623",
     "LaB6_2021_12_DESY_P08.poni": "bf2fa71bc8d726c2c610a2932a98a1a3e7d2772979ee454da28d4cd7c6add8a9",
     "MAPbI3_reference.cif": "b8e9424c3caae8f674e51075fa2e9485a620e61d25cfc027a081e6cfdd816f0a",
-    "PbI2_reference.cif": "fa7fa67d3c14825312bb8bf72b9353b2f7e177fb507db6073ce9da7fbf4e5cf2"
+    "PbI2_reference.cif": "2557e807f08160cb371be8fa0667c35270816852325da598fc6cd2fcfbd17d62"
   },
   "runtime": {
     "python": "3.10.18",
@@ -22,8 +22,8 @@
   },
   "expected": {
     "angles": {
-      "incidence_deg": 0.501240083622424,
-      "sample_roll_deg": -1.30458732430548
+      "incidence_deg": 0.501246175640125,
+      "sample_roll_deg": 0.0
     },
     "assignments": [
       {
@@ -32,7 +32,7 @@
         "hkl": null,
         "ambiguous": false,
         "tentative": false,
-        "q": 0.4519384971729407,
+        "q": 0.45210990652347294,
         "q_hkl": null,
         "alternatives": []
       },
@@ -42,7 +42,7 @@
         "hkl": "001",
         "ambiguous": false,
         "tentative": false,
-        "q": 0.8988944979517145,
+        "q": 0.8990050028513207,
         "q_hkl": 0.9002987974179089,
         "alternatives": []
       },
@@ -52,7 +52,7 @@
         "hkl": "110",
         "ambiguous": true,
         "tentative": false,
-        "q": 0.9972644500706269,
+        "q": 0.9972367454877836,
         "q_hkl": 1.0013258819378783,
         "alternatives": [
           {
@@ -68,7 +68,7 @@
         "hkl": "112",
         "ambiguous": false,
         "tentative": false,
-        "q": 1.4090652331820823,
+        "q": 1.4090722671380227,
         "q_hkl": 1.4093285375687215,
         "alternatives": []
       },
@@ -78,7 +78,7 @@
         "hkl": "202",
         "ambiguous": false,
         "tentative": false,
-        "q": 1.7247553236886166,
+        "q": 1.7247338062236703,
         "q_hkl": 1.7288321053949285,
         "alternatives": []
       },
@@ -88,7 +88,7 @@
         "hkl": "004",
         "ambiguous": false,
         "tentative": false,
-        "q": 1.9902653563539399,
+        "q": 1.990258060640855,
         "q_hkl": 1.9834852204812836,
         "alternatives": []
       },
@@ -98,7 +98,7 @@
         "hkl": "114",
         "ambiguous": true,
         "tentative": false,
-        "q": 2.225582132453181,
+        "q": 2.2255186071047217,
         "q_hkl": 2.2219061955236445,
         "alternatives": [
           {
@@ -114,7 +114,7 @@
         "hkl": "204",
         "ambiguous": true,
         "tentative": false,
-        "q": 2.4382473639617337,
+        "q": 2.4382347271921554,
         "q_hkl": 2.4371131823419745,
         "alternatives": [
           {
@@ -130,7 +130,7 @@
         "hkl": "224",
         "ambiguous": false,
         "tentative": false,
-        "q": 2.814807349932255,
+        "q": 2.8147823593809957,
         "q_hkl": 2.818657075137443,
         "alternatives": []
       },
@@ -140,7 +140,7 @@
         "hkl": "314",
         "ambiguous": true,
         "tentative": false,
-        "q": 2.9854047568769007,
+        "q": 2.985385263349868,
         "q_hkl": 2.9912340645728537,
         "alternatives": [
           {
@@ -156,7 +156,7 @@
         "hkl": "404",
         "ambiguous": false,
         "tentative": false,
-        "q": 3.4479565285475466,
+        "q": 3.4479526093255917,
         "q_hkl": 3.457664210789857,
         "alternatives": []
       },
@@ -166,7 +166,7 @@
         "hkl": "406",
         "ambiguous": true,
         "tentative": false,
-        "q": 4.103960429808656,
+        "q": 4.103979029730243,
         "q_hkl": 4.107701159944775,
         "alternatives": [
           {
@@ -196,43 +196,43 @@
         ],
         "axes": [
           [
-            1,
-            1,
-            0
+            0,
+            0,
+            1
           ]
         ],
         "populations": [
           {
-            "fwhm_deg": 11.08293050261685,
-            "fwhm_err_deg": 0.3324145284061027,
-            "fraction": 0.048279999201760106,
-            "fraction_err": 0.0021711835020701586,
-            "delta_bic_vs_isotropic_replacement": 3298.0051288479426,
-            "replacement_delta_chi2_per_bin": 4.438652252075536,
-            "fraction_isotropic_correlation": -0.607020386623084,
+            "fwhm_deg": 11.434740057565795,
+            "fwhm_err_deg": 0.5290184753476588,
+            "fraction": 0.03422711790821205,
+            "fraction_err": 0.005204565322927358,
+            "delta_bic_vs_isotropic_replacement": 698.3308378056672,
+            "replacement_delta_chi2_per_bin": 0.9720251350185658,
+            "fraction_isotropic_correlation": -0.9156318670643545,
             "axis": [
-              1,
-              1,
-              0
+              0,
+              0,
+              1
             ]
           }
         ],
         "near_random": [
           {
-            "fwhm_deg": 78.68437610680081,
-            "fwhm_err_deg": 5.517225705793409,
-            "fraction": 0.951720000446861,
-            "fraction_err": 0.4281320995685967,
-            "delta_bic_vs_isotropic_replacement": 524.3768925783288,
-            "replacement_delta_chi2_per_bin": 0.7206519353602361,
-            "fraction_isotropic_correlation": -0.9999918791656018,
+            "fwhm_deg": 69.26185656273492,
+            "fwhm_err_deg": 7.77682796985875,
+            "fraction": 0.22465397304439108,
+            "fraction_err": 0.12241531413006125,
+            "delta_bic_vs_isotropic_replacement": 698.3308378056672,
+            "replacement_delta_chi2_per_bin": 0.9720251350185658,
+            "fraction_isotropic_correlation": -0.9998539203759673,
             "reason": "fraction trades with the isotropic fraction within 3σ"
           }
         ],
-        "fraction_iso": 0.9517200007982399,
-        "fraction_iso_err": 0.0021711835020701586,
-        "oriented_fraction": 0.04827999920176007,
-        "reduced_chi2": 3.3659350539936344
+        "fraction_iso": 0.9657728820917879,
+        "fraction_iso_err": 0.005204565322927358,
+        "oriented_fraction": 0.03422711790821209,
+        "reduced_chi2": 6.63372919489722
       },
       {
         "phase": "PbI2",
@@ -252,13 +252,13 @@
         ],
         "populations": [
           {
-            "fwhm_deg": 51.239185311922746,
-            "fwhm_err_deg": 4.437007019675704,
-            "fraction": 0.5695842124598809,
-            "fraction_err": 0.09694828830887513,
-            "delta_bic_vs_isotropic_replacement": 90.48332927897195,
-            "replacement_delta_chi2_per_bin": 1.1966386806574114,
-            "fraction_isotropic_correlation": -0.9924128862794033,
+            "fwhm_deg": 55.08382534739786,
+            "fwhm_err_deg": 5.508806334115109,
+            "fraction": 0.6019765977266679,
+            "fraction_err": 0.11309353576263279,
+            "delta_bic_vs_isotropic_replacement": 82.11652237329866,
+            "replacement_delta_chi2_per_bin": 1.0830732853688725,
+            "fraction_isotropic_correlation": -0.9911914746144347,
             "axis": [
               0,
               0,
@@ -266,13 +266,13 @@
             ]
           },
           {
-            "fwhm_deg": 13.46473870709265,
-            "fwhm_err_deg": 1.666128568303387,
-            "fraction": 0.04901214659318594,
-            "fraction_err": 0.014302758676154796,
-            "delta_bic_vs_isotropic_replacement": 90.48332927897195,
-            "replacement_delta_chi2_per_bin": 1.1966386806574114,
-            "fraction_isotropic_correlation": -0.5526853101708478,
+            "fwhm_deg": 15.29708911555074,
+            "fwhm_err_deg": 1.8141177001782314,
+            "fraction": 0.06254103815978611,
+            "fraction_err": 0.01851010839047568,
+            "delta_bic_vs_isotropic_replacement": 82.11652237329866,
+            "replacement_delta_chi2_per_bin": 1.0830732853688725,
+            "fraction_isotropic_correlation": -0.5875818758199505,
             "axis": [
               0,
               0,
@@ -281,30 +281,20 @@
           }
         ],
         "near_random": [],
-        "fraction_iso": 0.38140364094693324,
-        "fraction_iso_err": 0.10411765523568789,
-        "oriented_fraction": 0.6185963590530668,
-        "reduced_chi2": 1.7859892988814567
+        "fraction_iso": 0.33548236411354604,
+        "fraction_iso_err": 0.1229735526916306,
+        "oriented_fraction": 0.664517635886454,
+        "reduced_chi2": 1.7589325266216047
       }
     ],
     "cells": [
       {
         "phase": "MAPbI3 (tetragonal)",
-        "ok": true,
-        "reason": "",
+        "ok": false,
+        "reason": "The indexed peak positions do not independently determine the free parameters.",
         "system": "tetragonal",
-        "values": {
-          "a": 8.933505868367465,
-          "c": 12.646446515703978,
-          "V": 1009.2816230227179
-        },
-        "errors": {
-          "a": 0.002191987346058593,
-          "c": 0.0037849869168553093,
-          "V": 0.6385479462771922
-        },
-        "zero_shift": 0.002951796962187015,
-        "zero_shift_error": 0.0004544426084244229
+        "values": {},
+        "errors": {}
       },
       {
         "phase": "PbI2",
