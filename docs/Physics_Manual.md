@@ -2306,7 +2306,7 @@ amplitude, not a probability or a volume fraction.
 
 **Values at a bound.** The least squares of Predict parameters keep every population inside the box of the network's
 prior (section 9.13: R from 0.5/q_max to 5/q_min, σR/R, σh/h and σnn/D 0.02–0.5, D and h within the prior's D/2R and
-h/2R at radii up to 1.5 times the start's, the tail's ν 1.8–2.2 and w at most 30 q_min). A free shape or tail value
+h/2R ranges at the current radius, the tail's ν 1.8–2.2 and w at most 30 q_min). A free shape or tail value
 within 10⁻⁴ of its range of a bound has *ended on the bound*; the solution names it in `at_bounds` (parameter, lower
 or upper bound, component; the keys `sigma_Res` and `nu_Res` are the tail's w and ν, which every text calls
 Tail w and Tail ν, the names of Fitting's Model table: `shared/fit_names.py` holds the one name of every quantity
@@ -2961,7 +2961,8 @@ with the right family:
 | hemisphere | 4 | 2.31 | −5.1 % | −16 % |
 | hemisphere | 6 | 3.46 | −24 % | −43 % |
 
-- Up to q₊R ≈ 1.7 for spheres and ≈ 1.2 for hemispheres the EIA radius is within about 5 %.
+- For the cuts in this table the EIA radius is within about 5 % up to q₊R ≈ 1.7 for spheres and ≈ 1.2 for
+  hemispheres. Section 9.13 gives the distribution of errors over simulated cuts.
 - Beyond that the error depends on the unknown substrate, sign included, so it cannot be corrected afterwards.
   χ²ᵣ usually shows it, but not always (hemispheres of 2 nm on PS: −4 % at χ²ᵣ = 1.0; of 3 nm: −7 % at 1.5). For
   hemispheres the polymer film sets the limit: on bare Si they stay within 3 % up to q₊R ≈ 2.0.
@@ -3121,9 +3122,9 @@ The benchmarks still run with a copy of the kit: `tools/benchmarks/fit1d_recover
 ### 9.13 Predict parameters
 
 *Predict parameters* compares particle compositions on a measured cut. A network trained on simulated cuts proposes
-compositions and starting values. Bounded least squares refines them. Importance sampling around each mode estimates
-parameter intervals and the evidence used to compare compositions. When local sampling fails, the comparison uses
-BIC weights.
+compositions and starting values. Bounded least squares refines them. Importance samples from all retained starts
+of a composition give one estimate of its evidence. Each solution receives a share of its composition's weight.
+When sampling fails, the comparison uses the lowest BIC found for each composition.
 
 **Compositions and values.** A composition is one to three populations, listed by increasing mean radius, each a
 sphere, an upright cylinder or a random cylinder, with or without the paracrystal of section 9.5 — 258 compositions.
@@ -3142,10 +3143,13 @@ and whether both angles are known (q₊ = k_i + k_f and q₋ = k_i − k_f, vacu
 with both angles have two sphere paths and a free r (section 9.10). On a known substrate the same network proposes
 values and the four-path likelihood below weights them.
 
-**The prior.** Uniform in a box: ln R̃ from 0.5 to 5ρ (every population above the previous one, by stick-breaking),
+**The prior.** The parameter coordinates are uniform over their ranges. R̃ is log-uniform from 0.5 to 5ρ
+(every population above the previous one, by stick-breaking),
 σR/R 0.02–0.5, h/2R 0.1–10 with h̃ ≤ 200 and R̃ ≤ 50 for random cylinders, D/2R 1–20, σnn/D 0.02–0.5, w from 0.3 to
-30 q_min (log), ν 1.8–2.2, σ_q/q_max 10⁻⁴–10⁻² (log), τ 0.003–0.15 (log), the real and imaginary part of r from −1 to
-1 (they change nothing on a cut without two paths, where their posterior is the prior). The scales: uniform from 0 to
+30 q_min (log), ν 1.8–2.2, σ_q/q_max 10⁻⁴–10⁻² (log), and τ 0.003–0.15 (log).
+For a sphere at level 3 the complex reflection coefficient r is uniform in area on |r| ≤ 1.
+An equal-area map takes the flow's two square coordinates onto this disk. The prior density in (Re r, Im r)
+is 1/π there, or 2a for the magnitude a = |r| with an independent uniform phase. The scales are uniform from 0 to
 10 times the curve's maximum. The tail is held to the Lorentzian wings of a beam profile (∝ q⁻², as fit1d's ν = 2): with ν free in
 1–6 a wide tail takes over the particles' own scattering at low q (on BornAgain's GALAXI model D fell to 14–22 nm), and
 a tail capped at 3 q_min (encoding 2) cannot describe a low-q rise (D rose to about 105 nm); with ν near 2 least
@@ -3163,7 +3167,8 @@ squares from different starts reaches one solution there (D 51 nm, true 53.6 nm)
 
 It was trained by maximum likelihood (neural posterior estimation) with the cross-entropy of the head on 5 million
 simulated cuts of `cut_model` (`tools/ml1d`, `prior_v2.json`): 40 % at the effective interface, 18 % at the Born term
-of a q₊/q_max from 0 to 1 and 42 % with two paths (q₋ = q₊ × U(−0.5, 0.9), r from the prior); every population's
+of a q₊/q_max from 0 to 1 and 42 % with two paths (q₋ = q₊ × U(−0.5, 0.9), real and imaginary r drawn from
+the original training square [−1, 1]²); every population's
 term on 8 points per bin (then averaged, as a
 measured bin is), convolved with the cut's resolution; for every batch anew the populations' shares (2.5 decades),
 the tail, the background, the model error, 100–1000 measured points (linear or logarithmic in q), Poisson counts
@@ -3189,7 +3194,8 @@ cylinders (1–2)* or *Any particles (1–3)*.
 3. The samples fall into modes (radii and distances 10 % apart, spreads 0.05 apart start a new one); the up to three
    heaviest modes of each composition are refined by least squares from their heaviest sample (section 9.8; σ_q free;
    every population held to the prior's box: R from 0.5/q_max to 5/q_min, the spreads 0.02–0.5, D/2R and h/2R in the
-   prior's ranges at radii up to 1.5 times the start's; the tail within the prior's ranges). So are the up to three
+   prior's ranges at the current radius, with the same random-cylinder size limits and radius order as in sampling).
+   So are the up to three
    modes of the weights tempered to 50 effective samples (w^β, the largest β ≤ 1 that gives them) whose heaviest sample
    is another: on a bright curve the weights sit on one or two samples, and a mode the network proposed with a
    slightly lower likelihood would otherwise never be refined. On a cut with two paths, r is free in least squares
@@ -3204,47 +3210,59 @@ cylinders (1–2)* or *Any particles (1–3)*.
    20–30 s each, and the benchmarks below have no random cylinders. When no
    solution of one of the two best compositions
    (by BIC) refines below χ²/N = 2 (the network's proposals miss the curve, as on GALAXI), one search of the ranges
-   (section 9.8) started from its 16 heaviest samples is added. Steps 1–3 use the σ of the counts, so the solutions
-   and their χ²/N are those of the curve.
+   (section 9.8) started from its 16 heaviest samples is added. The network weights and initial least-squares fits
+   use the counting errors. The reported χ²ᵣ is evaluated with those errors.
 4. From here on the σ of every point includes a model error of 5 % of its intensity, σ_m² = σ² + (0.05 I)²
-   (`refine.MODEL_ERROR_FLOOR`; *The model error* below). The refined solutions are ranked by BIC = χ²_m + k ln N (k
-   the free values, the scales included); those more than 20
+   (`refine.MODEL_ERROR_FLOOR`; *The model error* below). Each candidate is refitted using σ_m. Its score
+   BIC = χ²_m + k ln N uses the minimized sum of squared residuals in σ_m, the number k of free values including
+   the scales, and the number N of fitted data points. The solutions are ranked by this score. Those more than 20
    above the best are dropped, and around each of the others (at most four) the posterior is sampled: a Student t (5
    degrees of freedom) over the values the curve constrains, its scale from the Gauss–Newton curvature of the
    residuals plus the prior's, inflated by 1.4 (and by √(χ²/N) on a curve the model does not describe within σ); the
    others (an absent tail, a resolution at its bound, τ) from piecewise densities that a scan of the likelihood along
    each sets. That is the first of up to eight rounds of 400 samples (population Monte Carlo; three for a composition
-   with a random cylinder), run until 200 samples are effective. Each later round is a Student t over all values
+   with a random cylinder), run until 200 samples are effective at that start. Each later round is a Student t over all values
    together, the scanned ones and τ included, with the mean and the covariance (inflated by 1.4) of all samples so
    far, their weights tempered to two effective samples per value: it follows a posterior that lies away from the
    least-squares optimum, or along a direction the first round has no width in (a spread at its bound that trades
-   against the radius). All samples are weighted against the mixture of the rounds' proposals. The weighted
-   samples give every value's median and 68 %/95 % interval, and the evidence Z of the solution.
-5. A composition's evidence is the sum of those of its distinct solutions; the probabilities of the compositions are
-   ∝ Z (equally likely beforehand), a solution's is its composition's times its share. When the sampling of any
-   solution did not converge (fewer than 10 effective samples, or a refined solution whose radii left the
-   composition's order and has no local posterior), all receive BIC weights proportional to exp(−BIC/2), and their
-   intervals are the least-squares errors of section 9.8 with σ_m (scaled by χ²_m/N when it is above 1; on a log
-   scale for the lengths; never beyond the value's range); the
-   solutions carry the flag *bic* (*compared by χ² and the number of values (BIC): the posterior's sampling did not
-   converge*). This happens on curves the model does not describe within σ: with the model error near its bound the
-   posterior lies away from the least-squares optimum, and the evidences cannot be estimated (on BornAgain's GALAXI
-   model they ranked a solution with χ²/N = 11.5 above one with 4.4).
+   against the radius).
+5. Pool all the draws for each composition c. Index the sampling rounds over *every* retained start by j.
+   Proposal qⱼ generated mⱼ draws, and M = Σⱼ mⱼ. In the sampler coordinates z, use the same mixture density
+   at every draw (deterministic-mixture multiple importance sampling).
 
-**What the reported numbers measure.** The solution weight refers to one mode. The composition probability sums
-the weights of all its modes, including modes below the display cutoff. If sampling fails for any retained mode,
-the comparison uses normalized BIC weights for every mode and composition. The record identifies the comparison
-and the interval source separately. Evidence always uses the original weights. With effective sample size
-ESS = (Σw)²/Σw² below 50, sampled quantiles use tempered weights. BIC fallback intervals use least-squares errors.
+   ```text
+   q_mix(z) = Σⱼ (mⱼ/M) qⱼ(z)
+   wᵢ = L(data | zᵢ, c) π(zᵢ | c) / q_mix(zᵢ)
+   Z_c = (1/M) Σᵢ wᵢ                  P(c | data) = Z_c / Σ_b Z_b
+   ```
+
+   The retained compositions have equal prior probabilities. Assign each draw to the start that generated it.
+   The share of solution s within c is Σᵢ∈s wᵢ / Σᵢ wᵢ. Its reported weight is that share times P(c | data).
+   When starts cover the same peak, their individual shares depend on the proposals and still sum to their
+   combined share. Conditional quantiles use the draws assigned to s.
+
+**BIC fallback.** If any retained composition has fewer than 10 effective pooled samples or a retained solution has
+no local sampler, all compositions receive BIC weights. For each composition take B_c = minₛ BICₛ over its
+solutions. Normalize exp(−B_c/2) across compositions. Within c, normalize exp[−(BICₛ − B_c)/2] across its
+solutions to divide that weight. Finding the same optimum twice leaves B_c unchanged. On this branch the flag
+is *bic* and the reported intervals use the least-squares errors with σ_m (section 9.8).
+
+**What the reported numbers measure.** The composition weight includes every retained solution, including those
+below the display cutoff. The record identifies the comparison and the interval source separately.
+Intermediate results pool the starts sampled so far and normalize over the compositions available at that point.
+Evidence uses the original weights. Pooled ESS = (Σw)²/Σw² governs the composition comparison. For a solution
+with conditional ESS below 50, its sampled quantiles use tempered weights.
 Beside the least-squares value and its reported interval, **posterior median** gives the weighted 50th percentile
 with the original 16th and 84th percentiles, before the interval is extended to the optimum. Where sampling produced
 no local posterior, these entries are empty. Scales and background are solved for each sample and have no sampled marginal.
 
-For each mode, draw N of its N final importance weights with replacement and calculate log Z* = log(mean(w*)).
-Repeat 200 times with a separate fixed seed (7529). The sample standard deviation of log Z* estimates its Monte
-Carlo error conditional on the sampled proposals. For each replicate, sum Z* over modes of each composition and
-divide by the sum over all compared modes. The 16th and 84th percentiles give the composition probability's
-Monte Carlo range. If a mode has no local sampler, the record identifies the network-proposal evidence (using the counting uncertainty before the 5 % floor), its effective sample size and bootstrap error. BIC weights have no evidence-based probability range.
+For each bootstrap replicate, resample mⱼ corrected weights with replacement within each proposal round j and
+compute Z*_c as their pooled mean. Repeat 200 times with seed 7529. The sample standard deviation of log Z*_c
+estimates Monte Carlo error conditional on the proposals observed. Normalize the Z*_c across compositions in
+each replicate. The 16th and 84th percentiles of the resulting probabilities give the Monte Carlo range.
+This range excludes variation due to missed modes or a different set of adaptive proposals. Where a local sampler
+is missing, the record identifies the network estimate using counting errors. BIC weights have no evidence-based
+probability range.
 
 The 5 % model-error floor was calibrated on a **linear grid** of 397 points from 0.02 to 2 nm⁻¹,
 with Δq = 0.005 nm⁻¹. The average over those two decades is 198.5 points per decade. To compare sampling at
@@ -3258,9 +3276,9 @@ from 160 to 240. With 582 native points the sampler had five effective samples a
 
 Every solution with normalized weight at least 1 % is returned in descending order. Each carries the refined
 values with their least-squares errors (9.8), the posterior median and intervals, χ²ᵣ, its probability and flags. An
-interval always holds the refined value. The refined value is the least-squares optimum with the counts' σ, and the
-posterior has the model error and the prior's ranges, so on a curve the model does not describe within σ, or for a
-value at a bound, the refined value can lie beside the central interval, which is then extended to it. A value the
+interval always holds the refined value. The displayed fit normally uses the counting errors. If it falls outside
+the sampled 95 % limits, a refit with σ_m can be selected when more of its population parameters lie within those
+limits. The report then flags *model_error*. The reported interval is extended to the displayed optimum. A value the
 curve does not see at all (the shape of a population whose amplitude is 0) has no least-squares error. The flags: a
 value at a bound of its range; *unconstrained* when its 68 % interval covers more than 0.7 of the prior's range;
 strongly correlated pairs (beyond ±0.95); few effective samples (below 50: the intervals are then taken with the
@@ -3305,9 +3323,14 @@ For **The particles in Model**, the prediction record keeps each upright cylinde
 with its size law and LMA or DA setting. For example, a lognormal specified by its median keeps the standard deviation
 of ln(height) as its width. Refinement keeps these inputs fixed and preserves the order of populations by radius.
 The posterior check reads the same inputs from the saved solution.
-Random cylinders use q_z = 0 at levels 1 and 3. At level 2 the posterior uses q₊ and the refined
-model uses q_z = 0. At level 4 both use the orientational average at √(q² + q₊²) (section 9.4).
-For spheres, level 1 holds within about 5 % of R up to q₊R ≈ 1.7 (section 9.10). On the
+At all levels the likelihood and refinement apply the same Gaussian resolution to the particle terms.
+Widths σ_q up to one quarter of the smallest positive spacing between fitted q values are treated as sharp.
+For larger widths the two stages use the same convolution table over the fitted q range.
+For randomly oriented cylinders, sampling and refinement both average the form factor at |q| = q at
+levels 1 and 3, and at |q| = √(q² + q₊²) at levels 2 and 4 (q is the in-plane magnitude).
+Level 4 includes only the direct Born path for these cylinders. It omits their reflected-wave interference.
+For spheres, the archived level-1 fits with composition supplied had a median radius error within about
+5 % up to q₊R ≈ 1.7. Individual fits can exceed 5 % in this range. On the
 four-term DWBA curves on Si above (`posterior_dwba_pairs.json`) the median error of R at level 1 is 15 %, 20 % and
 29 % at q₊R 1.7–2.3, 2.3–3.5 and above 3.5; at level 3 it is 4.0 %, 6.7 % and 7.0 %; level 2 gives 4.0 %, 11 % and
 40 %. DWBA programs such as BornAgain and IsGISAXS evaluate the terms with the substrate's refractive index and need
@@ -3378,6 +3401,8 @@ a probability of at least 0.05 has them (`true_in_equivalent_set`). *Truth's mod
 every R and D of the most probable solution (*first*), or of a solution with a probability of at least 0.05
 (*listed*), lies within 20 % of the truth (`truth_mode`).
 
+The recovery, coverage and composition-selection results below predate the pooled evidence,
+composition-level BIC and substrate corrections. They describe the archived implementations.
 The first and extended sets were fitted at commit 2eb0243 and the three earlier DWBA comparisons at 7179b85.
 They used the same fitting code (git tree 7e68831a of `src/gimap/features/fitting/domain`) and the network
 `flow_v1`. Their summaries are `tools/benchmarks/posterior_*_summary.json`. The tables below retain their
@@ -3768,8 +3793,8 @@ r(α) = (k_z − k_z,s) / (k_z + k_z,s),   k_z = k sin α,   k_z,s = k √(sin²
 
 The four terms in (9.40) use the reflection amplitudes at αi and αf. Equation (9.41) gives the bare-interface
 amplitude and (9.41a) below gives it for a layered substrate. Both coefficients are fixed by the optical inputs.
-Random cylinders are averaged at |q| = √(q² + (k_i + k_f)²) (the Born term of the
-cut's q_z, as fit1d did). Upright cylinders with a height distribution use these four paths for the horizontal DA
+Random cylinders are averaged at |q| = √(q² + (k_i + k_f)²) using only the direct Born path.
+The likelihood and refinement both omit their reflected-wave interference. Upright cylinders with a height distribution use these four paths for the horizontal DA
 (sections 9.5, 9.10). Core–shell spheres stay at q_z = 0.
 The size average uses the quadrature of section 9.3. For batches of resolved sphere intensities, six-point
 interpolation in radius lets the size distributions share one table. On a densely sampled cut, a single
@@ -3942,8 +3967,9 @@ Implementation: `src/gimap/features/fitting/domain/joint_fit.py`, `domain/vertic
 ### 9.19 Posterior check by MCMC
 
 **Results ▸ Uncertainty and Report… ▸ Posterior check (MCMC)** compares intervals for the solution in Model.
-For Predict parameters it uses a second sampler of the same posterior (same likelihood, model error and prior);
-checks the Monte Carlo accuracy of this mode. Agreement measures sampling accuracy conditional on the assumed
+For Predict parameters it samples the same composition likelihood and prior, starting from the selected solution.
+The reference intervals use draws assigned to that solution (§9.13). Chains that visit another peak can therefore
+give different intervals. Agreement measures sampling accuracy conditional on the assumed
 model. The held-out DWBA coverage in section 9.13 tests how often an interval contains the true radius.
 
 **What is sampled.**
@@ -3957,7 +3983,8 @@ model. The held-out DWBA coverage in section 9.13 tests how often an interval co
   ln p(z) = ln L(values(z) | cut) + ln π(z)                                                                     (9.46)
   ```
 
-  over every value of the composition (the beam tail, σ_q and τ included; r only with both angles). The reference is
+  over the composition parameters, including the beam tail, σ_q and τ. For level-3 spheres the same equal-area
+  map gives |r| ≤ 1. The reference is
   Predict's sampled median and 68 % / 95 % intervals, with the same tempering as in section 9.13. If no sampled
   summary is available and the comparison used BIC, the reference is the reported least-squares interval.
 - A manual fit (the last Refine or Search): its free non-linear values, uniform in the fit's coordinates t ∈ [0, 1]

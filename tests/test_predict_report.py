@@ -108,21 +108,27 @@ def test_spacing_at_window_edges_and_legacy_record():
         (fit_names.DENSITY_NOTICE, {"count": 150})]
 
 
-def test_bootstrap_normalizes_all_modes_with_independent_replicates():
+def test_bootstrap_keeps_each_proposals_allocation_in_the_composition_integral():
     weights = np.linspace(0.1, 1.9, 24)
     groups = [0, 0, 2]
-    entries = [(SimpleNamespace(index=group), None, None, None,
-                SimpleNamespace(log_weights=np.log(weights) + 900, log_evidence=900.)) for group in groups]
-    records = reporting.comparison_diagnostics(entries, False, {0: 2 / 3, 2: 1 / 3})
+    results = [SimpleNamespace(index=c) for c in groups]
+    locals_ = [SimpleNamespace(log_weights=np.log(weights) + 900, log_evidence=900. + np.log(share),
+                               trace=SimpleNamespace(round_sizes=(8, 16))) for share in (.5, .5, 1.)]
+    pools = {c: SimpleNamespace(log_evidence=900., ess=24., locals=[v for j, v in zip(groups, locals_) if j == c],
+                                log_weights=np.tile(np.log(weights) + 900, groups.count(c))) for c in set(groups)}
+    records = reporting.comparison_diagnostics(results, locals_, pools, False, {0: .5, 2: .5})
     rng = np.random.default_rng(reporting.BOOTSTRAP_SEED)
-    draws = np.array([rng.choice(weights, (200, 24)).mean(axis=1) for _ in groups])
-    expected = np.quantile(draws[:2].sum(axis=0) / draws.sum(axis=0), [0.16, 0.84])
+    draws = np.array([(rng.choice(weights[:8], (200, 8)).sum(axis=1)
+                       + rng.choice(weights[8:], (200, 16)).sum(axis=1)) / 24 for _ in groups])
+    first = draws[:2].mean(axis=0)
+    expected = np.quantile(first / (first + draws[2]), [0.16, 0.84])
     for record in records[:2]:
         assert record["composition_probability_mc68"] == pytest.approx(expected)
     assert records[0]["log_evidence_mc_error"] == pytest.approx(np.std(np.log(draws[0]), ddof=1))
-    assert records == reporting.comparison_diagnostics(entries, False, {0: 2 / 3, 2: 1 / 3})
-    entries[0] = (SimpleNamespace(index=0, log_weights=np.zeros(24), log_evidence=0.), *entries[0][1:4], None)
-    fallbacks = reporting.comparison_diagnostics(entries, True, {0: .8, 2: .2})
+    assert records == reporting.comparison_diagnostics(results, locals_, pools, False, {0: .5, 2: .5})
+    results[0] = SimpleNamespace(index=0, log_weights=np.zeros(24), log_evidence=0.)
+    locals_[0] = None
+    fallbacks = reporting.comparison_diagnostics(results, locals_, pools, True, {0: .8, 2: .2})
     assert fallbacks[0]["log_evidence_mc_error"] == 0 and fallbacks[0]["log_evidence_source"] == "network"
     assert all("composition_probability_mc68" not in r and r["compared_by"] == "bic" for r in fallbacks)
 

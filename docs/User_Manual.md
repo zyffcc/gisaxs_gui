@@ -2732,8 +2732,11 @@ upright-cylinder height distributions supplied for level 4. **Refine** afterward
 
 - The solutions go to **Results ▸ Other solutions**, with the highest weight first. Each shows χ²ᵣ and its probability **p** or **BIC weight**. The
   highest-ranked solution is in Model, and **Method** turns to **Refine the values in Model**. Predict groups
-  solutions by particle family and paracrystal status in order of increasing radius. A composition's weight sums
-  the weights of all its retained solutions before the list is filtered for display. The probabilities compare the
+  solutions by particle family and paracrystal status in order of increasing radius. Predict pools the samples
+  from all starts of each composition and estimates its evidence once. Each solution receives the share of the
+  composition weight carried by its proposal's samples, including solutions below the display cutoff.
+  If sampling fails, the lowest BIC from the fits with the model-error floor sets each composition's weight.
+  Relative BIC within that composition divides the weight among its solutions. The probabilities compare the
   compositions tried and the distinct solutions of each: a solution with p 0.6 next to one with 0.4 means that the
   curve does not decide between them. With two or three populations this is common: another R of one population at
   the same D, or the paracrystals of two populations exchanged, can describe the curve as well; Predict tries these
@@ -2760,7 +2763,9 @@ upright-cylinder height distributions supplied for level 4. **Refine** afterward
   (effective interface) and level 2 (Born at q_z) flag sphere and random-cylinder radii above q_z·R = 1.2
   (`qzR_cov`). In the simulated DWBA sphere benchmark, nominal 68 % coverage was only 18–33 % at 1.2–1.7.
   Level 2 adds `qzR_fail` above 2. Use both angles for level 3 or fit the four-term DWBA with a known substrate.
-  Level 4 evaluates the reflected paths directly and omits the Born-approximation flags.
+  At level 3, spheres have a fitted reflection coefficient with |r| ≤ 1. At level 4, sphere amplitudes
+  include all four paths. Random cylinders use the orientation average at the finite Born transfer q₊ in
+  both sampling and refinement at levels 2 and 4. At levels 1 and 3 their vertical transfer is zero.
   Level 3 flags interval coverage above 1.7. The level-1 `qzR` radius-bias flag also starts above 1.7.
   At levels 2–4, an upright cylinder with fitted q₊R > 2 may stand for a sphere of similar radius (`cyl_sphere`).
   This shape ambiguity also occurred in the level-4 benchmark with a known Si substrate.

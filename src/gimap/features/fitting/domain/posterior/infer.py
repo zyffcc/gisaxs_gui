@@ -32,7 +32,7 @@ from ..cut_model import resolution
 from ..cut_model.geometry import Geometry
 from ..substrates import Substrate
 from . import encoding as E
-from . import substrate_level
+from . import reflection_disk, substrate_level
 
 AMPLITUDE_RANGE = 10.0
 TAIL_WIDTH_MAX = E.TAIL_WIDTH_MAX
@@ -52,10 +52,6 @@ paracrystal as the head's most probable single population: they are fast to eval
 EXPLORE_ESS = 50.0
 """The effective samples of the tempered weights from which the ``explore`` modes of a composition are found: on a
 bright curve the weights sit on one or two samples, and modes of slightly lower likelihood would never be refined."""
-SHARP = 0.25
-"""A sample's resolution σ_q below this fraction of the smallest spacing of the measured points is not applied."""
-TABLE_POINTS = 256
-"""Logarithmic points (besides the measured ones) on which the terms of the other samples are convolved."""
 
 
 @dataclass(frozen=True)
@@ -151,8 +147,8 @@ def _noise(q, y) -> np.ndarray:
     return relative * np.maximum(np.abs(y), 1e-300)
 
 
-def physical(values, q_max: float) -> np.ndarray:
-    """Values of ``encoding`` (dimensionless) in nm and nm⁻¹: R, h, D, w and σ_q scaled by q_max (copy)."""
+def physical(values, q_max: float, *, disk: bool = False) -> np.ndarray:
+    """Convert encoded lengths and wave vectors to nm and nm⁻¹ and a free sphere reflection to the unit disk."""
     out = np.array(values, float)
     for slot in range(E.SLOTS):
         j = slot * E.PER_SLOT
@@ -162,10 +158,12 @@ def physical(values, q_max: float) -> np.ndarray:
     g = E.GLOBAL.start
     out[..., g] = out[..., g] * q_max
     out[..., g + 2] = out[..., g + 2] * q_max
+    if disk:
+        out[..., g + 4:g + 6] = reflection_disk.from_square(out[..., g + 4:g + 6])
     return out
 
 
-def dimensionless(values, q_max: float) -> np.ndarray:
+def dimensionless(values, q_max: float, *, disk: bool = False) -> np.ndarray:
     """The inverse of ``physical``."""
     out = np.array(values, float)
     for slot in range(E.SLOTS):
@@ -176,6 +174,8 @@ def dimensionless(values, q_max: float) -> np.ndarray:
     g = E.GLOBAL.start
     out[..., g] = out[..., g] / q_max
     out[..., g + 2] = out[..., g + 2] / q_max
+    if disk:
+        out[..., g + 4:g + 6] = reflection_disk.to_square(out[..., g + 4:g + 6])
     return out
 
 
@@ -188,13 +188,13 @@ class Likelihood:
     def __init__(self, data: Cut, composition: int, law: str = "number_gauss", coupling: str = "lma"):
         self.data, self.composition, self.law, self.coupling = data, int(composition), law, coupling
         self.types = E.composition_types(composition)
+        self.free_reflection = data.reflected and any(family == "sphere" for family, _ in self.types)
         self.height_fractions = substrate_level.height_fractions(data, self.types, law, coupling)
         q = data.q
         self.position = np.log(q / (data.q_max / data.ratio)) / np.log(data.ratio)
         self.basis = E.error_basis(self.position)  # (8, n)
         self.log_norm = -float(np.sum(np.log(data.sigma))) - 0.5 * q.size * math.log(2 * math.pi)
-        steps = np.diff(np.unique(q))
-        self.spacing = float(steps.min()) if steps.size else 0.0
+        self.sharp_limit = resolution.predict_sharp_limit(q)
 
     def columns(self, values) -> np.ndarray:
         """(B, K + 2, n) of physical values (B, DIMS): each population's T on the measured points with the sample's
@@ -205,8 +205,10 @@ class Likelihood:
         out = np.empty((rows, k + 2, n))
         geometry = self.data.geometry()
         sigma = v[:, g + 2]
-        sharp = sigma <= SHARP * self.spacing  # the resolution does not matter between the points: no convolution
-        groups = [(np.flatnonzero(sharp), self.data.q), (np.flatnonzero(~sharp), None)]
+        sharp = sigma <= self.sharp_limit
+        groups = [(np.flatnonzero(sharp), self.data.q)]
+        if not sharp.all():
+            groups.append((np.flatnonzero(~sharp), resolution.predict_grid(self.data.q, np.max(sigma[~sharp]))))
         for slot, (family, structure) in enumerate(self.types):
             j = slot * E.PER_SLOT
             height = self.data.upright_height(slot) if family == "vertical_cylinder" else None
@@ -214,8 +216,6 @@ class Likelihood:
             for rows_, grid in groups:
                 if not rows_.size:
                     continue
-                if grid is None:
-                    grid = resolution.table_grid(self.data.q, float(np.max(sigma[rows_])), TABLE_POINTS)
                 kwargs = dict(law=law, coupling=coupling)
                 if family == "sphere" and self.data.reflected:  # every sample its own r
                     terms = np.stack([cut.population_terms(
@@ -285,7 +285,11 @@ class Likelihood:
         log_marginal = (log_like - m * math.log(top) + 0.5 * positive.sum(axis=1) * math.log(2 * math.pi)
                         - 0.5 * log_det_h + np.sum(at_zero, axis=1))
         wide = values[:, E.GLOBAL.start] > TAIL_WIDTH_MAX * self.data.q_max / self.data.ratio
-        return np.where(wide, -np.inf, log_marginal), amplitudes, chi2
+        outside = wide
+        if self.free_reflection:
+            re, im = values[:, -2], values[:, -1]
+            outside = outside | (np.hypot(re, im) > 1.0 + 4 * np.finfo(float).eps)
+        return np.where(outside, -np.inf, log_marginal), amplitudes, chi2
 
 
 
@@ -416,8 +420,8 @@ def sample_composition(network, h, data: Cut, composition: int, count: int, rng,
     """Importance-sampled posterior of one composition."""
     z, log_q = network.sample(network.context(h, composition), composition, count, rng, widths=PROPOSAL_WIDTHS)
     values = E.from_z(z, np.full(count, data.ratio), composition)
-    samples = physical(values, data.q_max)
     likelihood = Likelihood(data, composition, law, coupling)
+    samples = physical(values, data.q_max, disk=likelihood.free_reflection)
     log_like, amplitudes, chi2 = likelihood(samples)
     log_w = log_like + E.log_prior(z, composition) - log_q
     log_w = np.where(np.isfinite(log_w), log_w, -np.inf)
