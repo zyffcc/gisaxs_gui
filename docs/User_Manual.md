@@ -4271,23 +4271,15 @@ random-seed policy: Predict parameters uses a fixed seed.
 
 ## 12. Output files
 
-**Reading a reported uncertainty.** Reports and result labels round a positive uncertainty to two
-significant digits and the estimate to the same decimal place. For example, `8.9335(22) Å` in a
-cell table means `8.9335 ± 0.0022 Å`. A measured angle keeps that precision when the report repeats
-the angle it applied. A reported zero uncertainty appears as `± 0` or `(0)`. When an uncertainty
-is unavailable, the estimate appears on its own. Numbered notes below a table give the details of long entries.
-Display rounding affects neither calculations nor the precision of JSON and CSV exports.
+**Reading a reported uncertainty.** Reports and result labels round positive uncertainties to two significant digits and estimates to the same decimal place. In a cell table, `8.9335(22) Å` means `8.9335 ± 0.0022 Å`. A measured angle keeps this precision wherever the report repeats it. A zero uncertainty appears as `± 0` or `(0)`. If the uncertainty is unavailable, only the estimate appears. For long table entries, read the numbered notes below the table. Calculations and JSON and CSV exports keep their full precision.
 
-GIMaP never changes your data files. Exports from Analyze go by default into a folder
-**`gimap_analysis/` next to the data**; most other exports ask for a place and propose one. Some propose a place
-beside the data too (the XRR CSV, the Format Converter's `converted/`, a calibration, a project): on a read-only
-data share, choose another folder. The user data folder is `%APPDATA%\GIMaP` on Windows and `~/.config/gimap`
-elsewhere, or the folder in `GIMAP_HOME` (section 3.11; **Help ▸ Open User Data Folder**). The table lists every
-file GIMaP writes; the paragraphs below it, what the user data folder and the Windows package hold.
+GIMaP keeps your input files intact. Analyze saves exports in **`gimap_analysis/` next to the data** by default. Most other exports open a save dialog. On a read-only share, choose a writable folder for XRR CSVs, the Format Converter’s `converted/` output, calibrations and projects.
+
+Open **Help ▸ Open User Data Folder** to find settings and saved runs (section 3.11). The default is `%APPDATA%\GIMaP` on Windows and `~/.config/gimap` elsewhere. Set `GIMAP_HOME` to use another folder.
 
 | Action | Files written | Default location | Record that comes with it |
 |---|---|---|---|
-| Analyze ▸ **Export** (`Ctrl+E`), **Export Curves…** | `<stem>_<curve>.csv` per curve, `<stem>_fit_input.dat`, `<stem>_analysis.json` (`_frameNNNN` added for a frame of a multi-frame file, `_sumN` when frames are summed); with **Also as NXcanSAS (.h5)** also `<stem>_nxcansas.h5` | `gimap_analysis/` next to the data, without a dialog; a folder dialog if it cannot be written | `<stem>_analysis.json` (settings, geometry with the tilt of a `.poni`, corrections, pixels left out, error model, binning, UTC time of writing) and `#` header lines |
+| Analyze ▸ **Export** (`Ctrl+E`), **Export Curves…** | `<stem>_<curve>.csv` per curve, plus `<stem>_fit_input.dat` and `<stem>_analysis.json`. Names include `_frameNNNN` for a multi-frame source and `_sumN` for a sum. **Also as NXcanSAS (.h5)** adds `<stem>_nxcansas.h5`. | `gimap_analysis/` next to the data. A dialog opens if the folder is unwritable. | `<stem>_analysis.json` (settings, geometry with the tilt of a `.poni`, corrections, pixels left out, error model, binning, UTC time of writing) and `#` header lines |
 | Analyze plots ▸ **Save ▸ Curves as Data…** | the CSV files of that plot and `_analysis.json` | folder dialog in `gimap_analysis/` | as Export |
 | Analyze plots and images ▸ figures (**Plot as Figure…**, **View as Figure…**, **Analyze ▸ Figures ▸ Save Image…** …) | PNG, TIFF, SVG or PDF, light colours | dialog in `gimap_analysis/` | none |
 | Analyze ▸ **Save q-Map Data…**, **View Data as CSV…** (also **Analyze ▸ Figures**) | `<stem>_qmap.csv`, `<stem>_cake.csv` | dialog in `gimap_analysis/` | `#` header lines (source, frame, axes) |
@@ -4296,12 +4288,12 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Analyze ▸ Series ▸ **Export ▸ Timeline as Table…** | `<series>_<curve>[_<halves>]_timeline.csv` | dialog in `gimap_analysis/` | `#` header lines and a `.json` (method, reference frame, jumps) |
 | Fitting ▸ In-situ series ▸ **Save ▸ Fits as NXcanSAS…** / **Results Database…** | `series_fits.h5` (points fitted and model of every fitted frame); `gimap_series.sqlite` (every frame's fit) | the folder of the curves; a database found there or up to two folders above | each entry holds the frame's record; the database the fit settings |
 | Analyze ▸ **Send to Fitting** | `<stem>_fit_input.dat` (q in Å⁻¹) and `<stem>_fit_input.json`. **Send Both Cuts to Fitting** also writes the vertical cut as `<stem>_fit_input_qz.dat` and `.json`. | `gimap_analysis/` beside the data, or the writable folder chosen for this session | JSON reduction record and `#` header lines (source, frame, sum, curve and observation) |
-| Analyze ▸ **Batch Export…** | per-curve tables `<batch>_<curve>_frames.csv` (or `.txt`, `.dat`); if you chose fitting, a fit table `<batch>_peak_fits.csv` (or `<batch>_model_fits.csv`) with its trend plot `<batch>_peak_fits.png` (`_model_fits.png`) and, if chosen, the fitted curves `fits/<frame>_<peak or model>_fit.csv`; subfolders `curves/`, `nxcansas/`, `fit_input/`, `maps/`, `images/`, `frames/` after your choices; frame names keep the 0-based index (`…_frame0003_sum3_…`) | the last batch folder, else `gimap_analysis/` next to the data; by default in a subfolder named after the frames' folder (one file: its name; several folders: `batch`); **Keep Both** writes into a new subfolder | `README.txt` and `<batch>_batch.json` (every file written, the cut of every frame, failed frames and why); `curves/` also gets an `_analysis.json` per frame |
+| Analyze ▸ **Batch Export…** | Each curve has a `<batch>_<curve>_frames.csv` table (or `.txt`, `.dat`). Fitting adds `<batch>_peak_fits.csv` or `<batch>_model_fits.csv` and its trend plot, `<batch>_peak_fits.png` (model suffix `_model_fits.png`). Optional fitted curves go in `fits/<frame>_<peak or model>_fit.csv`. Other selected outputs use `curves/`, `nxcansas/`, `fit_input/`, `maps/`, `images/` and `frames/`. Frame names keep the zero-based index (`…_frame0003_sum3_…`). | Last batch folder, otherwise `gimap_analysis/` beside the data. The default subfolder uses the frames’ folder name, the filename for a single file, or `batch` for several folders. **Keep Both** creates a new subfolder. | `README.txt` and `<batch>_batch.json` list files written, each frame’s cut and reasons for failed frames. `curves/` also holds an `_analysis.json` per frame. |
 | Analyze ▸ **Send Series to Fitting…** | `fit_input/<frame>_fit_input.dat`, `README.txt`, `<batch>_batch.json` | a folder of its own, `<name>_fitting/`, next to any Batch Export of the same data | `README.txt`, batch JSON |
-| Analyze ▸ **Export New Frames While Watching** | as Export, for each new frame | `gimap_analysis/` next to the frame; when it cannot be written, a folder you choose once (kept for the session); with none, the export is switched off and the status line says why | as Export |
+| Analyze ▸ **Export New Frames While Watching** | as Export, for each new frame | `gimap_analysis/` beside each frame. If it is read-only, choose a writable folder once per session. Cancelling disables watched exports and the status line explains why. | as Export |
 | Analyze ▸ **Save Settings…**; Mask step ▸ **Save…**; Regions ▸ **Add ▸ Save Cuts…** | `analyze_settings.json`; `masks.json` or a mask image (section 5.2); `cuts.json` | dialog in `gimap_analysis/` | JSON recipes are self-describing. Mask images have a companion `<filename>.json`. |
 | Run Automatic Analysis ▸ Peaks ▸ **Save Peak Table…** | `<stem>_peaks.csv` | the folder proposed by the save dialog | source, settings and phase assignment in the CSV header |
-| Run Automatic Analysis ▸ **Save Report…** | `.html` (with pictures), `.md`, or a replayable `.json` for a completed run | the folder you chose last in this session for frames of the same folder, else `gimap_analysis/` if it exists, else next to the frame | select JSON for replay |
+| Run Automatic Analysis ▸ **Save Report…** | `.html` (with pictures), `.md`, or a replayable `.json` for a completed run | Last save folder used this session for frames from the same folder. Otherwise, an existing `gimap_analysis/` or the frame’s folder. | select JSON for replay |
 | Process with AI ▸ **Save Report…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | as above | the JSON |
 | Process with AI (automatic) | a record of every run; missing analyses | user data folder: `assistant_runs/`, `assistant_feature_requests.jsonl` | — |
 | Process with AI, when the AI exports | the curves as Export, and `<stem>_assistant.json` | `gimap_analysis/` next to the data | `<stem>_analysis.json`, `<stem>_assistant.json` |
@@ -4310,7 +4302,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Fitting ▸ **Save ▸ Plot…**, **Save ▸ Model…** | `<curve>_fit.png` / `.svg`; `<curve>_model.json` | as above | none; the model file |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Series report…** | `series_fit.md` | series folder | frame decisions, probabilities and run settings |
-| Fitting ▸ Batch / In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`, or `series_trend_1_R_D_nm.png` for the paired trend of particle 1) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
+| Fitting ▸ Batch / In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` uses the table column name, e.g. `series_trend_chi2_reduced.png`. The paired radius and spacing trend for particle 1 uses `series_trend_1_R_D_nm.png`. `series_frame_<NNNNN>.png` uses a five-digit frame number starting at 1. SVG (`.svg`) is also available. Before fitting, the defaults are `series_trend.png` and `series_frame.png`. | the series folder | none (the title in the picture names the value or frame) |
 | **Tools ▸ 1D Predict — Fit Many Curves…** | a run folder: `request.json`, `batch_summary.json` …, a subfolder per curve with `solutions.json`, `fitting_curves.csv` … | `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder; never removed automatically | `request.json` |
 | Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from (while it is there), else your home folder | `#` header lines and the JSON |
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
@@ -4326,68 +4318,65 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Geometry Calibration ▸ **Apply** | the instrument profile | user data folder: `instrument_profiles.json` | — |
 | **Tools ▸ Settings… ▸ Assistant** ▸ **API key** ▸ **Save** | API credential for the selected provider. **Remove** deletes it. | OS credential store when available, otherwise `claude_api_key.txt` or `assistant_provider_keys.json` in plain text in the user data folder | section 10.1 |
 | **File ▸ Save Project** | `<name>.gimap`; `<name>.<generation>.compare.npz` when Compare holds embedded arrays | next to the first frame | the project (data referenced by path); move the current `compare.arrays_file` with it (section 3.8). Sputter results stay in their result folder |
-| **File ▸ Labs Parameters ▸ Save As…** | `gimap_parameters.json` | dialog in the GIMaP user data folder | — |
+| **File ▸ Labs Parameters ▸ Save As…** | `gimap_parameters.json` | save dialog in the current working folder | — |
 | Errors (automatic) | `logs/errors.log` (moved to `errors.old.log` above 2 MB) | user data folder | — |
 | **Help ▸ Example Data** | the example's frame with its `.poni` (and mask), and `SOURCE_AND_LICENCE.md` | a folder you choose, by default `Documents/GIMaP examples/<example>/`; files already there are kept | `SOURCE_AND_LICENCE.md` (source and licence of the data) |
-| `tools/gimap_agent.py` | a subfolder per frame (a set of module files: per scan; `--series`: `<name>_series/`; frames of one name in different folders: `<name>_<folder>/`) with `report.md`, `report.json`, curves and fit tables (CSV whose `#` lines give the release, each input by SHA-256 and the geometry), q map; `summary.md` (links every frame's report) + `summary.json` | `--out`; without it `assistant_runs/cli/<time>/` in the user data folder; never next to the data. An `--out` folder with the summary of an earlier run is refused unless `--overwrite` | `report.json` (release, UTC time, the options as given, every input file by path, size and SHA-256, the mask applied or none, Analyze's record of the frame; for a fit the network, the SHA-256 of its weights and the seed) |
+| `tools/gimap_agent.py` | Each frame folder contains `report.md`, `report.json`, a q map, curves and fit tables. CSV `#` headers give the release, input SHA-256 digests and geometry. Module files share one folder per scan. `--series` uses `<name>_series/`. Same-name frames from different folders use `<name>_<folder>/`. Top-level `summary.md` links each report, with `summary.json` alongside. | `--out`, otherwise `assistant_runs/cli/<time>/` in the user data folder. To reuse a folder containing an earlier summary, specify `--overwrite`. | `report.json` records the release, UTC time, original options, each input’s path, size and SHA-256, mask or absence of one, and Analyze’s frame record. Fits also record network, weight SHA-256 and seed. |
 
-**Which release wrote a file.** The records of Analyze (`_analysis.json`, the settings file, the series and
-stages tables' JSON), of Batch Export and Send Series to Fitting (`<batch>_batch.json`; `README.txt` says *Written by
-GIMaP v…*), of Fitting (`<curve>_fit.json`, `series_fit.json`), Compare, Geometry Calibration, the XRR Series
-Extractor, SEM Particle Analysis, 2D Prediction and the Format Converter name the GIMaP release that wrote them:
-`software_version`, for example `GIMaP v0.2.0`. In Analyze's records `software` stays `GIMaP Analyze 1`, the name
+**Which release wrote a file.** Look for `software_version`, for example `GIMaP v0.2.0`, in the following records.
+
+- Analyze writes it in `_analysis.json`, the settings file and the JSON beside series and stages tables.
+- Batch Export and Send Series to Fitting write it in `<batch>_batch.json`. Their `README.txt` says *Written by GIMaP v…*.
+- Fitting writes it in `<curve>_fit.json` and `series_fit.json`. Compare, Geometry Calibration, the XRR Series Extractor, SEM Particle Analysis, 2D Prediction and the Format Converter also record it.
+
+In Analyze records, `software_version` gives the release and `software` gives `GIMaP Analyze 1`, the name
 of the record format. The records of Sputter, the AI assistant, `tools/gimap_agent.py` (`report.json`,
 `summary.json` and the `#` lines of its CSV tables) and 1D Predict's run folders name it too; records written by
 earlier versions may not ([Physics and Methods, section 14.5](Physics_Manual.md#145-version-of-the-software)).
 
-**Reproduce a reduction or fit.** Open **Analyze ▸ Tools ▸ Reproduce from Record…**, select the JSON beside the exported curves or fit, then choose an output folder. Use `<stem>_analysis.json` for one frame and `<batch>_batch.json` for Batch Export. The Series map and the selected frame’s profile can be replayed from the JSON beside their CSV tables. For Fitting, select the fit or solutions JSON saved with the result. For **1D Predict — Fit Many Curves**, use `fitting_run_summary.json` for the run or `solutions.json` for one fitted half. From a terminal, run:
+**Reproduce a reduction or fit.** Open **Analyze ▸ Tools ▸ Reproduce from Record…**. Select the record for your result, then choose an output folder.
+
+- For one frame, use `<stem>_analysis.json`. For Batch Export, use `<batch>_batch.json`.
+- For a Series map or the selected frame’s profile, use the JSON beside its CSV table.
+- For Fitting, use the fit or solutions JSON saved with the result.
+- For **1D Predict — Fit Many Curves**, use `fitting_run_summary.json` for the run or `solutions.json` for one fitted half.
+
+You can also reproduce a reduction from a terminal.
 
 ```text
 gimap reproduce example_analysis.json --out check
 ```
 
-For a completed automatic analysis, select its exported JSON in the same dialog or run `gimap reproduce report.json --out check`. Replay reads the original frames, repeats the angle measurements and the reduction, then repeats the structural analysis with the recorded settings. If you used `--assume-fibre-normal`, replay uses the same assumption when it measures sample roll. With phase CIFs it compares GIWAXS assignments, orientation verdicts and parameters, and cell refinement, including the reason a cell was withheld. For a GISAXS fit it compares each reported solution and its probability or BIC weight. Open `reproduced_report.json` for the new values and `comparison.json` for agreement by section.
+For a completed automatic analysis, select its exported JSON or run `gimap reproduce report.json --out check`. GIMaP reads the original frames, repeats the angle measurements and reduction, then uses the recorded settings for structural analysis. If the run used `--assume-fibre-normal`, replay uses that assumption when measuring sample roll.
 
-Without `--out`, the command creates `<record stem>_reproduced/` beside the JSON. Use a fresh destination for each comparison. The folder contains the newly calculated CSV columns and `comparison.json`. Batch results have numbered subfolders. **identical** means every recorded numerical column matches bit for bit, including uncertainties and pixel counts where present. **different** gives the largest relative difference in each column. The command exits with 0 for identical values, 2 for a difference and 1 for an error.
+With phase CIFs, replay compares GIWAXS phase assignments, orientation verdicts and parameters, and cell refinement results. It includes the reason for withholding a cell. For GISAXS fits, it compares each solution and its probability or BIC weight. Read `reproduced_report.json` for the new values and `comparison.json` for the differences by section.
 
-Keep the referenced files with the record. Relative paths start in the record's folder. If the original
-path is missing, place an identical copy beside the JSON with its original filename. Replay checks its
-SHA-256 and writes the locations and digests of the copies it used in `comparison.json` under
-`relocated_inputs`. For inputs that share a filename, preserve their separate folders and update their
-file references in a copy of the JSON, keeping the original digests.
+Use a fresh destination for each comparison. Without `--out`, the command creates `<record stem>_reproduced/` beside the JSON. This folder holds the recalculated CSV columns and `comparison.json`. Batch results use numbered subfolders.
 
-The reduction record preserves frame indices and sums, the applied geometry and instrument profile, ordered mask edits and their source files, final mask bitmaps, dark, background and flat-field settings, intensity corrections, normalisation, cuts, bins and error model. A manual fit records the fitted points, starting model and solver settings. Predict parameters records its network, sampling settings and seed. The record names the GIMaP version and source commit when available. Use the same software and numerical environment when checking bitwise agreement.
+**identical** means every numerical column matches bit for bit, including recorded uncertainties and pixel counts. For **different** results, check the largest relative difference in each column. The exit code is 0 for identical values, 2 for a difference and 1 for an error.
 
-**What `<stem>_analysis.json` says besides the settings.** `created` is the UTC time the record was written
-(ISO 8601). `error_model` says how the σ of the points were computed: `poisson` (photon counts),
-`pixel_scatter` (values that are not counts as measured: a dark- or background-subtracted frame, pixels
-filled from the mirror side) or `scaled_poisson` (GIWAXS intensity corrections on counts). `binning` gives,
-for GIWAXS, the number, q range and width of the radial bins, how many points the I(q) kept after sparse
-bins were joined and the rule for joining them; for GISAXS, one point per detector column or row. In
-`geometry`, `rot1_rad`, `rot2_rad` and `rot3_rad` are the detector's rotations (pyFAI's, all 0 for a detector
-perpendicular to the beam; section 4.2). The fields `dropped_tilt_deg`, `flat_detector_q_error_max` and the other
-`flat_detector_…` and `dropped_…` fields described what a flat detector left out up to 0.1; they are `null` now
-that the tilt is part of the geometry. The instrument profile's `source` says who chose the geometry:
-`automatic analysis: <file>` for Run Automatic Analysis and `tools/gimap_agent.py`. For Process with AI the
-source starts with `assistant: <file>` and ends with the provider and model. Profiles saved before 0.2.0 say
-`assistant:` for both workflows. [Physics and Methods, section 14.2](Physics_Manual.md#142-the-record-stem_analysisjson)
+Keep the input files with the record. Relative paths start in the record’s folder. If an input has moved, place an identical copy with its original filename beside the JSON. Replay verifies the SHA-256 and lists the paths and digests it used under `relocated_inputs` in `comparison.json`. For inputs with the same filename, keep separate folders. Update their paths in a copy of the JSON and retain the original digests.
 
-A save dialog for one file asks before it replaces that file; the record written beside it (for
-example a `.json`) is replaced without a question. Exports without a file dialog — Export, **Curves as
-Data…** (a folder dialog), Send to Fitting, watching, Batch Export, Send Series to Fitting, the AI's
-exports, the converter's report and metadata JSON — replace files of the same name in their folder. Batch
-Export and Send Series to Fitting first ask about an earlier export of the same data (**Replace**, **Keep Both
-in a New Subfolder**, **Cancel**; section 5.7). The Format Converter never overwrites converted images (it adds
+The reduction record includes frame indices and sums, the geometry and instrument profile, and mask edits in order with their source files and final bitmaps. It also records dark, background and flat-field settings, intensity corrections, normalisation, cuts, bins and the error model. A manual fit records fitted points, starting model and solver settings. Predict parameters records the network, sampling settings and seed. To check bitwise agreement, use the same software and numerical environment. The record gives the GIMaP version and, when available, the source commit.
+
+**Reading `<stem>_analysis.json`.**
+
+- `created` gives the UTC time the record was written (ISO 8601).
+- `error_model` gives the source of each point’s σ. `poisson` applies to photon counts and `scaled_poisson` to counts with GIWAXS intensity corrections. `pixel_scatter` applies to processed values, such as dark- or background-subtracted data or pixels filled from the mirror side.
+- `binning` gives the GIWAXS radial bin count, q range and bin width. It also gives the rule for joining sparse bins and the final I(q) point count. GISAXS gives one point per detector column or row.
+- In `geometry`, `rot1_rad`, `rot2_rad` and `rot3_rad` are pyFAI detector rotations. All three are zero for a detector perpendicular to the beam (section 4.2). Geometry includes tilt, so `dropped_tilt_deg`, `flat_detector_q_error_max` and the other `flat_detector_…` and `dropped_…` fields are `null`.
+- The instrument profile’s `source` identifies who chose the geometry. Run Automatic Analysis and `tools/gimap_agent.py` write `automatic analysis: <file>`. Process with AI writes `assistant: <file>` followed by the provider and model. Profiles saved before 0.2.0 use `assistant:` for both workflows. [Physics and Methods, section 14.2](Physics_Manual.md#142-the-record-stem_analysisjson)
+
+**Replacing files.** A single-file save dialog asks before replacing the selected file. It replaces the companion record (such as a `.json`) without another prompt.
+
+- Export, **Curves as Data…** (folder dialog), Send to Fitting, watched exports and AI exports replace same-name files in the destination folder. The Format Converter also replaces its report and metadata JSON.
+- Batch Export and Send Series to Fitting ask what to do with an earlier export of the same data. Choose **Replace**, **Keep Both in a New Subfolder** or **Cancel** (section 5.7).
+- The Format Converter protects converted images (it adds
 `_001` … or stops), and SEM Particle Analysis never overwrites its results. Sputter writes the tables of a
 result folder again when you change the rate, t0 or end or add refined windows, and **Register best model in 2D
 Prediction** replaces the module of the same project.
 
-**Text files.** Every text file GIMaP writes (CSV, TXT, DAT, the curves for Fitting, `README.txt`) is UTF-8
-without a byte-order mark. GIMaP's own symbols are written in ASCII — `1/A`, `deg`, `2theta`, `alpha_i`, `chi`,
-`sigma`, `+/-` — and file names, frame names and paths as they are; the JSON records keep every name exactly. A
-script should read the files with `encoding="utf-8"` (for example `numpy.loadtxt(path, encoding="utf-8")`). A
-name outside ASCII may be shown wrongly when a CSV is opened in Excel by a double-click; the numbers are not
-affected.
+**Text files.** Read CSV, TXT, DAT, Fitting curves and `README.txt` as UTF-8 without a byte-order mark. GIMaP writes ASCII symbols (`1/A`, `deg`, `2theta`, `alpha_i`, `chi`, `sigma`, `+/-`) and preserves file names, frame names and paths in exports and JSON records. In a script, use `encoding="utf-8"`, for example `numpy.loadtxt(path, encoding="utf-8")`. Double-clicking a CSV in Excel can garble non-ASCII names. The numbers keep their values.
 
 **In the user data folder.** Besides the files of the table, GIMaP keeps there `settings.json` (the settings
 and what the pages remember, section 3.9), `instrument_profiles.json`, `session.json`, `model_parameters.json`
@@ -4403,55 +4392,56 @@ that folder, `Start_GIMaP.bat` keeps Matplotlib's font cache in `%LOCALAPPDATA%\
 Windows whether a few cards of Fitting and 2D Prediction are folded is kept in the registry, under
 `HKEY_CURRENT_USER\Software\GIMaP`.
 
-**The Windows package.** Besides the program, the ZIP holds `licenses\`: the licence files of every component of
-the package, listed in `licenses\README.txt`, with `THIRD_PARTY_NOTICES.md` (**Help ▸ Third-party Notices**)
-and `LICENSE`. The release page lists the SHA-256 of every file to download in `SHA256SUMS.txt`: check a
-download with `Get-FileHash -Algorithm SHA256 <file>` in PowerShell, or `sha256sum -c --ignore-missing
-SHA256SUMS.txt` (it checks the files you downloaded).
+**The Windows package.** In the ZIP, `licenses\` holds the component licences and `licenses\README.txt` lists them. The ZIP also includes `THIRD_PARTY_NOTICES.md` (**Help ▸ Third-party Notices**) and `LICENSE`. The release page lists the SHA-256 for each download in `SHA256SUMS.txt`. Check a file with `Get-FileHash -Algorithm SHA256 <file>` in PowerShell, or check the files you downloaded with `sha256sum -c --ignore-missing SHA256SUMS.txt`.
 
 ## 13. Known limitations
 
-Version 0.2.0 is a pre-release. These limitations are known; each comes with what to do. This chapter is the complete list for this version. What the methods themselves leave out (scattering physics, instrument, statistics) is in [Physics and Methods, chapter 15](Physics_Manual.md#15-what-gimap-does-not-model).
+Version 0.2.0 is a pre-release. For the assumptions of each method, see [Physics and Methods, chapter 15](Physics_Manual.md#15-what-gimap-does-not-model).
 
 | Limitation | What to do |
 |---|---|
-| A shared q-scale error shifts the refined cell and can mimic strain. The cell errors condition on the calibration and chosen indices. | Check the calibrant and sample distance before interpreting a strain. Inspect the peak residuals and compare the measured ring sequence with the proposed indices (§5.9). |
-| A frame can lack a clear shadow edge, specular spot or identifiable Yoneda band. On P08 the shadow alone is consistent with both the published and the spot-derived angles. | Check the direct-beam calibration and the individual angle estimates. Use a known reference and **Keep entered αi** when a feature has another plausible assignment. |
-| **A film transmission model cannot reproduce a shadow that differs on the two sides of a ring.** The public P08 MAPbI₃ example shows this near the horizon (§5.9). | Measure incidence and roll before comparing signed sectors and checking the q window on the frame. Read the reported χ and size of the largest residual for a poorly fitted ring. Report a quantitative oriented fraction only when the model describes the measured profiles. |
-| **The rows of a Series map carry no σ.** The timeline's χ² takes the noise of each x column from the series itself, and a Series map recorded in the results database holds x and I only (section 5.6). | Read the timeline as a distance in units of the frame-to-frame noise, not as a goodness of fit; for σ of every point, use Batch Export ▸ Each frame: its curves, with error bars. |
-| **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
-| **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
-| **Geometry Calibration 1σ depends on the contributing rings.** Coverage of one estimated standard error varies by parameter and matched-ring count. Common shifts of every ring also affect accuracy. | Check the ring overlays. Physics and Methods §3.3 gives the measured coverage and tilt accuracy of the geometry returned by the line-position check. |
-| **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
-| **An instrument profile is matched by detector name and frame size only. A calibration found by the automatic search may belong to another experiment.** Even matching detector dimensions cannot establish which run produced a calibration (section 4.2). | Check the file named in the report and the distance in **Geometry**. Supply the calibration or name it in the notes. Remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
-| **Powder rings leave rot3 undetermined.** They constrain tilt weakly at SAXS distances (±0.2° on the public silver behenate frame). With seven or more matched rings in simulated frames, the 1σ estimates for beam x and rot1 covered the true values less often than expected. | See Physics and Methods 3.3 for measured coverage. Use a wide-angle standard for rot1 and rot2. Check rot3 on a GISAXS ridge and the horizon in **Geometry ▸ Check rot3**. GIMaP reads flat-detector `.poni` orientations 1–4 (section 4.2). |
-| **At ψ = 0 the automatic Yoneda search and horizontal cut average detector rows.** Analyze warns when the horizon varies by more than half a row across the frame. | Add a horizontal band in q for a constant exit angle. Mirror filling needs a measured partner on the other side. It cannot recover the missing wedge. |
-| **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**, the most prominent; the window has no setting for more. The others are left out of the peak table, the sector comparison, the rings and the series hints; *Decisions* says how many candidates there were (section 5.5). | Run `tools/gimap_agent.py auto … --max-peaks N` (section 10.7), or ask the AI to run `find_peaks` with `max_peaks`, when you need the full list. |
-| **Kinematic q omits film refraction.** Near the critical angle the shift in q_z can be of order k·sin αi. A transmitted-channel correction can leave a second ring from the reflected beam. | Check the q axis in the report. Apply the film critical angle when known and quote geometry uncertainty separately from peak-fit errors. |
-| **Missing-wedge intensities require extrapolation.** An unseen peak stronger than the edge band can put f outside the reported range. | Check f_iso, the scenarios at the systematic limits and the pole fit's quality (section 5.9). |
-| **NeXus/HDF5 files not written by the Lambda server are now read as stored** (earlier versions transposed and flipped them). A geometry or mask made on such a file with an earlier version no longer fits it (section 5.1). | Check the beam centre and masks of such data; calibrate again if needed. |
-| **Flat-field errors treat the measured flat mean as fixed.** A unit-mean response map lacks the acquisition count scale needed to estimate Poisson noise. | Supply the uniform exposure in counts or ADU. Curves using the same reference share uncertainty (section 5.2). |
-| **The normalisation divides the frame after the background and dark frame are subtracted** in the frame's own units. Transmission and thickness are entered by the user (section 5.2). | Set the background's **Scale** (and the **Dark scale**) to the ratio of exposure times or monitors of the frame and the background. |
-| **XRR intensities are raw**: no monitor normalisation, footprint, background, resolution correction or θ offset. Analyze masks and bad-pixel search are not applied (section 9.2). | Apply the required corrections to the exported curve and check the ROI and valid-pixel counts. |
+| **An automatic calibration match can come from another experiment.** | Profiles match by detector name and frame size, so check the reported file and the distance in **Geometry**. Supply the right calibration directly or in the notes and remove a wrong profile with **Geometry…** ▸ **Delete profile** (§4.2). |
+| **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** | For Si, Al₂O₃ or Cr₂O₃, the AI recognises the filename (§10.5). Calibrate the image in pyFAI, then name the `.poni` in your notes or place it beside the frames (§4.2). |
+| **Calibration 1σ depends on the parameter and the matched rings.** | Check the ring overlays for a shared shift. Even with several rings, 1σ can be too small for beam x and rot1 (Physics and Methods §3.3). |
+| **Powder rings leave rot3 undetermined and constrain tilt weakly at SAXS distances.** | Use a wide-angle standard for rot1 and rot2. Check rot3 against a GISAXS ridge and the horizon in **Geometry ▸ Check rot3**. |
+| **GIMaP reads flat-detector `.poni` orientations 1–4.** | Load the frame in the same row and column order as the calibration (§4.2). |
+| **Older masks and geometry may use a different NeXus/HDF5 orientation.** | GIMaP keeps the stored orientation of files written outside the Lambda server. Check the beam centre and mask alignment and recalibrate if needed (§5.1). |
+| **Flat-field errors treat the measured flat mean as fixed.** | Supply a uniform exposure in counts or ADU to estimate Poisson noise. Account for shared uncertainty when comparing curves that use the same flat (§5.2). |
+| **GIMaP subtracts dark and background in frame units before normalisation.** | Set **Scale** and **Dark scale** from the exposure or monitor ratio of the sample to each reference. Enter the sample transmission and thickness (§5.2). |
+| **A frame may give an ambiguous incidence angle.** | Check the direct-beam calibration and the estimates from the shadow edge, specular spot and Yoneda band. If a feature is missing or ambiguous, use a known reference and **Keep entered αi**. |
+| **At ψ = 0 the automatic Yoneda search and horizontal cut average detector rows.** | Analyze warns if the horizon varies by more than half a row across the frame. Add a horizontal band in q for a constant exit angle. |
+| **Kinematic q omits film refraction.** | Near the critical angle, q_z can shift by order k·sin αi, and a reflected-beam ring can remain after a transmitted-channel correction. Check the reported q axis, apply the film critical angle if known, and quote geometry uncertainty separately from peak-fit errors. |
+| **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks.** | The peak table, sectors, rings and series hints use the most prominent candidates. Check the total in *Decisions* (§5.5) and fit more with `tools/gimap_agent.py auto … --max-peaks N` (§10.7) or ask the AI to run `find_peaks` with `max_peaks`. |
+| **A q-scale error can mimic lattice strain.** | Check the calibrant and sample distance before interpreting strain. Cell errors assume the calibration and chosen indices, so compare the measured ring sequence with those indices and inspect peak residuals (§5.9). |
+| **The film transmission model misses asymmetric ring shadows.** | Measure incidence and roll, compare signed sectors and check the q window on the frame. Use the size and χ of the largest residual to judge whether the fit supports reporting an oriented fraction (§5.9). |
+| **Mirror filling needs a measured partner and leaves the missing wedge empty.** | For the Hermans factor f, check f_iso, the assumptions at both systematic limits and the pole fit (§5.9). A hidden peak stronger than the edge band can put f outside that range. |
+| **Series maps store x and I without σ.** | Read timeline χ² as a distance scaled by each column’s frame-to-frame noise (§5.6). For pointwise σ, use Batch Export ▸ Each frame: its curves, with error bars. |
+| **Quitting during Batch Export skips the batch summary.** | Completed frame files stay. End the batch with **Stop** to write the batch tables, `README.txt` and the JSON record. |
+| **Cancel waits for the current Compare or Fitting read.** | Press Cancel or Stop once. When the read finishes, GIMaP discards the unfinished import or skips the frame fit and keeps completed results (§§6.5, 7.2). |
+| **Curve import cannot identify three headerless columns or read interleaved errors.** | Choose `q I [sigma]` or `q I1 I2 …` in **Import Curves…** (§6.1). Split `q I1 sigma1 I2 sigma2` into one `q I sigma` file per curve. |
+| **A fixed import cannot watch for new files or columns.** | Import again to change the selection, or use folder mode to watch single-curve files (§6.1). |
+| **Broad sizes, roughness or a low-q rise can favour the wrong particle shape.** | From the cut alone, Run Automatic Analysis and Batch Export try one or two populations of spheres or upright cylinders (Gaussian sizes by number, local monodisperse approximation, §5.5). To test a known composition, including random cylinders, choose **The particles in Model** in **Fitting**, run Predict parameters, refine and check the residuals. |
+| **A side peak can appear without particle interference.** | Report 2π/q\* as a characteristic length. Use independent evidence to establish particle spacing. [Physics and Methods, section 8.5](Physics_Manual.md#85-the-model-fit-and-how-the-solution-is-chosen) |
+| **Core–shell spheres and two interference models need a manual fit.** | In Model, select core–shell spheres (q_z = 0), the 2D hexagonal paracrystal (infinite domains) or Percus–Yevick hard spheres (3D liquid). Run Refine or Search from known values or a Predict solution with spheres. [Physics and Methods, section 9.14](Physics_Manual.md#914-models-for-manual-fitting) |
+| **Intensity weighting and random cylinders slow the fit.** | Allow tens of seconds for **Search the ranges** with *Gaussian, by intensity* and up to minutes for random cylinders. Narrow the R, h and σR/R ranges, set **Sizes** to *Gaussian, by number* if appropriate, or start **Refine** close to the curve. |
+| **Vertical cuts support spheres and upright cylinders only.** | Take the vertical cut beside the specular rod and use horizontal cuts for random cylinders and core–shell spheres. Fitting ▸ Fit Several Curves Together uses the columns’ q∥, omits q resolution and the rod, and fits each cut’s population scales separately (§6.6). |
+| **Correlated radii and heights can bias cylinder heights in both fit ranges.** | The joint fit assumes a dilute layer with independent radii and heights. Compare heights from the two ranges and check the vertical cut’s reduced χ² (§6.6). |
+| **The substrate table covers Si, SiO₂, plate glass and Au from 4.9 to 30 keV.** | Enter δ and β for other substrates. At level 4 (smooth interfaces, particles in air), enter a known oxide or polymer film’s thickness, δ and β under **Top layer** (§6.4). |
+| **A posterior check can miss a distant solution.** | Compare Predict’s other solutions even when both MCMC ensembles agree (§6.2). Allow hours for a check with random cylinders. |
+| **Predict results vary slightly across numerical library builds.** | To reproduce solution probabilities, interval endpoints, standard errors and flags near bounds, keep the cut and settings. Record the operating system and Python, NumPy and SciPy versions. |
+| **Surface reflection affects sphere radii above q₊R ≈ 1.7.** | Without both incidence and exit angles, Predict uses the Born term at the cut’s q_z or the effective interface. Give both angles above this threshold (R ≈ 3 nm at α_i = 0.4°, 12 keV) and use level 4 (four-term DWBA) for a known substrate. [Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters) |
+| **Weak reflection leaves the sphere radius ambiguous.** | With both angles and an unknown substrate, a smaller sphere with a larger \|r\| can give the same two-path fit. Far above the critical angle, compare `refl_amp` in Model with the substrate value and fix it to that value before refining if they differ substantially. |
+| **XRR exports raw intensities.** | Check the ROI and valid-pixel counts because XRR skips Analyze masks and bad-pixel detection. Apply monitor, footprint, background, resolution and θ-offset corrections to the exported curve as needed (§9.2). |
 | **Format Converter does not read EDF.** | Use **Analyze ▸ Batch Export ▸ Converted detector frames**. |
-| **The uint16 modes of the Format Converter mark pixels without data only in HDF5**: in a TIFF or CBF such a pixel holds 65535 and reads back as a valid value (section 9.1). | Keep the stored data type (the default), or write HDF5, when the gaps and bad pixels matter. |
-| **SEM sizes depend on the segmentation**, and the default StarDist weights are trained on cell nuclei, not SEM. The scale is never read from the image. | Enter the calibration from the scale bar; check every outline; prefer a model trained on SEM images. |
+| **In uint16 TIFF or CBF, missing pixels read back as valid 65535 values.** | In Format Converter, keep the stored data type (the default) or write HDF5 to preserve gaps and bad pixels (§9.1). |
+| **SEM extraction needs a scale for each image.** | Enter the known nm per pixel or calibrate from a scale bar of known length. |
+| **SEM sizes depend on segmentation.** | Check every outline and prefer a model trained on SEM images. The default StarDist weights were trained on cell nuclei. |
 | **2D Prediction reads CBF frames only.** | Convert other frames to CBF with the Format Converter. |
-| **2D Prediction applies no geometry and no correction to a frame**: the module's own preprocessing is all that runs (section 11.3). | Use a module only for data of the set-up it was trained for. |
-| **The Ag and Cu distribution modules of 2D Prediction declare no axes**: their maps and curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale, and they are not attached to the SEM comparison (section 11.3). | Read only the shape of these distributions. When you know the axes of the trained model, add them to the module's `module.yaml`. |
-| After the interface language is switched in a session, a few texts keep the old language (e.g. the outcome line of a finished automatic analysis). | Run the analysis again, or restart. |
-| Quitting GIMaP during a Batch Export keeps the files of the frames done, but the batch tables, `README.txt` and the batch's JSON record are not written. | End a batch with **Stop**: it writes them. |
-| **The model fit of the automatic analysis chooses the particles from the curve alone.** Run Automatic Analysis (and Batch Export's particle model) fits the cut with Predict parameters among one or two populations of spheres and upright cylinders, using the cut geometry available to the fit (section 5.5). Random cylinders require a given composition. The earlier first-level fit of the public GALAXI frame of Ag spheres reported two upright cylinders (section 1.3). Broad sizes and a rise at low q can be described by another composition than the true one. 2π/q\* is a length scale, not the particle spacing: on BornAgain simulations of the GALAXI model it was within 10 % of the true distance in 1 of 10 simulations with interference, and a peak or shoulder appeared in all 4 without (sections 1.3 and 5.5; [Physics and Methods, section 8.5](Physics_Manual.md#85-the-model-fit-and-how-the-solution-is-chosen)). | Choose the model from what you know of the sample and confirm it in **Fitting**: Predict parameters with **The particles in Model**, then refine it and judge the residuals. Do not quote 2π/q\* as the particle spacing. |
-| **The models for manual fitting are not proposed by Predict parameters.** Core–shell spheres, the 2D hexagonal paracrystal (infinite domains) and Percus–Yevick hard spheres (a 3D liquid) are fitted by Refine and Search only; core–shell spheres at q_z = 0. | Start them from values you know, or from a Predict solution with spheres, then change the family or the interference in Model and Refine ([Physics and Methods, section 9.14](Physics_Manual.md#914-models-for-manual-fitting)). |
-| **Fitting is slower with sizes by intensity and with random cylinders.** With a sphere or vertical cylinder and sizes by number or log-normal, **Search the ranges** takes a few seconds as before; with *Gaussian, by intensity* (models of earlier versions) tens of seconds, and with a random cylinder (15–800 ms per evaluation) up to minutes. | Set **Sizes** to *Gaussian, by number*, narrow the ranges of R, h and σR/R before a search, or start **Refine** from values close to the curve. |
-| **A vertical cut is modelled for spheres and upright cylinders only**, at one in-plane q (q∥ of its columns), without a q resolution or the specular rod, and only in Fitting ▸ Fit Several Curves Together. Its scales are its own: with several populations their ratio is not tied to the horizontal cut's (section 6.6). | Take the vertical cut beside the specular rod; fit random cylinders and core–shell spheres on horizontal cuts. |
-| **Cylinder height in a joint fit.** The model assumes a dilute particle layer and independent heights and radii. | Check the vertical reduced χ² and the height difference between ranges. Both ranges can give a biased height when height and radius are correlated (section 6.6). |
-| **The substrate table holds Si, SiO₂, plate glass and Au from 4.9 to 30 keV.** Level 4 assumes smooth interfaces and particles surrounded by air. | For a known oxide or polymer film, enter its thickness, δ and β under **Top layer** (section 6.4). For a substrate outside the table, enter its δ and β. |
-| **The posterior check (MCMC) is slow for random cylinders.** A random cylinder takes 15–200 ms per evaluation. A check takes hours. Independent ensembles can both miss a distant mode (section 6.2). | Compare other modes through Predict's other solutions. |
-| **Predict parameters can give slightly different fits across platforms.** For the same cut, solution probabilities, interval endpoints, standard errors and flags for parameters near a bound can differ between numerical library builds. | To reproduce an archived fit, record the operating system and Python, NumPy and SciPy versions along with the cut and settings. |
-| **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; four-term DWBA with a known substrate and both angles; spheres with two paths and a free reflection coefficient r when the substrate is unknown and Model has both angles, else at the Born term of the cut's q_z or the effective interface). Simulated curves of independent models provide known parameters for checking recovery. In the paper’s measured Au comparison, halving the published SEM diameters gives an independent radius scale and population spread. For the measured GALAXI Ag frame, the reference radius comes from a BornAgain model of buried spheres (section 1.3 and Physics and Methods, section 9.10). Roughness or shapes outside the model can give the wrong composition a high weight. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with an unknown substrate and both angles R is off by about 6 % (median; P90 19–40 %) and the leading solution has the true unordered families in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7 and select level 4 when the substrate is known; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
-| **Older reduction or fit records may lack a reproduction recipe.** | Export a fresh record from the original inputs and settings. Section 12 describes replay for records with a `reproduction` block. |
-| Without a supported credential-store adapter, saved API keys are kept in plain text in the user data folder (section 10.1). Anyone with read access to those files can read the keys. | On a shared computer, use the provider's environment variable or **Remove** the saved key after use. |
+| **2D Prediction uses only the module’s preprocessing.** | Choose a module trained for your setup because 2D Prediction applies no frame geometry or corrections (§11.3). |
+| **The Ag and Cu distribution modules have no calibrated axes.** | Read only the distribution shape on the 0.05–15 nm placeholder axes. Add the trained model’s axes to `module.yaml` for physical sizes, including the radius axis for SEM comparison (§11.3). |
+| **Some text keeps its original language after a language switch.** | Run the analysis again or restart GIMaP. |
+| **Older reduction or fit records may lack a reproduction recipe.** | Look for the `reproduction` block (§12). If it is missing, export a fresh record from the original inputs and settings. |
+| **Without a supported credential store, saved API keys are plain text.** | Anyone who can read your user data folder can read the keys. On a shared computer, use the provider’s environment variable or **Remove** the saved key after use (§10.1). |
 | **Sputter ▸ Analyze reads Cu with networks trained for Cu on two polymer films (a homopolymer and a block copolymer)**. | For Cu on another substrate, choose **Polymer** for a polymer film and compare the model image with the measured one before using the values. |
 | **Sputter draws and reports no metal inside a polymer film.** The model has no metal that went into the polymer. For Cu on polymer films two forms were tested — clusters buried below the film, and a Cu/polymer composite layer with Cu domains — and the data did not resolve either; Ag on polymer films was not tested. A line under the **Real Space** views and the last section of the report (*What the model does not describe*) say so. | Do not read the missing metal in the picture as no metal: GISAXS here cannot tell. Use a depth-resolved measurement (XRR, cross-section microscopy) for it. |
 | **Sputter can still miss the thickness fringes of a continuous film on a polymer** — the horizontal stripes along the exit angle once the film has formed. Refine and Full start the film windows from a dense film with the film-density fluctuation on and keep only the metal amount and the film thickness from decreasing, which matched them on the tested scans; a window whose joint solution did not take that film, and a result of Quick (no joint fit), can miss them and then has part of its fit deviation from them. | Take the film thickness from the fringes themselves (the report's film thickness is read from them); in the film stage read the model's base layer as its closest description, not as a measurement, and compare the model image with the measured one (**Patterns**, a line drawn on the images). |
@@ -4459,71 +4449,54 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it reads are kept, one copy per request that changes the import (rate, geometry, mask, substrate …), in GIMaP's local folder, at most 5 GB together by default: the ones not used for the longest time are removed first. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. **Details ▸ Storage** lists the imports, removes them and sets the limit. |
 | **Sputter reads folders of CBF frames only** (chapter 8). | For NeXus series, use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.5). |
 | **Sputter keeps every result folder** in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds the Sputter form and references its result folder. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **Open Result…**. |
-| **TensorFlow runs on the CPU on Windows and macOS**; a GPU set-up is not configured. | Use the bundled CPU runtime. |
+| **TensorFlow runs on the CPU on Windows and macOS.** | Use the bundled CPU runtime. |
 
 ## 14. Troubleshooting, FAQ, version and contact
 
 ### 14.1 A file cannot be loaded
 
-The message under the image says why in words: an empty file (still being written?), not a detector
-image, a damaged or incomplete NeXus file, no permission. A NeXus/HDF5 file that another program is still
-writing cannot be read until it is closed; one left open by a program that ended can be read after
-`h5clear -s` on a copy; one compressed with a filter this installation cannot read needs the Python package
-`hdf5plugin` (section 5.1, *NeXus and HDF5 files*). Otherwise check that the format is supported:
-`.cbf` needs `fabio`, HDF5/NeXus files need `h5py` and the dataset where the reader expects it. To ask
-for another file format, use **Help ▸ Report a Problem…** or write to the author (section 14.12).
+Read the message under the image. It identifies empty files, damaged or incomplete NeXus files, other file types and permission errors.
+
+- If a file is empty or still being written, wait for the writer to finish and close it. If the writer stopped with a NeXus/HDF5 file open, run `h5clear -s` on a copy.
+- For an unreadable HDF5 compression filter, install `hdf5plugin` (section 5.1, *NeXus and HDF5 files*). HDF5/NeXus also needs `h5py` and a detector dataset in a supported location. For `.cbf`, check that `fabio` is installed.
+- For a permission error, check read access. To request support for another format, use **Help ▸ Report a Problem…** or contact the author (section 14.12).
 
 ### 14.2 A `.csv` curve asks for its columns
 
-Fitting reads a CSV by the names of its header (section 6.1). When they do not say which column is q, I and σ — two
-intensity columns, q of two axes, a table without a header of more than three columns — **Choose Columns** asks; pick
-the columns there (q, I and σ must be three different columns), or rename the header to `q, I, sigma`. A file
-that is neither `.dat`, `.txt`, `.csv` nor `.h5` is refused with what Fitting reads.
+Fitting asks when the header leaves q, I or σ ambiguous (section 6.1). Examples include two intensity columns, two q axes or more than three columns without a header.
+
+In **Choose Columns**, select a different column for each quantity, or rename the header to `q, I, sigma`. If Fitting refuses the file type, use one of the supported formats `.dat`, `.txt`, `.csv` or `.h5`.
 
 ### 14.3 1D Predict Does Not Start
 
-*Predict parameters* (in Fitting and in the 1D Predict window) checks its network
-(`src/gimap/features/fitting/domain/posterior/data/flow_v1.npz`) against the SHA-256 in its record `flow_v1.json`
-before it runs, and does not start when one of the two is missing or the weights were changed: the message names
-the file. The portable version and the Git repository both contain them. In a source checkout:
+In Fitting and 1D Predict, *Predict parameters* checks `src/gimap/features/fitting/domain/posterior/data/flow_v1.npz` against the SHA-256 in `flow_v1.json`. If either file is missing or the weights have changed, the message names the file.
 
-- A checkout last updated before the network was added does not have it yet: update it (section 2.4).
-- A network file that you changed yourself is left alone by the update script; `git status` lists it as modified.
-  `git checkout -- src/gimap/features/fitting/domain/posterior/data` puts the files of the repository back (and
-  discards your changes in that folder).
-- Git hands the weights out as binary (`.gitattributes`), so a checkout does not convert them.
+The portable package and Git repository include both files. For a source checkout, update missing files as described in section 2.4. If you edited a network file, the update keeps your changes and `git status` lists it as modified. To discard edits in that folder and restore the repository copies, run `git checkout -- src/gimap/features/fitting/domain/posterior/data`. Git stores the weights as binary (`.gitattributes`).
 
-The least-squares methods of Fitting (*Refine the values in Model*, *Search the ranges, then refine*) use no
-model files: the check does not concern them. Without the network, Fitting does not recommend Predict parameters
-for a GISAXS cut, and the line under **Method** names the missing file when you choose it (section 6.2).
+Without the network, Fitting skips its GISAXS recommendation for Predict parameters. Select it to see the missing file under **Method** (section 6.2). *Refine the values in Model* and *Search the ranges, then refine* work without network files.
 
 ### 14.4 Predict is disabled, or the model is not imported (2D Prediction)
 
-The three states above **Predict** say what is missing: *Input* (a CBF frame or a folder), *Model*
-(press **Import model...**) and *Framework* (the framework the module needs is installed). When the model
-does not load, read the Activity log: it names the folder that was tried. A folder that is gone, or one
-named in `module.yaml` that belongs to another computer, is asked for again by **Import model...**; when
-the model is loaded, press **Import model...** again to choose another folder.
+**Predict** needs all three states above it to be ready. For *Input*, select a CBF frame or folder. For *Model*, press **Import model...**. For *Framework*, install the framework the module needs.
+
+If the model fails to load, the Activity log shows the folder GIMaP tried. Use **Import model...** to choose a local folder if the one in `module.yaml` is missing or belongs to another computer. The same button changes the folder of a loaded model.
 
 ### 14.5 SEM Particle Analysis does not extract
 
-- The run button stays disabled until a positive **Image calibration** is set for this file.
-- **StarDist (local AI)**: press **Check local resources**. It needs a Python with StarDist and
-  TensorFlow (`requirements-sem-stardist.txt`) and a model folder with `config.json` and the weights.
-  Nothing is downloaded for you.
-- **Existing instance labels**: the labels must be an integer image of the size of the SEM image or of
-  the ROI.
-- No particle passes the filters: look at the rejected outlines and their reasons, then change the
-  threshold, contrast, area limits or ROI.
+- **Run button disabled.** Extraction needs a scale for this file. Set a positive **Image calibration**.
+- **StarDist (local AI)** fails to start if a local resource is missing. It needs a local Python with StarDist and TensorFlow (`requirements-sem-stardist.txt`), plus a model folder containing `config.json` and the weights. Provide these locally and press **Check local resources**.
+- For **Existing instance labels**, GIMaP needs an integer label image. Use labels with the dimensions of the SEM image or its ROI.
+- **No particles remain.** The filters rejected all outlines. Inspect the rejected outlines and their reasons, then adjust the threshold, contrast polarity, area limits or ROI.
 
 ### 14.6 The AI assistant does not start
 
-The start dialog says whether the chosen brain is ready. Claude Code: install it (or choose the `claude.exe` of
-the Claude desktop app, under `%LOCALAPPDATA%\Packages\Claude_…\LocalCache\Roaming\Claude\claude-code`, with
-**Browse…** beside **Program**), then **Sign In…** and **Check** in **Tools ▸ Settings… ▸ Assistant**. Claude API: `pip install anthropic`, a key, **Test Connection**.
-Other providers: `pip install openai`, a key, a model that supports tool calling, **Test Connection**.
-A key saved in GIMaP takes precedence over the environment variable: when the saved one is wrong or
-expired, replace it, or **Remove** it to use the variable.
+The start dialog shows whether the selected AI provider is ready. Open **Tools ▸ Settings… ▸ Assistant** and check the setup for that provider.
+
+- **Claude Code** needs an installed program and an active sign-in. Install Claude Code, or use **Browse…** beside **Program** to select `claude.exe` under `%LOCALAPPDATA%\Packages\Claude_…\LocalCache\Roaming\Claude\claude-code`. Then use **Sign In…** and **Check**.
+- **Claude API** needs the Python package and a valid key. Run `pip install anthropic`, enter the key and press **Test Connection**.
+- **Other providers** also need a model that supports tool calling. Run `pip install openai`, enter the key, choose that model and press **Test Connection**.
+
+If an environment key seems to have no effect, GIMaP checks the saved key first. Replace an incorrect or expired key, or press **Remove** to use the environment variable.
 
 ### 14.7 Sputter does not analyse, or TensorFlow is missing
 
@@ -4557,81 +4530,44 @@ missing package, activate the right Python environment and run `pip install -r` 
 
 ### 14.8 Windows warns about the installer
 
-The installer and the launcher are batch files (`.bat`) and are not signed, so Windows may ask before it
-runs a downloaded one, and an institution's antivirus or application control may block it. Only run
-files downloaded from the GitHub Releases page of GIMaP, and check them against `SHA256SUMS.txt` of the
-release (chapter 12, *The Windows package*). Otherwise run GIMaP from source in a local Python environment
-(section 2.2).
+Windows warns about the unsigned installer and launcher (`.bat`), and your institution's security software may block them. Use the files from GIMaP's GitHub Releases page and verify them against `SHA256SUMS.txt` (chapter 12, *The Windows package*). If your institution blocks batch files, run GIMaP from source in a local Python environment (section 2.2).
 
 ### 14.9 An export is empty or fails
 
-- **Empty**: check the q or frame range, the masks, the cut, and that the frame has valid data. In
-  Fitting, also the fitting range, the parameter bounds and the scale and background. In 2D Prediction,
-  the stack and whether the module fits the data.
-- **Fails**: check that the folder exists and can be written; do not export into protected system
-  folders. When `gimap_analysis/` next to the data cannot be written (a read-only data share), Export
-  asks for another folder. The tools that propose a place beside the data (the XRR CSV, the Format
-  Converter, Geometry Calibration's export, a project) need another folder there too.
+- **Export is empty.** The selection may contain no valid data. Check the q or frame range, masks, cut and frame values. In Fitting, also check the fitting range, parameter bounds, scale and background. In 2D Prediction, check the frame stack count and whether the module suits the data.
+- **Export fails.** The destination may be missing or read-only. Choose an existing, writable folder outside protected system folders. Export asks for one if it cannot write `gimap_analysis/` beside the data. On a read-only share, choose another folder for XRR CSVs, Format Converter, Geometry Calibration exports and projects too.
 
 ### 14.10 The window is too large for the screen
 
-GIMaP follows the display scaling of the operating system and fits a 1280 × 720 screen. If text is too
-large or too small, use **View ▸ Font Size** or **Tools ▸ Settings… ▸ Appearance**; dense panels scroll
-instead of being clipped. The window size and position are restored at the next start.
+GIMaP follows the operating system’s display scaling and fits a 1280 × 720 screen. If the text looks too large or small, adjust **View ▸ Font Size** or **Tools ▸ Settings… ▸ Appearance**. Scroll to see the rest of a dense panel. GIMaP restores the window size and position at the next start.
 
 ### 14.11 FAQ
 
-**Is GIMaP production-ready?** No. Version 0.2.0 is a pre-release: treat it as beta scientific software
-and check results that matter.
+**Is GIMaP production-ready?** Version 0.2.0 is a pre-release. Treat it as beta scientific software and check important results.
 
-**Can I use my own trained model?** For 2D Prediction, yes, if it can be described by a module
-configuration with a supported loader (section 11.3). For SEM Particle Analysis, any local StarDist model
+**Can I use my own trained model?** In 2D Prediction, describe the model in a module configuration with a supported loader (section 11.3). In SEM Particle Analysis, select a local StarDist model
 folder. Predict parameters uses the network that comes with GIMaP (`tools/ml1d` trains another one). Sputter uses
 the analysis package that comes with GIMaP in
 `utils/sputter_client/`, or another one you choose (section 8.1); a new package comes with a GIMaP update.
 
-**Where are the results of 1D Predict saved?** In `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the
-GIMaP user data folder. Fits you save yourself
-(**Save**) go where you choose. Chapter 12 lists every output.
+**Where are the results of 1D Predict saved?** Open `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder. For fits saved with **Save**, look in the folder you chose (chapter 12).
 
-**Which fitting method should I choose?** For a GISAXS cut whose particles you do not know, **Predict parameters**:
-it is Fitting's one network method and gives every solution with its probability. When Model is close to the
-curve, **Refine the values in Model**; when the start is poor but you know the family and its ranges, **Search the
-ranges, then refine** (section 6.3). *Predict parameters (fit1d)* and *Find the particle shape (no AI)* were
-removed in 0.2.0, so that there is one network method to choose.
+**Which fitting method should I choose?** For a GISAXS cut with unknown particles, use **Predict parameters**. This is Fitting’s network method and gives each solution with its probability. If the model is close to the curve, use **Refine the values in Model**. If the starting values are poor but you know the particle family and its ranges, use **Search the ranges, then refine** (section 6.3).
 
 **Where are Sputter's results saved?** In `sputter/<scan>-<code>/` of the user data folder, or in the folder
 set with **More options ▸ Save results in** (section 8.2; chapter 12); a result of Analyze is in its subfolder
 `iampred-<code>/`. They are kept until you delete them.
 
-**Does anything leave my computer?** Your data leave it only when you use the AI assistant with a remote
-brain (Claude Code, the Claude API or another provider's server): then the frame's status and the reduced
-curves are sent as numbers, never the detector file, and the small q-map image only when you allow it
-(section 10.6). With a model on your own computer or lab server, nothing leaves that network. GIMaP itself
-does not go online by itself. **Help ▸ GitHub Repository**, **Check for Updates…**, **Report a Problem…** and
-the model library of 2D Prediction open a page in your browser. **Report a Problem…** puts the versions of
-GIMaP and of your system (no paths, no data) on the clipboard and opens a new issue on GitHub: nothing is sent
-until you paste it there and submit the issue yourself. StarDist, Predict parameters and 2D Prediction run on
-your computer and download nothing.
+**Does anything leave my computer?** A remote AI assistant (Claude Code, Claude API or another provider's server) receives the frame status and numerical values of reduced curves. The detector file stays on your computer. Sending a small q-map image requires your permission (section 10.6). With a model on your computer or lab server, the data stay on that network. StarDist, Predict parameters and 2D Prediction run locally without downloads.
+
+**Help ▸ GitHub Repository**, **Check for Updates…**, **Report a Problem…** and the 2D Prediction model library open your browser on request. **Report a Problem…** copies the GIMaP and system versions to the clipboard and opens a new GitHub issue. You choose what to paste and submit. The clipboard summary contains no paths or data.
 
 ### 14.12 Version and Contact
 
-This manual describes **GIMaP 0.2.0** (pre-release). **Help ▸ About GIMaP** shows the version of the
-program you are running. `CHANGELOG.md` in the program folder lists what changed since 0.0.2 — the pages
-that were replaced, where the settings are kept now — the changes not yet released, and the known
-limitations of this version.
+This manual describes **GIMaP 0.2.0** (pre-release). Check your installed version in **Help ▸ About GIMaP**. The program folder contains `CHANGELOG.md` with changes since 0.0.2, unreleased changes and known limitations.
 
-- **Help ▸ Check for Updates…** opens the releases page on GitHub in your browser (newest first,
-  pre-releases included): compare the newest number with the one About shows. The check itself sends no request from GIMaP. Section 2.4 says how
-  to update.
-- **Help ▸ How to Cite GIMaP…** gives the reference to cite when you publish results obtained with
-  GIMaP, read from `CITATION.cff` in the program folder, with **Copy** and **Copy BibTeX**. Name the
-  version you used: the export records write it as `software_version` (chapter 12); for results from a
-  record without it (one written before 0.2.0, or one of those chapter 13 names) note it from **Help ▸
-  About GIMaP**. The reference names a DOI only when `CITATION.cff` gives one.
-- **Licence.** GIMaP is released under the MIT licence (`LICENSE` in the program folder). The Windows
-  package also contains components under other licences (PyQt5, for one, under the GPL-3.0), and the
-  example data keep their own licences: **Help ▸ Third-party Notices** lists them all.
-  **Help ▸ About GIMaP** names the licence and the versions of Python, Qt, PyQt and numpy, with **Copy**.
+- **Help ▸ Check for Updates…** opens GitHub Releases in your browser. Compare the latest version (pre-releases included, newest first) with the version in About. GIMaP itself sends no update request. See section 2.4 to update.
+- **Help ▸ How to Cite GIMaP…** displays the reference from `CITATION.cff`, including a DOI if the file supplies one. Use **Copy** or **Copy BibTeX**. Cite the version recorded in `software_version` (chapter 12). If the field is missing, as in older records, check **Help ▸ About GIMaP** (chapter 13).
+- **Licence.** GIMaP uses the MIT licence (`LICENSE`). For the licences of bundled components (including PyQt5 under GPL-3.0) and example data, open **Help ▸ Third-party Notices**. **Help ▸ About GIMaP** shows the licence and the Python, Qt, PyQt and numpy versions. Use **Copy** to copy them.
 
 Contact: [yufeng.zhai@desy.de](mailto:yufeng.zhai@desy.de)
