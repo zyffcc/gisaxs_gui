@@ -437,7 +437,7 @@ def compositions_of(case) -> list[tuple[str, int]]:
 
 
 def run_cut(network, index: int, points: int, samples: int, posterior_samples: int) -> dict:
-    case = fr.draw(index, SEED0)
+    case = fr.draw(index, SEED0, set_name="legacy-first")
     intensity, sigma = fr.curve(case)
     qz = float(fr.GEOM.qz_vacuum)
     counts = infer.Cut.prepare(fr.Q, intensity, sigma, qz)
@@ -618,7 +618,7 @@ def main():
     network = Network.load(a.network)
     cuts = []
     for index in (int(i) for i in a.indices.split(",")):
-        case = fr.draw(index, SEED0)
+        case = fr.draw(index, SEED0, set_name="legacy-first")
         if len(case["populations"]) != 1:
             raise SystemExit(f"cut {index} has {len(case['populations'])} populations; one-population cuts only")
         print(f"cut {index}: {case['composition']} {case['level']}", flush=True)

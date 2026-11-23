@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- The recovery benchmarks can generate an independent 300-cut set, audit reused draws, and report composition reliability separately for evidence and BIC. They also provide whole-cut coverage intervals, a grid-independent simulated beam tail, and a row-by-row check of the archived validation table.
+
 - A CBF frame still opens when a neighbouring scan folder disappears during the search for beam energy.
 
 - Reports and result labels round estimates to the decimal place of their two-significant-digit uncertainty. Unit-cell and population tables use compact notation such as `8.9335(22) Å`.

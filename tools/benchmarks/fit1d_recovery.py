@@ -43,7 +43,13 @@ for p in (str(HERE), str(KIT_APP)):
 
 import yoneda_truth as yt  # noqa: E402
 
-from recovery_cases import COMPOSITIONS, GEOM, Q, curve, draw  # noqa: E402,F401 - the cases, also from here
+from recovery_cases import COMPOSITIONS, GEOM, Q, curve, draw as draw_case  # noqa: E402,F401
+
+
+def draw(index, seed0=20261116):
+    """Replay the historical kit's inputs, also used by the V5 comparison."""
+    return draw_case(index, seed0, set_name="legacy-first")
+
 
 KEYS = ("R", "sR", "D", "s_nn")
 FIT_KEYS = dict(R=("R_nm", "R_nm_err"), sR=("sigma_R_rel", "sigma_R_rel_err"), D=("D_nm", "D_nm_err"),
@@ -74,7 +80,7 @@ def run(index):
     fit1d = importlib.import_module("research.fit1d.api").fit1d
     if SET["name"] == "extended":
         import heldout_cases
-        case = heldout_cases.draw(index, SET["seed0"])
+        case = heldout_cases.draw(index, SET["seed0"], set_name="legacy-extended")
         I, s = heldout_cases.curve(case)
     else:
         case = draw(index, SET["seed0"])

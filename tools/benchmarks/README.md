@@ -13,6 +13,74 @@ overwrite the stored file, which would lose those rows: give `--out PATH`, or `-
 summary names what was skipped (`skipped`).
 The held-out curves themselves (`recovery_cases.py`, `heldout_cases.py`) need neither the kit nor GIMaP.
 
+## Running an independent validation
+
+`posterior_recovery.py --set fresh` draws 300 cuts, 75 of each of the four first-set compositions.
+The model-only and added-effects groups each contain 150 cuts. The SHA-256 of the UTF-8 set name supplies
+eight little-endian words for the NumPy `SeedSequence` spawn key. The case index selects a child, whose
+two children supply the parameter generator and a 128-bit seed for Poisson noise. A run stores this noise
+seed in `case.seed`. The set name, root seed and index determine the same case in any worker order.
+The named `fit1d` and `extended` sets also use separate streams. The extended fit receives the true LMA/DA coupling.
+
+From the repository root, with `GIMAP_HOME` set to a temporary directory, a three-cut smoke run is:
+
+```bash
+B=tools/benchmarks
+N=src/gimap/features/fitting/domain/posterior/data/flow_v1
+python $B/check_case_overlap.py
+python $B/posterior_recovery.py --network "$N" --set fresh --n 3 --workers 1 --auto --out smoke --output-dir "$GIMAP_HOME"
+python $B/check_case_overlap.py --new-archive "$GIMAP_HOME/results/smoke.json"
+python $B/summary_tables.py --per-cut "$GIMAP_HOME/results/smoke.json" --stage choose
+python $B/posterior_pairs.py --by-cut "$GIMAP_HOME/paired.json" "fresh=$GIMAP_HOME/results/smoke.json"
+```
+
+Omit `--n` for the full named set. `--checkpoint DIR` resumes completed cuts with matching source,
+network, generator and fit settings. An unsuccessful fit is recorded and gives a nonzero exit status.
+`check_case_overlap.py` reads every shipped posterior gzip archive. For earlier posterior runs with
+only a summary in `history/`, it reconstructs case descriptors from the recorded generator, seed and
+count, including the 1,200-cut extended set. The audit labels these reconstructed draws.
+It counts identical (composition, populations, noise seed) tuples, population records, first-population
+numerical draws and noise seeds. It groups archives with identical indexed draws. Use `--indices` for
+the matching cut pairs. Reuse involving the new set gives exit status 1. `--strict` also fails on
+historical overlap. The archived third set shares 194 noise seeds with the first and 221 with the extended
+set. Every one of its 300 noise seeds and first-population numerical draws occurs in at least one earlier set.
+
+For replay, `--set legacy-first`, `legacy-extended` and `legacy-third` restore the original parameters,
+noise and grid-dependent beam tail. The archived third set has 152 model-only and 148 added-effects cuts.
+For a new run the central intensity after broadening is $A K(q)$, where $A$ is the integrated sharp
+intensity and the discrete resolution density satisfies Σ K(qᵢ) Δq = 1.
+
+**Composition and parameter errors.** The score uses the largest summed weight over retained modes of
+each composition index, including population radius order and each population's paracrystal status.
+Exact ties use the smaller index. Each successful fit, choose and auto record contains
+`composition_weights`, `compared_by` (`evidence` or `bic`) and `retained_modes`. Its top-level
+composition index, probability and fitted populations describe the leading individual solution.
+`truth_composition_index` and the stage's `candidates` record whether the shortlist included the truth.
+The summary gives attempted, failed, missing-weight, scored and correct cut counts. Its reliability
+bins give correct and total cuts by branch, and each branch includes binary Brier and constant-forecast
+scores. Historic runs lack the full weights. A parameter error in `fit.populations` uses the leading
+solution's least-squares `values.best`. The separate `fit.posterior` fields hold posterior medians.
+
+**Coverage bars for the validation figure.** Import `coverage_by_cut` from
+`tools.benchmarks.coverage_bootstrap`. For example, call
+`coverage_by_cut(run["results"], "model", "R")`. The point estimate counts covered populations
+among eligible fits with matching population count. Each bootstrap sample draws whole contributing
+cuts with replacement and recomputes the ratio of hits to eligible populations. The `bootstrap68`
+and `bootstrap95` fields give 68% percentile bounds for the two nominal coverages. The default is
+10,000 resamples with seed 0. Wilson intervals in composition reliability bins use one outcome per cut.
+
+**Table 3, revision 14.** Run `python tools/benchmarks/table3_sources.py` to check the historical table.
+The JSON report maps all 23 rows to their inputs, fields, producer information, reductions and counts.
+Recovery rows read `per_cut/*.json.gz` directly. The verifier reproduces the composition definition
+used for each printed historical row. For example, `--only first.high third.auto extended.composition`
+checks three rows. Use `--bench DIR` for a different copy of the benchmark directory.
+The all-pixel geometry, held-out calibration and measured Au rows require separate evidence. Supply
+`--all-pixel-q FILE --heldout-calibration FILE --au-fit FILE --sem-reference FILE` and the
+published `--table TABLE.tex --numbers MACROS.tex`. The SEM reference JSON supplies `citation`,
+`diameter_mean_nm` and `diameter_sd_nm`. Each missing source or mismatched printed value gives a
+nonzero exit status. Unstamped historical runs report an unknown producing commit.
+`--strict-provenance` also fails when a computational run lacks that commit.
+
 ## Tests
 
 On the Windows release-check machine, `python -m pytest --collect-only -q` collected **4322 tests**.
@@ -48,6 +116,11 @@ The recovery numbers of *Predict parameters* in the GIMaP paper, in Physics and 
 this tree), the network `flow_v1` (its SHA-256 is in every summary), ten workers on an Intel Core i9-13900HX; the
 timing run alone used one worker. Each summary written at 7179b85 names the commit and the tree (`code`);
 `posterior_recovery` and `posterior_extended` were written at 2eb0243, before summaries had that field.
+
+The options in the table and the commands immediately below apply at the original producing revision.
+To replay the inputs with the current scripts add `--set legacy-first` for first-set and own-model
+runs, use `--set legacy-extended` for the extended runs, and `--set legacy-third` for the third set.
+For its original automatic pass also select `--auto-level 1`.
 
 | Run (Table 3 of the paper) | Summary | Every cut | Options after `--network … --out NAME` |
 |---|---|---|---|
@@ -93,7 +166,7 @@ python tools/benchmarks/summary_tables.py            # the tables of the documen
 
 `posterior_pairs.py` reads the files of `per_cut/` as well (`born=tools/benchmarks/per_cut/posterior_recovery.json.gz …`).
 In `posterior_dwba_pairs.json` the runs keep the labels they were paired under: `born`, `si_tp_new`, `si_born_new`,
-`si_eia_new`. In the summaries, *true composition most probable* (`composition.exact`) is judged on the most probable
+`si_eia_new`. In the historical summaries, *true composition most probable* (`composition.exact`) is judged on the most probable
 solution: the first solution Predict lists has the true families; `true_in_equivalent_set` says that a listed
 solution (probability at least 0.05) has them.
 
@@ -114,15 +187,16 @@ angle. For ps100 the truth and the fit both place a 100 nm polystyrene film on S
 the simulated intensity and Poisson counts. The particle parameters, measurement settings and noise seeds remain
 paired by cut index. The independent simulator uses the same optical constants as the fit. It includes surface
 roughness, resolution and a beam tail on half of the cuts. The level-2 and level-3 DWBA comparisons both use Si.
-The Born `choose` comparison uses these same particle draws. The Born `auto` reference uses 300 draws from a
-different seed and provides an independent comparison.
+The Born `choose` comparison uses these same particle draws. The Born `auto` reference uses the archived
+300-cut third set, which overlaps the first and extended draws.
 
 The `fit` stage gives Predict the true composition. The `choose` stage compares compositions with a paracrystal
 in every population. The `auto` stage also considers populations without a paracrystal. All three use the same
 proposal network and the substrate's fixed reflection coefficients throughout the likelihood and refinement.
 
-Composition recovery requires the correct multiset of particle families. The truth's mode requires that
-composition and every fitted R and D within 20 % of its input. A listed mode also counts an alternative of
+In the historical tables below, composition recovery counts cuts whose leading solution has the correct
+unordered multiset of particle families. The truth's mode requires those families and every fitted R
+and D within 20 % of its input. A listed mode also counts an alternative of
 probability at least 0.05. The parameter errors and coverages compare populations in order of increasing
 radius whenever the fit returns the correct number of populations. Each q₊R bin uses the largest true R
 of the cut, including upright cylinders. The shape-confusion counts use the *fitted* q₊R to evaluate the
@@ -304,8 +378,8 @@ export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 for substrate in si ps100; do
   (
     name=posterior_dwba4_$substrate
-    python $B/posterior_recovery.py --network $N --out "${name}_repeat" --n 200 --workers 1 --scattering dwba --substrate "$substrate" --cut dwba &&
-    python $B/posterior_recovery.py --network $N --out "${name}_auto_repeat" --n 200 --workers 1 --scattering dwba --substrate "$substrate" --cut dwba --stages auto --auto-level 4
+    python $B/posterior_recovery.py --network $N --set legacy-first --out "${name}_repeat" --n 200 --workers 1 --scattering dwba --substrate "$substrate" --cut dwba &&
+    python $B/posterior_recovery.py --network $N --set legacy-first --out "${name}_auto_repeat" --n 200 --workers 1 --scattering dwba --substrate "$substrate" --cut dwba --stages auto --auto-level 4
   ) &
 done
 wait
@@ -318,7 +392,7 @@ python $B/posterior_pairs.py --by-cut $R/posterior_dwba4_born_auto_reference.jso
 ```
 
 The pairing command above uses the fresh `results/<name>.json` files and recomputes timings for that machine.
-To reproduce the published tables, use the four bundled archives as its level-4 inputs:
+To read the archived level-4 parameter and timing results, use the four bundled archives as inputs:
 `si_l4=$P/posterior_dwba4_si.json.gz`, `ps100_l4=$P/posterior_dwba4_ps100.json.gz`,
 `si_auto4=$P/posterior_dwba4_si_auto.json.gz` and `ps100_auto4=$P/posterior_dwba4_ps100_auto.json.gz`.
 
@@ -328,12 +402,12 @@ To reproduce the published tables, use the four bundled archives as its level-4 
 |---|---|---|
 | `recovery_cases.py` | the held-out curves of the 1D recovery benchmarks: fit1d's 200 (seed 20261116), their draw and their curve from the independent forward model `yoneda_truth.py`; shared by the scripts below | – |
 | `fit1d_recovery.py` | how well *Predict parameters (fit1d)* (removed in 0.2.0; a copy of the kit in `GISAXS1D_KIT_HOME`) recovered known parameters on the 200 curves of `recovery_cases.py` (Physics and Methods, section 9.12); with `--set extended` on 1200 curves of `heldout_cases.py` | `history/fit1d_recovery_summary.json`, `history/fit1d_heldout_summary.json` (a new run writes beside the script) |
-| `posterior_recovery.py` | how well *Predict parameters* (the proposal network, its posterior and refinement) recovers known parameters on fit1d's 200 held-out curves (`--set fit1d`) or on curves of `heldout_cases.py` (`--set extended`; 600 in the paper's run): errors, coverage of the 68 %/95 % intervals, how often the most probable solution is in the truth's mode, the composition chosen, time per curve on one core (Physics and Methods, section 9.13); `--truth own` draws the same cases in Predict's own model (the coverage when the model is exact), `--model-error-floor`, `--explored`, `--moves`, `--moved-solutions`, `--per-count` and `--widths` set those steps, `--constant module.NAME=value` any other constant of `refine` or `infer`; `--scattering dwba` draws the same curves with the four DWBA terms (`--substrate si` or `ps100`, 100 nm polystyrene on Si); `--cut` says what Predict is given of the cut: `born` its q₊ = k_i + k_f (the Born term at it; the default), `two_path` both angles (spheres with the exit-reflected path at q₋ = k_i − k_f and a free effective reflection coefficient), `dwba` both angles and the substrate optics (four fixed paths), `eia` nothing (the effective interface). `--stages auto --auto-level 4` runs automatic analysis with these known optics | `posterior_*_summary.json` and `per_cut/` (*The runs the paper quotes*, above); earlier runs in `history/` |
+| `posterior_recovery.py` | how well *Predict parameters* (the proposal network, its posterior and refinement) recovers known parameters on fit1d's 200 held-out curves (`--set legacy-first`) or on curves of `heldout_cases.py` (`--set legacy-extended`; 600 in the paper's run): errors, coverage of the 68 %/95 % intervals, how often the most probable solution is in the truth's mode, the composition chosen, time per curve on one core (Physics and Methods, section 9.13); `--truth own` draws the same cases in Predict's own model (the coverage when the model is exact), `--model-error-floor`, `--explored`, `--moves`, `--moved-solutions`, `--per-count` and `--widths` set those steps, `--constant module.NAME=value` any other constant of `refine` or `infer`; `--scattering dwba` draws the same curves with the four DWBA terms (`--substrate si` or `ps100`, 100 nm polystyrene on Si); `--cut` says what Predict is given of the cut: `born` its q₊ = k_i + k_f (the Born term at it; the default), `two_path` both angles (spheres with the exit-reflected path at q₋ = k_i − k_f and a free effective reflection coefficient), `dwba` both angles and the substrate optics (four fixed paths), `eia` nothing (the effective interface). `--stages auto --auto-level 4` runs automatic analysis with these known optics | `posterior_*_summary.json` and `per_cut/` (*The runs the paper quotes*, above); earlier runs in `history/` |
 | `posterior_pairs.py` | pairs runs of `posterior_recovery.py` on the same cases that differ in the truth's physics or Predict's geometry: errors of R and D by q₊R for spheres and upright cylinders, composition and truth's mode by the largest sphere's q₊R, whether χ²/N marks the spheres that are off (Physics and Methods 9.13, *The waves the surface reflects*). `--by-cut` compares the largest true q₊R, true composition, parameters, intervals, timing and single-population shape substitutions, checking the draws match | `posterior_dwba4_pairs.json`, `posterior_dwba_pairs.json`; earlier ones in `history/` |
 | `evidence_integration_check.py` | Predict's evidence, the scales integrated by Laplace at their least-squares values after the model error's spline coefficients (8 B-splines, a partition of unity, so a constant in them trades against every scale), against the scales and the coefficients integrated together (adaptive importance sampling, each value checked by a second run), on six one-population cuts of the first benchmark set (both halves) with four compositions each (the truth, without its paracrystal, the other family, two populations): the difference at the refined solution, at τ/2 and 2τ and at 40 draws of each solution's posterior, and what it changes in each solution's evidence and in the log Bayes factors against the truth (statistics referee, round 5, S7 ii). The joint integral is larger by 0.3–1.8 for the true composition (it grows with τ, spread 0.3–1.0 within a posterior); the log Bayes factors of the compositions that describe the curve change by −0.9 to +1.7 (+5.6 for one at χ²/N 1.5), those of compositions far off by +24 to +1350 in their favour, and no ranking changes | `evidence_integration_check.json` |
 | `summary_tables.py` | prints the tables of Physics and Methods 9.13 and 10.3 and of the model card from the stored summaries (`--lang zh` for the Chinese headers, `--only recovery extended sensitivity own dwba pairs timing v5 large card`); computes nothing again | – |
 | `search_baseline.py` | the baseline without a network: Fitting's *Search the ranges, then refine* from its default values on the same 200 held-out curves, the true composition given (median error of R 2.8 % / 6.7 %, 90th percentile 81 % / 136 %, about 10 s per curve; Predict parameters 0.5 % / 0.7 % and 10 % / 14 %, `posterior_recovery_summary.json`) | `search_baseline_summary.json` |
-| `heldout_cases.py` | a second held-out set drawn as fit1d's, on a seed range never used during development (20261201): one to three populations, the LMA or the DA | – |
+| `heldout_cases.py` | one to three populations, with LMA or DA. The historical extended set shared draws with the first and third sets. | – |
 | `v5_recovery.py` | 1D Predict V5 (removed in 0.2.0; runs in a checkout of commit 06e7395) on fit1d's 200 held-out curves, the true composition given (Physics and Methods, section 10.3) | `history/v5_recovery_summary.json` |
 | `galaxi_posterior.py` | *Predict parameters* on the measured GALAXI cut and on BornAgain's model of it (Physics and Methods, section 9.13) | `galaxi_posterior.json` |
 | `analyze_speed.py` | how long Analyze takes to reduce the public frames of `tests/data/external` with their own `.poni` (first frame and every further one) | `analyze_speed.json` |
@@ -592,7 +666,7 @@ standard errors to within 1.38 × 10⁻⁵ relative across all 450 frames.
 ## The third set
 
 `posterior_newseed` was run at commit 6bb1a18 (fitting tree d139e6f5). The fitting code differs from the tree of the other runs (7e68831a) in its reporting. The five-cut regression above checks the archived numerical results from three runs. The seed (20261122) was chosen after the last change of the procedure, so no change was judged on it. The stage `auto` in this archive is the automatic analysis's call as it was then: the first level (q_z = 0), spheres and upright cylinders, one or two populations.
-`posterior_newseed_auto2` repeats the stage `auto` on the same 300 cuts after the automatic analysis was changed to fit at the second level when it knows both angles (commit f73d9c8): the true composition is the most probable in 75 % of the cuts (27 % at the first level) and the median error of R is 0.8 % (13 %).
+`posterior_newseed_auto2` repeats the stage `auto` on the same 300 cuts after automatic analysis began fitting at the second level when it knows both angles (commit f73d9c8). The leading solution recovers the unordered particle families in 75 % of the cuts (27 % at the first level). The median error of R is 0.8 % (13 %) among cuts with matching population count.
 
 `posterior_dwba_auto2` (commit 9c90e6a): with DWBA truth the automatic analysis's call chooses the true composition in 31 % of the cuts; by the largest q_zR of a cut: 80 % (median |ΔR/R| 1 %) at 1.2–1.7, 29 % (10 %) at 1.7–2.3 and 23 % (9 %) above 2.3; cuts of spheres alone 9 %, of cylinders alone 78 %. The q_zR flags of Predict mark the solutions above these limits.
 

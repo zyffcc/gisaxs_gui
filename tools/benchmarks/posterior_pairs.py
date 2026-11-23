@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 
 import recovery_cases as fr
+from composition_scores import METHOD, summarize_compositions
 
 QPLUS = float(fr.GEOM.qz_vacuum)    # k_i + k_f: alpha_i 0.40 deg, the Si Yoneda angle, 0.1045 nm (0.577 nm^-1)
 BINS = (0.0, 1.2, 1.7, 2.3, 3.5, 99.0)
@@ -46,14 +47,13 @@ def rows(path):
                     abs(g["R"] - t["R"]) <= MODE * t["R"] and abs(g["D"] - t["D"]) <= MODE * t["D"]
                     for t, g in zip(truth, a["populations"])):
                 listed = True
-        ch = r.get("choose") or {}
-        out[c["index"]] = dict(level=c["level"], comp=c["composition"], pops=pops, chi2=fit.get("chi2"),
+        if c["index"] in out:
+            raise ValueError(f"Repeated cut index {c['index']} in {path}")
+        out[c["index"]] = dict(record=r, level=c["level"], comp=c["composition"], pops=pops, chi2=fit.get("chi2"),
                                nsph=sum(p["shape"] == "sphere" for p in truth),
                                maxqR=max(QPLUS * p["R"] for p in truth if p["shape"] == "sphere")
                                if any(p["shape"] == "sphere" for p in truth) else 0.0,
-                               first=mode_first, listed=listed,
-                               exact=ch.get("ok") and ch["families"] == r["truth_families"],
-                               in_set=ch.get("ok") and r["truth_families"] in ch["in_set"],
+                               first=mode_first if fit.get("ok") else None, listed=listed if fit.get("ok") else None,
                                flags=fit.get("flags", []))
     return out
 
@@ -64,6 +64,23 @@ def stats(values):
         return dict(n=0)
     return dict(n=int(a.size), median_abs=float(np.median(np.abs(a))), p90_abs=float(np.percentile(np.abs(a), 90)),
                 bias=float(np.median(a)), off20=float(np.mean(np.abs(a) > 0.2)))
+
+
+def group_stats(group):
+    composition = summarize_compositions([r["record"] for r in group], "choose")
+    out = dict(n=len(group), composition=composition, exact=composition["exact"],
+               in_set=composition["true_in_equivalent_set"])
+    for key in ("first", "listed", "chi2"):
+        values = [r[key] for r in group if r[key] is not None]
+        if key == "chi2":
+            out["chi2_median"] = float(np.median(values)) if values else None
+        else:
+            out[key] = float(np.mean(values)) if values else None
+    return out
+
+
+def _percent(value):
+    return f"{100 * value:.0f}%" if value is not None else "n/a"
 
 
 def main():
@@ -77,8 +94,12 @@ def main():
     out_path = sys.argv[1]
     runs = [arg.split("=", 1) for arg in sys.argv[2:]]
     loaded = {label: rows(path) for label, path in runs}
-    common = sorted(set.intersection(*(set(v) for v in loaded.values())))
-    report = dict(n_curves=len(common), bins=BINS, runs={})
+    reference = {i: r["record"]["case"] for i, r in next(iter(loaded.values())).items()}
+    for label, data in loaded.items():
+        if {i: r["record"]["case"] for i, r in data.items()} != reference:
+            raise ValueError(f"The case draws in {label} do not match the paired cuts")
+    common = sorted(reference)
+    report = dict(n_curves=len(common), composition_method=METHOD, bins=BINS, runs={})
     for label, data in loaded.items():
         res = {}
         for shape in ("sphere", "vc"):
@@ -87,24 +108,17 @@ def main():
                 if shape == "vc" and not pick:
                     continue
                 key = f"{shape} q+R {lo:g}-{hi:g}"
+                hits = [p["in68"] for p in pick if p["in68"] is not None]
                 res[key] = dict(R=stats([p["R"] for p in pick]), D=stats([p["D"] for p in pick]),
-                                in68=float(np.mean([p["in68"] for p in pick if p["in68"] is not None]))
-                                if pick else None)
+                                in68=float(np.mean(hits)) if hits else None)
         for lo, hi in ((0, 1.7), (1.7, 2.3), (2.3, 99)):
             group = [i for i in common if data[i]["nsph"] and lo <= data[i]["maxqR"] < hi] if lo else \
                 [i for i in common if not data[i]["nsph"] or data[i]["maxqR"] < hi]
-            res[f"curves largest sphere q+R {lo:g}-{hi:g}" + (" or none" if not lo else "")] = dict(
-                n=len(group), exact=float(np.mean([data[i]["exact"] for i in group])),
-                in_set=float(np.mean([data[i]["in_set"] for i in group])),
-                first=float(np.mean([data[i]["first"] for i in group])),
-                listed=float(np.mean([data[i]["listed"] for i in group])),
-                chi2_median=float(np.median([data[i]["chi2"] for i in group if data[i]["chi2"] is not None])))
+            key = f"curves largest sphere q+R {lo:g}-{hi:g}" + (" or none" if not lo else "")
+            res[key] = group_stats([data[i] for i in group])
         for level in ("model", "measured"):
             group = [i for i in common if data[i]["level"] == level]
-            res[f"all {level}"] = dict(n=len(group), exact=float(np.mean([data[i]["exact"] for i in group])),
-                                       in_set=float(np.mean([data[i]["in_set"] for i in group])),
-                                       first=float(np.mean([data[i]["first"] for i in group])),
-                                       listed=float(np.mean([data[i]["listed"] for i in group])),
+            res[f"all {level}"] = dict(**group_stats([data[i] for i in group]),
                                        R=stats([p["R"] for i in group for p in data[i]["pops"]]),
                                        D=stats([p["D"] for i in group for p in data[i]["pops"]]))
         # does chi2/N warn when a sphere's R is off by more than 10 %?
@@ -113,7 +127,7 @@ def main():
             [(data[i]["chi2"] or 0) > 2 for i in bad])) if bad else None, chi2_median=float(np.median(
                 [data[i]["chi2"] for i in bad if data[i]["chi2"] is not None])) if bad else None)
         report["runs"][label] = res
-    Path(out_path).write_text(json.dumps(report, indent=1), encoding="utf-8")
+    Path(out_path).write_text(json.dumps(report, indent=1, allow_nan=False), encoding="utf-8")
     labels = list(loaded)
     keys = list(report["runs"][labels[0]])
     for key in keys:
@@ -123,11 +137,10 @@ def main():
             if "R" in v and isinstance(v["R"], dict) and v["R"].get("n"):
                 line += f" | {label}: n{v['R']['n']} R med {100 * v['R']['median_abs']:.1f} P90 {100 * v['R']['p90_abs']:.1f}" \
                         f" bias {100 * v['R']['bias']:+.1f} >20% {100 * v['R']['off20']:.0f} D P90 {100 * v['D']['p90_abs']:.1f}"
-                if "exact" in v:
-                    line += f" comp {100 * v['exact']:.0f} set {100 * v['in_set']:.0f} first {100 * v['first']:.0f} listed {100 * v['listed']:.0f}"
-            elif "exact" in v:
-                line += f" | {label}: n{v['n']} comp {100 * v['exact']:.0f} set {100 * v['in_set']:.0f} first " \
-                        f"{100 * v['first']:.0f} listed {100 * v['listed']:.0f} chi2 {v['chi2_median']:.2f}"
+            if "exact" in v:
+                comp = v["composition"]
+                line += (f" | {label}: n{v['n']} comp {comp['n_correct']}/{comp['n_scored']} "
+                         f"set {_percent(v['in_set'])} first {_percent(v['first'])} listed {_percent(v['listed'])}")
             elif "curves" in v:
                 line += f" | {label}: {v['curves']} curves, chi2>2 {v['chi2_above_2']}, chi2 med {v['chi2_median']}"
         print(line)

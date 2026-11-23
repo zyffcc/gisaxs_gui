@@ -56,7 +56,7 @@ def start_model(composition: int, data) -> fm.FitModel:
 
 def run(job) -> dict:
     index, budget = job
-    case = fr.draw(index, SEED0)
+    case = fr.draw(index, SEED0, set_name="legacy-first")
     intensity, sigma = fr.curve(case)
     composition = pr._composition(case)
     data = infer.Cut.prepare(fr.Q, intensity, sigma, float(fr.GEOM.qz_vacuum), None)

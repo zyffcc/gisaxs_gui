@@ -2523,8 +2523,9 @@ r 是自由的有效系数，所以仍然不需要基底信息，只需要测量
 `src/gimap/features/fitting/domain/scattering_model.py`（`sphere_two_path_pd`）
 
 **一条实测切线：GALAXI 与 BornAgain 对它的模型。** BornAgain 对公开 GALAXI 帧的示例（r23，`hardcode_galaxi.py`）
-这样描述它：Ag 球位于 PTFE/Si 上 HMDSO 中 18.5 nm 深处，半径为对数正态分布（中位数 5.75 nm，σ = 0.4），径向准晶
-（D = 53.6 nm，无序 10.5 nm），尺寸–间距耦合 κ = 17.5，按层叠结构做 DWBA。r23 中尺寸分布被注释掉了；加上它，
+采用半径 5.75 nm 的单分散 Ag 球，颗粒埋在 PTFE/Si 上方的 HMDSO 中，深度为 18.5 nm。模型采用径向准晶
+（D = 53.6 nm，无序 10.5 nm），尺寸–间距耦合 κ = 17.5，按层叠结构做 DWBA。基准还启用了示例中可选的对数正态分布
+（中位半径 5.75 nm，ln R 的标准差为 0.4）。采用这个分布时，
 BornAgain 24.1 只用一个比例因子和一个背景描述 Analyze 的 Yoneda 切线，q > 0.3 nm⁻¹ 处 χ²_red = 2.1；不加它为 22
 （单分散球在 0.78 nm⁻¹ 处有一个极小，切线上没有）。
 
@@ -2766,9 +2767,9 @@ IsGISAXS 这类 DWBA 程序用基底的折射率计算各项，不需要这种�
 描述一条切线（弱的一群带不带次晶、两群大小相近），由似然在头部给出的最可能的几种（GIMaP 的预测参数中为四种，以及每种颗粒群数目最好的一种）之中决定。
 
 **基准。** fit1d 基准的 200 条留出曲线（独立的真值模型 `yoneda_truth.py`；9.12 节），用同样的评分
-（`tools/benchmarks/posterior_recovery.py`，`--cut born`：预测参数得到切线的 q_z，即真值的 Born 项）：一半用 fit1d 自己的物理（*model*），一半加上分辨率、直射束拖尾和粗糙度（*measured*）。表中是所有颗粒群误差的中位数和第 90 百分位，R 和 D 为相对误差，两个展宽为绝对误差；给定真实组成。“68 %”和“95 %”两列是解的这个区间包含真值的比例（fit1d：±1 倍最小二乘误差）。组成在球和竖直圆柱、一到两群之中选择。*真实组成最可能* 按最可能的解来判断：预测参数列出的第一个解具有真实的颗粒族（汇总文件中的 `composition.exact`）；*列出*：有一个概率不低于 0.05 的解具有它们（`true_in_equivalent_set`）。*真值所在的模态*（给定真实组成）：最可能的解（*排第一*）或某个概率不低于 0.05 的解（*列出*）的每个 R 和 D 都在真值的 20 % 以内（`truth_mode`）。
+（`tools/benchmarks/posterior_recovery.py`，`--cut born`：预测参数得到切线的 q_z，即真值的 Born 项）：一半用 fit1d 自己的物理（*model*），一半加上分辨率、直射束拖尾和粗糙度（*measured*）。表中是所有颗粒群误差的中位数和第 90 百分位，R 和 D 为相对误差，两个展宽为绝对误差。误差按给定真实组成时的最小二乘精修值（`values.best`）计算。“68 %”和“95 %”两列是解的这个区间包含真值的比例（fit1d：±1 倍最小二乘误差）。组成在球和竖直圆柱、一到两群之中选择。旧表中，*真实组成最可能* 表示预测参数列出的第一个解具有真实的颗粒族，不区分排列顺序（原汇总文件中的 `composition.exact`）；*列出*：有一个概率不低于 0.05 的解具有它们（`true_in_equivalent_set`）。*真值所在的模态*（给定真实组成）：最可能的解（*排第一*）或某个概率不低于 0.05 的解（*列出*）的每个 R 和 D 都在真值的 20 % 以内（`truth_mode`）。
 
-本节的数值就是 GIMaP 论文引用的那些运行的数值。它们都用同一版拟合代码（`src/gimap/features/fitting/domain` 的 git 树 7e68831a，提交 2eb0243 和 7179b85）和网络 `flow_v1` 得到。汇总文件是 `tools/benchmarks/posterior_*_summary.json`，每次运行的每条切线都在 `tools/benchmarks/per_cut/` 中，下面的表由 `tools/benchmarks/summary_tables.py` 从这些文件打印。更早版本代码的运行放在 `tools/benchmarks/history/`，它们不是这里给出的数值。fit1d 的两列是它在同样 200 条曲线上的记录（`history/fit1d_recovery_summary.json`）。
+第一组和扩展组的拟合来自提交 2eb0243，较早的三组 DWBA 对照来自 7179b85。它们采用了同一版拟合代码（`src/gimap/features/fitting/domain` 的 git 树 7e68831a）和网络 `flow_v1`。汇总文件是 `tools/benchmarks/posterior_*_summary.json`。下表沿用原来的评分方式。`tools/benchmarks/per_cut/` 中的文件保存了每条切线的首个解和部分备选解。对于新的归档，`summary_tables.py --per-cut` 读取完整的组成权重。更早版本代码的运行放在 `tools/benchmarks/history/`，它们不是这里给出的数值。fit1d 的两列是它在同样 200 条曲线上的记录（`history/fit1d_recovery_summary.json`）。
 
 | 层级 | 数值 | 预测参数：中位数 / P90 | 预测参数：68 % | 预测参数：95 % | fit1d：中位数 / P90 | fit1d：68 % |
 |---|---|---|---|---|---|---|
@@ -2785,7 +2786,13 @@ IsGISAXS 这类 DWBA 程序用基底的折射率计算各项，不需要这种�
 |  | 真值所在的模态排第一（model / measured） | 89 % / 89 % |  |  | – |  |
 |  | 真值所在的模态在列出的解中（model / measured） | 94 % / 92 % |  |  | – |  |
 
-在开发方法时从未用过的种子范围上以同样方式抽取的 600 条曲线（`heldout_cases.py`，seed0 20261201）：一到三群颗粒，LMA 或 DA（告知预测参数），组成在一到三群中选择（`posterior_extended_summary.json`）：
+**独立复测。** 已归档的第一组、扩展组和第三组采用 `base_seed + index` 作为种子，部分抽样重复。`fresh` 组含 150 条仅含模型项的切线和 150 条加入额外效应的切线。每条切线按组名和切线编号分别生成参数和计数噪声的随机数流。设中央峰的积分强度为 A，分辨率密度 K 满足 Σ K(qᵢ) Δq = 1，展宽后的中央峰对强度的贡献为 A K(q)。归档曲线的生成器在这一项额外乘了 Δq。
+
+新运行按预测参数采用的组成汇总所有保留模态的权重，再筛选要显示的解。组成 c 的权重为属于 c 的各模态权重 wₘ 之和。将颗粒群按半径递增排列后，权重最大的组成中每个颗粒群的形状及是否有次晶均与真值相符，才算选对。可靠性表逐个权重区间列出选对的切线数和总数，分别统计证据和 BIC 两种比较方法。原归档缺少部分模态的权重。
+
+对某参数的区间，设切线 i 有 Nᵢ 个可比较的颗粒群，其中 Hᵢ 个的区间包含真值。覆盖率为 Σ Hᵢ / Σ Nᵢ。求其 68% 不确定度区间时，在每个物理层级内以整条切线为单位有放回抽样，重新计算这个比值，取第 16 和第 84 百分位数。每次抽到一条切线时保留其全部颗粒群。[基准运行命令与归档字段](../tools/benchmarks/README.md)
+
+已归档的扩展组有 600 条曲线（`heldout_cases.py`，seed0 20261201）：一到三群颗粒，LMA 或 DA（告知预测参数），组成在一到三群中选择（`posterior_extended_summary.json`）：
 
 | 层级 | 数值 | 预测参数：中位数 / P90 | 预测参数：68 % | 预测参数：95 % |
 |---|---|---|---|---|
@@ -2821,7 +2828,7 @@ IsGISAXS 这类 DWBA 程序用基底的折射率计算各项，不需要这种�
 - **用时。** 给定组成时每条曲线 6.2 s，在一到两群中选择时 26 s（fit1d 那一组的 24 条切线的中位数，一个进程，Intel Core i9-13900HX；`posterior_timing_summary.json`）；只用网络 0.35 s。fit1d 在它的记录所用的电脑上为 3.5 s 和 6.3 s。本节其他运行在这个处理器上同时开了十个进程，所以它们的汇总文件里的时间不是单独拟合一条曲线的时间。
 - **粗糙度。** *measured* 曲线的粗糙度在低 q 处按 q⁻³ 下降，尾项（ν 接近 2）吸收不了：这时真实组成最可能的比例较低（65 %，fit1d 自己的物理下为 88 %）；在 fit1d 那一组的 100 条 *measured* 曲线中有 10 条、扩展的一组的 300 条中有 20 条，所选的解比真值多一群颗粒并带有 *large* 标记（`summary_tables.py --only large`，取自逐切线的文件）。
 
-**表面反射的波。** 两组曲线都用切线 q_z 处的 Born 项生成，所以没有检验 9.10 节的另外三个 DWBA 项。同样的 200 个情形、计数和噪声，用全部四项在裸 Si 上重画（`--scattering dwba --substrate si`；切线在 Si 的 Yoneda 角，q₊ = 0.577 nm⁻¹，所以 R = 2.9 nm 时 q₊R = 1.7），与第一张表逐条配对。预测参数得到两个角度（`--cut two_path`：两路径、r 自由；`posterior_dwba_tp_summary.json`）、只得到 q_z（`--cut born`；`posterior_dwba_born_summary.json`）或两者都没有（`--cut eia`，有效界面；`posterior_dwba_eia_summary.json`）。每格为 *model* / *measured*：
+**表面反射的波。** 归档的两组曲线都用切线 q_z 处的 Born 项生成。DWBA 对照复用 200 组颗粒参数、目标计数和噪声种子，期望计数和泊松计数随真值模型改变。用全部四项在裸 Si 上重画的曲线（`--scattering dwba --substrate si`；切线在 Si 的 Yoneda 角，q₊ = 0.577 nm⁻¹，所以 R = 2.9 nm 时 q₊R = 1.7），与第一张表逐条配对。预测参数得到两个角度（`--cut two_path`：两路径、r 自由；`posterior_dwba_tp_summary.json`）、只得到 q_z（`--cut born`；`posterior_dwba_born_summary.json`）或两者都没有（`--cut eia`，有效界面；`posterior_dwba_eia_summary.json`）。每格为 *model* / *measured*：
 
 | 运行 | 曲线数 | 68 % 区间（四个数值） | 95 % 区间（四个数值） | R：中位数 | R：P90 | R：68 % | 真实组成最可能 | 真实组成列出 | 模态排第一 | 模态列出 |
 |---|---|---|---|---|---|---|---|---|---|---|

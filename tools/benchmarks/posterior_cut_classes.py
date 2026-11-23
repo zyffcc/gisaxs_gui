@@ -6,6 +6,11 @@ from pathlib import Path
 
 import numpy as np
 
+if __package__:
+    from .composition_scores import LIST_THRESHOLD, METHOD, summarize_compositions
+else:
+    from composition_scores import LIST_THRESHOLD, METHOD, summarize_compositions
+
 
 def _median(values):
     return float(np.median(values)) if values else None
@@ -58,29 +63,35 @@ def _group(rows, q_plus):
         if not measured:
             continue
         ok = [r for r in measured if r[stage]["ok"]]
-        correct, first, listed = [], [], []
+        first, listed = [], []
         pairs = []
         for row in ok:
             truth = sorted(row["case"]["populations"], key=lambda p: p["R"])
             result = row[stage]
-            same = result["families"] == row["truth_families"]
-            correct.append(same)
 
             def in_mode(solution):
                 pops = solution["populations"]
-                return (solution["families"] == row["truth_families"] and len(pops) == len(truth) and
+                return (len(pops) == len(truth) and
                         all(p.get(k) is not None and abs(p[k] / t[k] - 1) <= .2
                             for p, t in zip(pops, truth) for k in ("R", "D")))
 
-            first.append(in_mode(result))
-            listed.append(first[-1] or any(in_mode(a) for a in result.get("alternatives", [])))
+            if stage == "fit":  # the composition was supplied, also in the legacy archive
+                first.append(in_mode(result))
+                listed.append(first[-1] or any(in_mode(a) for a in result["alternatives"]))
+            elif "retained_modes" in result:
+                truth_index = row["truth_composition_index"]
+                first.append(result["composition_index"] == truth_index and in_mode(result))
+                others = [m for m in result["retained_modes"][1:] if m["probability"] >= LIST_THRESHOLD]
+                listed.append(first[-1] or any(mode["composition_index"] == truth_index and in_mode(a)
+                                               for mode, a in zip(others, result["alternatives"], strict=True)))
             if len(truth) == len(result["populations"]):
                 pairs.extend(zip(truth, result["populations"]))
-        out[stage] = dict(n_ok=len(ok), n_failed=len(measured) - len(ok), composition_right=_mean(correct),
-                          truth_mode_first=_mean(first), truth_mode_listed=_mean(listed),
+        composition = summarize_compositions(measured, stage)
+        out[stage] = dict(n_ok=len(ok), n_failed=len(measured) - len(ok), composition_right=composition["exact"],
+                          composition=composition, n_truth_mode=len(first), truth_mode_first=_mean(first), truth_mode_listed=_mean(listed),
                           seconds=_median([r[stage]["seconds"] for r in measured]),
                           parameters=_parameter_stats(pairs))
-        out[stage]["shape_confusion"] = _shape_confusion(ok, stage, q_plus)
+        out[stage]["leading_solution_shape_confusion"] = _shape_confusion(ok, stage, q_plus)
     return out
 
 
@@ -127,4 +138,5 @@ def compare_runs(paths, q_plus):
         populations = _population_classes(records, q_plus)
         if populations:
             particles[label] = populations
-    return dict(n_curves=len(reference), q_plus_inv_nm=q_plus, runs=out, known_composition_populations=particles)
+    return dict(n_curves=len(reference), composition_method=METHOD, q_plus_inv_nm=q_plus, runs=out,
+                known_composition_populations=particles)
