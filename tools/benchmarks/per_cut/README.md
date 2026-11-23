@@ -21,10 +21,18 @@ run["seconds"]            # wall time of this invocation (the final part for che
 `tools/benchmarks/posterior_pairs.py` reads these files directly
 (`LABEL=tools/benchmarks/per_cut/posterior_NAME.json.gz`).
 
+These historical archives omit modes below the display cutoff and the full ordered composition weights.
+The current scorer reports how many cuts lack those weights. The historical Table 3 definitions and their
+source fields are available through `../table3_sources.py`. For the independent rerun and its per-cut
+fields, see [Running an independent validation](../README.md#running-an-independent-validation).
+
 | File | Cuts | Written at commit | Fitting code |
 |---|---|---|---|
 | `posterior_recovery.json.gz` | 200 | 2eb0243 (the summary has no `code` field) | tree 7e68831a |
 | `posterior_extended.json.gz` | 600 | 2eb0243 (the summary has no `code` field) | tree 7e68831a |
+| `posterior_newseed.json.gz` | 300 | 6bb1a18 | see summary.code.fitting_tree |
+| `posterior_newseed_auto2.json.gz` | 300 | f73d9c8 | see summary.code.fitting_tree |
+| `posterior_dwba_auto2.json.gz` | 200 | 9c90e6a | see summary.code.fitting_tree |
 | `posterior_floor03.json.gz`, `posterior_floor08.json.gz`, `posterior_amplitude100.json.gz` | 200 each | 7179b85 | tree 7e68831a |
 | `posterior_timing.json.gz` | 24 | 7179b85 | tree 7e68831a |
 | `posterior_dwba_tp.json.gz`, `posterior_dwba_born.json.gz`, `posterior_dwba_eia.json.gz` | 200 each | 7179b85 | tree 7e68831a |

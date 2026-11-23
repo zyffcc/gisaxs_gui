@@ -7,17 +7,21 @@ comparison with the removed fit1d method, history/fit1d_recovery_summary.json. W
 computed again (``large`` alone counts cuts of per_cut/). NAME is one of: recovery, extended, sensitivity, own, dwba,
 pairs, timing, v5, large, card.
 
-"true composition most probable" is judged on the most probable SOLUTION (``composition.exact`` of a summary: the
-composition of the first solution Predict lists is the true one); "true composition listed" is
-``true_in_equivalent_set``; "truth's mode first / listed" is ``truth_mode`` (every R and D of a solution within 20 %
-of the truth).
+For a rerun, --per-cut RUN.json[.gz] [--stage choose|auto] scores the full composition weights and prints
+reliability by comparison branch. A dash in the historical tables means the required quantities were not archived.
 """
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import sys
 from pathlib import Path
+
+if __package__:
+    from .composition_scores import METHOD, summarize_compositions
+else:
+    from composition_scores import METHOD, summarize_compositions
 
 HERE = Path(__file__).resolve().parent
 VALUES = (("R", "R", True), ("sR", "σR/R", False), ("D", "D", True), ("s_nn", "σnn/D", False))
@@ -26,7 +30,7 @@ ZH = {
     "level": "层级", "value": "数值", "run": "运行",
     "Predict: median / P90": "预测参数：中位数 / P90", "fit1d: median / P90": "fit1d：中位数 / P90",
     "fit1d: 68 %": "fit1d：68 %", "Predict: 68 %": "预测参数：68 %", "Predict: 95 %": "预测参数：95 %",
-    "true composition most probable (model / measured)": "真实组成是最可能的解的组成（model / measured）",
+    "true composition most probable (model / measured)": "真实组成的总权重最高（model / measured）",
     "true composition listed (model / measured)": "真实组成在列出的解中（model / measured）",
     "truth's mode first (model / measured)": "真值所在的模态排第一（model / measured）",
     "truth's mode listed (model / measured)": "真值所在的模态在列出的解中（model / measured）",
@@ -56,7 +60,12 @@ def t(text: str) -> str:
 
 
 def load(name: str) -> dict:
-    return json.loads((HERE / name).read_text(encoding="utf-8"))
+    result = json.loads((HERE / name).read_text(encoding="utf-8"))
+    if name.startswith("posterior_") and result.get("composition_method") != METHOD:
+        # Historical summaries contain unordered families of the leading mode only.
+        for level in (result.get("composition") or {}).values():
+            level.update(exact=None, true_in_equivalent_set=None)
+    return result
 
 
 def pct(x: float) -> str:
@@ -134,7 +143,7 @@ def recovery(name: str, fit1d: str | None) -> None:
                               ("truth's mode listed (model / measured)", "truth_mode", "listed")):
         cells = ["", label, pair(s, block, key), "", ""]
         if old:
-            cells += [pair(old, block, key) if block in old else "–", ""]
+            cells += [pair(old, block, key) if block in old and block != "composition" else "–", ""]
         rows.append(cells)
     table(header, rows)
     for level in LEVELS:
@@ -187,7 +196,8 @@ CURVE_BINS = (("curves largest sphere q+R 0-1.7 or none", "up to 1.7 or no spher
 
 def pairs() -> None:
     """The DWBA pairs by q+R (posterior_dwba_pairs.json: the same cases, curve by curve)."""
-    p = load("posterior_dwba_pairs.json")["runs"]
+    report = load("posterior_dwba_pairs.json")
+    p = report["runs"]
     print("R of the spheres, the true composition given: median error (bias) · share off by more than 20 % · 68 % "
           "interval holds the truth\n")
     rows = []
@@ -205,7 +215,8 @@ def pairs() -> None:
         cells = [label, p["born"][key]["n"]]
         for run, _ in PAIR_RUNS:
             e = p[run][key]
-            cells.append(f"{whole(e['exact'])} · {whole(e['listed'])} · {e['chi2_median']:.2f}")
+            exact = e["exact"] if report.get("composition_method") == METHOD else None
+            cells.append(f"{whole(exact)} · {whole(e['listed'])} · {e['chi2_median']:.2f}")
         rows.append(cells)
     table(["largest sphere's q₊R", "curves", *(label for _, label in PAIR_RUNS)], rows)
     rows = []
@@ -275,12 +286,29 @@ def card() -> None:
             rows.append(cells)
         table(["stage", "R (median / P90 · 68 % / 95 % coverage)", "σR/R", "D", "σnn/D"], rows)
         c, m = s["composition"], s["truth_mode"]
-        print("True composition most probable (the composition of the most probable solution is the true one), "
-              f"model / measured / all: {c['model']['exact']:.2f} / {c['measured']['exact']:.2f} / "
-              f"{c['all']['exact']:.2f}; true composition listed: {c['model']['true_in_equivalent_set']:.2f} / "
-              f"{c['measured']['true_in_equivalent_set']:.2f} / {c['all']['true_in_equivalent_set']:.2f}; truth's mode "
+        print("Highest-weight composition correct (model / measured / all) "
+              + " / ".join(whole(c[level]["exact"]) for level in (*LEVELS, "all"))
+              + ". True composition listed " + " / ".join(whole(c[level]["true_in_equivalent_set"]) for level in (*LEVELS, "all"))
+              + ". Truth's mode "
               f"first: {m['model']['first']:.2f} / {m['measured']['first']:.2f} / {m['all']['first']:.2f}; listed: "
               f"{m['model']['listed']:.2f} / {m['measured']['listed']:.2f} / {m['all']['listed']:.2f}.\n")
+
+
+def reliability(path, stage):
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt", encoding="utf-8") as stream:
+        records = json.load(stream)["results"]
+    for level in (*LEVELS, "all"):
+        data = summarize_compositions([r for r in records if level == "all" or r["case"]["level"] == level], stage)
+        print(f"### {stage}, {level}\n")
+        print(f"{data['n_scored']} scored / {data['n']} attempted. "
+              f"{data['n_failed']} failed. {data['n_missing_weights']} missing full weights.\n")
+        rows = []
+        for branch, scores in data["reliability_by_branch"].items():
+            for b in scores["bins"]:
+                rows.append([branch, f"{b['low']:g}–{b['high']:g}", b["n_correct"], b["n"],
+                             whole(b["mean_stated"]), whole(b["correct"])])
+        table(["branch", "winning weight", "correct", "cuts", "mean weight", "observed"], rows)
 
 
 def main() -> int:
@@ -288,10 +316,16 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--lang", choices=("en", "zh"), default="en")
     ap.add_argument("--only", nargs="*", default=[])
+    ap.add_argument("--per-cut", type=Path, help="print branch-specific composition reliability from a rerun")
+    ap.add_argument("--stage", choices=("choose", "auto"), default="choose")
     a = ap.parse_args()
     _lang = a.lang
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
+    if a.per_cut:
+        reliability(a.per_cut, a.stage)
+        return 0
+    print("Historical archives lack full composition weights. A dash marks an unavailable composition score.\n")
     sections = {
         "recovery": ("fit1d's 200 held-out curves (posterior_recovery)",
                      lambda: recovery("posterior_recovery_summary.json", "history/fit1d_recovery_summary.json")),

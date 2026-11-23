@@ -1,8 +1,8 @@
 """How well the proposal network and its refinement recover the parameters of curves they have never seen.
 
-The same held-out curves as fit1d_recovery.py (its draw() and curve(), unchanged: the independent truth model
-yoneda_truth.py, seed0 20261116, two levels of physics, four compositions), and with --seed0 another set from the same
-draw. By default each curve goes through the network, fit and choose stages. --stages selects any of these or auto:
+By default the independent truth model draws the 300 cuts of the named fresh set. The legacy-first,
+legacy-extended and legacy-third sets replay the archived draws, Poisson seeds and beam-tail convention.
+By default each curve goes through the network, fit and choose stages. --stages selects any of these or auto:
   network   the network's samples of the true composition, their median (no likelihood): what fit1d calls 'network'
   fit       the true composition: importance-sampled posterior, its modes refined by least squares; the most
             probable solution is scored
@@ -11,7 +11,8 @@ draw. By default each curve goes through the network, fit and choose stages. --s
   auto      the automatic analysis's choice among one or two populations of spheres and upright cylinders, with
             or without a paracrystal. Level 2 evaluates the Born term at the cut's vacuum q_z (the default). Level 4
             takes the angles, wavelength and known substrate. Level 1 fits at q_z = 0, with the cut's q_z for flags.
-For choose and auto the head's candidates are stored, and whether the true composition (its families) is among them.
+For choose and auto the head's candidates are stored, and whether they include the true radius-ordered composition.
+The winner has the greatest total weight over all retained modes of its composition, including paracrystal status.
 Reported as in fit1d_recovery.py (median and 90th percentile of the error, bias, |z| ≤ 1 with the least-squares
 error), and in addition the coverage of the posterior's 68 % and 95 % intervals, how often the most probable solution
 of the true composition is in the truth's mode and how often that mode is listed at all (``truth_mode``), the
@@ -24,19 +25,19 @@ evaluates it: the cut's q_z, the case's coupling, no beam tail, no resolution), 
 coverage when the model is exactly right.
 With --scattering dwba the independent truth adds the waves the surface reflects (the four DWBA terms of
 yoneda_truth.py), on bare Si or with --substrate ps100 on 100 nm polystyrene on Si (recovery_cases.SUBSTRATES); the
-same cases, counts and noise as the frozen sets (the Born term at the cut's q_z on Si), so the two pair curve by curve.
+same particle draws and Poisson seeds for a given set. The expected counts and noise realizations depend on the truth.
 --cut says what Predict is given of the cut: its q_z = k_i + k_f ('born', the default: the Born term, as the 1D Predict
 window's Cut qz), both angles ('two_path': k_i − k_f too, spheres with the exit-reflected path and a free effective
 reflection coefficient, as with the angles in Model), both angles and the known substrate ('dwba': all four
 paths), or nothing ('eia': the effective interface).
 usage: python tools/benchmarks/posterior_recovery.py --network PATH/NAME [--n 200] [--workers 8] [--seed0 20261116]
-           [--samples N] [--local-samples N] [--shortlist N] [--refined 3] [--set fit1d|extended]
+           [--samples N] [--local-samples N] [--shortlist N] [--refined 3] [--set SET]
            [--truth independent|own] [--model-error-floor F] [--explored N] [--moves N] [--widths 1,2]
            [--scattering born_qz|dwba] [--substrate si|ps100] [--cut born|two_path|dwba|eia] [--out NAME]
            [--stages network,fit,choose,auto] [--auto] [--auto-level 1|2|4]
   (defaults: Predict parameters' own, refine.SAMPLES, LOCAL_SAMPLES, SHORTLIST, MODEL_ERROR_FLOOR, EXPLORED, MOVES,
   infer.PROPOSAL_WIDTHS)
-Writes the summary to tools/benchmarks/NAME_summary.json (default posterior_recovery) and every curve to results/.
+Writes NAME_summary.json and results/NAME.json in --output-dir (default tools/benchmarks).
 """
 from __future__ import annotations
 
@@ -64,6 +65,8 @@ for p in (str(HERE), str(GIMAP)):
 
 import recovery_cases as fr  # noqa: E402
 import heldout_cases as hc  # noqa: E402
+from case_streams import SETS  # noqa: E402
+from composition_scores import LIST_THRESHOLD, METHOD, archive_weights, summarize_compositions  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import encoding as E  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import infer, refine  # noqa: E402
 from src.gimap.features.fitting.domain.posterior.flow import Network  # noqa: E402
@@ -112,6 +115,9 @@ def _init(network_path: str, options: dict):
     global NETWORK, OPTIONS
     NETWORK = Network.load(network_path)
     OPTIONS = dict(options)
+    if "stream_scheme" not in options and options.get("set", "fit1d") in ("fit1d", "extended"):
+        # Settings stored before named streams identify the legacy generators.
+        OPTIONS["set"] = "legacy-extended" if options.get("set") == "extended" else "legacy-first"
     # Older benchmark records have only the --auto switch and used level 1.
     OPTIONS.setdefault("stages", STAGES if options.get("auto") else STAGES[:-1])
     OPTIONS.setdefault("auto_level", 1 if options.get("auto") and "stages" not in options else 2)
@@ -179,13 +185,15 @@ def _known_substrate(kind=None) -> dict:
 
 def run(index: int, *, fit_only: bool = False) -> dict:
     """Evaluate one cut. The release regression needs only the fit with the given composition."""
-    extended = OPTIONS.get("set") == "extended"
-    case = (hc.draw if extended else fr.draw)(index, OPTIONS["seed0"])
-    I, s = own_curve(case) if OPTIONS.get("truth") == "own" else (hc.curve if extended else fr.curve)(case)
+    set_name = OPTIONS["set"]
+    extended = set_name in ("extended", "legacy-extended")
+    case = (hc.draw if extended else fr.draw)(index, OPTIONS["seed0"], set_name=set_name)
+    I, s = own_curve(case) if OPTIONS.get("truth") == "own" else fr.curve(case)
     coupling = case.get("coupling", "lma")
     out = dict(case=case)
     qz, qz_minus = _cut()
     truth = _composition(case)
+    out["truth_composition_index"] = truth
     k = len(case["populations"])
     selected = ("fit",) if fit_only else OPTIONS["stages"]
     if "network" in selected:
@@ -233,7 +241,9 @@ def run(index: int, *, fit_only: bool = False) -> dict:
         try:
             solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz_stage, qz_minus=qz_minus_stage,
                                        samples=OPTIONS["samples"],
-                                       seed=index,
+                                       # Every positive mode, including subnormals. Predict computes a mode's
+                                       # share within its composition only for modes passing this threshold.
+                                       seed=index, min_probability=np.nextafter(0.0, 1.0),
                                        coupling=coupling, local_samples=OPTIONS["local_samples"],
                                        refine_modes=OPTIONS["refined"],
                                        explored=OPTIONS.get("explored", refine.EXPLORED),
@@ -247,11 +257,12 @@ def run(index: int, *, fit_only: bool = False) -> dict:
                                          float(np.angle(refine.reflection(best.model)))],
                              populations=_populations(best.values, k_best, "best", "error"),
                              posterior=_populations(best.values, k_best, "median"),
-                             in_set=[_families(x.composition) for x in solutions if x.probability >= 0.05],
+                             **archive_weights(solutions, candidates if candidates is not None else [truth]),
+                             in_set=[_families(x.composition) for x in solutions if x.probability >= LIST_THRESHOLD],
                              alternatives=[dict(probability=x.probability, families=_families(x.composition),
                                                 populations=_populations(x.values, len(E.COMPOSITIONS[x.composition]),
                                                                          "best", "error"))
-                                           for x in solutions[1:] if x.probability >= 0.05])
+                                           for x in solutions[1:] if x.probability >= LIST_THRESHOLD])
             if kwargs.get("substrate"):
                 # Level 4 fixes both coefficients. The free exit-reflection parameter is absent.
                 del out[name]["reflection"]
@@ -263,7 +274,7 @@ def run(index: int, *, fit_only: bool = False) -> dict:
         out[name]["seconds"] = time.perf_counter() - tick
         if candidates is not None:
             out[name]["candidates"] = candidates
-            out[name]["truth_in_candidates"] = any(_families(c) == truth_families for c in candidates)
+            out[name]["truth_in_candidates"] = truth in candidates
     out["truth_families"] = truth_families
     return out
 
@@ -338,22 +349,17 @@ def summary(results):
     choose, auto = {}, {}
     for stage, target in (("choose", choose), ("auto", auto)):
         for level in levels:
-            rows = [r for r in results if (level == "all" or r["case"]["level"] == level) and r.get(stage, {}).get("ok")]
-            if not rows:
-                continue
-            exact = [r[stage]["families"] == r["truth_families"] for r in rows]
-            in_set = [r["truth_families"] in r[stage]["in_set"] for r in rows]
-            in_candidates = [r[stage]["truth_in_candidates"] for r in rows if "truth_in_candidates" in r[stage]]
-            target[level] = dict(n=len(rows), exact=float(np.mean(exact)),
-                                 true_in_equivalent_set=float(np.mean(in_set)),
-                                 true_in_candidates=float(np.mean(in_candidates)) if in_candidates else None)
+            rows = [r for r in results if (level == "all" or r["case"]["level"] == level) and stage in r]
+            if rows:
+                target[level] = summarize_compositions(rows, stage)
     seconds = {stage: float(np.median([r[stage]["seconds"] for r in results if stage in r]))
                for stage in stages}
     ess = [r["fit"]["ess"] for r in results if r.get("fit", {}).get("ok")]
     failed = {stage: sum(not r[stage]["ok"] for r in results if stage in r)
               for stage in stages if stage != "network"}
     mode = {level: _listed(results, level) for level in levels} if "fit" in stages else {}
-    return dict(parameters=table, composition=choose, composition_auto=auto or None, truth_mode=mode, median_seconds=seconds, n=len(results),
+    return dict(parameters=table, composition_method=METHOD, composition=choose, composition_auto=auto or None,
+                truth_mode=mode, median_seconds=seconds, n=len(results),
                 fit_ess=dict(median=float(np.median(ess)) if ess else None,
                              below_50=float(np.mean(np.asarray(ess) < 50)) if ess else None),
                 failed=failed)
@@ -382,17 +388,21 @@ def _stages(value):
     return [stage for stage in STAGES if stage in names]
 
 
-def _checkpoint(folder, options, network_path):
-    """Keep finished draws across long runs. Reuse only identical inputs, truth, weights and fitting code."""
-    folder.mkdir(parents=True, exist_ok=True)
+def _source_digest():
     source = hashlib.sha256()
     for path in sorted([*(GIMAP / "src/gimap/features/fitting/domain").rglob("*.py"),
                         *(HERE / name for name in ("posterior_recovery.py", "yoneda_truth.py", "recovery_cases.py",
-                                                  "heldout_cases.py"))]):
+                                                  "heldout_cases.py", "case_streams.py", "composition_scores.py"))]):
         source.update(path.relative_to(GIMAP).as_posix().encode())
         source.update(path.read_bytes())
-    meta = dict(settings=options, network_sha256=Network.load(network_path).meta["sha256"],
-                source_sha256=source.hexdigest(), python=sys.version, numpy=np.__version__, scipy=scipy.__version__)
+    return source.hexdigest()
+
+
+def _checkpoint(folder, options, network_sha256, source_sha256):
+    """Keep finished draws across long runs. Reuse only identical inputs, truth, weights and fitting code."""
+    folder.mkdir(parents=True, exist_ok=True)
+    meta = dict(settings=options, network_sha256=network_sha256, source_sha256=source_sha256,
+                python=sys.version, numpy=np.__version__, scipy=scipy.__version__)
     manifest = folder / "manifest.json"
     if manifest.exists():
         if json.loads(manifest.read_text()) != meta:
@@ -405,13 +415,14 @@ def _checkpoint(folder, options, network_path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--network", required=True)
-    ap.add_argument("--n", type=int, default=200)
+    ap.add_argument("--n", type=int, help="number of cuts (default: full named set)")
     ap.add_argument("--workers", type=int, default=8)
-    ap.add_argument("--seed0", type=int, default=20261116)
+    ap.add_argument("--seed0", type=int, help="override the named set's root seed")
     ap.add_argument("--samples", type=int, default=refine.SAMPLES)
-    ap.add_argument("--out", default="posterior_recovery")
+    ap.add_argument("--out", help="output basename (default: posterior_SET_rerun)")
+    ap.add_argument("--output-dir", type=Path, default=HERE)
     ap.add_argument("--checkpoint", type=Path, help="save each completed draw here and resume identical runs")
-    ap.add_argument("--set", default="fit1d", choices=("fit1d", "extended"))
+    ap.add_argument("--set", default="fresh", choices=tuple(SETS))
     ap.add_argument("--local-samples", type=int, default=refine.LOCAL_SAMPLES)
     ap.add_argument("--shortlist", type=int, default=refine.SHORTLIST)
     ap.add_argument("--refined", type=int, default=3)
@@ -433,17 +444,26 @@ def main():
     ap.add_argument("--cut", default="born", choices=("born", "two_path", "dwba", "eia"),
                     help="what Predict is given: vacuum q_z, both angles, both angles and substrate, or nothing")
     a = ap.parse_args()
+    default_n, default_seed = SETS[a.set]
+    a.n = default_n if a.n is None else a.n
+    a.seed0 = default_seed if a.seed0 is None else a.seed0
+    if a.n < 1 or a.workers < 1 or a.seed0 < 0:
+        ap.error("--n and --workers must be positive and --seed0 nonnegative")
+    a.out = a.out or f"posterior_{a.set}_rerun"
     if a.auto and "auto" not in a.stages:
         a.stages.append("auto")
     t0 = time.perf_counter()
     results = []
     options = dict(seed0=a.seed0, samples=a.samples, set=a.set, local_samples=a.local_samples, shortlist=a.shortlist,
+                   stream_scheme="legacy-offset" if a.set.startswith("legacy-") else "seedsequence-v1",
                    refined=a.refined, truth=a.truth, floor=a.model_error_floor,
                    explored=a.explored, moves=a.moves, widths=[float(w) for w in a.widths.split(",")],
                    moved_solutions=a.moved_solutions, per_count=a.per_count, constants=a.constant,
                    scattering=a.scattering, substrate=a.substrate, cut=a.cut, stages=a.stages,
                    auto="auto" in a.stages, auto_level=a.auto_level)
-    prior = _checkpoint(a.checkpoint, options, a.network) if a.checkpoint else {}
+    network_sha256 = Network.load(a.network).meta["sha256"]
+    source_sha256 = _source_digest()
+    prior = _checkpoint(a.checkpoint, options, network_sha256, source_sha256) if a.checkpoint else {}
     results.extend(prior[i] for i in range(a.n) if i in prior)
     remaining = [i for i in range(a.n) if i not in prior]
     with Pool(min(a.workers, a.n), initializer=_init, initargs=(a.network, options)) as pool:
@@ -458,23 +478,25 @@ def main():
             print(f"[{i}/{a.n}] {c['composition']:13s} {c['level']:8s} "
                   + " ".join(f"{k}:{'ok' if r[k].get('ok') else 'ERR'} {r[k]['seconds']:.1f}s"
                              for k in a.stages)
-                  + "".join(f" {k} chose {r[k]['composition']}" for k in ("choose", "auto")
+                  + "".join(f" {k} leading solution: {r[k]['composition']}" for k in ("choose", "auto")
                             if "composition" in r.get(k, {})), flush=True)
+    results.sort(key=lambda r: r["case"]["index"])
     s = summary(results)
     s["network"] = Path(a.network).name
-    s["network_sha256"] = Network.load(a.network).meta["sha256"]
-    s["code"] = _code_state()
+    s["network_sha256"] = network_sha256
+    s["code"] = dict(_code_state(), source_sha256=source_sha256)
     s["seed0"] = a.seed0
     s["set"] = a.set
     s["truth"] = a.truth
     s["settings"] = options
-    (HERE / "results").mkdir(exist_ok=True)
-    (HERE / f"{a.out}_summary.json").write_text(json.dumps(s, indent=1))
-    (HERE / "results" / f"{a.out}.json").write_text(json.dumps(dict(summary=s, results=results,
+    (a.output_dir / "results").mkdir(parents=True, exist_ok=True)
+    (a.output_dir / f"{a.out}_summary.json").write_text(json.dumps(s, indent=1))
+    (a.output_dir / "results" / f"{a.out}.json").write_text(json.dumps(dict(summary=s, results=results,
                                                                      seconds=time.perf_counter() - t0),
                                                                 indent=1, default=str))
     print(json.dumps(s, indent=1))
+    return int(any(s["failed"].values()))
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

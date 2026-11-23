@@ -30,6 +30,7 @@ def card(network: dict, evaluation: dict, benchmarks: list[tuple[str, dict]]) ->
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from src.gimap.features.fitting.domain.posterior import encoding
+    from tools.benchmarks.composition_scores import METHOD
     tail_width, tail_exponent = encoding.TAIL_WIDTH_MAX, encoding.TAIL_EXPONENT
     lines = [
         f"# Model card: {name} (GIMaP's proposal network of 1D cuts)", "",
@@ -74,8 +75,15 @@ def card(network: dict, evaluation: dict, benchmarks: list[tuple[str, dict]]) ->
                                   + (f" · {row[k]['posterior_coverage68']:.2f}" if row[k].get("posterior_coverage68")
                                      is not None else "") for k in ("R", "sR", "D", "s_nn"))))
         lines += _table(rows, ("stage", "R (median / P90 · 68 % coverage)", "σR/R", "D", "σnn/D"))
-        lines += ["", f"Composition chosen: {json.dumps(summary.get('composition'))}; median seconds: "
-                      f"{json.dumps(summary.get('median_seconds'))}."]
+        comp = summary.get("composition", {}).get("all", {})
+        if comp:
+            if summary.get("composition_method") == METHOD:
+                lines += ["", f"The highest-weight ordered composition matched the truth on "
+                          f"{comp['n_correct']}/{comp['n_scored']} scored cuts."]
+            else:
+                lines += ["", f"The leading solution recovered the unordered particle families on "
+                          f"{comp['exact']:.1%} of cuts (historical score)."]
+        lines += [f"Median seconds per stage: {json.dumps(summary.get('median_seconds'))}."]
     lines += ["", "## Where it does not apply", "",
               "- cuts spanning less than a factor 10 in q; points below q_max/300 are left out;",
               "- more than three populations, other families, random cylinders larger than R q_max = 50 or "

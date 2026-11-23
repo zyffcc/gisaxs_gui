@@ -2983,9 +2983,10 @@ Implementation: `src/gimap/features/fitting/domain/fit_model.py` (`grazing`, `qz
 `src/gimap/features/fitting/domain/scattering_model.py` (`sphere_two_path_pd`)
 
 **A measured cut: GALAXI against BornAgain's model of it.** BornAgain's example of the public GALAXI frame (r23,
-`hardcode_galaxi.py`) describes it by Ag spheres 18.5 nm deep in HMDSO on PTFE on Si, log-normal radii (median
-5.75 nm, σ = 0.4), a radial paracrystal (D = 53.6 nm, disorder 10.5 nm) with size–spacing coupling κ = 17.5, in
-the DWBA of the layer stack. In r23 the size distribution is commented out; with it, BornAgain 24.1 describes the
+`hardcode_galaxi.py`) uses monodisperse Ag spheres of radius 5.75 nm, buried 18.5 nm deep in HMDSO on PTFE on Si.
+It evaluates a radial paracrystal (D = 53.6 nm, disorder 10.5 nm) with size–spacing coupling κ = 17.5 in the DWBA
+of the layer stack. The benchmark also enables the example's optional log-normal distribution (median 5.75 nm,
+σ of ln R = 0.4). With this distribution, BornAgain 24.1 describes the
 Yoneda cut of Analyze with one scale and one background at χ²_red = 2.1 above q = 0.3 nm⁻¹, and without it at 22
 (its monodisperse spheres have a minimum at 0.78 nm⁻¹ the cut does not have).
 
@@ -3352,18 +3353,20 @@ the best of every number of populations).
 9.12), with the same scoring (`tools/benchmarks/posterior_recovery.py`, `--cut born`: Predict is given the cut's q_z,
 the truth's Born term): half of them in fit1d's own physics (*model*), half with a resolution, a beam tail and
 roughness (*measured*). Medians and 90th percentiles of the errors over all populations, R and D relative, the
-spreads absolute; the true composition given. The "68 %" and "95 %" columns give how often that interval of the
+spreads absolute. Errors use the refined least-squares estimates (`values.best`) with the true composition given.
+The "68 %" and "95 %" columns give how often that interval of the
 solution holds the truth (fit1d: ±1 least-squares error). The composition is chosen among spheres and upright
-cylinders, one or two populations. *True composition most probable* is judged on the most probable solution: the
-first solution Predict lists has the true families (`composition.exact` in the summaries); *listed*: a solution with
+cylinders, one or two populations. In these archived tables, *true composition most probable* counts cuts whose
+first listed solution has the true unordered families (`composition.exact` in the original summaries); *listed*: a solution with
 a probability of at least 0.05 has them (`true_in_equivalent_set`). *Truth's mode*, with the true composition given:
 every R and D of the most probable solution (*first*), or of a solution with a probability of at least 0.05
 (*listed*), lies within 20 % of the truth (`truth_mode`).
 
-The numbers of this section are those of the runs the GIMaP paper quotes. All were made with one version of the
-fitting code (git tree 7e68831a of `src/gimap/features/fitting/domain`, commits 2eb0243 and 7179b85) and the network
-`flow_v1`. Their summaries are `tools/benchmarks/posterior_*_summary.json`, every cut of every run is in
-`tools/benchmarks/per_cut/`, and `tools/benchmarks/summary_tables.py` printed the tables below from these files.
+The first and extended sets were fitted at commit 2eb0243 and the three earlier DWBA comparisons at 7179b85.
+They used the same fitting code (git tree 7e68831a of `src/gimap/features/fitting/domain`) and the network
+`flow_v1`. Their summaries are `tools/benchmarks/posterior_*_summary.json`. The tables below retain their
+historical scoring. The per-cut files in `tools/benchmarks/per_cut/` store the leading solution and selected
+alternatives. For new archives, `summary_tables.py --per-cut` reads the full composition weights.
 Runs of earlier versions of the code are in `tools/benchmarks/history/`; they are not the numbers given here.
 fit1d's columns are its record on the same 200 curves (`history/fit1d_recovery_summary.json`).
 
@@ -3382,7 +3385,23 @@ fit1d's columns are its record on the same 200 curves (`history/fit1d_recovery_s
 |  | truth's mode first (model / measured) | 89 % / 89 % |  |  | – |  |
 |  | truth's mode listed (model / measured) | 94 % / 92 % |  |  | – |  |
 
-On 600 curves drawn the same way on a seed range never used while the method was developed (`heldout_cases.py`,
+**Independent rerun.** The first, extended and third archived sets share draws because their generators used
+`base_seed + index`. The `fresh` set contains 150 model-only cuts and 150 cuts with added effects. Each cut has
+separate parameter and counting-noise streams keyed by set and case. For an integrated central intensity A and a
+resolution density K with Σ K(qᵢ) Δq = 1, the broadened beam contributes A K(q) to the intensity. The archived
+generator included an extra factor Δq in this term.
+
+New runs group all retained modes by the composition used by Predict, before applying the display threshold.
+For composition c the weight is Σ wₘ over modes m of c. A correct choice requires the highest-weight composition
+to match every true particle family and paracrystal flag in increasing radius order. Reliability bins report
+correct and total cuts separately for evidence and BIC. The original archives omit some mode weights.
+
+For a parameter interval, let Hᵢ of Nᵢ eligible populations on cut i contain the true value. The measured coverage
+is Σ Hᵢ / Σ Nᵢ. To obtain its 68% uncertainty interval, resample whole cuts with replacement within each level,
+recompute the ratio, and take the 16th and 84th percentiles. Each draw keeps all populations of the sampled cut.
+[Benchmark commands and archive fields](../tools/benchmarks/README.md)
+
+The archived extended set contains 600 curves (`heldout_cases.py`,
 seed0 20261201): one to three populations, the LMA or the DA (given to Predict), the composition chosen among one to
 three populations (`posterior_extended_summary.json`):
 
@@ -3445,8 +3464,9 @@ What this says:
   the 100 *measured* curves of fit1d's set and 20 of the 300 of the extended set the chosen solution has one
   population more than the truth and the flag *large* (`summary_tables.py --only large`, from the per-cut files).
 
-**The waves the surface reflects.** Both sets draw their curves with the Born term at the cut's q_z, so they do not
-test the other three DWBA terms of section 9.10. The same 200 cases, counts and noise drawn with all four terms on
+**The waves the surface reflects.** Both archived sets use the Born term at the cut's q_z. The DWBA comparison
+reuses the same 200 particle draws, count targets and noise seeds. Expected counts and Poisson realizations
+change with the truth model. Curves drawn with all four terms on
 bare Si (`--scattering dwba --substrate si`; the cut at the Si Yoneda angle, q₊ = 0.577 nm⁻¹, so q₊R = 1.7 at
 R = 2.9 nm) pair curve by curve with the first table. Predict is given both angles (`--cut two_path`: the two paths
 with a free r; `posterior_dwba_tp_summary.json`), q_z alone (`--cut born`; `posterior_dwba_born_summary.json`) or
