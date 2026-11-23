@@ -34,7 +34,7 @@ def _signed_means(analysis, geometry):
     return sides
 
 
-def measure_public(name):
+def measure_public(name, *, assume_fibre_normal=False):
     manifest = json.loads((DATA / "manifest.json").read_text(encoding="utf-8"))
     info = manifest[name]
     corrections = Corrections()
@@ -49,7 +49,8 @@ def measure_public(name):
     # Si substrate δ at the experimental wavelength from BornAgain's GALAXI model
     # (galaxi_bornagain_model.py). The multilayer's band attribution is conditional.
     critical = float(np.degrees(np.arccos(1-5.7816e-6))) if name == "gisaxs_galaxi" else None
-    result, incidence = measure_frame_angles(analysis, frames, critical_angle_deg=critical)
+    result, incidence = measure_frame_angles(analysis, frames, critical_angle_deg=critical,
+                                             assume_fibre_normal=assume_fibre_normal)
     record = result.as_dict()
     record.update(incidence=incidence.as_dict(), published_incidence_deg=info["incidence_deg"])
     if critical is not None:

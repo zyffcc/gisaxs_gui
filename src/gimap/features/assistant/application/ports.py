@@ -47,7 +47,7 @@ class AnalysisWorkbench(Protocol):
         ...
 
     def apply_frame_angles(self, roll_policy, roll_deg, reference_deg, reference_source, keep_incidence,
-                           yoneda_critical_deg=None, yoneda_material=None) -> dict:
+                           yoneda_critical_deg=None, yoneda_material=None, assume_fibre_normal=False) -> dict:
         """Measure both angles on the same selected frame or sum, then reduce it with the chosen geometry."""
         ...
 

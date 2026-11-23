@@ -44,6 +44,24 @@ def _fibre_text(fit):
                op=percent_text(fit["values"]["out_of_plane"], fit["errors"]["out_of_plane"]))
 
 
+def _sensitivity(fit):
+    lines = []
+    sensitivity = fit.get("assignment_sensitivity", {})
+    if sensitivity:
+        bounds = ", ".join(f"{k} = {lo:.6g}–{hi:.6g} Å" for k, (lo, hi) in sensitivity["range_A"].items())
+        lines.append(trf("Omit one centre: {values} ({n}/{total} subsets determined).",
+                         values=bounds or "—", n=sum(not r["reason"] for r in sensitivity["fits"]),
+                         total=len(sensitivity["fits"])))
+    optics = fit.get("refraction_sensitivity", {})
+    if optics.get("available"):
+        for key, angle in (("off", 0.), ("on", optics["critical_angle_deg"])):
+            trial = optics[key]
+            values = ", ".join(f"{k} = {v:.6g} Å" for k, v in trial["values"].items() if k in ("a", "b", "c"))
+            lines.append(trf("αc = {angle}° · {n} centres · {values}", angle=format_number(angle),
+                             n=len(trial["seeds"]), values=values or tr("Cell undetermined")))
+    return lines
+
+
 class CellRefinementMixin:
     def _setup_cell(self):
         self._cell_key = self._cell_cancel = None
@@ -147,7 +165,8 @@ class CellRefinementMixin:
                                               chi=format_number(fit["chi2_red"]), shift=shift))
                 for key, value in fit["values"].items():
                     parameters.append((_units(key), format_number(value, fit["errors"][key]),
-                                       format_number(fit["reference"][key], digits=5),
+                                       format_number(fit["reference"][key], fit.get("reference_errors", {}).get(key),
+                                                     compact=True, digits=5),
                                        percent_text(fit["strain"].get(key), fit["strain_errors"].get(key))))
                 for row in fit["residuals"]:
                     residual = format_number(row["residual"], row["sigma"], value_only=True)
@@ -159,12 +178,14 @@ class CellRefinementMixin:
                                   "—", tr("Available")))
             critical = fit["q_axis"].get("critical_angle_deg")
             basis = trf("Transmitted q (αc = {angle}°)", angle=f"{critical:g}") if critical else tr("Kinematic q")
-            self.cell_summary.setText(self.cell_summary.text() + " · " + basis)
+            rank = trf("metric rank {rank}/{total}", rank=fit["metric_rank"], total=fit["metric_parameters"])
+            self.cell_summary.setText(" · ".join((self.cell_summary.text(), rank, basis)))
             for row in fit.get("excluded", ()):
                 peaks.append((str(row.get("candidate_hkl") or "—"), format_number(row["q"], row.get("sigma")),
                               "—", tr(row["reason"])))
-            self.cell_fibre_label.setText(_fibre_text(fit.get("fibre_strain")))
+            self.cell_fibre_label.setText("\n".join([*_sensitivity(fit), _fibre_text(fit.get("fibre_strain"))]))
         _table(self.cell_values, parameters)
+        self.cell_values.setVisible(bool(parameters))
         height = self.cell_values.horizontalHeader().sizeHint().height()
         self.cell_values.setMaximumHeight(height + sum(self.cell_values.rowHeight(i) for i in range(len(parameters))) + 4)
         _table(self.cell_peaks, peaks)

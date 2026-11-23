@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- GIWAXS cell fits recheck reflection positions, exclude unresolved multiplets and report sensitivity to peak selection and film refraction. Phase reports compare the expanded CIF sites with the formula and Z. Orientation fits use film pole angles and pool unresolved broad fractions. Automatic roll requires surface evidence or an explicit fibre-normal assumption, and incidence reports identify the dominant feature. Calibration benchmarks score all five returned parameters.
+
 - A CBF frame still opens when a neighbouring scan folder disappears during the search for beam energy.
 
 - Reports and result labels round estimates to the decimal place of their two-significant-digit uncertainty. Unit-cell and population tables use compact notation such as `8.9335(22) Å`.

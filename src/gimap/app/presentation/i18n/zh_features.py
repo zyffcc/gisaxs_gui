@@ -10,6 +10,7 @@ from .zh_calibration_residuals import CALIBRATION_RESIDUALS_ZH
 from .zh_calibration_rings import CALIBRATION_RINGS_ZH
 from .zh_calibration_uncertainty import CALIBRATION_UNCERTAINTY_ZH
 from .zh_cell_refinement import CELL_REFINEMENT_ZH
+from .zh_cell_sensitivity import CELL_SENSITIVITY_ZH
 from .zh_cell_series import CELL_SERIES_ZH
 from .zh_cell_orientation import CELL_ORIENTATION_ZH
 from .zh_coverage_report import COVERAGE_REPORT_ZH
@@ -28,6 +29,7 @@ from .zh_gisaxs_fit_level import GISAXS_FIT_LEVEL_ZH
 from .zh_gisaxs_posterior import GISAXS_POSTERIOR_ZH
 from .zh_horizon_selection import HORIZON_SELECTION_ZH
 from .zh_indexing import INDEXING_ZH
+from .zh_phase_geometry import PHASE_GEOMETRY_ZH
 from .zh_insitu import INSITU_ZH
 from .zh_joint_fit import JOINT_FIT_ZH
 from .zh_joint_height import JOINT_HEIGHT_ZH
@@ -37,6 +39,7 @@ from .zh_normalisation import NORMALISATION_ZH
 from .zh_nxcansas import NXCANSAS_ZH
 from .zh_orientation_reduction import ORIENTATION_REDUCTION_ZH
 from .zh_orientation_report import ORIENTATION_REPORT_ZH
+from .zh_orientation_verdict import ORIENTATION_VERDICT_ZH
 from .zh_pole_reference import POLE_REFERENCE_ZH
 from .zh_posterior_mcmc import POSTERIOR_MCMC_ZH
 from .zh_predict_report import PREDICT_REPORT_ZH
@@ -64,6 +67,8 @@ from .zh_usability_giwaxs import USABILITY_GIWAXS_ZH
 from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 
 FEATURES_ZH = {
+    **PHASE_GEOMETRY_ZH,
+    **CELL_SENSITIVITY_ZH,
     **PREDICT_SUBSTRATE_ZH,
     **ANALYZE_NUMBERS_ZH, **FITTING_NUMBERS_ZH, **REPORT_NUMBERS_ZH,
     **CELL_REFINEMENT_ZH, **CELL_ORIENTATION_ZH, **CELL_SERIES_ZH,
@@ -91,6 +96,7 @@ FEATURES_ZH = {
     **RING_ASSIGNMENT_ZH, **ORIENTATION_REDUCTION_ZH, **ORIENTATION_REPORT_ZH, **SERIES_SELECTION_ZH,
     **REDUCTION_ERRORS_ZH, **HORIZON_SELECTION_ZH, **REPRODUCTION_ZH, **JOINT_HEIGHT_ZH,
     **COVERAGE_REPORT_ZH, **POLE_REFERENCE_ZH, **CRYSTAL_ORIENTATION_ZH, **TEXTURE_POPULATIONS_ZH,
+    **ORIENTATION_VERDICT_ZH,
     **CRYSTAL_FILM_ZH, **REFRACTED_FILM_ZH,
 }
 

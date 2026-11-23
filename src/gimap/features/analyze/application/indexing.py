@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import math
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -47,6 +48,7 @@ from ..domain.crystal import (
     reflections,
 )
 from ..domain.crystal.cif import FROM_SYMBOL, NO_SPACE_GROUP, POSITIONS_ONLY
+from ..domain.crystal.composition import phase_composition
 from ..domain.crystal.space_groups import CELL_MISFIT, DISAGREE, NO_NUMBER, ORIGIN_TAKEN, UNKNOWN, UNREADABLE
 
 SYMMETRY_TEMPLATES = (FROM_SYMBOL, ORIGIN_TAKEN, UNREADABLE, UNKNOWN, CELL_MISFIT, DISAGREE, NO_NUMBER)
@@ -58,6 +60,7 @@ ORIENTATIONS = (POWDER, PLANE, AXIS)
 PHASE_COLORS = ("#f97316", "#22d3ee", "#a3e635", "#f472b6", "#facc15", "#c084fc", "#38bdf8", "#fb7185")
 """Marker colours of the phases in order (data colours, readable on the light and dark image backgrounds)."""
 DEFAULT_Q_MAX = 3.0
+CIF_COMPOSITION = "Expanded sites per cell: {sites}. CIF sum formula: {formula}. Z = {z}."
 ARC_POINTS = 181
 
 
@@ -91,6 +94,7 @@ class PhaseSpec:
     formula_units_z: Optional[float] = None
     space_group_number: int = 0
     cif_cell: Optional[tuple[float, ...]] = None
+    cell_errors: tuple[float | None, ...] = ()
 
     @property
     def reference_cell(self) -> UnitCell:
@@ -100,6 +104,18 @@ class PhaseSpec:
     @property
     def positions_only(self) -> bool:
         return self.symmetry == "none"
+
+    @cached_property
+    def composition(self) -> dict:
+        return phase_composition(self.phase())
+
+    def composition_text(self) -> str:
+        if not self.source:
+            return ""
+        counts = self.composition["site_atoms_per_cell"]
+        sites = ", ".join(f"{el} {n:g}" for el, n in sorted(counts.items())) or "unavailable"
+        z = f"{self.formula_units_z:g}" if self.formula_units_z is not None else "unspecified"
+        return CIF_COMPOSITION.format(sites=sites, formula=self.formula_sum or "unspecified", z=z)
 
     def phase(self) -> Phase:
         if self.positions_only:  # no symmetry known: every hkl, no intensities from the atoms as listed
@@ -128,6 +144,7 @@ class PhaseSpec:
     def record(self) -> dict:
         return {
             "name": self.name, "formula": self.formula, "cell": list(self.cell), "space_group": self.space_group,
+            **self.composition, "composition_text": self.composition_text(),
             "symmetry": self.symmetry_record(), "symmetry_notes": list(self.notes),
             "positions_only": self.positions_only, "atoms": len(self.atoms),
             "intensities": "none (positions only)" if self.positions_only else
@@ -136,6 +153,7 @@ class PhaseSpec:
             "source": self.source, "source_sha256": self.source_sha256, "warnings": list(self.warnings),
             "space_group_number": self.space_group_number,
             "reference_cell": list(self.reference_cell.as_tuple()),
+            "reference_cell_errors": list(self.cell_errors),
         }
 
 
@@ -207,12 +225,14 @@ def phase_from_cif(path, *, color: str = PHASE_COLORS[0], orientation: str = POW
     """A phase read from a CIF (cell, symmetry operations, atom sites)."""
     path = Path(path)
     structure = read_cif(path)
-    return PhaseSpec(
+    spec = PhaseSpec(
         structure.name or path.stem, structure.cell.as_tuple(), "P", structure.operations, structure.atoms,
         structure.space_group, orientation, tuple(indices), color, True, str(path), _sha256(path), structure.warnings,
         structure.symmetry, structure.notes, structure.formula, structure.formula_sum, structure.formula_units_z,
-        structure.space_group_number, structure.cell.as_tuple(),
+        structure.space_group_number, structure.cell.as_tuple(), cell_errors=structure.cell_errors,
     )
+    warning = spec.composition["composition_warning"]
+    return replace(spec, warnings=(*spec.warnings, warning)) if warning else spec
 
 
 def _normal(spec: PhaseSpec, cell: UnitCell) -> np.ndarray:
@@ -363,15 +383,24 @@ def _assignment_axis(geometry: Optional[DetectorGeometry], transmission: bool) -
 
 
 def assign_peaks(peaks: Sequence[dict], specs: Sequence[PhaseSpec], q_max: Optional[float] = None, *,
-                 geometry: Optional[DetectorGeometry] = None, transmission: bool = False) -> dict:
+                 geometry: Optional[DetectorGeometry] = None, transmission: bool = False, q_offsets=None) -> dict:
     """``{"phases", "rule", "assignments"}``: each peak ``{"q", "q_err", "fwhm"}`` with its nearest reflection."""
     visible = [spec for spec in specs if spec.visible]
     if not visible:
         return {"phases": [], "rule": "", "assignments": []}
-    largest = max((float(peak.get("q") or 0.0) + float(peak.get("fwhm") or 0.0) for peak in peaks), default=0.0)
+    from ..domain.crystal.assignment import tolerance
+
+    largest = max((float(peak.get("q") or 0.) + tolerance(peak.get("q_err"), peak.get("fwhm"))
+                   for peak in peaks), default=0.)
     window_limit = max((max(peak["q_window"]) for peak in peaks if "q_window" in peak), default=0.0)
-    settings = IndexingSettings(q_max=max(float(q_max or 0.0), largest + 0.05, window_limit, 0.5))
-    found = candidates(overlays(visible, settings, None))
+    limit = max(float(q_max or 0.0), largest + 0.05, window_limit, 0.5)
+    found = []
+    for spec in visible:
+        phase = spec.phase()
+        offset = (q_offsets or {}).get(spec.name, 0.)
+        rings = powder_rings(reflections(phase, max(.05, limit - offset)), phase.operations)
+        found.extend(Candidate(spec.name, r.label, r.q + offset, r.intensity, r.multiplicity,
+                               r.labels, r.families) for r in rings if r.q + offset > 0)
     observed = [peak for peak in peaks if peak.get("q")]
     triples = [(float(peak["q"]), float(peak.get("q_err") or math.nan), float(peak.get("fwhm") or math.nan))
                for peak in observed]
@@ -379,7 +408,7 @@ def assign_peaks(peaks: Sequence[dict], specs: Sequence[PhaseSpec], q_max: Optio
     assignments = []
     for item, peak in zip(assign_all(triples, found), observed):
         record = item.record()
-        for coordinate in ("q_parallel", "qz"):
+        for coordinate in ("q_parallel", "qz", "before_refraction", "sector", "chi_range", "tracked_phase", "tracked_hkl"):
             if coordinate in peak:
                 record[coordinate] = peak[coordinate]
         record["tentative"] = bool(record["phase"] in loose)  # positions only: no extinctions, no intensities

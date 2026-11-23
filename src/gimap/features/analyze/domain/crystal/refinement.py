@@ -13,7 +13,8 @@ import math
 import numpy as np
 from scipy.optimize import least_squares
 
-from .cell_metric import CellMetric, system_for_cell
+from .cell import UnitCell
+from .cell_metric import CellMetric, independent_reference_parameters, reference_errors, system_for_cell
 from .cell_observations import (
     CellPeak, NO_DIRECTION, POLE_TIE, SECTOR_POLE, Refraction, corrected, finite_number, select_peaks,
 )
@@ -25,16 +26,21 @@ NO_FIT = "The weighted position fit did not converge."
 COINCIDENT = "The coincident indices separate when the free cell parameters change."
 
 
-def _full_rank(jacobian):
+def _rank(jacobian):
     """Compare singular values after removing parameter units; avoid amplifying numerical zeros."""
     norm = np.linalg.norm(jacobian, axis=0)
-    if not norm.size or norm.min() <= norm.max() * 1e-12:
-        return False
-    singular = np.linalg.svd(jacobian / norm, compute_uv=False)
-    return len(singular) == len(norm) and bool(singular[-1] > singular[0] * 1e-10)
+    if not norm.size or not norm.max():
+        return 0
+    active = norm > norm.max() * 1e-12
+    singular = np.linalg.svd(jacobian[:, active] / norm[active], compute_uv=False)
+    return int(np.count_nonzero(singular > singular[0] * 1e-10))
 
 
-def _weighted_fit(design, initial, observed, sigma):
+def _full_rank(jacobian):
+    return _rank(jacobian) == jacobian.shape[1]
+
+
+def _weighted_fit(design, initial, observed, sigma, *, fit_shift=None):
     """Fit sqrt(D·x) plus a constant. The tangent below q²=0 only guides invalid trial steps back."""
     n, p = design.shape
     if n < p:
@@ -62,7 +68,7 @@ def _weighted_fit(design, initial, observed, sigma):
     if not _full_rank(jacobian(initial)):
         raise ValueError(SINGULAR)
     augmented = np.r_[initial, 0.]
-    shift_free = n >= p + 2 and _full_rank(jacobian(augmented))
+    shift_free = (n >= p + 2 and _full_rank(jacobian(augmented))) if fit_shift is None else fit_shift
     start = augmented if shift_free else initial
     fit = least_squares(residual, start, jac=jacobian, x_scale="jac")
     if not fit.success:
@@ -106,9 +112,10 @@ def _pole_projection(peak, direction, reference, normal):
     return [float(par[best]**2), float(z[best]**2)], indices[best].tolist(), float(angles[best])
 
 
-def _refine(reference, peaks, optics, *, metric=None, axis_hkl=None, system=""):
+def _refine(reference, peaks, optics, *, metric=None, axis_hkl=None, system="", cell_errors=()):
     result = {"ok": False, "reason": "", "system": system, "values": {}, "errors": {}, "reference": {},
               "strain": {}, "strain_errors": {}, "chi2_red": None, "residuals": [], "excluded": [],
+              "zero_shift_fitted": False, "zero_shift": None, "zero_shift_error": None,
               "zero_shift_rule": "Fit an additive q offset with N >= p + 2 and full augmented Jacobian rank.",
               "uncertainties": "Absolute peak-position errors; covariance multiplied by max(1, reduced chi-square).",
               "refraction": {k: float(v) for k, v in asdict(optics).items()} if optics is not None else None}
@@ -145,6 +152,7 @@ def _refine(reference, peaks, optics, *, metric=None, axis_hkl=None, system=""):
         except ValueError as exc:
             result["excluded"].append({"source_index": source_index, "q": finite_number(peak.q), "reason": str(exc),
                                        "chi_range_deg": aperture})
+    result.update(metric_rank=_rank(np.asarray(design)) if design else 0, metric_parameters=n_free)
     if len(rows) < n_free:
         result["reason"] = TOO_FEW
         return result
@@ -165,6 +173,8 @@ def _refine(reference, peaks, optics, *, metric=None, axis_hkl=None, system=""):
         else:
             names = metric.names
             values, deriv = metric.parameters(x)
+            native, _ = metric.parameters(x, native=True)
+            result["native_cell"] = list(native.values())
             if metric.rhombohedral:
                 ref, _ = metric.parameters(metric.start)
                 result["cell_setting"] = "conventional hexagonal (CIF indices in rhombohedral axes)"
@@ -186,28 +196,70 @@ def _refine(reference, peaks, optics, *, metric=None, axis_hkl=None, system=""):
         row["q_calc"] = float(prediction)
         row["residual"] = float(row["q_corrected"] - prediction)
     if metric is not None:
+        ref_errors = result["reference_errors"] = reference_errors(reference, metric, system, cell_errors)
         for name in ("a", "b", "c", "V"):
             if name in values:
                 result["strain"][name] = (values[name] - ref[name]) / ref[name]
-                result["strain_errors"][name] = errors[name] / ref[name]
+                result["strain_errors"][name] = math.hypot(errors[name] / ref[name],
+                    values[name] * ref_errors.get(name, 0.) / ref[name]**2)
     result.update(info, ok=True, values=values, errors=errors, reference=ref, residuals=rows,
                   parameter_order=order, covariance=propagated.tolist())
     return result
 
 
-def refine_cell(reference, system, peaks, *, refraction=None):
+def refine_cell(reference, system, peaks, *, refraction=None, cell_errors=()):
     """Fit the free cell parameters with measured radial errors and propagate errors to volume and strain."""
     metric = CellMetric(reference, system)
-    return _refine(reference, peaks, refraction, metric=metric, system=system)
+    return _refine(reference, peaks, refraction, metric=metric, system=system, cell_errors=cell_errors)
 
 
-def refine_fibre_strain(reference, axis_hkl, peaks, *, refraction=None):
+def refine_fibre_strain(reference, axis_hkl, peaks, *, refraction=None, cell_errors=(), system=None):
     """Fit two real-space strains relative to the reference, conditional on the fitted fibre pole.
 
     For each 2D/sector centre select the family member at the closest polar angle. Fit its
     radial position with q² = q_ref,parallel²/(1+ε_parallel)² + q_ref,z²/(1+ε_z)².
     """
-    return _refine(reference, peaks, refraction, axis_hkl=axis_hkl, system="fibre")
+    result = _refine(reference, peaks, refraction, axis_hkl=axis_hkl, system="fibre")
+    if not result["ok"] or not any(s is not None for s in cell_errors):
+        return result
+    system = system or system_for_cell(reference)
+    metric = CellMetric(reference, system)
+    rows = result["residuals"]
+    # The observed radii and selected symmetry-equivalent poles stay fixed. A small
+    # change to the CIF affects both the reciprocal vectors and the director.
+    indices = [r["hkl"] for r in rows]
+    q = np.array([r["q_corrected"] for r in rows])
+    sigma = np.array([r["sigma_corrected"] for r in rows])
+
+    def fitted(cell):
+        vectors = cell.q_vectors(indices)
+        normal = cell.plane_normal(axis_hkl)
+        z = vectors @ normal
+        parallel = vectors - z[:, None] * normal
+        design = np.column_stack((np.sum(parallel**2, axis=1), z*z))
+        x, _, _, info = _weighted_fit(design, np.ones(2), q, sigma, fit_shift=result["zero_shift_fitted"])
+        values = 1 / np.sqrt(x) - 1
+        return np.r_[values, info["zero_shift"]] if result["zero_shift_fitted"] else values
+
+    parameters = np.array(reference.as_tuple(), dtype=float)
+    contribution = np.zeros_like(result["covariance"])
+    for group, error in independent_reference_parameters(metric, system, cell_errors):
+        step = parameters[group[0]] * 1.e-5
+        if group[0] >= 3:
+            step = min(step, (180. - parameters[group[0]]) * 1.e-5)
+        delta = np.zeros(6)
+        delta[list(group)] = step
+        derivative = (fitted(UnitCell(*(parameters + delta))) - fitted(UnitCell(*(parameters - delta)))) / (2*step)
+        contribution += np.outer(derivative, derivative) * error**2
+    covariance = np.asarray(result["covariance"]) + contribution
+    result.update(reference_covariance=contribution.tolist(), covariance=covariance.tolist(),
+                  uncertainties="Peak-position covariance plus independent CIF reference-parameter propagation.")
+    for name, error in zip(result["parameter_order"], np.sqrt(np.diag(covariance))):
+        if name == "zero_shift":
+            result["zero_shift_error"] = float(error)
+        else:
+            result["errors"][name] = float(error)
+    return result
 
 
 __all__ = ["CellPeak", "Refraction", "refine_cell", "refine_fibre_strain", "select_peaks", "system_for_cell"]

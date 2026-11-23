@@ -2,8 +2,8 @@
 
 Read from the first data block that gives a cell:
 
-* ``_cell_length_a/b/c`` (Å) and ``_cell_angle_alpha/beta/gamma`` (°); standard uncertainties in brackets,
-  ``8.874(2)``, are dropped;
+* ``_cell_length_a/b/c`` (Å) and ``_cell_angle_alpha/beta/gamma`` (°), including standard uncertainties
+  in parentheses;
 * the symmetry operations of ``_space_group_symop_operation_xyz`` or ``_symmetry_equiv_pos_as_xyz`` (also with
   a dot, ``_space_group_symop.operation_xyz``), the Hermann–Mauguin and Hall symbols and the number of the space
   group;
@@ -48,7 +48,7 @@ POSITIONS_ONLY = ("No symmetry operations: positions only. Every hkl of the cell
 """The warnings of a phase without operations (after the reason: ``space_groups.SpaceGroupError``)."""
 GENERIC_BLOCKS = ("global", "i", "1", "cif", "data", "phase", "structure", "unnamed", "unknown")
 """Data block names that say nothing about the phase (``data_global``, ``data_I``)."""
-_ESD = re.compile(r"\(\d+\)$")
+_ESD = re.compile(r"\((\d+)\)(?=(?:[Ee][+-]?\d+)?$)")
 
 
 @dataclass(frozen=True)
@@ -78,6 +78,7 @@ class CifStructure:
     space_group_number: int = 0
     formula_sum: str = ""
     formula_units_z: Optional[float] = None
+    cell_errors: tuple[float | None, ...] = ()
 
 
 def _tokens(text: str) -> list[str]:
@@ -179,6 +180,18 @@ def _first(items: dict[str, list[str]], tags) -> str:
     return ""
 
 
+def _cell_uncertainty(items, tag):
+    """Parenthesized digits in the last decimal place, including the CIF exponent."""
+    text = _first(items, (tag,))
+    match = _ESD.search(text)
+    if not match or number(text) is None:
+        explicit = number(_first(items, (tag + "_esd", tag + "_su")))
+        return explicit if explicit is not None and explicit >= 0 else None
+    mantissa, _, exponent = _ESD.sub("", text).lower().partition("e")
+    places = len(mantissa.partition(".")[2])
+    return int(match[1]) * 10.**(int(exponent or 0) - places)
+
+
 def _atoms(items: dict[str, list[str]], warnings: list[str]) -> tuple[AtomSite, ...]:
     labels = items.get("_atom_site_label") or []
     xs, ys, zs = (items.get(f"_atom_site_fract_{axis}") or [] for axis in "xyz")
@@ -230,9 +243,11 @@ def parse_cif(text: str) -> CifStructure:
                                                              warnings, notes)
         formula = " ".join(_first(items, FORMULA_TAGS).split())
         name = _first(items, NAME_TAGS) or _block_name(block_name) or formula or "phase"
+        tags = [*(f"_cell_length_{s}" for s in "abc"), *(f"_cell_angle_{s}" for s in ("alpha", "beta", "gamma"))]
+        cell_errors = tuple(_cell_uncertainty(items, key) for key in tags)
         return CifStructure(" ".join(name.split()), cell, operations, symbol, atoms, tuple(warnings), symmetry,
                             tuple(notes), formula, number_, _first(items, ("_chemical_formula_sum",)),
-                            number(_first(items, ("_cell_formula_units_z",))))
+                            number(_first(items, ("_cell_formula_units_z",))), cell_errors=cell_errors)
     raise ValueError("No data block with a unit cell (_cell_length_a, _b, _c) in this file.")
 
 

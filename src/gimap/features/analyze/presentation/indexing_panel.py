@@ -21,6 +21,7 @@ from ..application.export_record import export_stem
 from ..application.indexing import POWDER, PhaseSpec, table_rows
 from ..application.pole_figure import pole_figure
 from .cell_refinement_panel import CellRefinementMixin
+from .texts import message_text
 from .crystal_orientation_panel import CrystalOrientationMixin
 from .indexing_export import write_crystal_export, write_pole_export
 from .indexing_texts import (
@@ -182,6 +183,8 @@ class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin, CellRefineme
                 spin.setEnabled(spec.orientation != POWDER)
             notes = phase_notes(spec)
             summary = symmetry_text(spec)
+            if spec.composition_text():
+                summary += "\n" + message_text(spec.composition_text())
             detail = summary + ("\n" + notes if notes else "")
             self.symmetry_label.setText(detail if spec.warnings else summary)
             self.symmetry_label.setToolTip(detail)

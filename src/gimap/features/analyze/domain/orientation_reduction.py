@@ -16,6 +16,7 @@ from .curve_errors import pixel_errors
 from .intensity import polarization_factor
 from .models import Curve
 from .peak_fit import GAUSSIAN, fit_peak
+from .refracted_film import internal_qz
 
 DEFAULT_POLARIZATION = 0.99
 BACKGROUND_PEAK = "local linear background of a Gaussian fit to I(q)"
@@ -48,11 +49,11 @@ def _background(q, intensity, errors, low, high, step):
 
 
 def ring_profiles(maps, image, valid, counts, geometry, window, step, corrections):
-    profiles, indices, _ = measured_ring_profiles(maps, image, valid, counts, geometry, window, step, corrections)
+    profiles, indices, _, _ = measured_ring_profiles(maps, image, valid, counts, geometry, window, step, corrections)
     return profiles, indices
 
 
-def measured_ring_profiles(maps, image, valid, counts, geometry, window, step, corrections):
+def measured_ring_profiles(maps, image, valid, counts, geometry, window, step, corrections, *, film_index=None):
     """Reduce actual pixels inside the ring at each exit-angle threshold. Image excludes L and mirror fill."""
     low, high = sorted(window)
     width = high - low
@@ -63,6 +64,8 @@ def measured_ring_profiles(maps, image, valid, counts, geometry, window, step, c
     along, x, y = lab_rays(geometry, (column - cx) * geometry.pixel_size_x_m,
                            (cy - row) * geometry.pixel_size_y_m)
     _, _, sin_exit = exit_directions(x, y, along, geometry.incidence_rad, sample_roll_rad=geometry.sample_roll_rad)
+    if film_index is not None:
+        chi = np.degrees(np.arctan2(maps.q_parallel[near], internal_qz(geometry, sin_exit, *film_index)))
     signal = image[near]
     errors = pixel_errors(counts).subset(near)
     polar = corrections.polarization
@@ -95,14 +98,19 @@ def measured_ring_profiles(maps, image, valid, counts, geometry, window, step, c
                                     geometry.critical_rad, geometry.wavevector_inv_angstrom))
         # At the outer edge of the q window, cos χ = qz / q gives the largest accessible |χ|.
         horizon_chi = math.degrees(math.acos(np.clip(min_qz / high, 0., 1.))) if high > 0 else None
+        if film_index is not None:
+            parallel = math.sqrt(max(0., high**2 - min_qz**2))
+            min_qz = float(internal_qz(geometry, math.sin(math.radians(min(90., limit))), *film_index))
+            horizon_chi = math.degrees(math.atan2(parallel, min_qz))
         *_, horizon = fold_ring(azimuth, means, sigma, background, horizon_chi_deg=horizon_chi)
         region = {"q_window": (low, high), "min_exit_deg": limit, "exit_angle_source": source,
                   "min_qz": min_qz, "horizon_chi_deg": horizon_chi, "horizon_excluded_deg": horizon,
                   "horizon_fraction": HORIZON_FRACTION,
                   "polarization": polar, "lorentz": False, "mirror_fill": False, "background": background,
                   "background_source": method, "background_sigma": error, "error_model": error_model}
+        region["pole_angle_coordinate"] = "inside film" if film_index is not None else "active q map"
         profiles[multiplier] = Curve("azimuthal", f"I(χ), q = {low:.3f}–{high:.3f} Å⁻¹",
                                      azimuth, means, sigma, pixels, "χ (°)", region=region)
     selected = ring & nominal
     indices = np.ravel_multi_index((row[selected], column[selected]), image.shape)
-    return profiles, indices, sin_exit[selected]
+    return profiles, indices, sin_exit[selected], chi[selected]

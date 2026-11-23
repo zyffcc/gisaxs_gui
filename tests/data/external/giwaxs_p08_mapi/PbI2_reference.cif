@@ -1,6 +1,8 @@
 # GIMaP example comparison model (Physics and Methods, section 7).
 # Use as a candidate for indexing. Atomic sites are approximate.
 data_PbI2
+_chemical_formula_sum 'Pb I2'
+_cell_formula_units_Z 1
 _cell_length_a 4.557
 _cell_length_b 4.557
 _cell_length_c 6.979

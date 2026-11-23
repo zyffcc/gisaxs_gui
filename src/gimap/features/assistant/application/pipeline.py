@@ -173,6 +173,8 @@ class PipelineOptions:
     """Material assigned to the GISAXS band when no explicit numeric αc is given."""
     substrate: Optional[dict | str] = None
     """Substrate of this GISAXS sample, as a material key or an optical-constants record at the cut's wavelength."""
+    assume_fibre_normal: bool = False
+    """Allow ring symmetry to supply roll when the user identifies the fibre axis as the surface normal."""
 
 
 @dataclass

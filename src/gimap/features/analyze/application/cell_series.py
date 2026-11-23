@@ -12,9 +12,31 @@ from ..domain import GIWAXS, TRANSMISSION
 from ..domain.cell_tracks import ring_tracks, track_frame
 from ..domain.crystal.refinement import refine_cell
 from ..domain.series_map import RowFacts
+from .cell_assignments import fit_assignments
 from .export_record import analysis_metadata
+from .indexing import assign_peaks
 from .record_values import plain
 from .series_map import frame_key, row_label, series_row, series_times
+
+
+def _fit_tracks(phases, indexed, peaks, tracks, check_cancel):
+    """Initialize each metric from tracked orders, then check their measured widths against every visible phase."""
+    specs = [p for p in phases if p.visible]
+    models, offsets = [], {}
+    for spec in specs:
+        initial = indexed.get(spec.name, {})
+        if spec.name in peaks:
+            trial = refine_cell(spec.reference_cell, initial["system"], peaks[spec.name])
+            if trial["ok"]:
+                initial = trial
+        models.append(replace(spec, cell=tuple(initial.get("native_cell", spec.cell))))
+        offsets[spec.name] = initial.get("zero_shift") or 0.
+    rows = [{"q": t["q"], "q_err": t["sigma"], "fwhm": t["fwhm"], "tracked_phase": t["phase"],
+             "tracked_hkl": t["hkl"]} for t in tracks if "q" in t]
+    assignment = assign_peaks(rows, models, q_offsets=offsets)
+    fits, _, _ = fit_assignments(specs, assignment, check_cancel=check_cancel, initial_models=models,
+                                 initial_offsets=offsets)
+    return {f["phase"]: f for f in fits if f["phase"] in indexed}
 
 
 def refine_series(frames, numbers, template, analyze, phases, results, source, *, check_cancel, progress):
@@ -28,8 +50,7 @@ def refine_series(frames, numbers, template, analyze, phases, results, source, *
     tracks = ring_tracks(results)
     if not tracks:
         raise ValueError("No indexed peaks are available for tracking.")
-    systems = {result["phase"]: result["system"] for result in results if result.get("seeds")}
-    cells = {phase.name: phase.reference_cell for phase in phases if phase.name in systems}
+    indexed = {result["phase"]: result for result in results if result.get("seeds")}
     reference = source["analysis"]
     first = numbers.get(frame_key(reference["source_file"], reference["frame_index"]), 1)
 
@@ -80,8 +101,7 @@ def refine_series(frames, numbers, template, analyze, phases, results, source, *
                 peaks, row["tracks"] = track_frame(x, y, sigma, tracks, previous, check_cancel)
                 if index == anchor:
                     anchor_centres = dict(previous)
-                for name, cell in cells.items():
-                    row["fits"][name] = refine_cell(cell, systems[name], peaks.get(name, []))
+                row["fits"] = _fit_tracks(phases, indexed, peaks, row["tracks"], check_cancel)
             except InterruptedError:
                 raise
             except (OSError, ValueError, RuntimeError) as error:
@@ -92,9 +112,11 @@ def refine_series(frames, numbers, template, analyze, phases, results, source, *
     for i, row in enumerate(rows):
         row["time_s"] = float(times[i]) if times is not None else None
     return {"kind": "GIMaP indexed cell series", "software_version": SOFTWARE, "indexing": source,
-            "phases": [p.record() for p in phases if p.name in cells], "indexed_cells": results,
+            "phases": [p.record() for p in phases if p.name in indexed], "indexed_cells": results,
             "tracking": "Gaussian + linear background, intensity sigma, series-map centroid start; "
-                        "half-window max(2.5 indexed FWHM, 5 native bin steps), clipped at midpoints between neighbouring peaks in the indexed frame",
+                        "half-window max(2.5 indexed FWHM, 5 native bin steps), clipped at midpoints between "
+                        "neighbouring peaks in the indexed frame. At each frame's fitted metrics and offsets, "
+                        "retain a tracked centre only if its window still contains its single tracked family.",
             "anchor_frame": frame_number(anchor), "time_from": time_from, "frames": rows}
 
 

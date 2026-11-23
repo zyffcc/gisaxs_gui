@@ -78,6 +78,11 @@ def test_phase_model_shows_joint_fit_and_reflection_curves(tmp_path, monkeypatch
         assert "refraction and attenuation of the incident and exit waves" in report
         assert "| (1 1 0) | 25.00(40) | 0.560(30) |" in report
         assert "| (1 1 0) | 6.00(20) | 0.140(20) |" in report
+        from src.gimap.features.analyze.presentation.crystal_orientation_panel import _summary
+
+        conditional = dict(phase, determined=False, reasons=["joint or ring reduced χ² exceeds 5"])
+        assert "conditional on the preferred candidate" in _summary(conditional, ring)
+        assert "conditional on the preferred candidate" in "\n".join(crystal_lines([conditional]))
         panel.crystal_ring_combo.setCurrentIndex(1)
         assert "1.980" in panel.pole_plot.figure_state()["title"]
         fitted, excluded = panel.pole_plot.figure_state()["curves"][:2]

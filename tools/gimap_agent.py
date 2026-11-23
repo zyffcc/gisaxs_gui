@@ -134,6 +134,7 @@ def command_auto(arguments) -> int:
         sample_roll_deg=arguments.sample_roll_deg, keep_incidence=arguments.keep_incidence,
         yoneda_critical_deg=arguments.yoneda_critical_deg,
         yoneda_material=arguments.yoneda_material,
+        assume_fibre_normal=arguments.assume_fibre_normal,
         orientation_min_exit_deg=arguments.orientation_min_exit_deg,
         pixel_size_um=arguments.pixel_size_um, frame=arguments.frame,
         sum_frames=arguments.sum,
@@ -336,6 +337,8 @@ def parser() -> argparse.ArgumentParser:
     yoneda.add_argument("--yoneda-material", choices=("Si", "SiO2", "glass", "Au"),
                         help="material assigned to the GISAXS Yoneda band; calculate αc at the calibrated wavelength")
     auto.add_argument("--sample-roll-deg", type=float, help="sample normal roll ψ about the beam in degrees (overrides frame measurement)")
+    auto.add_argument("--assume-fibre-normal", action="store_true",
+                      help="allow ring symmetry to supply sample roll when the fibre axis is known to be the surface normal")
     auto.add_argument("--orientation-min-exit-deg", type=float,
                       help="Minimum pixel exit angle for GIWAXS ring orientation (default: twice αc or twice αi).")
     auto.add_argument("--critical-angle-deg", type=float,

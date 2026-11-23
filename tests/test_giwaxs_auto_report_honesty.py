@@ -65,12 +65,20 @@ def test_the_frame_angle_is_checked_against_the_command_bar(p08, how: str) -> No
     assert measured["deg"] == pytest.approx(.50, abs=.02) and measured["error_deg"] > 0.
     assert report["geometry"]["incidence_deg"] == pytest.approx(measured["applied_deg"], abs=1e-10)
     assert measured["horizon"] and measured["specular"]
+    spot = measured["specular"]["details"]
+    assert spot["axial_profile"] and len(spot["direct_beam_px"]) == 2
+    assert len(measured["horizon"]["details"]["strip_edges_px"]) >= 8
+    assert measured["dominant_estimator"] == "specular" and measured["estimator_weights"]["specular"] > .99
+    assert report["geometry"]["sample_roll_deg"] == 0.
+    assert report["sample_roll_measurement"]["method"] == "unsupported fibre tilt"
     assert session.page.automation().analysis_record()["incidence_measurement"] == measured
     assert not _alpha_asked(report)
     alpha = _decision(report, "incidence angle")
     assert alpha["decision"] == "αi = 0.075°" and alpha["why"] == FROM_COMMAND_BAR
     markdown = pipeline_markdown(report)
     assert "differ by more than 3σ" in markdown and "0.075°" in markdown
+    assert "a single specular-like spot" in markdown and "near-beam shadow intercept" in markdown
+    assert "relative to the calibrated direct beam at" in markdown
     assert "0° is used" not in markdown
 
 
@@ -94,7 +102,7 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08, tm
 
     session, poni = p08
     report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.075, keep_incidence=True,
-                                                  follow_detection=True, rings=1))
+                                                  follow_detection=True, rings=1, assume_fibre_normal=True))
 
     q = _decision(report, "q")
     assert q["decision"] == "kinematic (no refraction correction)"
@@ -125,6 +133,7 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08, tm
     assert "αf < 0.15° (2 × αi)" in horizon["decision"] and "factor 0.99" in horizon["decision"]
     ring = min(report["rings"], key=lambda r: abs(r["q"] - 0.997))
     assert report["sample_roll_measurement"]["significant"]
+    assert report["sample_roll_measurement"]["assume_fibre_normal"]
     assert report["geometry"]["sample_roll_deg"] == pytest.approx(-1.30, abs=.02)
     assert ring["orientation_settings"]["error_model"] == "pixel_scatter"
     pole = ring["pole_figure"]

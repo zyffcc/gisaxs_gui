@@ -40,6 +40,11 @@ class IncidenceMeasurement:
 
     def as_dict(self):
         record = asdict(self)
+        precision = {name: getattr(self, name).error_deg ** -2 for name in self.used_estimators}
+        total = sum(precision.values())
+        weights = {name: p / total for name, p in precision.items()}
+        record["estimator_weights"] = weights
+        record["dominant_estimator"] = next((name for name, fraction in weights.items() if fraction >= .90), None)
         if self.yoneda_material:
             record.update(critical_angle_source="material optical constants",
                           material_optics_source="Henke, Gullikson & Davis (CXRO), tabulated bulk density")
@@ -147,9 +152,15 @@ def _specular(frame, valid, g):
     prominence, index, width, arc_ratio = candidates[0]
     step_deg = math.degrees(theta[1])/2
     error = step_deg * max(1., width/2.355)
+    # Store the measured signal around the chosen spot before smoothing and background removal.
+    span = max(5, math.ceil(2 * width))
+    trace = [{"position_px": (float(x[k]), float(y[k])), "centre_mean": float(centre[k]),
+              "brighter_flank_mean": float(flank[k])}
+             for k in range(max(0, index-span), min(len(theta), index+span+1)) if finite[k]]
     return IncidenceEstimate(math.degrees(theta[index])/2, error, (float(x[index]), float(y[index])),
                              {"scattering_angle_deg": math.degrees(theta[index]), "prominence": prominence,
-                              "fwhm_scattering_deg": width*step_deg*2, "arc_to_axis_ratio": arc_ratio})
+                              "fwhm_scattering_deg": width*step_deg*2, "arc_to_axis_ratio": arc_ratio,
+                              "axial_profile": trace, "direct_beam_px": (g.beam_center_x_px, g.beam_center_y_px)})
 
 
 def _incidence_at_band(g, row, critical_deg):
@@ -209,7 +220,8 @@ def measure_incidence(data, geometry, *, valid, technique="giwaxs", roll_deg=Non
     if trace is not None:
         horizon = IncidenceEstimate(trace.incidence_deg, trace.incidence_error_deg, trace.intercept_px,
                                     {"roll_deg": trace.roll.deg, "roll_error_deg": trace.roll.error_deg,
-                                     "near_beam_deg": trace.near_beam_incidence_deg})
+                                     "near_beam_deg": trace.near_beam_incidence_deg,
+                                     "strip_edges_px": trace.strip_edges_px})
     specular = _specular(frame, keep, g)
     yoneda = None
     if technique == "gisaxs" and min(frame.shape) >= 32:
