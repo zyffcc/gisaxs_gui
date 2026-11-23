@@ -31,7 +31,7 @@ HALVES_SENTENCES = (
     "The halves differ by {percent} % (median) up to |qy| = {q} Å⁻¹ even after the symmetry correction (a shadow, an "
     "absorber or real in-plane anisotropy): both are kept and the {better} half, the better covered one, is fitted.",
     "Both halves are usable (points in {a} and {b} of their |qy| ranges) and {agree}: they are averaged where both "
-    "exist, which halves the noise{extend}.",
+    "exist{extend}.",
     "agree within {percent} %",
     "; beyond {q} Å⁻¹ the longer {side} half continues alone to {reach} Å⁻¹",
     "mean of both halves up to |qy| = {q} Å⁻¹",

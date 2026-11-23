@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- Automatic-analysis reports can be replayed from the original frames through GIWAXS phase assignment, orientation and cell refinement, or GISAXS Predict fitting. Averaging signed cuts now accounts for the variance of interpolated bins. Wheel installations include the illustrated manuals and the calibration detector catalogue.
+
 - A CBF frame still opens when a neighbouring scan folder disappears during the search for beam energy.
 
 - Reports and result labels round estimates to the decimal place of their two-significant-digit uncertainty. Unit-cell and population tables use compact notation such as `8.9335(22) Å`.

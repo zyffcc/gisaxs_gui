@@ -79,6 +79,9 @@ def _replay(record, record_path, folder, should_cancel, *, retain=None):
     kind = recipe["kind"]
     if kind == "batch":
         return _replay_batch(record, record_path, folder, should_cancel)
+    if kind == "automatic":
+        from .reproduce_automatic import replay_automatic
+        return replay_automatic(record, record_path, folder, should_cancel)
     if kind == "reduction":
         from src.gimap.features.analyze.infrastructure.reproduce import replay_reduction
         tables = replay_reduction(record, record_path.parent)
@@ -188,7 +191,7 @@ def reproduce_record(record_path, out=None, *, should_cancel=None) -> dict:
 
 def reproduce_cli(argv):
     parser = argparse.ArgumentParser(prog="gimap reproduce",
-                                     description="Repeat a recorded reduction or fit and compare the numerical columns.")
+                                     description="Repeat a recorded reduction, fit or automatic analysis and compare its results.")
     parser.add_argument("record", type=Path, metavar="RECORD.json")
     parser.add_argument("--out", type=Path, metavar="FOLDER", help="output folder (default: <record stem>_reproduced)")
     args = parser.parse_args(argv)

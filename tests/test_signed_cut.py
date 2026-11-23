@@ -65,6 +65,60 @@ def test_mirrored_halves_give_the_plain_mean_with_the_error_of_a_mean() -> None:
     assert set(mean.halves.tolist()) == {2}
 
 
+def test_off_grid_midpoints_and_shared_endpoint_covariance_against_monte_carlo() -> None:
+    positive = ([1.5, 2.5], [5., 6.], [1.5, 1.5])
+    negative = ([1., 2., 3.], [4., 6., 8.], [3., 4., 5.])
+    mean = mean_of_halves(positive, negative, grid="positive")
+    keep = mean.halves == 2
+    np.testing.assert_array_equal(mean.intensity[keep], [5., 6.5])
+    draws = np.random.default_rng(7213).normal(size=(150_000, 5)) * [1.5, 1.5, 3, 4, 5]
+    midpoints = 0.5 * (draws[:, :2] + 0.5 * (draws[:, 2:4] + draws[:, 3:5]))
+    observed = np.cov(midpoints.T)
+    variance = np.array([1.5**2 + (3**2 + 4**2)/4, 1.5**2 + (4**2 + 5**2)/4]) / 4
+    shared = 4**2 / 16  # one quarter of the same middle measurement goes into each row
+    np.testing.assert_allclose(mean.sigma[keep]**2, variance)
+    np.testing.assert_allclose(observed.diagonal(), variance, rtol=0.012)
+    assert observed[0, 1] == pytest.approx(shared, rel=0.025)
+    np.testing.assert_allclose(mean.fit_sigma(keep)**2, variance + shared)
+
+
+def test_shared_endpoints_matter_to_a_fitted_constant_interval() -> None:
+    q = np.arange(1., 82.)
+    q_mid = (q[1:] + q[:-1]) / 2
+    mean = mean_of_halves((q_mid, q_mid*0 + 5, np.ones_like(q_mid)),
+                          (q, q*0 + 5, np.ones_like(q)), grid="positive")
+    keep = mean.halves == 2
+    n = keep.sum()
+    # Equal errors give C_ii = 3/8, C_i,i+1 = 1/16. Propagate this covariance
+    # into the weighted constant for each choice of weights ("sandwich" variance).
+    for sigma, adjusted in [(mean.sigma[keep], False), (mean.fit_sigma(keep), True)]:
+        w = sigma**-2
+        interval = 1 / np.sqrt(w.sum())
+        true_interval = np.sqrt(3/8 * (w @ w) + 1/8 * (w[:-1] @ w[1:])) / w.sum()
+        if adjusted:
+            assert 1 <= interval / true_interval < 1.001
+        else:
+            assert n == 80 and 0.86 < interval / true_interval < 0.88
+
+
+def test_merged_errors_include_reuse_within_and_across_groups() -> None:
+    q = np.array([-3., -2., -1., 1.5, 2.5])
+    s = np.array([5., 4., 3., 1.5, 1.5])
+    cut = prepare_cut(q, q*0 + 10, s, None, "mean", max_points=2)
+    # The two outer source points are also retained as single observations.
+    w = np.array([[0, 0, 1, 0, 0], [0, .25, .25, .5, 0],
+                  [.25, .25, 0, 0, .5], [1, 0, 0, 0, 0]])
+    cov = (w * s**2) @ w.T
+    weights = (1 / np.diag(cov)).reshape(2, 2)
+    weights /= weights.sum(axis=1)[:, None]
+    merge = np.zeros((2, 4))
+    merge[0, :2], merge[1, 2:] = weights
+    merged = merge @ cov @ merge.T
+    assert cut.merged == 2
+    np.testing.assert_allclose(cut.marginal_sigma**2, merged.diagonal())
+    np.testing.assert_allclose(cut.sigma**2, merged.sum(axis=1))
+
+
 def test_the_mean_does_not_interpolate_across_a_hole_of_the_other_half() -> None:
     grid = np.arange(1, 201) * STEP
     positive = _half(grid)

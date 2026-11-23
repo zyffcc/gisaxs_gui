@@ -35,7 +35,11 @@ def fit_curve_table(fit: dict) -> tuple[str, np.ndarray]:
         q, np.asarray(data.get("intensity") or (), dtype=float), np.asarray(data.get("sigma") or (), dtype=float),
         fit_on(q, fit.get("best_curve")),
     ]) if q.size else np.empty((0, 4))
-    return f"q (A^-1), I, sigma, I_fit  [{fit.get('curve')}]", columns
+    header = "q (A^-1), I, sigma, I_fit"
+    if "fit_sigma" in data:
+        columns = np.column_stack((columns, data["fit_sigma"]))
+        header += ", fit_sigma"
+    return f"{header}  [{fit.get('curve')}]", columns
 
 
 def _intervals(row: dict, number: int) -> list[str]:

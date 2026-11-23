@@ -100,7 +100,7 @@ Windows 和 macOS 上，公式和命令都以等宽文本块保留原文的空�
 
 选中一个峰，打开**拟合细节**（Fit details），可以看到拟合用到的点、高斯峰和它的背景，以及各个误差。
 被选来做环分析的峰也可能与高斯模型不符。警告行会显示拟合较差、峰重叠、峰在数据边缘或峰宽受分箱限制等已记录的标记。
-**保存报告…**（Save Report…）把全部内容存成网页或 Markdown。把图像切换到 **q 图**（q map）或
+**保存报告…**（Save Report…）可保存网页或 Markdown，完成分析后也可保存供复现用的 JSON 记录。把图像切换到 **q 图**（q map）或
 **展开图**（Cake），可以在 q 中看环；**来源**（Sources）显示每条曲线用了哪些像素。
 
 ![GIWAXS 结果](manual_images/zh/07_giwaxs_results.png)
@@ -268,8 +268,7 @@ python main.py
 **作为软件包安装，带 `gimap` 命令。** 在源码文件夹里运行 `python -m pip install -e .`，会安装 GIMaP 和
 `requirements.txt` 里的包，并添加命令 `gimap`。`gimap` 启动 GIMaP；`gimap frame_0001.cbf scan_folder sample.gimap`
 同时打开所列的内容（帧和文件夹在分析页打开，项目按项目打开）；`gimap --version` 显示版本，`gimap --help` 显示选项。
-`python main.py` 接受同样的参数。请像上面那样以可编辑方式（`-e`）安装：手册、图标和示例数据留在源码文件夹里，
-普通的 `pip install .` 不会复制它们。
+`python main.py` 接受同样的参数。从发行标签检出的源码运行 `python -m pip install .`，安装的 wheel 包含带图的中英文手册、探测器目录和预测参数的网络权重。要使用**帮助 ▸ 示例数据**（Help ▸ Example Data）中的公开帧，请运行 `python -m pip install -e .` 并保留源码文件夹。示例位于 `tests/data/external/`。软件包声明支持 Python 3.10 及以上版本，持续集成测试使用 Python 3.10 和 3.11。
 
 **预测参数**（Predict parameters）和一维预测训练好的网络在 Git 仓库里（约 13 MB，6.4 节），所以源码版本什么都能运行，包括预测参数（第 6 章）。
 在 macOS 上，BornAgain 要单独安装：方法见 `README.md`。
@@ -1441,8 +1440,8 @@ GIWAXS 的**结果摘要**（Result summary）给出已指标化的峰数、归�
 若已完成的运行只有取向方面的注意事项，报告列为**取向核查**（Orientation checks）。若设置和帧测量都不能给出 αi，报告会提示填写。
 
 **结果属于哪一帧。** 结果属于运行时的那一帧。运行期间文件列表被锁定。切换到别的帧时，结果步骤会说明这些结果来自哪一帧；
-回到那一帧时结果随之恢复。**保存报告…** 写出带图片的网页（`.html`，任何浏览器都能打开）或 Markdown 文本（`.md`）；保存对话框从数据所在文件夹开始。
-两种都有**掩膜**（Mask）和**记录**（Record）两节：GIMaP 的版本、输入文件及其 SHA-256、几何取自标定文件时该文件的路径和
+回到那一帧时结果随之恢复。在**保存报告…**中选择**可复现报告**（Replayable report，`.json`）可在日后重新运行分析。要阅读结果，可保存带图片的网页（`.html`）或 Markdown 文本（`.md`）。
+网页和 Markdown 都有**掩膜**（Mask）和**记录**（Record）两节：GIMaP 的版本、输入文件及其 SHA-256、几何取自标定文件时该文件的路径和
 SHA-256、仪器配置及其来源（由文件建立的配置写明该文件的路径），以及各项校正（背景、缝隙保护、坏像素、强度校正）。
 
 自动分析设的求和只用于它分析的那一帧。序列热图、批量导出和把序列发送到拟合不用它（对话框和序列标签页会这样说明）；
@@ -3156,7 +3155,7 @@ AI 对分析的每个修改（扇区宽度、自定义扇区、q 框、帧、模
 
 ### 10.7 不用窗口
 
-**示例（GALAXI GISAXS）。** 在源码文件夹中运行以下命令，可复现论文图 4 的 Yoneda 切线和第二层拟合。
+**示例（GALAXI GISAXS）。** 在源码文件夹中运行以下命令，可用计入协方差的权重重新计算论文图 4 的 Yoneda 切线和第二层拟合。
 输入为公开的 GALAXI 帧、配套的标定文件和文献给出的入射角 0.463°。
 
 ```sh
@@ -3164,9 +3163,9 @@ python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.t
 ```
 
 打开 `fig4/galaxi_data/report.md`，在 *Decisions* 中查看拟合层级和切线的真空 q_z。
-在 q_z = 0.5226 nm⁻¹ 处，半径 5.99 nm 的竖直圆柱有 q_z·R = 3.13。*Needs attention* 提示它可能代表球（`cyl_sphere:R_2`）。BornAgain 的参考模型使用半径 5.75 nm 的球。
+在 q_z = 0.5226 nm⁻¹ 处，半径 5.94 nm 的竖直圆柱有 q_z·R = 3.10。*Needs attention* 提示它可能代表球（`cyl_sphere:R_2`）。BornAgain 的参考模型使用半径 5.75 nm 的球。
 `horizontal.csv` 保存带正负号的 Yoneda 水平切线，`vertical.csv` 保存垂直切线。`fit_curve.csv` 给出以 |qᵧ| 为横坐标的最佳拟合曲线，两侧重叠处取平均。
-`fit_solutions.csv` 列出候选解及其概率。退出码 2 表示报告里还有需要判断的问题。
+`fit_solutions.csv` 列出候选解及其权重。存档平台上这次运行使用 BIC，同一组成的两组解的权重分别为 0.6540 和 0.3443。`fit_curve.csv` 中的 `sigma` 为单点标准误差；`fit_sigma` 还计入插值时多个点共用端点的相关性。退出码 2 表示报告里还有需要判断的问题。
 同一文件夹中还有 `qmap.png` 和 `report.json`。整次运行的摘要保存在 `fig4/summary.md` 和 `fig4/summary.json`。
 
 `tools/gimap_agent.py` 不开窗口就运行同样的标准流程，供脚本和其他智能体使用：
@@ -3318,7 +3317,7 @@ GIMaP 从不改动你的数据文件。分析的导出默认写到**数据旁边
 | 分析 ▸ **监视时导出新帧**（Export New Frames While Watching） | 每个新帧同导出 | 帧旁边的 `gimap_analysis/`；那里写不了时为你选一次的文件夹（本次会话记住）；不选时关闭这项导出，状态行说明原因 | 同导出 |
 | 分析 ▸ **保存设置…**（Save Settings…）；掩膜步骤 ▸ **保存…**（Save…）；区域 ▸ **添加 ▸ 保存切线…**（Add ▸ Save Cuts…） | `analyze_settings.json`；`masks.json` 或掩膜图像（5.2 节）；`cuts.json` | 对话框，从 `gimap_analysis/` 开始 | JSON 文件记录了操作。掩膜图像旁另有 `<文件名>.json`。 |
 | 运行自动分析 ▸ 峰 ▸ **保存峰表…**（Save Peak Table…） | `<stem>_peaks.csv` | 保存对话框建议的文件夹 | CSV 头行记录来源、设置和物相归属 |
-| 运行自动分析 ▸ **保存报告…**（Save Report…） | `<stem>_report.html`（带图）或 `.md` | 本次会话中同一文件夹的帧上次保存到的文件夹，否则已有 `gimap_analysis/` 时在那里，否则在帧旁边 | 报告本身（没有 JSON） |
+| 运行自动分析 ▸ **保存报告…**（Save Report…） | `.html`（带图）、`.md`，或完成分析后保存可复现的 `.json` | 本次会话中同一文件夹的帧上次保存到的文件夹，否则已有 `gimap_analysis/` 时在那里，否则在帧旁边 | 要复现分析，请选择 JSON |
 | 用 AI 处理 ▸ **保存报告…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | 同上 | JSON |
 | 用 AI 处理（自动） | 每次运行的记录；缺少的分析 | 用户数据文件夹：`assistant_runs/`、`assistant_feature_requests.jsonl` | — |
 | 用 AI 处理，AI 导出时 | 同导出的曲线，以及 `<stem>_assistant.json` | 数据旁边的 `gimap_analysis/` | `<stem>_analysis.json`、`<stem>_assistant.json` |
@@ -3360,6 +3359,8 @@ GIMaP 从不改动你的数据文件。分析的导出默认写到**数据旁边
 ```text
 gimap reproduce example_analysis.json --out check
 ```
+
+自动分析完成后，在同一对话框中选择其导出的 JSON，或运行 `gimap reproduce report.json --out check`。程序读取原始帧，重新测量角度并约化，再按记录中的设置执行结构分析。提供物相 CIF 时，比较 GIWAXS 物相归属、取向判定及参数、晶胞精修结果。GISAXS 拟合会比较报告中的各个解及其概率或 BIC 权重。`reproduced_report.json` 给出重算值，`comparison.json` 列出各项比较结果。
 
 省略 `--out` 时，命令在 JSON 旁创建 `<记录主文件名>_reproduced/`。每次比较请选择新的输出位置。文件夹中有重新计算的各列数据（CSV）和 `comparison.json`，批量结果分在带序号的子文件夹中。**identical** 表示记录中的每一列数值都逐位相同，包括曲线所带的不确定度和像素数。**different** 时可查看各列的最大相对差。数值逐位相同时退出码为 0，有差异为 2，出错为 1。
 

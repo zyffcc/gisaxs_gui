@@ -12,12 +12,13 @@ from PyQt5.QtWidgets import QDialog, QFileDialog, QVBoxLayout
 from .app_dialogs import JSON_FILTER, ask_open_json, warn
 from .components import JobStatus, show_toast
 from .i18n import language_changed, tr, trf
+from .i18n.zh_automatic_replay import AUTOMATIC_REPLAY_ERRORS
 from .i18n.zh_reproduction import REPLAY_ERROR_TEMPLATES
 from .task_runner import TaskRunner
 
 
 def reproduction_error_text(message):
-    for template in REPLAY_ERROR_TEMPLATES:
+    for template in (*REPLAY_ERROR_TEMPLATES, *AUTOMATIC_REPLAY_ERRORS):
         parts = [re.escape(literal) + (f"(?P<{field}>.+?)" if field else "")
                  for literal, field, _, _ in Formatter().parse(template)]
         match = re.fullmatch("".join(parts), message, flags=re.DOTALL)

@@ -89,9 +89,12 @@ CURVE_FIT_SEED = 0
 """The seed of every random draw of ``create_curve_fit``'s Predict parameters (Physics and Methods 14.8)."""
 
 
-def create_curve_fit():
+def create_curve_fit(*, predict_settings=None):
     """Predict parameters as a plain function, for the analyses that fit one cut on their own (Run Automatic
     Analysis, Batch Export's particle model, Process with AI and the command line).
+
+    During replay, ``predict_settings`` restores the composition policy, model and sampling options.
+    The newly measured cut still supplies q_z, wavelength, grazing angles and substrate.
 
     ``curve_fit(q_inv_angstrom, intensity, sigma, *, components=(), distance_nm=None, report=None, cancelled=None,
     evaluated=None, halves=None, cut_qz=None, substrate=None, grazing=None)`` finds the particles of one cut on |q|: the given composition
@@ -134,6 +137,11 @@ def create_curve_fit():
     from .infrastructure.reproduce_fit import predict_options, prediction_plan
     from .infrastructure.adapters.workflow_v5 import prepare_sides, side_notes
 
+    algorithm = {key: predict_settings[key] for key in (
+        "seed", "compositions", "allowed", "shortlist", "samples", "local_samples", "refine_modes", "explored",
+        "law", "coupling", "min_probability", "model_error_floor",
+    ) if predict_settings is not None and key in predict_settings}
+
     def prepared(q, intensity, sigma, halves) -> PreparedCut:
         finite = q[np.isfinite(q)]
         if halves is not None or (np.any(finite < 0) and np.any(finite > 0)):
@@ -164,8 +172,8 @@ def create_curve_fit():
         proposals = network.load()
         if substrate is not None:
             chosen.update(substrate=substrate, grazing=grazing)
-        settings = predict_options(dict(seed=CURVE_FIT_SEED, qz=cut_qz,
-                                        reflected_beam=True if cut_qz else None, **chosen))
+        settings = predict_options({"seed": CURVE_FIT_SEED, "qz": cut_qz,
+                                    "reflected_beam": True if cut_qz else None, **chosen, **algorithm})
         solutions = refine.predict(proposals, item["q"], item["observed"], item["sigma"],
                                    cancelled=cancelled, **settings)
         if not solutions:
@@ -183,7 +191,7 @@ def create_curve_fit():
                                    display_q=np.linspace(q.min(), q.max(), options["render_points"]), limit=5)
             rows[0]["reproduction"] = prediction_record(plan, [encode(s) for s in solutions[:5]])
         for row in rows:
-            row.update(prepared=cut.note, preparation=dict(made_of), network=dict(used), seed=CURVE_FIT_SEED,
+            row.update(prepared=cut.note, preparation=dict(made_of), network=dict(used), seed=settings["seed"],
                        curve_notes=side_notes(item, {}))  # an estimated σ, negative and zero intensities
         return rows
 

@@ -45,7 +45,7 @@ SENTENCES = (
     "The halves differ by {percent} % (median) up to |qy| = {q} Å⁻¹ even after the symmetry correction (a shadow, an "
     "absorber or real in-plane anisotropy): both are kept and the {better} half, the better covered one, is fitted.",
     "Both halves are usable (points in {a} and {b} of their |qy| ranges) and {agree}: they are averaged where both "
-    "exist, which halves the noise{extend}.",
+    "exist{extend}.",
     "agree within {percent} %",
     "; beyond {q} Å⁻¹ the longer {side} half continues alone to {reach} Å⁻¹",
     "mean of both halves up to |qy| = {q} Å⁻¹",
@@ -173,6 +173,8 @@ _SENTENCE_BREAK = re.compile(r"(?<=[.。])\s+(?=[A-Z])")
 """Between two sentences of a text that has no form of its own (a hint made of several sentences)."""
 
 _SAVED_SENTENCES = (
+    "Both halves are usable (points in {a} and {b} of their |qy| ranges) and {agree}: they are averaged where both "
+    "exist, which halves the noise{extend}.",
     "no clear preferred orientation (f − f_iso = {f}, within ±{margin}): the ring is strongest at |χ| ≈ {chi}° but "
     "nearly as intense elsewhere",
     "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "

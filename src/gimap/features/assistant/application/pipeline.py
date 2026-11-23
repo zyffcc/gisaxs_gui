@@ -27,6 +27,7 @@ from ..domain import AT_EDGE, MAX_PEAKS, caveat, energy_from_notes, incidence_fr
 from ..domain import reliable as is_reliable
 from ..domain.notes import calibrants_in_notes
 from .gisaxs_procedure import GisaxsProcedureMixin
+from .automatic_recipe import automatic_recipe
 from .giwaxs_decisions import (
     flat_field_decision,
     horizon_decision,
@@ -173,6 +174,8 @@ class PipelineOptions:
     """Material assigned to the GISAXS band when no explicit numeric αc is given."""
     substrate: Optional[dict | str] = None
     """Substrate of this GISAXS sample, as a material key or an optical-constants record at the cut's wavelength."""
+    notes_source: Optional[dict] = None
+    """Identity of the original bytes when the notes were read from a file."""
 
 
 @dataclass
@@ -199,6 +202,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         *,
         stop=None,
         events: Optional[Callable[[dict], None]] = None,
+        recorded_calibration: bool = False,
     ):
         """``stop``: a ``threading.Event``; set, the run ends before the next tool call and reports what
         it found so far. ``events``: called with ``{"state": "start" | "done", "tool", …}`` around each call."""
@@ -207,6 +211,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         self.progress = progress
         self.stop = stop
         self.events = events
+        self.recorded_calibration = recorded_calibration
         self._run = _Run()
         self._energy: Optional[float] = None
         self._incidence: Optional[float] = None
@@ -332,6 +337,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         if status.get("measurement") is None and status.get("message") and not status.get("frames"):
             self._attention("frame", str(status["message"]), None, "Check that GIMaP can read this file.")
             return self._report()
+        snapshot = getattr(getattr(self.catalog, "workbench", None), "automatic_state", None)
+        initial = snapshot(True) if snapshot else None
         self._values(status)
         if not self._geometry(status):
             options = self.options
@@ -372,7 +379,12 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             choose_frame_angles(self)
         self._analyse_gisaxs() if technique == "gisaxs" else self._analyse()
         self._run.ok = True
-        return self._report()
+        report = self._report()
+        if initial is not None:
+            report["reproduction"] = automatic_recipe(report, self.options, initial, snapshot(False))
+            if prediction := self.catalog.results.gisaxs.get("prediction"):
+                report["reproduction"]["predict"] = prediction
+        return report
 
     def _technique(self, status: dict) -> tuple[str, str]:
         """The procedure to run and why: the technique given, the mode chosen in Analyze, what Auto detected

@@ -40,7 +40,7 @@ OPTION_FLAGS = {
 
 def compact_report(report: dict) -> dict:
     """The report without the full tables, the calibration record and the fitted arrays (kept in report.json)."""
-    compact = {key: value for key, value in report.items() if key not in ("tables", "calibration")}
+    compact = {key: value for key, value in report.items() if key not in ("tables", "calibration", "reproduction")}
     fit = (compact.get("gisaxs") or {}).get("fit")
     if fit:
         compact["gisaxs"] = {**compact["gisaxs"], "fit": {

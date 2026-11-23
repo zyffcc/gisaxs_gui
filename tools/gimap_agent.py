@@ -73,6 +73,7 @@ Exit codes (auto):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -94,11 +95,19 @@ def _utf8_console() -> None:
             pass
 
 
-def _notes(arguments) -> str:
+def _notes_and_source(arguments):
     parts = [arguments.notes or ""]
+    source = None
     if arguments.notes_file:
-        parts.append(Path(arguments.notes_file).read_text(encoding="utf-8", errors="replace"))
-    return "\n".join(part for part in parts if part)
+        path = Path(arguments.notes_file).resolve()
+        raw = path.read_bytes()
+        source = {"file": path.name, "path": str(path), "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+        parts.append(raw.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n"))
+    return "\n".join(part for part in parts if part), source
+
+
+def _notes(arguments) -> str:
+    return _notes_and_source(arguments)[0]
 
 
 def _print_json(data) -> None:
@@ -127,7 +136,7 @@ def command_auto(arguments) -> int:
 
     check_arguments(arguments)
     frames, found = expand_frames(arguments.frames, exclude=(arguments.calibration, arguments.mask, arguments.flat_field))
-    notes = _notes(arguments)
+    notes, notes_source = _notes_and_source(arguments)
     options = PipelineOptions(
         calibration=arguments.calibration, standard=arguments.standard, energy_kev=arguments.energy_kev,
         incidence_deg=arguments.incidence_deg, critical_angle_deg=arguments.critical_angle_deg,
@@ -139,7 +148,7 @@ def command_auto(arguments) -> int:
         sum_frames=arguments.sum,
         rings=arguments.rings, max_peaks=arguments.max_peaks, recalibrate=arguments.recalibrate, notes=notes,
         technique=arguments.technique, follow_detection=arguments.technique is None, fit=not arguments.no_fit,
-        phases=tuple(arguments.phase or ()), substrate=getattr(arguments, "substrate", None),
+        phases=tuple(arguments.phase or ()), substrate=getattr(arguments, "substrate", None), notes_source=notes_source,
     )
     out = Path(arguments.out) if arguments.out else default_output_folder()
     progress = (lambda _text: None) if arguments.quiet else (lambda text: print(text, file=sys.stderr, flush=True))

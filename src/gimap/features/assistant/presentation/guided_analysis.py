@@ -18,6 +18,7 @@ progress never touches the next one.
 from __future__ import annotations
 
 import dataclasses
+import json
 import re
 import threading
 from typing import Callable, Optional
@@ -479,18 +480,27 @@ class GuidedAnalysis(GuidedFramesMixin, QObject):
         saved_toast(self.controls, path)
 
     def save_report(self) -> Optional[str]:
-        """The report as a web page (pictures drawn from the frame in Analyze) or Markdown, next to the data."""
+        """Save HTML with figures, Markdown or a JSON record of the completed automatic analysis."""
         if self.report is None or self._save_text is None or not self._for_this_frame():
             return None
+        filters = f"{tr('Web page with pictures')} (*.html);;{tr('Markdown text')} (*.md)"
+        if self.report.get("reproduction"):
+            filters += f";;{tr('Replayable report')} (*.json)"
         path, chosen = ask_save_path(
             self.controls, "Save Report", self.report.get("frame"), "report.html",
-            f"{tr('Web page with pictures')} (*.html);;{tr('Markdown text')} (*.md)",
+            filters,
         )
         if not path:
             return None
-        markdown = path.lower().endswith(".md") or (chosen.endswith("(*.md)") and not path.lower().endswith(".html"))
+        suffix = path.lower()
+        if not suffix.endswith((".json", ".html", ".md")):
+            suffix = chosen.rstrip(")")
+        if suffix.endswith(".json") and self.report.get("reproduction"):
+            content = json.dumps(self.report, indent=1, ensure_ascii=False, default=str)
+        else:
+            content = self.report_markdown() if suffix.endswith(".md") else self.report_page()
         try:
-            written = self._save_text(path, self.report_markdown() if markdown else self.report_page())
+            written = self._save_text(path, content)
         except OSError as exc:
             save_failed_toast(self.controls, path, exc.strerror or str(exc))
             return None

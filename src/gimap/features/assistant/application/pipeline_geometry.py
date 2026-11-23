@@ -215,7 +215,7 @@ class GeometryStepsMixin:
         # A geometry Analyze took from the .poni beside the frame is no saved profile: the search finds that file.
         if not found and not self._declined and existing and existing.get("resolved_by") != "file" and not options.recalibrate:
             found = self._keep_profile(existing)
-        if not found and not self._declined:
+        if not found and not self._declined and not self.recorded_calibration:
             found = self._first_fit(self._candidates({file_key(item["path"]) for item in named}))
         if self._declined:
             self._attention(
@@ -284,7 +284,8 @@ class GeometryStepsMixin:
     def _named(self) -> list[dict]:
         """The calibration given (``calibration``), then the calibration files the notes name: tried first."""
         given = [self.options.calibration] if self.options.calibration else []
-        noted = self.catalog.named_calibration_files(self.options.notes) if self.options.notes else []
+        noted = (self.catalog.named_calibration_files(self.options.notes)
+                 if self.options.notes and not self.recorded_calibration else [])
         paths = given + [path for path in noted if file_key(path) not in {file_key(item) for item in given}]
         if paths:
             self._decide("calibration candidates", ", ".join(Path(path).name for path in paths), NAMED)
@@ -498,7 +499,7 @@ class GeometryStepsMixin:
             self._decide("geometry", f"could not use {name}", self._run.steps[-1]["summary"])
             return False
         self._run.geometry_source = name
-        self._run.calibration = values
+        self._run.calibration = {**values, "calibration_file": path}
         self._decide("geometry", f"from {name}", str(info.get("assessment") or info.get("kind")))
         if self._incidence is None:
             self._incidence_missing()

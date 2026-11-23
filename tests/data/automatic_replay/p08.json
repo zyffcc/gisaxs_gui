@@ -1,0 +1,319 @@
+{
+  "dataset": "giwaxs_p08_mapi",
+  "frame": "S121_MAI_A2_00841.tif",
+  "calibration": "LaB6_2021_12_DESY_P08.poni",
+  "reference_incidence_deg": 0.075,
+  "phases": [
+    "MAPbI3_reference.cif",
+    "PbI2_reference.cif"
+  ],
+  "input_sha256": {
+    "S121_MAI_A2_00841.tif": "d164df4cbb9b469a3105d2bbd89ec012fd4d77ef4ea2739d05a425bab1f0d623",
+    "LaB6_2021_12_DESY_P08.poni": "bf2fa71bc8d726c2c610a2932a98a1a3e7d2772979ee454da28d4cd7c6add8a9",
+    "MAPbI3_reference.cif": "b8e9424c3caae8f674e51075fa2e9485a620e61d25cfc027a081e6cfdd816f0a",
+    "PbI2_reference.cif": "fa7fa67d3c14825312bb8bf72b9353b2f7e177fb507db6073ce9da7fbf4e5cf2"
+  },
+  "runtime": {
+    "python": "3.10.18",
+    "numpy": "1.26.4",
+    "scipy": "1.15.3",
+    "system": "Windows",
+    "machine": "AMD64"
+  },
+  "expected": {
+    "angles": {
+      "incidence_deg": 0.501240083622424,
+      "sample_roll_deg": -1.30458732430548
+    },
+    "assignments": [
+      {
+        "assigned": false,
+        "phase": null,
+        "hkl": null,
+        "ambiguous": false,
+        "tentative": false,
+        "q": 0.4519384971729407,
+        "q_hkl": null,
+        "alternatives": []
+      },
+      {
+        "assigned": true,
+        "phase": "PbI2",
+        "hkl": "001",
+        "ambiguous": false,
+        "tentative": false,
+        "q": 0.8988944979517145,
+        "q_hkl": 0.9002987974179089,
+        "alternatives": []
+      },
+      {
+        "assigned": true,
+        "phase": "MAPbI3 (tetragonal)",
+        "hkl": "110",
+        "ambiguous": true,
+        "tentative": false,
+        "q": 0.9972644500706269,
+        "q_hkl": 1.0013258819378783,
+        "alternatives": [
+          {
+            "phase": "MAPbI3 (tetragonal)",
+            "hkl": "002",
+            "q_hkl": 0.9917426102406418
+          }
+        ]
+      },
+      {
+        "assigned": true,
+        "phase": "MAPbI3 (tetragonal)",
+        "hkl": "112",
+        "ambiguous": false,
+        "tentative": false,
+        "q": 1.4090652331820823,
+        "q_hkl": 1.4093285375687215,
+        "alternatives": []
+      },
+      {
+        "assigned": true,
+        "phase": "MAPbI3 (tetragonal)",
+        "hkl": "202",
+        "ambiguous": false,
+        "tentative": false,
+        "q": 1.7247553236886166,
+        "q_hkl": 1.7288321053949285,
+        "alternatives": []
+      },
+      {
+        "assigned": true,
+        "phase": "MAPbI3 (tetragonal)",
+        "hkl": "004",
+        "ambiguous": false,
+        "tentative": false,
+        "q": 1.9902653563539399,
+        "q_hkl": 1.9834852204812836,
+        "alternatives": []
+      },
+      {
+        "assigned": true,
+        "phase": "MAPbI3 (tetragonal)",
+        "hkl": "114",
+        "ambiguous": true,
+        "tentative": false,
+        "q": 2.225582132453181,
+        "q_hkl": 2.2219061955236445,
+        "alternatives": [
+          {
+            "phase": "MAPbI3 (tetragonal)",
+            "hkl": "222",
+            "q_hkl": 2.234763408578546
+          }
+        ]
+      },
+      {
+        "assigned": true,
+        "phase": "MAPbI3 (tetragonal)",
+        "hkl": "204",
+        "ambiguous": true,
+        "tentative": false,
+        "q": 2.4382473639617337,
+        "q_hkl": 2.4371131823419745,
+        "alternatives": [
+          {
+            "phase": "MAPbI3 (tetragonal)",
+            "hkl": "312",
+            "q_hkl": 2.4488407490403024
+          }
+        ]
+      },
+      {
+        "assigned": true,
+        "phase": "MAPbI3 (tetragonal)",
+        "hkl": "224",
+        "ambiguous": false,
+        "tentative": false,
+        "q": 2.814807349932255,
+        "q_hkl": 2.818657075137443,
+        "alternatives": []
+      },
+      {
+        "assigned": true,
+        "phase": "MAPbI3 (tetragonal)",
+        "hkl": "314",
+        "ambiguous": true,
+        "tentative": false,
+        "q": 2.9854047568769007,
+        "q_hkl": 2.9912340645728537,
+        "alternatives": [
+          {
+            "phase": "MAPbI3 (tetragonal)",
+            "hkl": "006",
+            "q_hkl": 2.9752278307219253
+          }
+        ]
+      },
+      {
+        "assigned": true,
+        "phase": "MAPbI3 (tetragonal)",
+        "hkl": "404",
+        "ambiguous": false,
+        "tentative": false,
+        "q": 3.4479565285475466,
+        "q_hkl": 3.457664210789857,
+        "alternatives": []
+      },
+      {
+        "assigned": true,
+        "phase": "MAPbI3 (tetragonal)",
+        "hkl": "406",
+        "ambiguous": true,
+        "tentative": false,
+        "q": 4.103960429808656,
+        "q_hkl": 4.107701159944775,
+        "alternatives": [
+          {
+            "phase": "MAPbI3 (tetragonal)",
+            "hkl": "523",
+            "q_hkl": 4.092856121076856
+          },
+          {
+            "phase": "MAPbI3 (tetragonal)",
+            "hkl": "118",
+            "q_hkl": 4.091394383496831
+          },
+          {
+            "phase": "MAPbI3 (tetragonal)",
+            "hkl": "514",
+            "q_hkl": 4.1193093357710335
+          }
+        ]
+      }
+    ],
+    "orientation": [
+      {
+        "phase": "MAPbI3 (tetragonal)",
+        "determined": false,
+        "reasons": [
+          "joint or ring reduced χ² exceeds 5"
+        ],
+        "axes": [
+          [
+            1,
+            1,
+            0
+          ]
+        ],
+        "populations": [
+          {
+            "fwhm_deg": 11.08293050261685,
+            "fwhm_err_deg": 0.3324145284061027,
+            "fraction": 0.048279999201760106,
+            "fraction_err": 0.0021711835020701586,
+            "delta_bic_vs_isotropic_replacement": 3298.0051288479426,
+            "replacement_delta_chi2_per_bin": 4.438652252075536,
+            "fraction_isotropic_correlation": -0.607020386623084,
+            "axis": [
+              1,
+              1,
+              0
+            ]
+          }
+        ],
+        "near_random": [
+          {
+            "fwhm_deg": 78.68437610680081,
+            "fwhm_err_deg": 5.517225705793409,
+            "fraction": 0.951720000446861,
+            "fraction_err": 0.4281320995685967,
+            "delta_bic_vs_isotropic_replacement": 524.3768925783288,
+            "replacement_delta_chi2_per_bin": 0.7206519353602361,
+            "fraction_isotropic_correlation": -0.9999918791656018,
+            "reason": "fraction trades with the isotropic fraction within 3σ"
+          }
+        ],
+        "fraction_iso": 0.9517200007982399,
+        "fraction_iso_err": 0.0021711835020701586,
+        "oriented_fraction": 0.04827999920176007,
+        "reduced_chi2": 3.3659350539936344
+      },
+      {
+        "phase": "PbI2",
+        "determined": true,
+        "reasons": [],
+        "axes": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        "populations": [
+          {
+            "fwhm_deg": 51.239185311922746,
+            "fwhm_err_deg": 4.437007019675704,
+            "fraction": 0.5695842124598809,
+            "fraction_err": 0.09694828830887513,
+            "delta_bic_vs_isotropic_replacement": 90.48332927897195,
+            "replacement_delta_chi2_per_bin": 1.1966386806574114,
+            "fraction_isotropic_correlation": -0.9924128862794033,
+            "axis": [
+              0,
+              0,
+              1
+            ]
+          },
+          {
+            "fwhm_deg": 13.46473870709265,
+            "fwhm_err_deg": 1.666128568303387,
+            "fraction": 0.04901214659318594,
+            "fraction_err": 0.014302758676154796,
+            "delta_bic_vs_isotropic_replacement": 90.48332927897195,
+            "replacement_delta_chi2_per_bin": 1.1966386806574114,
+            "fraction_isotropic_correlation": -0.5526853101708478,
+            "axis": [
+              0,
+              0,
+              1
+            ]
+          }
+        ],
+        "near_random": [],
+        "fraction_iso": 0.38140364094693324,
+        "fraction_iso_err": 0.10411765523568789,
+        "oriented_fraction": 0.6185963590530668,
+        "reduced_chi2": 1.7859892988814567
+      }
+    ],
+    "cells": [
+      {
+        "phase": "MAPbI3 (tetragonal)",
+        "ok": true,
+        "reason": "",
+        "system": "tetragonal",
+        "values": {
+          "a": 8.933505868367465,
+          "c": 12.646446515703978,
+          "V": 1009.2816230227179
+        },
+        "errors": {
+          "a": 0.002191987346058593,
+          "c": 0.0037849869168553093,
+          "V": 0.6385479462771922
+        },
+        "zero_shift": 0.002951796962187015,
+        "zero_shift_error": 0.0004544426084244229
+      },
+      {
+        "phase": "PbI2",
+        "ok": false,
+        "reason": "Fewer usable peak positions than free parameters.",
+        "system": "trigonal",
+        "values": {},
+        "errors": {}
+      }
+    ]
+  }
+}
