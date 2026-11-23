@@ -31,6 +31,13 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter ▸ Compare…**: several results side by side, for example the same metal on a homopolymer and on a block
+  copolymer. The result shown and the newest other one start ticked; more can be ticked or added from any folder and
+  renamed. One small plot per quantity against the nominal deposit (or the time): the solution shown of each window
+  and, as open squares, the report's model-free readings (film thickness from the fringes, grain height, optical
+  density, lateral scale); a growth table with the package's descriptors and the metal amount at which each stage
+  starts. **Export…** writes both tables as CSV with where every value comes from, and the plots as PNG and PDF.
+  GIMaP computes none of the values (*Physics and Methods* 12.1; manual 8.1).
 - **Sputter ▸ Analyze, Refine and Full for Cu and Ag on a polymer film**: the joint fit also starts every film
   window from the model's film-density fluctuation switched on and from a dense film with small grains on it, each
   refined on its own, and keeps them where the data fit them better; over the scan it keeps only the metal amount and

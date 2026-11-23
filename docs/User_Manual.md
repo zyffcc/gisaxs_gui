@@ -3535,6 +3535,32 @@ evolution that is smooth over the scan. They were not compared with an independe
 result. A folder without a result of Analyze (one of the earlier method, Predict, which is no longer part of GIMaP)
 is not opened. Chapter 12 says where the results are.
 
+**Compare scans.** **Compare…** (in the bar, beside **Export…**) puts several results side by side — for example the
+same metal on a homopolymer and on a block copolymer. Its list holds the result shown and the results analysed in the
+results folder, newest first; the result shown and the newest other one start ticked, so after analysing two scans one
+click compares them. Tick more, or take one from any folder with **Add Result…**; double-click a name to change it
+(the name labels the plots and the files); **Remove** takes a result off the list and leaves its files.
+
+- **Horizontal axis**: **Nominal deposit** (rate × time of each window: scans sputtered at different rates are
+  compared at the same amount of metal) or **Time** since the onset of the deposition.
+- **Curves**: one small plot per quantity, one colour per result. Dots joined by a line are the solution shown in each
+  window, as chosen on the main screen (radius R, height H, distance D, gap, coverage, the continuous layer t_b);
+  open squares are what the package's report reads from the data without the model — the film thickness from the
+  fringes, the grain height from its fringe, the optical density of the metal (α/α_c)² and the lateral scale 2π/q.
+- **Growth**: the growth descriptors of each result in a column (the metal amount at coverage 0.5 and at which the
+  film forms, the growth laws of D and R, the distance and the radius once the film has formed) and the metal amount
+  at which each stage starts.
+- **Export…** writes `compare_curves.csv` and `compare_growth.csv` (the folder, metal, substrate, model family and
+  mode of every result in `#` lines) and the plots `compare.png` (300 dpi) and `compare.pdf` into a folder you choose.
+
+GIMaP computes none of these values: it reads them from each result and places them side by side. Results are only as
+comparable as their inputs — the same metal, the rate given the same way (QCM reading or at the sample) and the same
+mode.
+
+![Compare Scans with two made-up results](manual_images/en/22c_sputter_compare.png)
+*Compare Scans with two made-up results (invented values): one metal on two polymers, against the nominal deposit.
+Open squares are read from the data without the model.*
+
 ### 8.2 Details
 
 **Main Screen | Details** at the right of the bar switches to Details. At the left, from the top:
@@ -4298,6 +4324,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
 | Sputter ▸ **Analyze** (section 8.1) | a folder per request: `analysis.json` (status, model family, steps, the files), the package's `REPORT.md`, `report.png`, `report.csv`, `windows.csv`, `summary.json`, `evolution.png`, `patterns.png` and step logs, and `main/` with `main.json` and one `w_<t>.npz` + `w_<t>.png` per time window (the measured image and the model image of every solution) | the scan's folder in the user data folder (or **More options ▸ Save results in**): `sputter/<scan>-<code>/iampred-<code>/`; the same request to the same package shows the result it has. The frames as the package read them are kept in GIMaP's local folder (`%LOCALAPPDATA%\GIMaP\sputter_client\` on Windows, `~/Library/Caches/GIMaP/sputter_client/` on macOS), at most 5 GB by default (**Details ▸ Storage**); the steps' details are in the result's `trace/` | `gimap_request.json` (the request, the label of the imported scan, the package and its version, the Python, the command) |
 | Sputter ▸ another **Solution shown** on the main screen | `choices.json`: the solution chosen per time window, where it is not the default | the result's `main/`; when it cannot be written, the user data folder: `sputter_client/choices/` | the file itself (result folder, GIMaP version, time) |
+| Sputter ▸ **Compare…** ▸ **Export…** (section 8.1) | `compare_curves.csv` (every quantity of every ticked result against the nominal deposit or the time), `compare_growth.csv` (the growth table), `compare.png` (300 dpi) and `compare.pdf` | a folder you choose (starts beside the first result) | `#` header lines: every result's folder, scan, metal, substrate, model family and mode, and where the values come from |
 | XRR Series Extractor ▸ **Export CSV…** | `<source>_xrr.csv` + `.json` | next to the source file; for a folder chosen with **Folder…**, inside it, named after it | the JSON (every value that determines qz and its origin; `center_convention`; `source_layout` with every file read) |
 | Format Converter | converted frames: `<source>.<ext>` for a single-frame source; for a multi-frame source by default `<source>_<frame counted from 1, 6 digits>.<ext>`; `_001` … added on a name collision; or one `converted_images.h5` (`converted_images_001.h5` … when it exists) | `converted/` next to the first input | `conversion_report.json`, `conversion_metadata.json` (or one JSON per frame) |
 | SEM Particle Analysis ▸ **Export SEM results…** | the files of section 9.3 | a new `SEM_analysis_<date>_<time>/` in the folder you choose; never overwrites | `sem_analysis.json`; `#` header line in the CSVs |

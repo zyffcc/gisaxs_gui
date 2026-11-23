@@ -64,12 +64,14 @@ class ScanInspector(Protocol):
 
 
 class SputterService:
-    def __init__(self, inspector: ScanInspector, results_root: Callable[[], Path], client=None):
+    def __init__(self, inspector: ScanInspector, results_root: Callable[[], Path], client=None, compare=None):
         self.inspector = inspector
         self.results_root = results_root
         """The default results root (``<user data>/sputter``); the user may name another one."""
         self.client = client
         """``ClientService`` (Analyze: the client analysis package, ``application/client.py``), None without it."""
+        self.compare = compare
+        """``CompareService`` (Compare Scans: ``application/compare.py``), None without Analyze."""
 
     def inspect(self, folder: Path) -> ScanInfo:
         return self.inspector.inspect(Path(folder))

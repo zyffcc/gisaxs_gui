@@ -23,7 +23,9 @@
   （`SputterService`、扫描的结果文件夹）、`infrastructure/client.py`、`infrastructure/process.py`、
   `presentation/views/sputter_main_view.py`、`presentation/client_flow.py`、`rate_flow.py`（速率与单位）、`client_panel.py`、
   `client_texts.py`、`pattern_view.py`、`evolution_view.py`、`real_space_view.py` 与 `domain/real_space.py`（实空间示意）、
-  `components_view.py` 与 `domain/process.py`（组分与生长过程）；
+  `components_view.py` 与 `domain/process.py`（组分与生长过程）；比较扫描：`domain/compare.py`、`application/compare.py`、
+  `infrastructure/compare_files.py`、`presentation/compare_flow.py`、`compare_dialog.py`、`views/sputter_compare_view.py`、
+  `i18n/zh_sputter_compare.py`；
   详情：`presentation/views/sputter_page_view.py`、`geometry.py`、`result_tabs.py`（时间窗、报告、日志）、`process_tab.py`
   （生长过程）、`project_state.py`；
   并行进程数：`presentation/workers_flow.py`；读帧耗时的文字：`presentation/reading_texts.py`；
@@ -57,8 +59,10 @@
   步骤标签页、连续金属层、实时视图只留所示的图）、
   [`tests/test_sputter_storage.py`](../../../tests/test_sputter_storage.py)（本机文件夹、用户数据文件夹里旧的读入数据、
   上限与最久未用者先删、存储区）、
-  [`tests/test_sputter_client_bundle.py`](../../../tests/test_sputter_client_bundle.py)（随仓库的分析包）
-- **Last verified**: 2026-11-18（步骤树、步骤的产出、联合精修迭代内的进度、连续金属层、存储：离线测试，编造的事件、细节文件与
+  [`tests/test_sputter_client_bundle.py`](../../../tests/test_sputter_client_bundle.py)（随仓库的分析包）、
+  [`tests/test_sputter_compare.py`](../../../tests/test_sputter_compare.py)（比较扫描：曲线与读数、生长表、导出的来源行、列表与勾选、
+  改名与取消勾选、添加结果、中文）
+- **Last verified**: 2026-11-23（比较扫描：离线测试，编造的结果；另在离屏窗口里浅色英文、浅色中文、深色截图核对）；2026-11-18（步骤树、步骤的产出、联合精修迭代内的进度、连续金属层、存储：离线测试，编造的事件、细节文件与
   缓存；另在离屏窗口里浅色英文、深色中文截图核对）；2026-11-17（状态行与联合精修的虚线：离线测试，编造的事件与结果，另在离屏窗口里浅色、深色截图核对）；
   2026-11-17（并行进程数、读帧耗时、各步用时：离线测试，编造的事件与结果）；2026-11-16（删除“预测”、新的详情、速率单位、联合精修解、闭合的膜：离线测试，编造的结果）；
   2026-11-16（输入栏的“沉积后”与静态帧的实时视图：离线测试；另在本机用一份真实的沉积后样品在离屏窗口里经输入栏走完三步
@@ -428,6 +432,30 @@ q_y，float16，各项之和为 1）。读取：`domain/process.py`（`ProcessAn
 - 详情 ▸ **生长过程**（`presentation/process_tab.py`，标签页第 2 个）：依据的解、生长阶段表、生长规律表（这条扫描的值、
   同一金属与基底的中位数和范围、位置）、各时间窗所显示解的各项占比表（跟着主屏的选择变）；旧结果或静态系列一行说明原因。
 - 文字：`i18n/zh_sputter_process.py`。测试：`tests/test_sputter_process.py`。
+
+## 比较扫描（Compare…）
+
+输入栏第二行“导出…”右边的**比较…**（`views/sputter_compare_view.py` 的 `compare_button`，`compare_flow.CompareMixin`）打开
+**比较扫描**（`compare_dialog.CompareDialog`，非模态；布局在 `views/sputter_compare_view.py` 的 `CompareDialogView`）。
+
+- **列表**：主屏显示的结果在第一行，其后是结果根（更多选项里填的那个和默认的那个）下分析过的结果
+  （`CompareService.analysed` → `infrastructure/compare_files.CompareFolderFiles.analysed`：`<根>/*/iampred-*` 与
+  `<根>/iampred-*`，`analysis.json` 的 `status == "ok"` 且有 `main/main.json`，按 `main.json` 的修改时间新者在前，至多 40 个）。
+  主屏显示的结果和最新的另一个一开始就勾选（没有主屏结果时勾最新的两个）。一个结果在第一次勾选时才读（`CompareService.load`：
+  `ClientService.open`、`choices`，以及 `report.csv` 的读数 `domain/compare.report_readings`）；读不出时取消勾选并用 toast 说明。
+  名称默认 `<扫描> · <基底>`（`default_name`），双击可改，改过的名称读入后不被覆盖（`NAMED_ROLE`）。**添加结果…**
+  （`QFileDialog.getExistingDirectory`）、**移除**（只拿掉列表项）。再按一次**比较…**把同一个对话框提到前面并勾选主屏此刻显示的结果。
+- **横轴**（`axis_switch`）：`nominal`（每个时间窗的 `h_nom`）或 `time`（`t_rel`，没有时用时间）。读数的横轴来自
+  `report.csv` 的 `h_nom` 和 `t`（减去起点）。
+- **曲线**（`ComparePlots`，Matplotlib）：`domain/compare.CURVES` 里至少一个结果有的量，各一张小图（不多于 4 个时一行，5–9 个三列，
+  更多四列）；模型量画所示的解（与主屏的选择相同，按需求的时间窗 `on_demand` 不画），读数（来源为 `reading`，估计值不画）画空心
+  方块。每个结果一种数据颜色（`SCAN_COLOURS`，两种主题都看得清）。`drawn` 记下画出的 {量: {名称: (x, 值)}}（测试用）。
+- **生长**（`growth_table`，`enable_table_copy`，`DATA_HEADERS`）：`domain/compare.growth_rows`——`process.DESCRIPTORS` 里至少
+  一个结果有的描述量，然后每个阶段开始时的金属量（`STAGE_ROW`，模板与阶段名分别翻译）。数值三位有效数字（`shown_number`）。
+- **导出…**：`CompareService.write_tables` 写 `compare_curves.csv`（长表：scan、quantity、unit、source、横轴、value）和
+  `compare_growth.csv`，`#` 头行写每个结果的文件夹、扫描、金属、基底、模型族、模式和“GIMaP 不计算这些值”；图在
+  `theme.figures.exported_colors` 里存为 `compare.png`（300 dpi）和 `compare.pdf`。完成后 toast 带“打开文件夹”。
+- 语言与主题：连接 `language_changed()`（`apply_to` 后重画）和 `theme_manager().changed`；关闭时断开。页面 `dispose()` 先关闭它。
 
 ## 记住的内容（偏好 `sputter_page`）
 
