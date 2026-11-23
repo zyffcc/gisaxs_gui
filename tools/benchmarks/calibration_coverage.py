@@ -179,6 +179,17 @@ def simulate(seed: int, target: int, gaps: np.ndarray, max_order: int | None = N
                                 first_ring_counts=first, background_counts=level)
 
 
+def line_checked_candidate(result, image):
+    """Keep the link from a headless candidate to its ring points through the line check."""
+    summary = describe_calibration(result)
+    first = result.selected_candidate
+    candidates = [first, *(c for c in result.candidates if c != first)]
+    for index, description in enumerate([summary, *summary["alternatives"]]):
+        description["benchmark_index"] = index
+    summary = with_line_checks(summary, image)
+    return summary, candidates[summary["benchmark_index"]]
+
+
 def calibrated(image, truth, wavelength, estimate) -> dict:
     start = time.perf_counter()
     try:
@@ -188,32 +199,19 @@ def calibrated(image, truth, wavelength, estimate) -> dict:
                                                    pixel_size_y_m=PIXEL_M)
     except Exception as error:  # a failure is a result of the benchmark
         return {"failed": f"{type(error).__name__}: {error}", "identified": False}
-    summary = with_line_checks(describe_calibration(result), image)
-    candidate = result.selected_candidate
-    fit = np.array([candidate.center_x_px + 0.5, candidate.center_y_px + 0.5, candidate.distance_mm,
-                    candidate.rot1_deg, candidate.rot2_deg])
-    headless_beam = summary["beam_center_px"]
-    headless_distance = summary["distance_mm"]
-    headless_identified = bool(
-        summary["tilt_refined"] and summary["uncertainty"]["distance_mm"] is not None
-        and all(value is not None for value in summary["tilt_uncertainty_deg"])
-        and abs(headless_distance / truth[2] - 1) < 0.05
-        and np.hypot(*(np.asarray(headless_beam) - truth[:2])) < 5
-    )
+    summary, candidate = line_checked_candidate(result, image)
+    fit = np.array([*summary["beam_center_px"], summary["distance_mm"], *summary["rotations_deg"][:2]])
+    sigma = np.array([*summary["uncertainty"]["beam_center_px"], summary["uncertainty"]["distance_mm"],
+                      *summary["tilt_uncertainty_deg"]], float)
     record = dict(seconds=round(time.perf_counter() - start, 2), matched_rings=candidate.matched_ring_count,
                   orders=[ring.theoretical_index + 1 for ring in candidate.matched_rings],
                   method=candidate.uncertainty_method, tilt_refined=candidate.tilt_refined,
-                  chosen_by=summary["chosen_by"], fit=named(GIMAP_KEYS, fit),
-                  headless_beam_center_px=headless_beam, headless_distance_mm=headless_distance,
-                  headless_identified=headless_identified,
+                  chosen_by=summary["chosen_by"], returned_index=summary["benchmark_index"],
+                  fit=named(GIMAP_KEYS, fit, 12), sigma=named(GIMAP_KEYS, sigma, 12),
+                  tilt_vector_error_deg=float(np.linalg.norm(fit[3:] - truth[3:])),
                   identified=bool(abs(fit[2] / truth[2] - 1) < 0.05 and np.hypot(*(fit[:2] - truth[:2])) < 5))
-    if not candidate.tilt_refined or candidate.distance_sigma_mm is None:
-        return {**record, "failed": "tilt not refined (fewer than 3 matched rings) or no uncertainty",
-                "identified": False}
-    if candidate.rot1_sigma_deg is None or candidate.rot2_sigma_deg is None:
-        return {**record, "failed": "no tilt uncertainty from the full fit", "identified": False}
-    sigma = np.array([candidate.center_x_sigma_px, candidate.center_y_sigma_px, candidate.distance_sigma_mm,
-                      candidate.rot1_sigma_deg, candidate.rot2_sigma_deg], float)
+    if not candidate.tilt_refined or not np.all(np.isfinite(sigma)):
+        return {**record, "failed": "tilt not refined or incomplete standard errors", "identified": False}
     replicates, covariance = gimap_spread(fit_points[id(candidate)], candidate, wavelength)
     values = np.array([engine_to_gimap(params) for params in replicates])
     n = len(values)
@@ -221,7 +219,7 @@ def calibrated(image, truth, wavelength, estimate) -> dict:
     sigma_ls = ls_sigma_gimap(covariance)
     if candidate.uncertainty_method == THREE_RING_UNCERTAINTY_METHOD:
         sigma_from_points = np.r_[np.maximum(sigma_from_points[:3], sigma_ls[:3]), sigma_ls[3:]]
-    record.update(sigma=named(GIMAP_KEYS, sigma), sigma_ls=named(GIMAP_KEYS, sigma_ls),
+    record.update(sigma_ls=named(GIMAP_KEYS, sigma_ls, 12),
                   jackknife_fits=n, sigma_check_max_relative_difference=float(np.max(
                       np.abs(sigma_from_points - sigma) / np.maximum(sigma, 1e-12))))
     if candidate.matched_ring_count == 3:
@@ -240,8 +238,8 @@ def run_case(job) -> dict:
     estimate = truth[2] * np.random.default_rng(seed + 7).uniform(0.85, 1.15)
     tilt = math.degrees(math.acos(math.cos(math.radians(truth[3])) * math.cos(math.radians(truth[4]))))
     record = dict(case=index, seed=seed, target_rings=target, orders_drawn=max_order or "all",
-                  truth=named(GIMAP_KEYS, truth), estimate_mm=estimate,
-                  tilt_deg=round(tilt, 3), **{key: round(value, 4) for key, value in setup.items()})
+                  truth=named(GIMAP_KEYS, truth, 12), estimate_mm=estimate,
+                  tilt_deg=tilt, **{key: round(value, 4) for key, value in setup.items()})
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder) / "simulated_agbh.npy"
         path.write_bytes(b"simulated AgBh frame")
@@ -259,8 +257,10 @@ def coverage_table(records, name: str, sigma_key: str) -> dict:
         row = {"cases": len(chosen)}
         for key in GIMAP_KEYS:
             ratio = np.array([abs(r[name]["fit"][key] - r["truth"][key]) / r[name][sigma_key][key] for r in chosen])
-            row[key] = {"within_1sigma": round(float(np.mean(ratio <= 1)), 3),
-                        "within_2sigma": round(float(np.mean(ratio <= 2)), 3),
+            row[key] = {"within_1sigma_count": int(np.count_nonzero(ratio <= 1)),
+                        "within_2sigma_count": int(np.count_nonzero(ratio <= 2)),
+                        "within_1sigma": float(np.mean(ratio <= 1)),
+                        "within_2sigma": float(np.mean(ratio <= 2)),
                         "median_error_over_sigma": round(float(np.median(ratio)), 3)}
         if sigma_key == "sigma" and all(r[name]["method"] == "ring jackknife" for r in chosen):
             dof = np.array([r[name]["jackknife_fits"] - 1 for r in chosen])
@@ -275,10 +275,9 @@ def identified_share(records, name: str) -> str:
     return f"{sum(r[name]['identified'] for r in records)}/{len(records)}"
 
 
-def headless_recovery(records, name: str) -> dict:
-    if not any("headless_identified" in r[name] for r in records):
-        return {}
-    return {"headless_identified": f"{sum(r[name].get('headless_identified', False) for r in records)}/{len(records)}"}
+def tilt_accuracy(records, name: str) -> dict:
+    errors = [r[name]["tilt_vector_error_deg"] for r in records if "fit" in r[name]]
+    return {"returned": len(errors), "p95_tilt_vector_error_deg": float(np.percentile(errors, 95)) if errors else None}
 
 
 def not_identified(records, name: str) -> dict:
@@ -301,22 +300,21 @@ def calibration_times(records, name: str) -> dict:
 
 
 def engine_summary(records, name: str) -> dict:
-    good = [r for r in records if r[name]["identified"]]
+    good = [r for r in records if "sigma_ls" in r[name]]
     three = [r for r in good if r[name]["matched_rings"] == 3]
     many = [r for r in good if r[name]["matched_rings"] >= 7]
     targets = (("3", 3, 3), ("4-6", 4, 6), ("7-9", 7, 9))
     tilts = (("<1", 0, 1), ("1-2", 1, 2), ("2-3", 2, 3), (">=3", 3, 99))
     return {
         "identified": identified_share(records, name),
-        **headless_recovery(records, name),
+        **tilt_accuracy(records, name),
         "calibration_and_line_check_seconds_per_frame": calibration_times(records, name),
         "identified_by_target_rings": {label: identified_share([r for r in records if low <= r["target_rings"] <= high],
                                                                name) for label, low, high in targets},
         "identified_by_tilt_deg": {label: identified_share([r for r in records if low <= r["tilt_deg"] < high], name)
                                    for label, low, high in tilts},
         "not_identified": not_identified(records, name),
-        "line_check_switched_candidate": sum(str(r[name].get("chosen_by")).startswith("line positions")
-                                             for r in records),
+        "line_check_switched_candidate": sum(r[name].get("returned_index", 0) > 0 for r in records),
         "coverage_reported_sigma": coverage_table(good, name, "sigma"),
         "coverage_least_squares_sigma": coverage_table(good, name, "sigma_ls"),
         "within_1sigma_with_covariance_floor_7plus": {
@@ -349,11 +347,13 @@ def three_ring_set(cases: int, workers: int, seed0: int) -> tuple[dict, list[dic
 def three_ring_summary(meta: dict, records: list[dict]) -> dict:
     summary = {**meta, "set_up": "as the main set with about 3 rings on the detector, but orders above 3 not drawn"}
     name = "as_shipped"
-    good = [r for r in records if r[name]["identified"] and r[name]["matched_rings"] == 3]
+    good = [r for r in records if "sigma_ls" in r[name] and r[name]["matched_rings"] == 3]
     example = good[0] if good else None
     summary[name] = {
-        "identified": identified_share(records, name), "identified_with_3_rings": len(good),
-        **headless_recovery(records, name),
+        "identified": identified_share(records, name),
+        "identified_with_3_rings": sum(r[name]["identified"] for r in good),
+        "covariance_tilt_fallbacks": sum(r[name]["method"] == THREE_RING_UNCERTAINTY_METHOD for r in good),
+        **tilt_accuracy(records, name),
         "calibration_and_line_check_seconds_per_frame": calibration_times(records, name),
         "not_identified": not_identified(records, name),
         "coverage_reported_sigma": coverage_table(good, name, "sigma").get("3"),
@@ -377,8 +377,11 @@ def coverage_summary(meta: dict, records: list[dict]) -> dict:
     return {
         **meta, "set_up": SIMULATION,
         "identified_means": "tilt refined with a 1 sigma, |L - L_true| < 5 % and the beam within 5 px of the truth",
-        "engines": {"as_shipped": "CalibrationEngine as in this checkout, with guided ring extraction and fitted "
-                                  "candidate ranking by the supported and missing rings and the point residual"},
+        "scored_candidate": "Geometry returned after with_line_checks, including its own five standard errors "
+                            "and matched-ring count. Tilt-vector error is hypot(rot1-returned minus true rot1, "
+                            "rot2-returned minus true rot2), in degrees, for every returned geometry. Coverage "
+                            "counts all returned joint fits with five standard errors, including misidentified fits. "
+                            "Empirical coverage of +/- one standard error need not equal 68 percent.",
         "three_rings_jackknife": "Leave one of three rings out and refit all five parameters. If any replicate is "
                                  "unconverged, physically inadmissible, or has a rank-deficient normalized Jacobian, "
                                  "hold tilt fixed in all three replicates. In that fallback, use full-fit covariance "
