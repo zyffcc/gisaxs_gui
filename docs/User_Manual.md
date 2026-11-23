@@ -4633,7 +4633,7 @@ the analysis package that comes with GIMaP in
 set with **More options ▸ Save results in** (section 8.2; chapter 12); a result of Analyze is in its subfolder
 `iampred-<code>/`. They are kept until you delete them.
 
-**Does anything leave my computer?** A remote AI assistant (Claude Code, Claude API or another provider's server) receives the frame status and numerical values of reduced curves. The detector file stays on your computer. Sending a small q-map image requires your permission (section 10.6). With a model on your computer or lab server, the data stay on that network. StarDist, Predict parameters and 2D Prediction run locally without downloads.
+**Does anything leave my computer?** Your data leave it only when you use a remote AI assistant (Claude Code, Claude API or another provider's server), which receives the frame status and numerical values of reduced curves. The detector file stays on your computer. Sending a small q-map image requires your permission (section 10.6). With a model on your computer or lab server, the data stay on that network. StarDist, Predict parameters and 2D Prediction run locally without downloads. GIMaP itself does not go online.
 
 **Help ▸ GitHub Repository**, **Check for Updates…**, **Report a Problem…** and the 2D Prediction model library open your browser on request. **Report a Problem…** copies the GIMaP and system versions to the clipboard and opens a new GitHub issue. You choose what to paste and submit. The clipboard summary contains no paths or data.
 

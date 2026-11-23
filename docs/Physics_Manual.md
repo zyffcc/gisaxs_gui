@@ -2386,7 +2386,7 @@ Int_i is the scale of component i. Every family is normalised to P(0) = 1 (secti
 of component i at q = 0 (times S_i(0)). BG is a constant background (not multiplied by k), A, w and ν the amplitude,
 width and exponent of the beam-tail term, and k an overall factor fixed at 1 by default. By default the model depends on
 `abs(q)` only: spheres are evaluated at q_z = 0, the effective interface approximation. With the angles of the cut
-entered, spheres use the direct and the exit-reflected path of the DWBA instead (section 9.10). The beam-tail term is
+entered, spheres can use the direct and the exit-reflected path of the DWBA instead (section 9.10). The beam-tail term is
 additive, not a resolution convolution. With w ≤ 0 or ν ≤ 0 the term is 1.
 
 **q resolution (σ_q, off by default).** With σ_q > 0 each particle term `Int_i·T_i` is convolved with a Gaussian
@@ -3178,8 +3178,8 @@ levels 1 and 3, and at |q| = √(q² + q₊²) at levels 2 and 4 (q is the in-pl
 Level 4 includes only the direct Born path for these cylinders. It omits their reflected-wave interference.
 
 For spheres at level 1, the median radius error stays within about 5 % up to q₊R ≈ 1.7; single fits can exceed it.
-Above q₊R 1.7, on simulated four-term DWBA cuts on Si, the median error of R is 15–29 % at level 1, 4–40 % at level 2
-and 4–7 % at level 3. DWBA programs such as BornAgain and IsGISAXS evaluate the terms with the substrate's refractive
+Above q₊R 1.7, on simulated four-term DWBA cuts on Si, the median error of R is 10–23 % at level 1, 4–34 % at level 2
+and 4–8 % at level 3. DWBA programs such as BornAgain and IsGISAXS evaluate the terms with the substrate's refractive
 index and need no such approximation, so GIMaP says when it matters:
 
 - A solution fitted at level 1 whose sphere or random cylinder has q₊R above 1.7 (R its radius, the populations
@@ -3217,8 +3217,9 @@ index and need no such approximation, so GIMaP says when it matters:
 **The model error.** A model error per point says how well the model can describe a measured cut. Without it, the
 68 % intervals were too narrow on simulated curves that Fitting's model describes closely but not exactly: the values
 the curve fixes sharply, above all D and σnn/D, moved by more than the counting errors allow. 5 % is the smallest
-floor at which the 68 % intervals held the truth in at least 68 % of the cases, both on curves of Fitting's own model
-and on curves with added effects. Steps 1–3 keep the counting errors, because the floor there led some fits into
+floor at which the 68 % intervals held the truth in at least 68 % of the cases on simulated development curves, both
+in Fitting's own model and with a beam tail, roughness and resolution. On the benchmark curves with these effects the
+intervals of R hold the truth less often (*Benchmark* below). Steps 1–3 keep the counting errors, because the floor there led some fits into
 other modes. On curves that the model describes exactly, the 68 % intervals are therefore conservative.
 
 The floor was calibrated on a **linear grid** of 397 points from 0.02 to 2 nm⁻¹ (Δq = 0.005 nm⁻¹; on average 198.5
@@ -4878,7 +4879,7 @@ fits, and names the section that states it in full.
   horizontal particle terms are smeared (sections 8.6, 9.2, 9.13). Fitting and Predict parameters use sizes by
   number unless a component's Sizes says otherwise (sections 8.5, 9.3). Without a given composition the automatic
   analysis lets the network choose among one or two populations of spheres and upright cylinders; random cylinders
-  and three populations are fitted only when given (section 8.6).
+  and three populations are fitted only when given (section 8.5).
 - **Cylinder height from a joint fit.** The bare-substrate DWBA leaves out the particle layer's effective
   refractive index and assumes independent radii and heights. Dense or high-Z layers can give heights that are too
   low, and radius–height correlation can bias the height even with a good fit (section 9.18).
