@@ -56,8 +56,8 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    只返回前 3 个，外加 `chosen`。报告的解（`chosen`）就是最可能的那个，附 R、h、D 的 68 % 后验区间（决策
    `fit intervals`；区间不含几何和模型选择）。拟合决策给出组成的概率或 BIC 权重；同一组成有多个解时也给出所报告解的份额。
    另一种组成的概率或 BIC 权重 ≥ 0.2（`ASK_PROBABILITY`）时，Needs attention 里的 “model” 列出竞争的组成及其概率或权重。
-   同一组成中还有权重 ≥ 0.2 的解时，逐群比较 R、h、D。若两解各自的精修值都落在对方的 68 % 区间内，拟合决策便记录重叠；
-   若有值落在区间外或缺少区间，Needs attention 里的 “values” 会列出对应参数。分别从这两个解出发在 Fitting 中精修，再比较结果。
+   同一组成中还有权重 ≥ 0.2 的解时，逐群比较 R、h、D。若两解每个数值的 68 % 区间都相互重叠，拟合决策便记录重叠；
+   若某个数值的区间不重叠或缺少区间，Needs attention 里的 “values” 会列出对应参数。分别从这两个解出发在 Fitting 中精修，再比较结果。
    停在范围边界上的非线性参数列在每个解的 `at_bounds` 里（表里写 “D at its upper bound”），它们不由
    曲线确定；报告的解有这样的值时 Needs attention 里有一条 “fit”。振幅、背景 BG 和直射束拖尾振幅 A 按非负最小二乘求解，
    不算边界：等于 0 时 Decisions 有一条 `fit caveat`（“Background at 0, the non-negativity limit”；Tail A = 0 时 Tail w、Tail ν
@@ -107,7 +107,7 @@ python tools/gimap_agent.py auto tests/data/external/gisaxs_galaxi/galaxi_data.t
   有 15 个点落在另一半的缺口里，只来自一半）；
 - shoulder 在 |qy| = 0.0113 Å⁻¹，2π/q* = 55.6 nm（特征长度；接近模型的 53.6 nm 只是巧合，去掉干涉的模拟也有 shoulder）；
 - 报告的解（`chosen`）为带次晶的球和竖直圆柱，R 分别为 3.28 和 5.98 nm，球的 D = 48.8 nm。χ²ᵣ = 1.048，598 个点中 596 个参与拟合。按证据估算，该组成的概率为 0.9995，两组解各占总概率的 0.5126 和 0.4869。
-  存档中的首选解球半径为 3.278 nm，低于第二个解的 68 % 区间下限 3.294 nm，因此 Needs attention 里的 “values” 提示核对 R (1)。
+  两个解的 68 % 区间相互重叠（R (1) 为 [3.267, 3.441] 和 [3.294, 3.471] nm），因此 Needs attention 里没有 “values”。
   在 q_z = 0.5226 nm⁻¹，报告标记球半径的区间覆盖率（`qzR_cov:R_1`），并提示竖直圆柱可能代表半径相近的球（`cyl_sphere:R_2`，q_z·R = 3.13）。
 
 这个例子正好说明：选模型要看用户知道的形状（这里是球），并在 Fitting 里确认；不能只看概率或 χ²ᵣ，也不能把 2π/q* 当间距。

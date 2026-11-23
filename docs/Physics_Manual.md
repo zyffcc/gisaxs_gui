@@ -2334,8 +2334,8 @@ Further rules of the report (`gisaxs_choice.py`):
   by its most probable solution. The report identifies representatives whose D is within 15 % of D* (section 8.4).
   For a model with multiple solutions, the fit decision gives both the model's total weight and the reported solution's weight.
 - For each other solution of the reported composition with solution weight ≥ 0.2, compare the refined R, h and D
-  of each population. The two solutions agree when every applicable estimate in each solution lies inside the
-  corresponding 68 % interval of the other. The fit decision records this overlap. If an estimate falls outside or
+  of each population. The two solutions agree when the 68 % intervals of every applicable value overlap: two starts
+  that ended in one mode. The fit decision records this overlap. If the intervals of a value do not overlap or
   an interval is missing, *Needs attention* (**values**) names the parameter and shows the estimates and available intervals.
 - A value of the reported solution at a bound: *Needs attention* (**fit**) says that those values are not determined
   by the curve.
@@ -2352,8 +2352,8 @@ population of each solution: rank, model, χ²ᵣ (`chi2`; a `#` line gives the 
 **GALAXI.** On the public GALAXI frame (α_i = 0.463°, `galaxi_bornagain.poni`) the earlier first-level fit reported an upright cylinder
 with a paracrystal next to a second upright cylinder, R = 3.17 / 6.15 nm, D = 44 / – nm, χ²ᵣ = 1.07 over 596 of 598
 points, probability 0.39. In the worked example in User Manual section 10.7, the leading model has a sphere with a
-paracrystal and an upright cylinder. Its probability rounds to 1.00. The reported sphere radius (3.278 nm) lies
-below the second solution's 68 % interval (3.294–3.471 nm), so the report flags R (1) under **values**.
+paracrystal and an upright cylinder. Its probability rounds to 1.00, shared by two solutions whose 68 % intervals
+overlap (R (1) 3.267–3.441 and 3.294–3.471 nm), so that the report records one mode and asks nothing about the values.
 The cut's broad log-normal sizes and its low-q rise are described by two populations; the sample's
 particles are spheres (BornAgain's model, section 9.10), which a fit with a sphere in Model and the particles of
 Model as the composition describes (section 9.13). The choice of model is the user's: the automatic analysis

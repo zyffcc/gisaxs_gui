@@ -1755,9 +1755,9 @@ The Results tab asks you to choose a model only when another composition has a p
 least 0.2. It names the competing models and gives the total probability or weight of each. It also identifies models
 whose most probable solution has D within 15 % of the cut's length scale 2π/q\*. When the reported model has several
 solutions, the fit decision also gives the reported solution's own probability or weight. For another solution of the same
-model with a probability or weight of at least 0.2, the analysis compares R, h and D for each population. When each refined value
-lies inside the other solution's 68 % interval in both directions, the decision records the overlap. If a value falls
-outside or an interval is missing, the report identifies the value to check. Refine from each starting solution in
+model with a probability or weight of at least 0.2, the analysis compares R, h and D for each population. When the 68 % intervals
+of every value of the two solutions overlap, the two starts ended in one mode, and the decision records the overlap.
+If the intervals of a value do not overlap or an interval is missing, the report identifies the value to check. Refine from each starting solution in
 **Fitting** and compare the fits.
 
 The report gives the refined R, h and D of the reported
@@ -4097,8 +4097,8 @@ a possible sphere (`cyl_sphere:R_2`). The BornAgain reference uses spheres of ra
 gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
 the candidate solutions and their weights. On the archive platform the leading composition had evidence probability
 0.9995, divided between two solutions with weights 0.5126 and 0.4869. For the sphere radius R (1), the first gave
-3.278 [3.267, 3.441] nm and the second 3.310 [3.294, 3.471] nm. The first estimate falls below 3.294 nm, so the
-**values** item asks you to compare the two fits. In `fit_curve.csv`, `sigma` gives the pointwise standard error and `fit_sigma` includes the correlation between points that share interpolated measurements. Exit code 2 means that an item needs attention in the report.
+3.278 [3.267, 3.441] nm and the second 3.310 [3.294, 3.471] nm. These intervals overlap, as do those of D and of
+the cylinder radius, so that the decision records one mode found from two starts and nothing is asked about the values. In `fit_curve.csv`, `sigma` gives the pointwise standard error and `fit_sigma` includes the correlation between points that share interpolated measurements. Exit code 2 means that an item needs attention in the report.
 The same folder contains `qmap.png` and `report.json`. The run summaries are
 `fig4/summary.md` and `fig4/summary.json`.
 

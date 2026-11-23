@@ -246,7 +246,7 @@ def _value_differences(reported, other):
                 continue  # h and D exist only for components that fit them
             first, second = _finite(first), _finite(second)
             a, b = interval(reported, key, index), interval(other, key, index)
-            if a and b and a[0] <= second <= a[1] and b[0] <= first <= b[1]:
+            if a and b and a[0] <= b[1] and b[0] <= a[1]:  # the 68 % intervals overlap: one mode found twice
                 continue
             name = fit_names.display_name(f"{key}_{index + 1}", count > 1)
             yield name, _estimate_text(first, a), _estimate_text(second, b)
@@ -255,8 +255,8 @@ def _value_differences(reported, other):
 def compare_same_model(solutions: list[dict], reported: Optional[dict] = None) -> tuple[int, list[tuple[str, str, str]]]:
     """Count solutions consistent with the reported one (including itself), and list differences for the others.
 
-    A probable solution agrees only if every refined R, h and D is in the corresponding 68 % interval of the
-    other solution, in both directions. The comparison uses full precision before formatting the differences.
+    A probable solution agrees when, for every refined R, h and D, its 68 % interval overlaps that of the reported
+    solution (two starts that ended in one mode); a missing interval counts as a difference. The comparison uses full precision before formatting the differences.
     """
     if not solutions:
         return 0, []

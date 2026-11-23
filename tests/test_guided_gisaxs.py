@@ -770,7 +770,20 @@ def test_same_model_reports_mutual_overlap_and_both_weights(weight_key, label):
     assert [row[weight_key] for row in report["gisaxs"]["fit"]["solutions"]] == [0.55, 0.45]
 
 
-@pytest.mark.parametrize("missing_interval", [False, True], ids=["one-way-containment", "missing-interval"])
+def test_same_model_with_overlapping_intervals_is_one_mode():
+    """As on the GALAXI frame (R (1) 3.278 [3.267, 3.441] and 3.310 [3.294, 3.471] nm): one value lies outside the other
+    solution's interval, but the intervals overlap, so that the two starts found one mode and nothing is asked."""
+    model = "sphere (S) + upright cylinder"
+    rows = [_weighted_row(i, model, weight, 1.0, 2, "probability", composition_count=2)
+            for i, weight in enumerate((0.51, 0.49), 1)]
+    rows[1]["least_squares_values"] = {"D_1": 58.0}
+    rows[1]["posterior"]["D_1"] = [58, 58, 52, 70, 45, 80]  # 50 of the first lies below 52, 58 inside [40, 60]
+    report = _fit_report(rows)
+    assert report["needs_attention"] == []
+    assert "2 solutions of this model with overlapping 68 % intervals" in _decision(report, "fit")["decision"]
+
+
+@pytest.mark.parametrize("missing_interval", [False, True], ids=["separate-intervals", "missing-interval"])
 def test_same_model_flags_only_the_unresolved_parameter(missing_interval):
     model = "sphere (S) + upright cylinder"
     rows = [_weighted_row(i, model, weight, 1.0, 2, "probability", composition_count=2)
@@ -778,16 +791,16 @@ def test_same_model_flags_only_the_unresolved_parameter(missing_interval):
     if missing_interval:
         del rows[1]["posterior"]["h_2"]
     else:
-        # The intervals overlap and contain 50. Only the second interval contains the refined value 65.
-        rows[1]["least_squares_values"] = {"D_1": 65.0}
-        rows[1]["posterior"]["D_1"] = [65, 65, 45, 85, 25, 105]
+        # The 68 % intervals of D (1) do not overlap: 50 [40, 60] and 90 [75, 105].
+        rows[1]["least_squares_values"] = {"D_1": 90.0}
+        rows[1]["posterior"]["D_1"] = [90, 90, 75, 105, 60, 120]
     report = _fit_report(rows)
     point, = report["needs_attention"]
     assert point["item"] == "values"
     if missing_interval:
         assert "h (2)" in point["why"] and "68 % interval unavailable" in point["why"]
     else:
-        for text in ("D (1)", "50 [40, 60] nm", "65 [45, 85] nm"):
+        for text in ("D (1)", "50 [40, 60] nm", "90 [75, 105] nm"):
             assert text in point["why"]
     assert "Fitting" in point["hint"] and "each start" in point["hint"] and "compare" in point["hint"]
     assert "overlapping" not in _decision(report, "fit")["decision"]

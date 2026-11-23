@@ -125,8 +125,8 @@ in order of probability, or BIC weight if evidence sampling failed. Report the c
 values, posterior medians where available, interval kind and diagnostics. Call bic_weight a BIC weight. \
 Give the model's weight and, for a model with several solutions, the reported solution's share. Ask the user to choose \
 a model only when another composition has weight 0.2 or more. For another solution of the reported model with weight \
-at least 0.2, check each refined R, h and D against the other solution's 68 % interval in both directions. Ask about \
-the values if this comparison fails or an interval is missing. χ²ᵣ is the reduced χ² over the fitted points ('points': \
+at least 0.2, compare the 68 % intervals of each refined R, h and D of the two solutions. Ask about \
+the values if the intervals of a value do not overlap or an interval is missing. χ²ᵣ is the reduced χ² over the fitted points ('points': \
 fitted of given, the rest below the network's q window). A value in at_bounds ended on a \
 bound of its range and is not determined by the curve: say so. A distance D of hundreds of nm means \
 no correlation in the q range, not a measured distance. The model is confirmed in Fitting.
