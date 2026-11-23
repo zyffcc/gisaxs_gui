@@ -46,7 +46,8 @@ def growth_prior_used(setting, metal, substrate):
 
 
 VARIANT_FAMILIES = ("cu_p5", "polyag_p3")
-VARIANT_ARGS = ["--variant", "lnRP=1.791759,lnAP=0", "--variant-refine", 15]
+VARIANT_ARGS = ["--variant", "lnRP=1.791759,lnAP=0", "--variant", "fb=0.9,lnR=1.1,lnRP=1.791759,lnAP=0",
+                "--variant-refine", 15, "--monotone", "lnh_mass,lnt_film"]
 
 
 def variant_args(family, sequence):
