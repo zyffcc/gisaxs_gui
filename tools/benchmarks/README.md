@@ -3,6 +3,100 @@
 Scripts behind the numbers that *Physics and Methods* and the GIMaP paper quote. They use public or synthetic data
 only and write their summaries next to themselves.
 
+## Round-7 reruns (r15)
+
+The recovery, sensitivity and timing runs for revision 15 all use commit `65a640b0` with a clean
+fitting tree (`ea44c0cbf8875fc84dbf6303e847c2b7e904d1e0`). Freezing Predict lets the comparisons
+attribute differences to the simulated physics, fitting options or curve sets.
+The first (`fit1d`), third (`fresh`) and `extended` sets draw independent NumPy `SeedSequence` streams
+by set name and case index, with separate children for particle parameters and Poisson noise. The simulated
+beam tail uses the sharp beam's integrated intensity and a resolution density normalised on the q grid.
+Composition scores use Predict's weights before display filtering. The winning composition specifies
+the particle family and paracrystal status of each population in radius order. For cuts with a winning
+weight of at least 0.99, Table 3 reports correct/total separately for evidence and BIC.
+
+Run the following shell setup from the repository root. Pass the name and options from one row to
+`run_predict`. Each run has its own checkpoint directory.
+
+```bash
+export OMP_NUM_THREADS=1
+export GIMAP_HOME="$(mktemp -d)"
+B=tools/benchmarks
+R="$B/results"
+N=src/gimap/features/fitting/domain/posterior/data/flow_v1
+run_predict() {
+    name=$1
+    shift
+    python "$B/posterior_recovery.py" --network "$N" --out "$name" \
+        --checkpoint "$GIMAP_HOME/checkpoints/$name" "$@"
+}
+```
+
+| Name | Options | Summary in `tools/benchmarks/` | Per-cut archive in `tools/benchmarks/` |
+|---|---|---|---|
+| `posterior_r15_fresh` | `--workers 5 --set fresh --auto` | `posterior_r15_fresh_summary.json` | `per_cut/posterior_r15_fresh.json.gz` |
+| `posterior_r15_first` | `--workers 5 --set fit1d --n 200 --auto` | `posterior_r15_first_summary.json` | `per_cut/posterior_r15_first.json.gz` |
+| `posterior_r15_dwba4_si` | `--workers 5 --set fit1d --n 200 --scattering dwba --substrate si --cut dwba --auto --auto-level 4` | `posterior_r15_dwba4_si_summary.json` | `per_cut/posterior_r15_dwba4_si.json.gz` |
+| `posterior_r15_dwba4_ps100` | `--workers 5 --set fit1d --n 200 --scattering dwba --substrate ps100 --cut dwba --auto --auto-level 4` | `posterior_r15_dwba4_ps100_summary.json` | `per_cut/posterior_r15_dwba4_ps100.json.gz` |
+| `posterior_r15_own` | `--workers 5 --set fit1d --n 200 --truth own` | `posterior_r15_own_summary.json` | `per_cut/posterior_r15_own.json.gz` |
+| `posterior_r15_dwba_born` | `--workers 4 --set fit1d --n 200 --scattering dwba --substrate si --cut born --auto` | `posterior_r15_dwba_born_summary.json` | `per_cut/posterior_r15_dwba_born.json.gz` |
+| `posterior_r15_dwba_tp` | `--workers 4 --set fit1d --n 200 --scattering dwba --substrate si --cut two_path` | `posterior_r15_dwba_tp_summary.json` | `per_cut/posterior_r15_dwba_tp.json.gz` |
+| `posterior_r15_dwba_eia` | `--workers 4 --set fit1d --n 200 --scattering dwba --substrate si --cut eia` | `posterior_r15_dwba_eia_summary.json` | `per_cut/posterior_r15_dwba_eia.json.gz` |
+| `posterior_r15_extended` | `--workers 4 --set extended --n 600` | `posterior_r15_extended_summary.json` | `per_cut/posterior_r15_extended.json.gz` |
+| `posterior_r15_floor03` | `--workers 4 --set fit1d --n 200 --model-error-floor 0.03` | `posterior_r15_floor03_summary.json` | `per_cut/posterior_r15_floor03.json.gz` |
+| `posterior_r15_floor08` | `--workers 4 --set fit1d --n 200 --model-error-floor 0.08` | `posterior_r15_floor08_summary.json` | `per_cut/posterior_r15_floor08.json.gz` |
+| `posterior_r15_amplitude100` | `--workers 4 --set fit1d --n 200 --constant infer.AMPLITUDE_RANGE=100` | `posterior_r15_amplitude100_summary.json` | `per_cut/posterior_r15_amplitude100.json.gz` |
+| `posterior_r15_timing` | `--workers 1 --set fit1d --n 24` | `posterior_r15_timing_summary.json` | `per_cut/posterior_r15_timing.json.gz` |
+
+Run the 24-cut timing row alone on an idle machine. The runs write per-cut records to `results/NAME.json`.
+Gzip those files into `per_cut/NAME.json.gz` for the archive. After the DWBA and first-set runs finish,
+derive the two paired comparisons from the same indexed cuts.
+
+```bash
+python "$B/posterior_pairs.py" "$B/posterior_r15_dwba_pairs.json" \
+    born="$R/posterior_r15_first.json" si_tp="$R/posterior_r15_dwba_tp.json" \
+    si_born="$R/posterior_r15_dwba_born.json" si_eia="$R/posterior_r15_dwba_eia.json"
+python "$B/posterior_pairs.py" --by-cut "$B/posterior_r15_dwba4_pairs.json" \
+    born="$R/posterior_r15_first.json" si_l1="$R/posterior_r15_dwba_eia.json" \
+    si_l2="$R/posterior_r15_dwba_born.json" si_l3="$R/posterior_r15_dwba_tp.json" \
+    si_auto2="$R/posterior_r15_dwba_born.json" si_l4="$R/posterior_r15_dwba4_si.json" \
+    ps100_l4="$R/posterior_r15_dwba4_ps100.json" si_auto4="$R/posterior_r15_dwba4_si.json" \
+    ps100_auto4="$R/posterior_r15_dwba4_ps100.json"
+```
+
+Search the parameter ranges and refine on the same 200 curves as `posterior_r15_first` with
+`python tools/benchmarks/search_baseline.py --set fit1d --n 200 --workers 8 --out search_baseline_r15`.
+This writes `search_baseline_r15_summary.json` and `results/search_baseline_r15.json`. Search accepts
+`fit1d` (the default), `fresh`, `legacy-first` and `legacy-third`. The root seed defaults to the
+selected set's seed and can be supplied with `--seed0`.
+
+The overlap audit compared each of the fresh and first sets with all earlier archived sets.
+Both comparisons found zero matching identifying tuples, populations, first-population numerical
+draws and noise seeds. Run this comparison before adding r15 to `per_cut/`, or use `--archive-dir`
+to select the earlier `per_cut/` directory with its sibling `history/`.
+
+```bash
+python "$B/check_case_overlap.py" --new-archive "$R/posterior_r15_fresh.json"
+python "$B/check_case_overlap.py" --new-archive "$R/posterior_r15_first.json"
+```
+
+The default revision is 15. To verify all 25 rows, pass the paper's Table 3, its `numbers.tex` definitions
+and the four external inputs. Use the merged-commit reruns of `galaxi_posterior.json` and
+`vertical_height_bias.json` in the benchmark directory (`--bench DIR`), and supply the measured Au
+rerun with `--au-fit`. The verifier reads the producing commits from those files. For the frozen Predict
+runs it reads compressed recovery records first and falls back to the JSON in `results/`. It lists
+missing sources and disagreements for each affected row.
+
+```bash
+python tools/benchmarks/table3_sources.py --revision 15 --table Table3.tex --numbers numbers.tex \
+    --all-pixel-q all_pixel_q.json --heldout-calibration heldout_calibration.json \
+    --au-fit au_fit.json --sem-reference sem_reference.json
+```
+
+## History of revision 14 and earlier
+
+The following sections document earlier benchmarks and their original results.
+
 The fit1d kit (*Predict parameters (fit1d)*) was removed from GIMaP in 0.2.0; it remains in the repository's history
 (`utils/gisaxs1d_gui_kit`). The scripts that compare against it keep the record of that comparison and need a copy of
 the kit: `fit1d_recovery.py` takes it from the environment variable `GISAXS1D_KIT_HOME`; `galaxi_fit1d.py` and the
@@ -69,7 +163,7 @@ cuts with replacement and recomputes the ratio of hits to eligible populations. 
 and `bootstrap95` fields give 68% percentile bounds for the two nominal coverages. The default is
 10,000 resamples with seed 0. Wilson intervals in composition reliability bins use one outcome per cut.
 
-**Table 3, revision 14.** Run `python tools/benchmarks/table3_sources.py` to check the historical table.
+**Table 3, revision 14.** Run `python tools/benchmarks/table3_sources.py --revision 14` to check the historical table.
 The JSON report maps all 23 rows to their inputs, fields, producer information, reductions and counts.
 Recovery rows read `per_cut/*.json.gz` directly. The verifier reproduces the composition definition
 used for each printed historical row. For example, `--only first.high third.auto extended.composition`
@@ -501,7 +595,7 @@ The other scripts (the commands of the paper's Predict runs are above):
 ```bash
 GISAXS1D_KIT_HOME=<copy of the kit> python tools/benchmarks/fit1d_recovery.py --n 200 --workers 10
 GISAXS1D_KIT_HOME=<copy of the kit> python tools/benchmarks/fit1d_recovery.py --set extended --n 1200 --seed0 20261201 --out fit1d_heldout
-python tools/benchmarks/search_baseline.py --n 200 --workers 10
+python tools/benchmarks/search_baseline.py --set legacy-first --n 200 --workers 10 --out search_baseline_replay
 python tools/benchmarks/galaxi_posterior.py   # in an environment with BornAgain 24
 python tools/benchmarks/analyze_speed.py --repeat 5 --json tools/benchmarks/analyze_speed.json
 python tools/benchmarks/pyfai_comparison.py --json tools/benchmarks/pyfai_comparison.json  # in an environment with pyFAI

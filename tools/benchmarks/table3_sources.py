@@ -1,18 +1,25 @@
-"""Verify the revision-14 Table 3 row by row. See --help and the benchmark README."""
+"""Verify Table 3 row by row from the benchmark records and supplied manuscript."""
 from __future__ import annotations
 
 import argparse
 import gzip
 import json
+import math
 import re
 import sys
 from functools import lru_cache
 from pathlib import Path
 
 if __package__:
+    from .case_streams import SETS
+    from .composition_scores import METHOD
     from .table3_metrics import reduce_row
+    from .table3_metrics_r15 import reduce_row as reduce_r15
 else:
+    from case_streams import SETS
+    from composition_scores import METHOD
     from table3_metrics import reduce_row
+    from table3_metrics_r15 import reduce_row as reduce_r15
 
 HERE = Path(__file__).resolve().parent
 BENCH = "tools/benchmarks/"
@@ -45,7 +52,7 @@ HISTORIC = ("results[].truth_families; choose.families/probability and choose.al
 # Each entry is one printed row. Pinned cells are reproducible from the distributed files;
 # rows requiring third-party inputs must be checked against the separately supplied table.
 # In ranges and paired statistics the order is the printed reading order.
-ROWS = {
+ROWS14 = {
     "all_pixel_q": ([("@all-pixel-q", None, "python figures/scripts/q_difference_pyfai.py")],
                     "max(frames[].max_abs_relative_all_pixels); upper bound to one significant digit", None),
     "radial": ([source("pyfai_comparison.json", "pyfai_comparison", "--json <output.json>")],
@@ -89,21 +96,131 @@ ROWS = {
 }
 
 
+FROZEN = "65a640b0"
+FITTING_TREE = "ea44c0cbf8875fc84dbf6303e847c2b7e904d1e0"
+
+
+def predict_run(name, options):
+    stem = f"posterior_r15_{name}"
+    return source(f"per_cut/{stem}.json.gz", "posterior_recovery",
+                  f"--network {NETWORK} --out {stem} --checkpoint <checkpoint-dir>/{stem} {options}", FROZEN)
+
+
+FIRST15 = predict_run("first", "--workers 5 --set fit1d --n 200 --auto")
+FRESH15 = predict_run("fresh", "--workers 5 --set fresh --auto")
+EXT15 = predict_run("extended", "--workers 4 --set extended --n 600")
+SI_CUT = "--workers 4 --set fit1d --n 200 --scattering dwba --substrate si --cut "
+DWBA15 = [predict_run("dwba_tp", SI_CUT + "two_path"), predict_run("dwba_born", SI_CUT + "born --auto"),
+          predict_run("dwba_eia", SI_CUT + "eia")]
+
+
+def paired_run(stem, labels, by_cut=False):
+    pairs = " ".join(f"{label}={BENCH}results/posterior_r15_{run}.json" for label, run in labels)
+    return source(stem, "posterior_pairs", ("--by-cut " if by_cut else "") + BENCH + stem + " " + pairs)
+
+
+PAIRS15 = paired_run("posterior_r15_dwba_pairs.json",
+                     [("born", "first"), ("si_tp", "dwba_tp"), ("si_born", "dwba_born"), ("si_eia", "dwba_eia")])
+BY_CUT15 = paired_run("posterior_r15_dwba4_pairs.json",
+                      [("born", "first"), ("si_l1", "dwba_eia"), ("si_l2", "dwba_born"), ("si_l3", "dwba_tp"),
+                       ("si_auto2", "dwba_born"), ("si_l4", "dwba4_si"), ("ps100_l4", "dwba4_ps100"),
+                       ("si_auto4", "dwba4_si"), ("ps100_auto4", "dwba4_ps100")], by_cut=True)
+CHOICE = ("composition_score on results[].choose.composition_weights and truth_composition_index "
+          "(radius-ordered families and structure)")
+HIGH = CHOICE + ", winning weight >= 0.99, correct/eligible for evidence then bic"
+
+
+def unpinned(key):
+    items, fields, _ = ROWS14[key]
+    return items, fields, None
+
+
+ROWS15 = {
+    **{key: unpinned(key) for key in ("all_pixel_q", "radial", "agbh", "calibration", "calibration_heldout",
+                                      "independent_model", "bornagain")},
+    "first.error": ([FIRST15], ROWS14["first.error"][1], None),
+    "first.coverage": ([FIRST15], ROWS14["first.coverage"][1], None),
+    "first.composition": ([FIRST15], CHOICE + ", correct percent by level", None),
+    "first.high": ([FIRST15], HIGH, None),
+    "third.error": ([FRESH15], ROWS14["third.error"][1], None),
+    "third.coverage": ([FRESH15], ROWS14["third.coverage"][1], None),
+    "third.composition": ([FRESH15], CHOICE + ", overall correct percent", None),
+    "third.high": ([FRESH15], HIGH, None),
+    "third.auto": ([FRESH15], CHOICE.replace(".choose.", ".auto.") +
+                   ", overall correct percent, matched-count auto radius median error and 68% coverage", None),
+    "extended.error": ([EXT15], ROWS14["extended.error"][1], None),
+    "extended.composition": ([EXT15], CHOICE + ", correct percent by level", None),
+    "network.error": ([FIRST15], ROWS14["network.error"][1], None),
+    "search": ([source("search_baseline_r15_summary.json", "search_baseline",
+                       "--set fit1d --n 200 --workers 8 --out search_baseline_r15")], ROWS14["search"][1], None),
+    "dwba": ([PAIRS15, *DWBA15], 'runs.{si_tp,si_born,si_eia}["sphere q+R 2.3-3.5"].R.median_abs', None),
+    "dwba4": ([BY_CUT15], "runs.{si_l4,si_l2}.overall.choose.{composition_right,parameters.R.median_abs_relative}", None),
+    "galaxi": ([source("galaxi_posterior.json", "galaxi_posterior")], ROWS14["galaxi"][1], None),
+    "height": ([source("vertical_height_bias.json", "vertical_height_bias")],
+               "cases[name].summary.full.h.noise_free_bias, max absolute off, Si 10%, least/most negative Au", None),
+    "au": ([(name, None, cmd) for name, _, cmd in ROWS14["au"][0]], ROWS14["au"][1], None),
+}
+REVISIONS = {14: ROWS14, 15: ROWS15}
+
+
 @lru_cache(maxsize=12)
 def read_json(path):
     with (gzip.open if path.suffix == ".gz" else open)(path, "rt", encoding="utf-8") as stream:
         return json.load(stream)
 
 
-def evidence(item, bench, external):
+def recovery_stamp(summary, command):
+    code = summary["code"]
+    if not code["commit"].startswith(FROZEN) or code.get("fitting_code_modified") is not False:
+        raise ValueError(f"expected Predict commit {FROZEN} with fitting_code_modified: false")
+    if "fitting_tree" in code and code["fitting_tree"] != FITTING_TREE:
+        raise ValueError("archive fitting tree disagrees with the frozen commit")
+    args = command.split()
+    set_name = args[args.index("--set") + 1]
+    n, seed = SETS[set_name]
+    if (summary["n"], summary["set"], summary["seed0"]) != (n, set_name, seed):
+        raise ValueError("archive count, set or root seed disagrees with the producing command")
+    expected = dict(stream_scheme="seedsequence-v1", truth="independent", auto="--auto" in args)
+    for option, default in (("cut", "born"), ("substrate", "si"), ("scattering", "born_qz")):
+        flag = "--" + option
+        expected[option] = args[args.index(flag) + 1] if flag in args else default
+    for key, value in expected.items():
+        if summary["settings"][key] != value:
+            raise ValueError(f"archive setting {key} disagrees with the producing command")
+    return code["commit"]
+
+
+def evidence(item, bench, external, revision):
     name, commit, command = item
     path = external.get(name[1:]) if name.startswith("@") else bench / name
     if path is None:
         raise ValueError("missing --" + name[1:])
+    if name.startswith("per_cut/posterior_r15_") and not path.exists():
+        unpacked = bench / "results" / path.stem
+        if not unpacked.exists():
+            raise ValueError(f"missing archive: {name} or results/{path.stem}")
+        path = unpacked
     d = json.load(sys.stdin) if name == "@sem-reference" and path == Path("-") else read_json(path)
-    record = dict(file=path.name if name.startswith("@") else BENCH + name,
+    record = dict(file=path.name if name.startswith("@") else BENCH + path.relative_to(bench).as_posix(),
                   producing_commit=commit, command=command)
-    if "summary" in d:
+    if name.startswith("per_cut/posterior_r15_"):
+        record.update(producing_commit=recovery_stamp(d["summary"], command), commit_source="summary.code.commit")
+    elif name == BY_CUT15[0] and d.get("composition_method") != METHOD:
+        raise ValueError(f"{name}: paired report must use {METHOD}")
+    elif name == "search_baseline_r15_summary.json":
+        n, seed = SETS["fit1d"]
+        if (d["n"], d["set"], d["seed0"], d["stream_scheme"]) != (n, "fit1d", seed, "seedsequence-v1"):
+            raise ValueError("search baseline did not use the r15 first set")
+        code = d["code"]
+        if not code["commit"] or code.get("fitting_code_modified") is not False:
+            raise ValueError("search baseline needs a producing commit and unmodified fitting code")
+        record.update(producing_commit=code["commit"], commit_source="code.commit")
+    elif revision == 15 and name in ("galaxi_posterior.json", "vertical_height_bias.json"):
+        code = d.get("code", {})
+        if not code.get("commit") or code.get("fitting_code_modified") or code.get("modified"):
+            raise ValueError(f"{name}: supply the stamped rerun from the merged commit")
+        record.update(producing_commit=code["commit"], commit_source="code.commit")
+    elif "summary" in d:
         code = d["summary"].get("code", {})
         if code and (code["commit"] != commit or code.get("fitting_code_modified")):
             raise ValueError(f"{name}: archive code stamp disagrees with recorded producer")
@@ -120,7 +237,8 @@ def evidence(item, bench, external):
                       command=f"python {BENCH}calibration_check.py --part coverage --cases {coverage['cases']} "
                               f"--seed {coverage['seed0']} --workers {coverage['workers']} --json <output.json>")
     elif name == "@au-fit":
-        if d["code"].get("modified") or not d["code"]["commit"].startswith(commit):
+        producer = d["code"]["commit"]
+        if not producer or d["code"].get("modified") or (commit and not producer.startswith(commit)):
             raise ValueError("measured fit has local changes or a different producing commit")
         record.update(producing_commit=d["code"]["commit"], commit_source="code.commit",
                       command=f"python series.py fit {d['cycle']}")
@@ -142,7 +260,7 @@ def tex_values(cell):
     return [float(x) for x in re.findall("-?" + NUMBER, text)]
 
 
-def manuscript_rows(table, numbers):
+def manuscript_rows(table, numbers, revision=15):
     macros = dict(re.findall(r"\\newcommand\{\\([A-Za-z]+)\}\{(.*)\}\s*$",
                              numbers.read_text(encoding="utf-8"), re.M))
     rows = []
@@ -154,10 +272,11 @@ def manuscript_rows(table, numbers):
             continue
         expand = lambda m: macros.get(m[1], m[0])
         rows.append((re.sub(r"\\([A-Za-z]+)", expand, label), re.sub(r"\\([A-Za-z]+)", expand, cell)))
-    if len(rows) != len(ROWS):
-        raise ValueError(f"expected {len(ROWS)} data rows in the revision-14 Table 3, found {len(rows)}")
+    manifest = REVISIONS[revision]
+    if len(rows) != len(manifest):
+        raise ValueError(f"expected {len(manifest)} data rows in the revision-{revision} Table 3, found {len(rows)}")
     expected = {}
-    for key, (label, cell) in zip(ROWS, rows):
+    for key, (label, cell) in zip(manifest, rows):
         printed = tex_values(cell)
         if key in ("calibration", "calibration_heldout", "au"):
             printed = tex_values(label) + printed
@@ -165,35 +284,38 @@ def manuscript_rows(table, numbers):
     return expected
 
 
-def verify(bench, external, expected=None, only=None, strict=False):
+def verify(bench, external, expected=None, only=None, strict=False, revision=15):
     read_json.cache_clear()
     report = {}
-    for key, (items, fields, pinned) in ROWS.items():
+    reducer = reduce_r15 if revision == 15 else reduce_row
+    for key, (items, fields, pinned) in REVISIONS[revision].items():
         if only and key not in only:
             continue
         row = report[key] = dict(fields=fields, sources=[], issues=[])
         inputs = []
         for item in items:
             try:
-                d, record = evidence(item, bench, external)
+                d, record = evidence(item, bench, external, revision)
                 inputs.append(d)
                 if strict and record["producing_commit"] is None and item[0] != "@sem-reference":
                     row["issues"].append(f"unknown producing commit for {item[0]}")
-            except (KeyError, ValueError, TypeError, OSError, EOFError) as exc:
+            except (KeyError, ValueError, TypeError, AttributeError, OSError, EOFError) as exc:
                 record = dict(file=item[0], producing_commit=item[1], command=item[2])
                 row["issues"].append(str(exc))
             row["sources"].append(record)
         if len(inputs) != len(items):
             continue
         try:
-            row.update(reduce_row(key, inputs))
-            got = [float(v) for v in row["printed"]]
+            row.update(reducer(key, inputs))
+            got = [float(value) for cell in row["printed"] for value in re.split("--|/", cell)]
+            if not all(map(math.isfinite, got)):
+                raise ValueError("non-finite value in printed cells")
             if pinned is not None and got != pinned:
                 row["issues"].append(f"disagrees with pinned historical cells {pinned}")
             if expected is not None and got != expected[key]:
                 row["issues"].append(f"disagrees with supplied Table 3 cells {expected[key]}")
             if pinned is None and expected is None:
-                row["issues"].append("supply --table and --numbers to verify the external result")
+                row["issues"].append("supply --table and --numbers to verify the printed result")
         except (KeyError, IndexError, ValueError, ArithmeticError, TypeError) as exc:
             row["issues"].append(f"cannot regenerate: {exc}")
     return report
@@ -201,11 +323,12 @@ def verify(bench, external, expected=None, only=None, strict=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--revision", choices=REVISIONS, type=int, default=15, help="paper revision (default: 15)")
     parser.add_argument("--bench", type=Path, default=HERE, help="directory containing the shipped benchmark files")
-    parser.add_argument("--table", type=Path, help="revision-14 LaTeX Table 3, with --numbers")
+    parser.add_argument("--table", type=Path, help="LaTeX Table 3 for the selected revision, with --numbers")
     parser.add_argument("--numbers", type=Path, help="LaTeX macro definitions used by the table")
     parser.add_argument("--strict-provenance", action="store_true", help="also fail on unrecorded producing commits")
-    parser.add_argument("--only", choices=list(ROWS), nargs="+", help="verify selected row IDs")
+    parser.add_argument("--only", choices=sorted(ROWS14.keys() | ROWS15.keys()), nargs="+", help="verify selected row IDs")
     for name, desc in (("all-pixel-q", "figure's all-pixel geometry JSON"),
                        ("heldout-calibration", "separate held-out calibration run JSON"),
                        ("au-fit", "stamped series fit JSON for the measured row"),
@@ -213,14 +336,16 @@ def main(argv=None):
                         "reference (use - to read JSON from stdin)")):
         parser.add_argument("--" + name, type=Path, help=desc)
     args = parser.parse_args(argv)
+    if args.only and (unknown := set(args.only).difference(REVISIONS[args.revision])):
+        parser.error(f"unknown row(s) for revision {args.revision}: {', '.join(sorted(unknown))}")
     if bool(args.table) != bool(args.numbers):
         parser.error("supply --table and --numbers together")
     try:
-        expected = manuscript_rows(args.table, args.numbers) if args.table else None
+        expected = manuscript_rows(args.table, args.numbers, args.revision) if args.table else None
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     external = {k.replace("_", "-"): v for k, v in vars(args).items()}
-    rows = verify(args.bench, external, expected, args.only, args.strict_provenance)
+    rows = verify(args.bench, external, expected, args.only, args.strict_provenance, args.revision)
     print(json.dumps(rows, indent=2, ensure_ascii=True, allow_nan=False))
     return int(any(r["issues"] for r in rows.values()))
 

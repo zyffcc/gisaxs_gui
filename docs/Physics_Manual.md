@@ -3444,6 +3444,13 @@ For composition c the weight is Σ wₘ over modes m of c. A correct choice requ
 to match every true particle family and paracrystal flag in increasing radius order. Reliability bins report
 correct and total cuts separately for evidence and BIC. The original archives omit some mode weights.
 
+Revision 15 fixes the Predict code at commit `65a640b0`. Search uses the same 200 first-set curves.
+For the recovery rows in Table 3, a cut contributes radius errors when its fitted and true population
+counts agree. Pair the populations in increasing radius order and take |R_fit/R_true − 1| for each pair.
+The median and 90th percentile describe those errors. For coverage, either endpoint of the reported
+interval counts as containing the true radius. For composition choices with winning weight ≥ 0.99,
+the table reports correct/total for evidence and BIC separately. [Round-7 sources and verification](../tools/benchmarks/README.md#round-7-reruns-r15)
+
 For a parameter interval, let Hᵢ of Nᵢ eligible populations on cut i contain the true value. The measured coverage
 is Σ Hᵢ / Σ Nᵢ. To obtain its 68% uncertainty interval, resample whole cuts with replacement within each level,
 recompute the ratio, and take the 16th and 84th percentiles. Each draw keeps all populations of the sampled cut.

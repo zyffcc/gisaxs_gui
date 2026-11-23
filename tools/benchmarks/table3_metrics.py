@@ -114,27 +114,29 @@ def recovery(key, data):
     return result(printed, **counts)
 
 
-def dwba(data):
+def sphere_radius_bin(run):
     if __package__:
         from .recovery_cases import GEOM
     else:
         from recovery_cases import GEOM
 
-    printed, counts = [], []
-    for run in data:
-        errors = []
-        for r in archive_rows(run):
-            truth = sorted(r["case"]["populations"], key=lambda p: p["R"])
-            fit = r["fit"]
-            if fit["ok"] and len(fit["populations"]) == len(truth):
-                for t, g in zip(truth, fit["populations"]):
-                    if t["shape"] == "sphere" and 2.3 <= GEOM.qz_vacuum * t["R"] < 3.5:
-                        errors.append(abs(g["R"] - t["R"]) / t["R"])
-        if not errors:
-            raise ValueError("empty sphere q_z R bin")
-        printed.append(format(100 * np.median(errors), ".0f"))
-        counts.append(len(errors))
-    return result(printed, eligible_spheres=counts)
+    errors = []
+    for r in archive_rows(run):
+        truth = sorted(r["case"]["populations"], key=lambda p: p["R"])
+        fit = r["fit"]
+        if fit["ok"] and len(fit["populations"]) == len(truth):
+            for t, g in zip(truth, fit["populations"]):
+                if t["shape"] == "sphere" and 2.3 <= GEOM.qz_vacuum * t["R"] < 3.5:
+                    errors.append(abs(g["R"] - t["R"]) / t["R"])
+    if not errors:
+        raise ValueError("empty sphere q_z R bin")
+    return len(errors), float(np.median(errors))
+
+
+def dwba(data):
+    bins = [sphere_radius_bin(run) for run in data]
+    return result([format(100 * median, ".0f") for _, median in bins],
+                  eligible_spheres=[n for n, _ in bins])
 
 
 def reduce_row(key, inputs):

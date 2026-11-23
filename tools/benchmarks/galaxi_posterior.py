@@ -30,6 +30,7 @@ for path in (str(HERE), str(ROOT)):
 
 import galaxi_fit as gf  # noqa: E402
 from galaxi_fit1d import ALPHA_F, ALPHA_I, K, QZ, TRUTH  # noqa: E402
+from posterior_recovery import _code_state  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import encoding as E  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import network as posterior_network  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import refine  # noqa: E402
@@ -82,8 +83,8 @@ def main() -> None:
             values = best.get("values") or {}
             print(variant, source, best.get("composition"), "chi2/N", best.get("chi2"),
                   "R", (values.get("R_1") or {}).get("best"), "D", (values.get("D_1") or {}).get("best"), flush=True)
-    (HERE / "galaxi_posterior.json").write_text(json.dumps(dict(truth=TRUTH, qz=QZ, network=network.meta.get("sha256"),
-                                                                fits=rows), indent=1, default=str), encoding="utf-8")
+    payload = dict(code=_code_state(), truth=TRUTH, qz=QZ, network=network.meta.get("sha256"), fits=rows)
+    (HERE / "galaxi_posterior.json").write_text(json.dumps(payload, indent=1, default=str), encoding="utf-8")
 
 
 if __name__ == "__main__":

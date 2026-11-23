@@ -1,12 +1,13 @@
 """The baseline without a network: Fitting's *Search the ranges, then refine* on the held-out curves.
 
-The same 200 curves as posterior_recovery.py (recovery_cases.py; the independent forward model yoneda_truth.py), the
+The same curves as posterior_recovery.py on the selected recovery_cases set (independent forward model yoneda_truth.py), the
 same model (cut_model, sizes by number, LMA, the Born term at the cut's q_z, the beam tail free) and the true
 composition given, but no proposal: every population starts at Fitting's defaults and is searched over Fitting's
 default ranges (differential evolution, fit_engine.fit(method="global")), then refined by least squares. --budget is
 the number of model evaluations of the search (Fitting's own default: 4000).
-usage: python tools/benchmarks/search_baseline.py [--n 200] [--workers 8] [--budget 4000] [--out search_baseline]
-Writes tools/benchmarks/NAME_summary.json and every curve to results/NAME.json.
+usage: python tools/benchmarks/search_baseline.py [--set fit1d] [--seed0 SEED] [--n 200] [--workers 8]
+           [--budget 4000] [--out NAME]
+Writes tools/benchmarks/NAME_summary.json and every curve to results/NAME.json. NAME defaults to search_baseline_SET.
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ import json
 import os
 import sys
 import time
+from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -31,12 +33,13 @@ for p in (str(HERE), str(GIMAP)):
 
 import posterior_recovery as pr  # noqa: E402
 import recovery_cases as fr  # noqa: E402
+from case_streams import SETS  # noqa: E402
 from src.gimap.features.fitting.domain import fit_engine, fit_model as fm  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import encoding as E  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import infer  # noqa: E402
 
 BUDGET = 4000
-SEED0 = 20261116
+RECOVERY_SETS = tuple(name for name in SETS if name not in ("extended", "legacy-extended"))
 
 
 def start_model(composition: int, data) -> fm.FitModel:
@@ -54,9 +57,8 @@ def start_model(composition: int, data) -> fm.FitModel:
     return model
 
 
-def run(job) -> dict:
-    index, budget = job
-    case = fr.draw(index, SEED0, set_name="legacy-first")
+def run(index, *, budget, set_name, seed0) -> dict:
+    case = fr.draw(index, seed0, set_name=set_name)
     intensity, sigma = fr.curve(case)
     composition = pr._composition(case)
     data = infer.Cut.prepare(fr.Q, intensity, sigma, float(fr.GEOM.qz_vacuum), None)
@@ -76,32 +78,47 @@ def run(job) -> dict:
     return out
 
 
-def main() -> None:
+def main(argv=None) -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--set", default="fit1d", choices=RECOVERY_SETS)
+    ap.add_argument("--seed0", type=int, help="override the named set's root seed")
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--budget", type=int, default=BUDGET)
-    ap.add_argument("--out", default="search_baseline")
-    a = ap.parse_args()
+    ap.add_argument("--out", help="output basename (default: search_baseline_SET)")
+    a = ap.parse_args(argv)
+    seed0 = SETS[a.set][1] if a.seed0 is None else a.seed0
+    if min(a.n, a.workers, a.budget) < 1 or seed0 < 0:
+        ap.error("--n, --workers and --budget must be positive and --seed0 nonnegative")
+    name = a.out or f"search_baseline_{a.set}"
+    code = dict(pr._code_state(), source_sha256=pr._source_digest())
     fr.set_truth("born_qz", "si")
-    with Pool(a.workers) as pool:
-        results = list(pool.imap_unordered(run, [(i, a.budget) for i in range(a.n)], chunksize=1))
+    worker = partial(run, budget=a.budget, set_name=a.set, seed0=seed0)
+    if a.workers == 1:
+        results = list(map(worker, range(a.n)))
+    else:
+        with Pool(min(a.workers, a.n)) as pool:
+            results = list(pool.imap_unordered(worker, range(a.n)))
     results.sort(key=lambda r: r["case"]["index"])
     table = {level: pr._errors(results, "fit", level) for level in ("model", "measured", "all")}
     ok = [r for r in results if r["fit"].get("ok")]
-    summary = dict(n=len(results), failed=len(results) - len(ok), budget=a.budget, parameters=table,
+    chi2 = {}
+    for level in ("model", "measured", "all"):
+        values = [r["fit"]["chi2"] for r in ok if level == "all" or r["case"]["level"] == level]
+        chi2[level] = float(np.median(values)) if values else None
+    summary = dict(set=a.set, seed0=seed0, stream_scheme="legacy-offset" if a.set.startswith("legacy-") else "seedsequence-v1",
+                   code=code, n=len(results), failed=len(results) - len(ok), budget=a.budget, parameters=table,
                    median_seconds=float(np.median([r["fit"]["seconds"] for r in results])),
-                   median_chi2={level: float(np.median([r["fit"]["chi2"] for r in ok
-                                                        if level == "all" or r["case"]["level"] == level]))
-                                for level in ("model", "measured", "all")})
+                   median_chi2=chi2)
     (HERE / "results").mkdir(exist_ok=True)
-    (HERE / "results" / f"{a.out}.json").write_text(json.dumps(results, indent=1, default=float), encoding="utf-8")
-    (HERE / f"{a.out}_summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
+    archive = dict(summary=summary, results=results)
+    (HERE / "results" / f"{name}.json").write_text(json.dumps(archive, indent=1, default=float), encoding="utf-8")
+    (HERE / f"{name}_summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     for level in ("model", "measured"):
         row = table[level]
         print(level, {k: (None if row[k]["median_abs"] is None else round(row[k]["median_abs"], 4),
                           None if row[k]["p90_abs"] is None else round(row[k]["p90_abs"], 4)) for k in pr.KEYS},
-              "chi2", round(summary["median_chi2"][level], 2))
+              "chi2", round(chi2[level], 2) if chi2[level] is not None else None)
     print("seconds per curve", round(summary["median_seconds"], 1), "failed", summary["failed"])
 
 

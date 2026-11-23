@@ -61,6 +61,7 @@ from src.gimap.features.fitting.application import joint_fit as japp  # noqa: E4
 from src.gimap.features.fitting.domain import fit_model as fm  # noqa: E402
 from src.gimap.features.fitting.domain.joint_fit import SHARED, default_shared  # noqa: E402
 from src.gimap.features.fitting.domain.substrates import Substrate, optical_constants  # noqa: E402
+from tools.benchmarks.posterior_recovery import _code_state  # noqa: E402
 
 WAVELENGTH, ALPHA_I = 0.1045, 0.40
 SUBSTRATE = Substrate("Si")
@@ -433,6 +434,7 @@ def main(argv=None):
                               fits=[r for r in rows if r["case"] == case.name],
                               bornagain_seconds=simulated[case.name]["seconds"]))
     out = dict(
+        code=_code_state(),
         wavelength_nm=WAVELENGTH, alpha_i_deg=ALPHA_I, substrate="Si (GIMaP's table)", delta=DELTA, beta=BETA,
         horizontal_alpha_f_deg=ALPHA_C, horizontal_q_range=list(Q_RANGE), vertical_q_y=Q_Y,
         vertical_alpha_f_deg=list(ALPHA_RANGE), windows_alpha_f_min_deg=WINDOWS,

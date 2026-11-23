@@ -2681,6 +2681,10 @@ describes a measured curve only to a few per cent; the fit itself and its χ²�
 [Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters) describes the method and its
 benchmarks.
 
+To compare **Predict parameters** with Search on the same synthetic cuts, use the benchmark scripts
+in a source checkout. The round-7 instructions give the commands, archive names and checks for the paper's Table 3.
+[Round-7 reruns (r15)](../tools/benchmarks/README.md#round-7-reruns-r15)
+
 - **For the curve open in Fitting**: the method **Predict parameters** of the Fit step (below).
 - **For a list of curve files**: **Tools ▸ 1D Predict — Fit Many Curves…** (or **1D Predict Batch Window…**
   under *Options* in the Fit step) opens the 1D Predict window (further below). To fit every curve of a folder with

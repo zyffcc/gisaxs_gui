@@ -4,7 +4,7 @@ from tools.benchmarks import table3_sources as table3
 
 
 def test_shipped_archive_cells_and_missing_external_sources():
-    rows = table3.verify(table3.HERE, {})
+    rows = table3.verify(table3.HERE, {}, revision=14)
     assert len(rows) == 23
     assert {key for key, row in rows.items() if row["issues"]} == {"all_pixel_q", "calibration_heldout", "au"}
     assert rows["extended.composition"]["counts"]["measured"] == {"correct": 179, "eligible": 300}
@@ -17,7 +17,7 @@ def test_shipped_archive_cells_and_missing_external_sources():
 
 def test_missing_corrupt_and_changed_row_fail(tmp_path, capsys):
     def check(key):
-        status = table3.main(["--bench", str(tmp_path), "--only", key])
+        status = table3.main(["--revision", "14", "--bench", str(tmp_path), "--only", key])
         row = json.loads(capsys.readouterr().out)[key]
         assert status == 1 and row["issues"]
         return row
@@ -40,12 +40,12 @@ def test_explicit_reference_strict_provenance_and_rounding(tmp_path):
                              "heldout": {"commit": "45a32e74"}}))
     external = {"heldout-calibration": f}
     key = "calibration_heldout"
-    verified = table3.verify(tmp_path, external, {key: [9, 78]}, [key], strict=True)[key]
+    verified = table3.verify(tmp_path, external, {key: [9, 78]}, [key], strict=True, revision=14)[key]
     assert not verified["issues"]
     assert verified["counts"] == {"identified": 7, "frames": 9}
     assert "--seed 15" in verified["sources"][0]["command"]
-    assert table3.verify(tmp_path, external, {key: [9, 100]}, [key])[key]["issues"]
-    assert table3.verify(tmp_path, external, only=[key])[key]["issues"]
-    assert table3.verify(table3.HERE, {}, only=["search"], strict=True)["search"]["issues"]
+    assert table3.verify(tmp_path, external, {key: [9, 100]}, [key], revision=14)[key]["issues"]
+    assert table3.verify(tmp_path, external, only=[key], revision=14)[key]["issues"]
+    assert table3.verify(table3.HERE, {}, only=["search"], strict=True, revision=14)["search"]["issues"]
     assert table3.tex_values(r"$3.1 \times 10^{-5}$ / $10^{-7}$") == [3.1e-5, 1e-7]
     assert table3.tex_values(r"$-$5\% / $-$(4--9)\%") == [-5, -4, -9]
