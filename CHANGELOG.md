@@ -31,6 +31,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter ▸ Analyze, Refine and Full on a polymer film, whichever network is chosen**: the starts from the film-density
+  fluctuation and from a dense film, and the no-decrease rule on the metal amount and the film thickness only, now apply
+  whichever of the package's networks for Cu or Ag on a polymer film the comparison chose (before: only two of them; a
+  Cu-on-PEO test scan was refined with an earlier network without them) and at other energies, where the any-energy
+  network runs (analysis package 26151c8e). On that scan the fit deviation fell; values of such scans change.
 - **Sputter ▸ Compare…**: several results side by side, for example the same metal on a homopolymer and on a block
   copolymer. The result shown and the newest other one start ticked; more can be ticked or added from any folder and
   renamed. One small plot per quantity against the nominal deposit (or the time): the solution shown of each window
