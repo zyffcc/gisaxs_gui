@@ -31,6 +31,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter ▸ Analyze, Refine and Full for Cu and Ag on a polymer film**: the joint fit also starts every film
+  window once with the model's film-density fluctuation switched on, refined on its own, and keeps it where the data
+  fit it better (analysis package 88fbaf7f). On the scans it was tested on, the fit deviation fell and none grew by
+  more than 5 %; the joint fit takes several times longer. Values of these modes on polymer films change; Si, TiO₂
+  and mode Quick are unchanged (*Physics and Methods* 12.1).
 - **Sputter ▸ Analyze: what the model does not describe.** On a polymer film a line under the **Real Space** views
   says that no metal inside the polymer is drawn (for Cu: the data did not resolve it; for the other metals: the
   model has none), and the report of a metal on a polymer ends with a section on what the model does not describe —

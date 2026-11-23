@@ -173,7 +173,15 @@ def _render(args):
         _live_window(cfg, ctx, s, t, "refined", "refined", mu, d5, _wanted_live(cfg, ctx, xr, m, p, h, rep.tolist()))
         LV.progress("refine", n + 1, total, force=True, family=cfg["family"], evaluations=seen[0], current=0,
                     budget=budget)
-    for row, t, v in vtodo:
+    _refine_variants(cfg, s, vtodo, var)
+    return rows
+
+
+def _refine_variants(cfg, s, vtodo, var):
+    '--variant: each variant of vtodo [(row, t, variant)] refined on its own (var["refine"]); v["refined"].'
+    from . import adapter as A
+    for n, (row, t, v) in enumerate(vtodo):
+        LV.progress("refine", n, len(vtodo), family=cfg["family"])
         ctx = A.Context(cfg, s, t)
         nf = len(ctx.names)
         t0 = time.time()
@@ -188,6 +196,21 @@ def _render(args):
                                 seconds=time.time() - t0, nfev=var["refine"])
         except (Exception, SystemExit) as e:
             v["refined"] = dict(dev5=float("nan"), error=str(e)[:120])
+    if vtodo:
+        LV.progress("refine", len(vtodo), len(vtodo), force=True, family=cfg["family"])
+
+
+def _variant_pass(args):
+    "--variant in a --reuse run (the second step of analyze's refine mode): the variants of the reused rows, drawn"
+    cfg, scan, rows, var = args
+    from . import adapter as A
+    s = A.get_scan(scan)
+    vtodo = []
+    for row in rows:
+        row.pop("variants", None)
+        if "best" in row:
+            vtodo += [(row, row["t"], v) for v in _variants(A.Context(cfg, s, row["t"]), row["best"]["x"], var, row)]
+    _refine_variants(cfg, s, vtodo, var)
     return rows
 
 
@@ -675,6 +698,16 @@ def main():
             r.pop("seq", None)
         okf = [d for d in feats if d["ok"]]
         print(f"--reuse: {len(okf)} windows (features, candidates, per-window refinement) from state.json.gz", flush=True)
+        var = parse_variants(a.variant, info["pnames"], a.variant_refine, a.variant_min_fb)
+        if var and a.sequence > 0:
+            LV.step("joint.pool", "running", summary="film windows: start variants refined on their own")
+            t_var = time.time()
+            chunks = [rows[i::nw] for i in range(nw)]
+            rows = sum(runner.run(cfg, [(cfg, a.scan, c, var) for c in chunks if c], _variant_pass, nw, data=a.data,
+                                  shadow=a.shadow), [])
+            rows.sort(key=lambda r: r["t"])
+            print(f"--variant: {sum(len(r.get('variants', ())) for r in rows)} start variants in "
+                  f"{sum(bool(r.get('variants')) for r in rows)} windows ({time.time() - t_var:.0f} s)", flush=True)
     if netfam != cfg["family"]:
         new_ = [n_ for n_ in info["pnames"] if n_ not in meta["params"]]
         dropped_ = [n_ for n_ in meta["params"] if n_ not in info["pnames"]]
