@@ -15,8 +15,8 @@ increasing mean radius (``COMPOSITIONS``; slot 1 is the smallest). Every populat
     σnn/D                  [0.02, 0.5] with a paracrystal only
 
 and six values belong to the cut: the beam tail's width w̃ = w/q_max in [0.3/ρ, ``TAIL_WIDTH_MAX``/ρ] and exponent ν
-in ``TAIL_EXPONENT`` (the Lorentzian wings of a beam profile, ∝ q⁻²: a steeper "tail" with a free exponent takes over the
-particles' own scattering at low q, and a narrow one cannot describe a measured low-q rise), the
+in ``TAIL_EXPONENT``: from the Lorentzian wings of a beam profile (ν = 2) to the diffuse scattering of a rough interface,
+ν = 2(1 + H) with the Hurst exponent H, and Porod's q⁻⁴ of large aggregates (ν = 4); the
 Gaussian resolution σ_q/q_max in [10⁻⁴, 10⁻²], the amplitude τ in [0.003, 0.15] of a smooth multiplicative model
 error exp(Σ b_k B_k), b_k ~ N(0, τ²) over the ``ERROR_BASIS`` cubic B-splines of ``error_basis``, and the real and
 imaginary part of the effective reflection coefficient r of the exit-reflected path of spheres, each in [−1, 1]
@@ -58,11 +58,12 @@ SLOT_CODE = 2 + len(FAMILIES)
 """Per slot of ``composition_code``: in use, the family (one-hot), a paracrystal."""
 ERROR_BASIS = 8
 TAIL_WIDTH_MAX = 30.0
-TAIL_EXPONENT = (1.8, 2.2)
-VERSION = 4
-"""Of this encoding, recorded with a network (``flow.Network`` refuses another): 4 since spheres can have the
-exit-reflected path (r and the cut's k_i − k_f); 3: the tail's exponent is ``TAIL_EXPONENT`` and its width at most
-``TAIL_WIDTH_MAX`` q_min (2: ν in [1, 6], w at most 3 q_min; 1: at most 0.1 q_max)."""
+TAIL_EXPONENT = (1.8, 4.0)
+VERSION = 5
+"""Of this encoding, recorded with a network (``flow.Network`` refuses another): 5 since the tail's exponent reaches 4
+(a measured low-q rise of a rough film falls as q^−2.5 to q^−3; 4 and 3 had ν in [1.8, 2.2]); 4 since spheres can have
+the exit-reflected path (r and the cut's k_i − k_f); 3: the tail's width at most ``TAIL_WIDTH_MAX`` q_min (2: ν in
+[1, 6], w at most 3 q_min; 1: at most 0.1 q_max)."""
 CYLINDER_RADIUS, CYLINDER_HEIGHT = 50.0, 200.0
 
 
