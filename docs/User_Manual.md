@@ -175,8 +175,8 @@ spheres and upright cylinders, with or without a paracrystal. Each solution is r
 and weighted by its probability; the most probable one comes first. The probabilities compare only the
 compositions that were tried. In this example (worked through in section 10.7), the first two rows are
 the same model: a sphere with a paracrystal plus an upright cylinder. The model's probability rounds to
-1.00, split 0.51 / 0.49 between the two solutions. The report flags the sphere radius for review,
-because its value in the first row lies below the interval of the second. The two populations describe
+1.00, split 0.51 / 0.49 between the two solutions. Their radii and distances lie within each other's 68 %
+intervals, so the report names no value to check. The two populations describe
 the cut's broad log-normal sizes and its rise at low q. For this sample you know the particles are
 spheres: fit that model in Fitting (step 5).
 
