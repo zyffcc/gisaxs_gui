@@ -300,10 +300,11 @@ REMOVED_FITTING_CONTROLS = (
     "Resolve values at the edge of their range automatically", "Other compositions", "Constraints and ranges",
     "fit1d network", "fit1d search", "fit1d curve type", "fit1d systematic error", "Try spheres and vertical cylinders",
     "Try 1–3 vertical cylinders", "Use This Composition", "Predict each frame (fit1d)", "gisaxs1d_tables",
-    "threadpoolctl", "预测：解的得出方式", "搜索组成时处理默认范围边界", "其他组成", "约束与范围", "逐帧预测（fit1d）",
+    "预测：解的得出方式", "搜索组成时处理默认范围边界", "其他组成", "约束与范围", "逐帧预测（fit1d）",
 )
 """Controls and files of fit1d, the quick physical fit and Predict's options, all removed in 0.2.0: no document a
-user or a developer reads describes them (the changelog says that they were removed)."""
+user or a developer reads describes them (the changelog says that they were removed). threadpoolctl, which the fit1d
+kit used, came back as the optional library with which Predict parameters runs on several threads."""
 
 
 def _manual_section(text: str, heading: str) -> str:

@@ -382,6 +382,8 @@ The core, `requirements.txt`:
 - PyYAML>=6.0
 - psutil>=5.9 (optional: Batch Export reads the physical cores and the free memory with it to choose how
   many frames to reduce at once; without it GIMaP asks the operating system)
+- threadpoolctl>=3.1 (optional: Predict parameters sets numpy's BLAS to one thread with it and then runs on several
+  threads, with the numbers of one; without it Predict runs on one thread)
 
 Optional parts, each needed only for the function named; GIMaP starts without them and says which file to install:
 
