@@ -48,8 +48,8 @@ EXPECTED_VIEWS_BY_OWNER = {
     },
     "xrr": {"xrr_series_dialog_view.py"},
     "sem": {"sem_window_view.py", "sem_instance_view.py"},
-    "sputter": {"sputter_live_view.py", "sputter_main_view.py", "sputter_page_view.py", "sputter_samples_view.py",
-                "sputter_static_view.py", "sputter_steps_view.py"},
+    "sputter": {"sputter_compare_view.py", "sputter_live_view.py", "sputter_main_view.py", "sputter_page_view.py",
+                "sputter_samples_view.py", "sputter_static_view.py", "sputter_steps_view.py"},
     "analyze": {
         "analyze_page_view.py", "analyze_steps_view.py", "batch_export_view.py", "batch_progress_view.py",
         "options_panel_view.py", "normalisation_view.py", "absolute_scale_view.py", "mask_tools_view.py",

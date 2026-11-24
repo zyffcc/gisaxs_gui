@@ -6,7 +6,8 @@ the main screen shows its steps and what each has found so far (``live_panel.py`
 window at a time (``client_panel.py``): the measured image beside the model image of a solution, the solutions to
 choose from (the network's candidates, the refined one and the joint fit of the whole scan), the values of the
 solution shown — radius, height, distance, gap, size distribution width, coverage — and their evolution over the scan. **Export…**
-writes the result shown for a paper (``export_flow.py``).
+writes the result shown for a paper (``export_flow.py``); **Compare…** puts several results side by side against the
+deposited amount (``compare_flow.py``).
 
 **After Deposition** (the switch of the bar): Add Samples… fills the sample list beside the main screen
 (``static_list.py``) and Analyze works through its ticked samples, each into the series of its folder name
@@ -37,6 +38,7 @@ from ..application import SputterService
 from .at_time_panel import AtTimePanelMixin
 from .client_flow import CLIENT_KEY, SputterClientMixin
 from .client_panel import ClientPanelMixin
+from .compare_flow import CompareMixin
 from .export_flow import EXPORT_KEY, ExportMixin
 from .geometry import INSPECT_KEY, SputterGeometryMixin
 from .live_panel import LivePanelMixin
@@ -53,7 +55,8 @@ from .views.sputter_page_view import SputterPageView
 from .workers_flow import WorkersMixin
 
 
-class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, ExportMixin, ResultTabsMixin, ProcessTabMixin,
+class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, ExportMixin, CompareMixin, ResultTabsMixin,
+                  ProcessTabMixin,
                   LivePanelMixin, AtTimePanelMixin,
                   SputterStaticMixin, StaticListMixin, StaticQueueMixin, StaticExportMixin, RateMixin, WorkersMixin,
                   StoragePanelMixin, SputterGeometryMixin, QWidget, SputterPageView):
@@ -89,6 +92,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Exp
         self._init_storage()
         self._connect_geometry()
         self._connect_client()
+        self._connect_compare()
         self._connect_static()
         self._empty_project_state = self.project_state()
         self._pending_project_state = None
@@ -146,6 +150,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Exp
         return self.analyzing() or self.static_analyzing()
 
     def dispose(self) -> None:
+        self.close_compare()
         self._dispose_client()
         self._dispose_at_time()
         self._dispose_static()

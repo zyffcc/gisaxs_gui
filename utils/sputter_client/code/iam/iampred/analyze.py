@@ -45,7 +45,7 @@ def growth_prior_used(setting, metal, substrate):
     return setting == "on" or (setting == "auto" and (metal, substrate) in PRIOR_DEFAULT_ON)
 
 
-VARIANT_FAMILIES = ("cu_p5", "polyag_p3")
+VARIANT_FAMILIES = ("cu_p5", "cu_u1", "cu_v4", "polyag_p3", "polyag_v5", "polyag_u1")
 VARIANT_ARGS = ["--variant", "lnRP=1.791759,lnAP=0", "--variant", "fb=0.9,lnR=1.1,lnRP=1.791759,lnAP=0",
                 "--variant-refine", 15, "--monotone", "lnh_mass,lnt_film"]
 

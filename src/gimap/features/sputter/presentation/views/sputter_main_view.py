@@ -1,28 +1,26 @@
 """Static layout of the Sputter page's main screen and of its input bar (behaviour in ``presentation/client_flow.py``
 and ``client_panel.py``).
 
-**The input bar** (always shown, above the two views): the switch In Situ | After Deposition and its inputs — an
-in-situ scan: the scan folder, Metal, Substrate, the deposition rate with its unit (Å/s or nm/s) and its QCM reading
-box; samples measured after
-their deposition: Add Samples… (a folder of samples, one sample's folder or one CBF file: ``static_list.py``), a line
-that sums up the sample list and the switch that shows or hides that list — and the primary button Analyze;
-one line about the scan; one line with the geometry used and Edit; Open Result…, Export… (``export_flow.py``) and
-the switch between the main
-screen and Details; at the right the job status of Analyze (of both kinds).
+**The input bar** (always shown, above the two views): the switch In Situ | After Deposition and its inputs — an in-situ
+scan: the scan folder, Metal, Substrate, the deposition rate with its unit (Å/s or nm/s) and its QCM reading box;
+samples measured after their deposition: Add Samples… (a folder of samples, one sample's folder or one CBF file:
+``static_list.py``), a line that sums up the sample list and the switch that shows or hides that list — and the primary
+button Analyze; one line about the scan; one line with the geometry used and Edit; Open Result…, Export…
+(``export_flow.py``), Compare… (``compare_flow.py``), the switch Main Screen | Details; at the right Analyze's status.
 
-**The main screen** shows one time window of a result: the window selector (previous, slider, next, its time and
-nominal deposit) with the switch Patterns | Real Space; a host for the measured image beside the model image and a
-host for the solution drawn in real space (one shown at a time); a host for the selector of the solution
-(candidates and the refined one, each with its fit deviation); the value tiles — radius, height, distance, gap, size
-distribution width, coverage, and for a porous substrate the island, cap and film shares and the two correlation
-lengths: only the tiles of the quantities a result has are shown — and the fit deviation of the solution shown; a
-host for the evolution over the scan. A series of static samples is shown the same way, one sample in the place of a
-time window. Before there is a result an empty state says what to do; while Analyze runs, the live view
-(``sputter_live_view.py``) is the third page of the same stack.
+**The main screen** shows one time window of a result: the window selector (previous, slider, next, its time and nominal
+deposit) with the switch Patterns | Real Space; a host for the measured image beside the model image and a host for the
+solution drawn in real space (one shown at a time); a host for the selector of the solution (candidates and the refined
+one, each with its fit deviation); the value tiles — radius, height, distance, gap, size distribution width, coverage,
+and for a porous substrate the island, cap and film shares and the two correlation lengths: only the tiles of the
+quantities a result has are shown — and the fit deviation of the solution shown; a host for the evolution over the scan.
+A series of static samples is shown the same way, one sample in the place of a time window. Before there is a result an
+empty state says what to do; while Analyze runs, the live view (``sputter_live_view.py``) is the third page of the same
+stack.
 
-**Analyze options** (a section of Details): the mode, the parallel processes (Automatic or a number), the optional
-onset and duration of the deposition and polymer film thickness, the analysis package and its folder, Open Report,
-Open Folder and Export… (of the result shown), and the messages of the run (the job status's Details shows them).
+**Analyze options** (a section of Details): the mode, the parallel processes (Automatic or a number), the optional onset
+and duration of the deposition and polymer film thickness, the analysis package and its folder, Open Report, Open Folder
+and Export… (of the result shown), and the messages of the run (the job status's Details shows them).
 """
 
 from __future__ import annotations
@@ -35,6 +33,7 @@ from PyQt5.QtWidgets import (QCheckBox, QDoubleSpinBox, QFormLayout, QFrame, QHB
 from src.gimap.app.presentation.components import (CurvePlot, EmptyState, FilePicker, JobStatus, ParameterSection,
                                                    SafeWheelComboBox, SegmentedControl)
 from src.gimap.app.presentation.i18n import DATA_VALUES
+from .sputter_compare_view import compare_button
 
 
 STATUS_WIDTH = 400
@@ -280,6 +279,7 @@ class SputterMainView:
         self.export_button = QPushButton("Export…", bar)
         self.export_button.setObjectName("sputterExport")
         self.export_button.setEnabled(False)
+        self.compare_button = compare_button(bar)
         self.view_switch = SegmentedControl(bar)
         self.view_switch.setObjectName("sputterViewSwitch")
         for label, key in VIEW_CHOICES:
@@ -291,6 +291,7 @@ class SputterMainView:
         first.addSpacing(12)
         first.addWidget(self.open_result_button)
         first.addWidget(self.export_button)
+        first.addWidget(self.compare_button)
         first.addWidget(self.view_switch)
         lines.addLayout(first)
         self.scan_summary = meta(bar)  # one line about the scan once a folder is chosen

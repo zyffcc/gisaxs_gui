@@ -7,9 +7,9 @@ from typing import Callable, Optional
 
 from src.gimap.integrations.state.user_store import user_data_dir
 
-from .application import ClientService, SputterService, StaticService
-from .infrastructure import (CbfHeaderInspector, ClientFolderReader, ClientPackageRunner, StaticPackageRunner,
-                             local_data_dir)
+from .application import ClientService, CompareService, SputterService, StaticService
+from .infrastructure import (CbfHeaderInspector, ClientFolderReader, ClientPackageRunner, CompareFolderFiles,
+                             StaticPackageRunner, local_data_dir)
 
 
 def default_results_root() -> Path:
@@ -22,8 +22,9 @@ def create_sputter_service(*, inspector=None, results_root: Optional[Callable[[]
     """The real adapters unless others are given (tests give fakes). ``client``: Analyze, the client analysis package
     (by default the package found by ``infrastructure.client.locate_package``, its data and work folders in the user
     data folder)."""
-    return SputterService(inspector or CbfHeaderInspector(), results_root or default_results_root,
-                          client or create_client_service())
+    client = client or create_client_service()
+    return SputterService(inspector or CbfHeaderInspector(), results_root or default_results_root, client,
+                          CompareService(client, CompareFolderFiles()))
 
 
 def default_series_root() -> Path:

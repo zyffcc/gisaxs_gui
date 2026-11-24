@@ -4,11 +4,12 @@ tree of a child, and the scan header."""
 from .cache_store import ImportCacheStore, folder_size, local_data_dir
 from .client import (CACHES_REMOVED, CHOICES_FILE, CLIENT_OVERRIDE, CLIENT_REQUEST_FILE, ClientFolderReader,
                      ClientPackageRunner, LOCAL_PACKAGE, locate_package)
+from .compare_files import CompareFolderFiles
 from .client_static import SERIES_FILE, StaticPackageRunner, archive_folders, static_defaults
 from .process import Outcome, child_environment, console_python, default_workers, kill_tree, run_streaming
 from .scan_header import CbfHeaderInspector, header_text
 
-__all__ = ["CACHES_REMOVED", "ImportCacheStore", "folder_size", "local_data_dir", "CHOICES_FILE", "CLIENT_OVERRIDE", "CLIENT_REQUEST_FILE", "ClientFolderReader", "ClientPackageRunner",
+__all__ = ["CompareFolderFiles", "CACHES_REMOVED", "ImportCacheStore", "folder_size", "local_data_dir", "CHOICES_FILE", "CLIENT_OVERRIDE", "CLIENT_REQUEST_FILE", "ClientFolderReader", "ClientPackageRunner",
            "LOCAL_PACKAGE", "locate_package", "SERIES_FILE", "StaticPackageRunner", "archive_folders",
            "static_defaults", "CbfHeaderInspector", "Outcome", "child_environment", "console_python",
            "default_workers", "header_text", "kill_tree", "run_streaming"]

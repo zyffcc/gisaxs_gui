@@ -31,6 +31,10 @@ from .static_samples import (DC, HIPIMS, NO_SAMPLE_FRAMES, NO_THICKNESS, OTHER_M
                              series_slug)
 from .scan import (CHECK_SOURCES, FILLING_HINTS, GROUPS, HINT_TEXT, NO_FRAMES, SOURCE_TEXT, Prefill, ScanInfo, Source,
                    add_preset, energy_kev, folder_key, make_preset, matching_preset, prefill, remember)
+from .compare import EXPORT_FILES as COMPARE_FILES, CompareFiles, CompareService
+from ..domain.compare import (AXES as COMPARE_AXES, COMPARE_TEMPLATES, CURVES as COMPARE_CURVES, NO_SCAN as COMPARE_NO_SCAN,
+                              READ as COMPARE_READ, ComparedScan, curves as compare_curves, growth_rows,
+                              series as compare_series)
 from .use_cases import (FOLDER_VALUES, METALS, PROBLEMS, ScanInspector, SputterService, Stopped, scan_label,
                         scan_results_folder)
 
@@ -63,4 +67,6 @@ __all__ = [
     "Source", "add_preset", "energy_kev", "folder_key", "make_preset", "matching_preset", "prefill", "remember",
     "FOLDER_VALUES", "METALS", "PROBLEMS", "ScanInspector", "SputterService", "Stopped", "scan_label",
     "scan_results_folder",
+    "COMPARE_AXES", "COMPARE_CURVES", "COMPARE_FILES", "COMPARE_NO_SCAN", "COMPARE_READ", "COMPARE_TEMPLATES",
+    "CompareFiles", "CompareService", "ComparedScan", "compare_curves", "compare_series", "growth_rows",
 ]
