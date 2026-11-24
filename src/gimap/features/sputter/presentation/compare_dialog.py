@@ -26,7 +26,7 @@ from src.gimap.app.presentation.i18n import DATA_HEADERS, apply_to, current_lang
 from src.gimap.app.presentation.theme.engine import theme_manager
 
 from ..application import (COMPARE_AXES, COMPARE_FILES, COMPARE_NO_SCAN, COMPARE_READ, compare_curves, compare_series,
-                           growth_rows)
+                           growth_rows, info_rows)
 from .client_texts import shown_number
 from .texts import message_text, text
 from .views.sputter_compare_view import CompareDialogView
@@ -251,12 +251,18 @@ class CompareDialog(QDialog, CompareDialogView):
 
     def _fill_growth(self, scans) -> None:
         rows = growth_rows(scans)
+        infos = info_rows(scans) if scans else []
         table = self.growth_table
         table.clear()
         table.setColumnCount(2 + len(scans))
-        table.setRowCount(len(rows))
+        table.setRowCount(len(infos) + len(rows))
         table.setHorizontalHeaderLabels([tr(QUANTITY_HEADER), tr("Unit"), *(scan.name for scan in scans)])
-        for row, (name, fields, unit, values) in enumerate(rows):
+        for row, (name, texts) in enumerate(infos):  # how each result was analysed: names and codes stay as they are
+            table.setItem(row, 0, QTableWidgetItem(tr(name)))
+            table.setItem(row, 1, QTableWidgetItem(""))
+            for column, words in enumerate(texts):
+                table.setItem(row, 2 + column, QTableWidgetItem(words))
+        for row, (name, fields, unit, values) in enumerate(rows, start=len(infos)):
             shown = trf(name, **{key: tr(value) for key, value in fields.items()}) if fields else tr(name)
             table.setItem(row, 0, QTableWidgetItem(shown))
             table.setItem(row, 1, QTableWidgetItem(unit))

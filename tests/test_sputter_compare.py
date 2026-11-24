@@ -174,6 +174,10 @@ def test_compare_lists_the_analysed_results_and_ticks_the_shown_one_and_the_newe
     film = next(row for row in range(table.rowCount())
                 if table.item(row, 0).text() == "Metal amount at which the film forms")
     assert (table.item(film, 2).text(), table.item(film, 3).text()) == ("0.7", "1.4")
+    # first how each result was analysed: a comparison across network families or modes is seen as one
+    assert [(table.item(row, 0).text(), table.item(row, 2).text(), table.item(row, 3).text()) for row in range(4)] == \
+        [("Metal", "Cu", "Cu"), ("Substrate", "PEO", "Polymer"), ("Model family", "zz_family", "zz_family"),
+         ("Mode", "quick", "quick")]
     # the time axis
     dialog.axis_switch.setCurrentIndex(1)
     dialog.axis_switch.activated.emit(1)
@@ -200,7 +204,7 @@ def test_a_renamed_unticked_result_leaves_the_plots_and_export_writes_tables_and
     assert [path.name for path in written] == ["compare_curves.csv", "compare_growth.csv", "compare.png", "compare.pdf"]
     assert all(path.stat().st_size > 0 for path in written)
     growth = (tmp_path / "exported" / "compare_growth.csv").read_text(encoding="utf-8")
-    assert "quantity,unit,Cu on the block copolymer" in growth
+    assert "quantity,unit,Cu on the block copolymer" in growth and "Model family,,zz_family" in growth
     _close(page)
 
 
@@ -237,7 +241,7 @@ def test_compare_in_chinese(tmp_path):
         assert page.compare_button.text() == "比较…"
         assert dialog.growth_table.horizontalHeaderItem(0).text() == "量"
         rows = [dialog.growth_table.item(row, 0).text() for row in range(dialog.growth_table.rowCount())]
-        assert "成膜时的金属量" in rows and "连续膜开始于（金属量，nm）" in rows
+        assert "成膜时的金属量" in rows and "连续膜开始于（金属量，nm）" in rows and rows[:4] == ["金属", "基底", "模型族", "模式"]
         titles = [ax.get_title() for ax in dialog.plots.figure.axes if ax.get_visible()]
         assert "半径 R (nm)" in titles and "膜厚（条纹） (nm)" in titles
     finally:

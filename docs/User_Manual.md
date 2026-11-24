@@ -3636,7 +3636,8 @@ click compares them. Tick more, or take one from any folder with **Add Result…
   window, as chosen on the main screen (radius R, height H, distance D, gap, coverage, the continuous layer t_b);
   open squares are what the package's report reads from the data without the model — the film thickness from the
   fringes, the grain height from its fringe, the optical density of the metal (α/α_c)² and the lateral scale 2π/q.
-- **Growth**: the growth descriptors of each result in a column (the metal amount at coverage 0.5 and at which the
+- **Growth**: first how each result was analysed (metal, substrate, model family — the package's network that fitted the
+  scan best — and mode), then the growth descriptors of each result in a column (the metal amount at coverage 0.5 and at which the
   film forms, the growth laws of D and R, the distance and the radius once the film has formed) and the metal amount
   at which each stage starts.
 - **Export…** writes `compare_curves.csv` and `compare_growth.csv` (the folder, metal, substrate, model family and
