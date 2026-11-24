@@ -25,7 +25,7 @@ and Export… (of the result shown), and the messages of the run (the job status
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QCheckBox, QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
                              QPlainTextEdit, QPushButton, QSizePolicy, QSlider, QStackedWidget, QToolButton, QVBoxLayout,
                              QWidget)
@@ -34,6 +34,7 @@ from src.gimap.app.presentation.components import (CurvePlot, EmptyState, FilePi
                                                    SafeWheelComboBox, SegmentedControl)
 from src.gimap.app.presentation.i18n import DATA_VALUES
 from .sputter_compare_view import compare_button
+from .widgets import ElidedLabel, ShownComboBox
 
 
 STATUS_WIDTH = 400
@@ -125,48 +126,6 @@ STEPS_TIP = "The steps of the analysis at work and what each has found (the live
 WORKERS_TIP = ("How many processes the analysis runs at once (Analyze and Static Frames). Automatic: one per core, two "
                "cores left free and at most 16, fewer when the free memory is short; worked out again when the "
                "analysis starts. More processes do not help when reading the frames from the disk is the slow part.")
-
-
-class ShownComboBox(SafeWheelComboBox):
-    """A combo box that says when it is shown or opened (``aboutToShow``): its choices can be worked out again."""
-
-    aboutToShow = pyqtSignal()
-
-    def showEvent(self, event) -> None:  # noqa: N802 - Qt API
-        super().showEvent(event)
-        self.aboutToShow.emit()
-
-    def showPopup(self) -> None:  # noqa: N802 - Qt API
-        self.aboutToShow.emit()
-        super().showPopup()
-
-
-class ElidedLabel(QLabel):
-    """One line that never widens its window: text that does not fit ends in “…” and is whole in the tooltip.
-    ``full_text`` is what was set."""
-
-    def __init__(self, parent: QWidget | None = None):
-        super().__init__(parent)
-        self._full = ""
-        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        self.setMinimumWidth(40)
-
-    def set_full_text(self, text: str) -> None:
-        self._full = str(text)
-        self.setToolTip(self._full)
-        self._fit()
-
-    def full_text(self) -> str:
-        return self._full
-
-    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
-        super().resizeEvent(event)
-        self._fit()
-
-    def _fit(self) -> None:
-        shown = self.fontMetrics().elidedText(self._full, Qt.ElideRight, max(20, self.width() - 2))
-        if shown != self.text():
-            self.setText(shown)
 
 
 def _row(parent: QWidget, *widgets, stretch_last: bool = False) -> QWidget:
