@@ -2806,11 +2806,13 @@ simulated cuts ([README](../tools/benchmarks/README.md)).
    proposals: composition 2 of 4*, *Step 2 of 3 · Refining the modes …*, *Step 3 of 3 · Sampling the posterior:
    solution 2 of 3* — the time since the start and, once an item of the step is done, about how long the step still
    takes. **Stop** ends it at once. Solutions whose posterior was sampled before Stop are kept, marked *incomplete*,
-   with probabilities over those alone; with none sampled, nothing changes. For a curve of a few hundred points on
-   one core it takes some seconds with **The particles in Model**, from some tens of seconds to a few minutes with
+   with probabilities over those alone; with none sampled, nothing changes. For a curve of a few hundred points
+   it takes some seconds with **The particles in Model**, from some tens of seconds to a few minutes with
    **Spheres and upright cylinders (1–2)** and a few minutes or more with **Any particles (1–3)**, whose random
    cylinders are slow (20–30 s per least-squares fit). The time grows with the number of points and of compositions
-   tried, and depends on the computer.
+   tried, and depends on the computer. Sizes *Gaussian, by intensity* take several times longer than *Gaussian, by
+   number*, whose averages come from tables. Predict uses half the computer's logical processors, at most 12 (the
+   environment variable `GIMAP_PREDICT_THREADS` sets another number); the results are the same with any number.
 
 Predict has nothing else to set. Step 1 weights the network's samples of each composition against the curve.
 Step 2 refines the most probable values by least squares; when none refines below χ²ᵣ 2, it searches the ranges of

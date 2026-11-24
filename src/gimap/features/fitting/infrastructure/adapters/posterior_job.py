@@ -16,7 +16,7 @@ While it runs, the job reports its stages (``StageReport``): the details of a re
 seconds since the start and an estimate of the seconds left in the stage; after each solution's posterior is sampled
 (but the last) they also carry ``partial``: the solutions sampled so far, encoded as the result's, their probabilities
 over those alone — what the page keeps when Predict is stopped. The numbers computed are those of a run without
-reports (``refine.predict``).
+reports (``refine.predict``), on any number of threads (``parallel.default_threads``).
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from src.gimap.shared import fit_names
 
 from ...domain import fit_model as fm
 from ...domain.posterior import network as posterior_network
+from ...domain.posterior import parallel
 from ...domain.posterior import refine
 from ...application.fit_reproduction import prediction_record
 from ..reproduce_fit import predict_options, prediction_plan
@@ -150,7 +151,7 @@ def run_predict(payload: dict, report, cancelled) -> dict:
         raise RuntimeError("Fitting cancelled")
     solutions = refine.predict(
         network, payload["q"], payload["intensity"], payload.get("sigma"), **options,
-        progress=stages.progress, partial=stages.partial)
+        progress=stages.progress, partial=stages.partial, threads=parallel.default_threads())
     if cancelled():
         raise RuntimeError("Fitting cancelled")
     report(1, 1, "Done")
@@ -301,7 +302,8 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
     cut = batch_geometry(options.get("predict_cut", {})) or dict(
         qz=options.get("cut_qz"), reflected_beam=options.get("reflected_beam"), measured_qz=options.get("measured_qz"))
     settings = predict_options({**cut, **batch_compositions(options["components"])})
-    solutions = refine.predict(network, item["q"], item["observed"], item["sigma"], **settings)
+    solutions = refine.predict(network, item["q"], item["observed"], item["sigma"], **settings,
+                               threads=parallel.default_threads())
     if cancelled():
         raise RuntimeError("Prediction cancelled")
     q = np.asarray(item["q"], float)

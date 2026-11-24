@@ -16,7 +16,7 @@ from ..application.fit_reproduction import joint_tables, model_tables, points_fr
 from ..application.single_fit import converged_again
 from ..domain.fit_engine import fit
 from ..domain.fit_model import model_from_dict
-from ..domain.posterior import refine
+from ..domain.posterior import parallel, refine
 from ..domain.posterior.flow import Network
 
 
@@ -75,7 +75,7 @@ def _predict(plan, folder, should_cancel):
             partial_solutions = solutions
 
     solutions = refine.predict(network, data.q, data.intensity, data.sigma, **plan["options"], partial=partial,
-                               cancelled=lambda: _check_cancel(should_cancel))
+                               cancelled=lambda: _check_cancel(should_cancel), threads=parallel.default_threads())
     if plan.get("partial_after") is not None:
         if partial_solutions is None:
             raise ValueError("Predict did not reach the partial solution recorded when the fit stopped.")

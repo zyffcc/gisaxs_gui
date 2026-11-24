@@ -19,3 +19,6 @@ PyYAML>=6.0
 # how many frames to reduce at once. Without it GIMaP asks the operating system and takes half of
 # the logical cores as physical.
 psutil>=5.9
+# Optional: Predict parameters sets numpy's BLAS to one thread with it and then runs on several threads (the
+# same numbers as on one). Without it Predict runs on one thread.
+threadpoolctl>=3.1
