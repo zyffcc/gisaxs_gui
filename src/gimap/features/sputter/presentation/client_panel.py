@@ -30,10 +30,11 @@ from src.gimap.app.presentation.theme import set_role
 
 from ..application import (COMPONENT_NAMES, ClientResult, ClientWindow, arrangement, grown, real_space, top_grains,
                            visible)
-from .client_texts import (JOINT_FAILED, CHOICE_NOT_SAVED, EMPTY_ACTION, EMPTY_MESSAGE, EMPTY_TITLE, PACKAGE_ACTION, PACKAGE_TITLE,
+from .client_texts import (JOINT_FAILED, PRELIMINARY, CHOICE_NOT_SAVED, EMPTY_ACTION, EMPTY_MESSAGE, EMPTY_TITLE,
+                           PACKAGE_ACTION, PACKAGE_TITLE,
                            MASK_AUTO, MASK_AUTO_ONLY, MASK_FILE, RELATIVE_RADIUS_TIP, RESULT_NAME, SAMPLE_CONTROLS, SAMPLE_ERROR, WINDOW_CONTROLS,
-                           WINDOW_ERROR, entry_name, entry_segment, entry_tip, range_text, shown_number, window_text,
-                           window_tip)
+                           WINDOW_ERROR, entry_name, entry_segment, entry_tip, range_text, shown_number, stop_hint_text,
+                           window_text, window_tip)
 from .components_view import ComponentsPicture
 from .evolution_view import RELATIVE_RADIUS, EvolutionPlot, axis_label
 from .pattern_line import PatternLine
@@ -160,19 +161,14 @@ class ClientPanelMixin:
             self.sync_export_buttons()
         self._show_result_kind()
         if result is None:
+            self.result_note.setVisible(False)
             self.evolution.draw(None, None, None)
             self.patterns.show(None, "", "")
             self._show_client_empty()
             self.show_result_details()
             return
         self.client_choices = self.service.client.choices(result)
-        named = "/".join(part for part in (result.metal, result.substrate) if part) or "?"  # the metal on its substrate
-        self.result_name.setText(RESULT_NAME.format(scan=result.scan or result.folder.name, sample=named,
-                                                    family=result.family or "?"))
-        self.result_name.setToolTip("\n".join(part for part in (str(result.folder), mask_text(result.mask)) if part))
-        if result.joint_failed:  # the package's joint fit did not finish: the network's solutions are shown
-            self.result_name.setText(f"{self.result_name.text()}  ·  {tr(JOINT_FAILED)}")
-        set_role(self.result_name, "warning" if result.joint_failed else "muted")
+        self._show_result_name()
         self.window_slider.blockSignals(True)
         self.window_slider.setRange(0, len(result.windows) - 1)
         first = next((index for index, window in enumerate(result.windows) if window.entries), 0)
@@ -186,6 +182,28 @@ class ClientPanelMixin:
         self._show_window()
         self.show_result_details()  # Details ▸ Windows, Report and Log
         self._at_time_result_shown()  # a time between the windows, on demand
+
+    def _show_result_name(self) -> None:
+        """The scan, the sample and the network of the result shown, and on a line under the window selector the
+        package's notes on it (in the interface language: drawn again when it changes)."""
+        result = self.client_result
+        named = "/".join(part for part in (result.metal, result.substrate) if part) or "?"  # the metal on its substrate
+        self.result_name.setText(RESULT_NAME.format(scan=result.scan or result.folder.name, sample=named,
+                                                    family=result.family or "?"))
+        self.result_name.setToolTip("\n".join(part for part in (str(result.folder), mask_text(result.mask)) if part))
+        notes, tips = [], []
+        if result.joint_failed:  # the package's joint fit did not finish: the network's solutions are shown
+            notes.append(tr(JOINT_FAILED))
+        if result is getattr(self, "_live_preliminary", None):  # the run's preliminary result: its joint fit is running
+            notes.append(tr(PRELIMINARY))
+        hint = result.stop_hint  # no duration given, but the deposition seems to have stopped
+        if hint is not None:
+            notes.append(stop_hint_text(hint))
+            tips.append(stop_hint_text(hint, detail=True))
+        self.result_note.setText("  ·  ".join(notes))
+        self.result_note.setToolTip("\n".join(tips))
+        self.result_note.setVisible(bool(notes))
+        set_role(self.result_note, "warning" if result.joint_failed or hint is not None else "info")
 
     def _show_result_kind(self) -> None:
         """What depends on the kind of result: the words of the selector and the caption of the radius."""
@@ -471,6 +489,7 @@ class ClientPanelMixin:
             self._show_client_empty()
             return
         self._entry_labels = ()  # the names of the entries are composed again
+        self._show_result_name()
         self._show_window()
         self.redraw_client_plots()  # every title and axis title again, not only the model's
 

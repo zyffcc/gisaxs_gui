@@ -162,6 +162,15 @@ SPUTTER_CLIENT_ZH = {
     ("network result: the joint fit of the whole scan did not finish (Details ▸ Logs), so the evolution "
      "can jump between windows"):
         "网络结果：整条扫描联合精修没有完成（见 详情 ▸ 日志），演化可能在相邻时间窗之间跳动",
+    ("the deposition may have stopped about {time} s after its start ({amount} nm): if it did, enter "
+     "Deposition duration and analyse again"):
+        "沉积可能在开始后约 {time} s（{amount} nm）就已停止：若是，请填写“沉积持续时间”后重新分析",
+    ("No deposition duration was given, so the model adds metal until the end of the scan. The lateral "
+     "scale read from the counts stops growing about {time} s after the start, and the windows after "
+     "that fit worse (median fit deviation {after}, before {before}). If the deposition went on, ignore "
+     "this note."):
+        ("没有给出沉积持续时间，模型按一直沉积到扫描结束来算。从计数直接读出的横向尺度在开始后约 {time} s 不再增长，"
+         "此后的时间窗拟合变差（拟合偏差中位数 {after}，之前 {before}）。如果沉积确实一直在进行，请忽略这条提醒。"),
     "network result: the joint fit of the whole scan is running and replaces it when it is done":
         "网络初步结果：整条扫描联合精修进行中，完成后自动替换",
     "The analysis failed.": "分析失败。",

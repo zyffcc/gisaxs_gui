@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ..application import STEP_OF, STEP_REUSED, STEP_TEXT
 from .texts import text
@@ -79,6 +79,15 @@ READY_TOAST = "The analysis of {name} is ready."
 JOINT_FAILED = ("network result: the joint fit of the whole scan did not finish (Details ▸ Logs), so the evolution "
                 "can jump between windows")
 """Appended to the result's name when the package says its joint fit did not finish (analysis.json joint_fit)."""
+STOP_HINT = ("the deposition may have stopped about {time} s after its start ({amount} nm): if it did, enter "
+             "Deposition duration and analyse again")
+"""Appended to the result's name when the package reminds of a deposition that seems to have stopped although no
+duration was given (analysis.json stop_hint)."""
+STOP_HINT_DETAIL = ("No deposition duration was given, so the model adds metal until the end of the scan. The lateral "
+                    "scale read from the counts stops growing about {time} s after the start, and the windows after "
+                    "that fit worse (median fit deviation {after}, before {before}). If the deposition went on, ignore "
+                    "this note.")
+"""The tooltip of the result's name with that reminder."""
 PRELIMINARY = "network result: the joint fit of the whole scan is running and replaces it when it is done"
 """Appended to the result's name while the package's preliminary result is shown (mode refine: the network's
 solutions and their time path, before the whole-scan joint fit)."""
@@ -199,3 +208,15 @@ __all__ = ["ANALYZE_ANYWAY", "CHOICE_NOT_SAVED", "DONE", "EMPTY_ACTION", "EMPTY_
            "STARTING", "STOPPING_ANALYSIS", "TEMPLATES", "UNUSUAL_RATE", "UNUSUAL_RATE_TITLE", "WAITING_TO_ANALYZE",
            "WINDOW_CONTROLS", "WINDOW_ERROR", "entry_name", "entry_segment", "entry_tip", "range_text", "shown_number",
            "window_text", "window_tip", "wrappable"]
+
+
+def stop_hint_text(hint, detail: bool = False) -> str:
+    """The reminder of a deposition that seems to have stopped (the result's ``stop_hint``), or its tooltip."""
+    def figure(value, digits=1):
+        return "?" if value is None else f"{value:.{digits}f}"
+    time = figure(hint.time_s, 0 if hint.time_s >= 10 else 1)
+    if detail:
+        return trf(STOP_HINT_DETAIL, time=time, after=figure(hint.deviation_after),
+                   before=figure(hint.deviation_before))
+    return trf(STOP_HINT, time=time, amount=figure(hint.nominal_nm))
+

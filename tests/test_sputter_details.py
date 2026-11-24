@@ -167,8 +167,9 @@ def test_a_preliminary_result_replaces_the_live_view_until_the_final_one(tmp_pat
     (out / "analysis.json").write_text(json.dumps(dict(analysis, status="preliminary")), encoding="utf-8")
     page._client_event(LiveEvent(kind="preliminary", step="predict", fields={"folder": str(out)}))
     assert page.client_result is not None and page.result_stack.currentIndex() == 1
-    assert page.result_name.text().endswith("network result: the joint fit of the whole scan is running and replaces "
-                                            "it when it is done")
+    assert page.result_note.text() == ("network result: the joint fit of the whole scan is running and replaces it when "
+                                       "it is done")
+    assert not page.result_note.isHidden() and page.result_note.property("gimapRole") == "info"
     page._client_event(LiveEvent(kind="preliminary", step="predict", fields={"folder": str(tmp_path / "zz_none")}))
     assert page.client_result is not None  # a folder without a result leaves what is shown
     _close(page)
@@ -183,12 +184,39 @@ def test_a_result_whose_joint_fit_did_not_finish_says_so(tmp_path):
                                        encoding="utf-8")
     assert page.open_client_result(out)
     assert page.client_result.joint_failed
-    assert "the joint fit of the whole scan did not finish" in page.result_name.text()
-    assert page.result_name.property("gimapRole") == "warning"
+    assert "the joint fit of the whole scan did not finish" in page.result_note.text()
+    assert page.result_note.property("gimapRole") == "warning" and not page.result_note.isHidden()
+    assert "did not finish" not in page.result_name.text()  # the name stays one short line
     good = write_result(tmp_path / "good")
     assert page.open_client_result(good)
-    assert not page.client_result.joint_failed and "did not finish" not in page.result_name.text()
-    assert page.result_name.property("gimapRole") == "muted"
+    assert not page.client_result.joint_failed and page.result_note.isHidden()
+    _close(page)
+
+
+def test_a_result_reminds_of_a_deposition_that_seems_to_have_stopped(tmp_path):
+    """analysis.json stop_hint (no duration given, the lateral scale stops growing and the later windows fit worse): the
+    line under the window selector says when, in the warning role, and its tooltip why; hint false or a broken record
+    says nothing."""
+    page = _page(tmp_path)
+    page.show()
+    out = write_result(tmp_path / "out")
+    analysis = json.loads((out / "analysis.json").read_text(encoding="utf-8"))
+    hint = {"hint": True, "checked": True, "slope": 0.02, "t_stop_s": 12.5, "h_stop_nm": 3.1, "dev_before": 4.0,
+            "dev_after": 21.5}
+    (out / "analysis.json").write_text(json.dumps(dict(analysis, stop_hint=hint)), encoding="utf-8")
+    assert page.open_client_result(out)
+    shown = page.client_result.stop_hint
+    assert (shown.time_s, shown.nominal_nm, shown.deviation_before, shown.deviation_after) == (12.5, 3.1, 4.0, 21.5)
+    assert page.result_note.text() == ("the deposition may have stopped about 12 s after its start (3.1 nm): if it did, "
+                                       "enter Deposition duration and analyse again")
+    assert page.result_note.property("gimapRole") == "warning" and not page.result_note.isHidden()
+    assert "median fit deviation 21.5, before 4.0" in page.result_note.toolTip()
+    assert "may have stopped" not in page.result_name.text()
+    for record in ({**hint, "hint": False}, {**hint, "t_stop_s": None}, {**hint, "t_stop_s": -1.0}, "hint"):
+        other = write_result(tmp_path / f"other_{len(str(record))}")
+        (other / "analysis.json").write_text(json.dumps(dict(analysis, stop_hint=record)), encoding="utf-8")
+        assert page.open_client_result(other)
+        assert page.client_result.stop_hint is None and page.result_note.isHidden()
     _close(page)
 
 

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import live as LV
 from . import registry as REG
+from . import stop_hint as SH
 
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent.parent / "assets"
@@ -476,6 +477,9 @@ def _analysis(a, out, data, fam, tried, like, steps, status):
     res["growth_prior"] = dict(setting=a.growth_prior, requested=bool(a.prior_used and MODES[a.mode]["sequence"]),
                                used=bool(gp and gp.get("active")), prior=gp,
                                default_on=sorted(f"{m}/{s}" for m, s in PRIOR_DEFAULT_ON))
+
+
+    res["stop_hint"] = SH.for_folder(out)
     if getattr(a, "joint_note", None) and status != "preliminary":
         res["joint_fit"] = a.joint_note
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
