@@ -64,7 +64,9 @@ def test_overlap_with_all_archived_runs():
     _, pairs = audit.compare(archives, fresh)
     historic = {}
     for (left, right), fields in pairs.items():
-        if right == "new":
+        if right == "new" and "posterior_r15_fresh" in left:  # the fresh set itself, archived after its run
+            assert all(len(matches) == n for matches in fields.values())
+        elif right == "new":
             assert not any(fields.values())
         else:
             for name in ("recovery", "extended"):
