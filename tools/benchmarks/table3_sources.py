@@ -136,8 +136,11 @@ def unpinned(key):
 
 
 ROWS15 = {
-    **{key: unpinned(key) for key in ("all_pixel_q", "radial", "agbh", "calibration", "calibration_heldout",
-                                      "independent_model", "bornagain")},
+    **{key: unpinned(key) for key in ("all_pixel_q", "radial", "agbh", "calibration")},
+    # rerun at the frozen commit: the producer is the file's own stamp, as for the measured Au fit
+    "calibration_heldout": ([(name, None, cmd) for name, _, cmd in ROWS14["calibration_heldout"][0]],
+                            ROWS14["calibration_heldout"][1], None),
+    **{key: unpinned(key) for key in ("independent_model", "bornagain")},
     "first.error": ([FIRST15], ROWS14["first.error"][1], None),
     "first.coverage": ([FIRST15], ROWS14["first.coverage"][1], None),
     "first.composition": ([FIRST15], CHOICE + ", correct percent by level", None),
@@ -231,7 +234,7 @@ def evidence(item, bench, external, revision):
         record["commit_source"] = "git log -1 420b0e29"
     elif name == "@heldout-calibration":
         coverage = d["coverage"]
-        if not d["heldout"]["commit"].startswith(commit):
+        if not d["heldout"]["commit"] or (commit and not d["heldout"]["commit"].startswith(commit)):
             raise ValueError("held-out calibration has a different producing commit")
         record.update(producing_commit=d["heldout"]["commit"], commit_source="heldout.commit",
                       command=f"python {BENCH}calibration_check.py --part coverage --cases {coverage['cases']} "
