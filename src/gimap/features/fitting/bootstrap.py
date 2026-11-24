@@ -132,7 +132,7 @@ def create_curve_fit(*, predict_settings=None):
     from .application.single_fit import CURVE_FIT_MIN_POINTS, TOO_FEW_FOR_CURVE_FIT
     from .application.fit_reproduction import prediction_record
     from .application.workflow_v5 import default_options
-    from .domain.posterior import encoding, network, refine
+    from .domain.posterior import encoding, network, parallel, refine
     from .infrastructure.adapters.posterior_job import batch_compositions, curve_rows, encode
     from .infrastructure.reproduce_fit import predict_options, prediction_plan
     from .infrastructure.adapters.workflow_v5 import prepare_sides, side_notes
@@ -175,7 +175,7 @@ def create_curve_fit(*, predict_settings=None):
         settings = predict_options({"seed": CURVE_FIT_SEED, "qz": cut_qz,
                                     "reflected_beam": True if cut_qz else None, **chosen, **algorithm})
         solutions = refine.predict(proposals, item["q"], item["observed"], item["sigma"],
-                                   cancelled=cancelled, **settings)
+                                   cancelled=cancelled, threads=parallel.default_threads(), **settings)
         if not solutions:
             raise ValueError("Predict parameters found no solution for this curve")
         q = np.asarray(item["q"], float)

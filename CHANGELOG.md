@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- **Predict parameters** runs on several threads: half the logical processors, at most 12 (`GIMAP_PREDICT_THREADS` sets another number). The results are the same as on one thread. Sizes *Gaussian, by intensity*, which have no tables, gain most: on a 776-point cut the network's step went from about 6 to about 1 minute per composition.
+
 - The joint-fit height benchmark records which vertical χ² and height-range warnings appear for each BornAgain case and Poisson draw. The vertical χ² warning points to *Physics and Methods* §9.18 for the measured height biases.
 
 - The Search baseline can use the same first-set or fresh curves as Predict and replay their archived predecessors. The Table 3 verifier defaults to revision 15 and checks its 25 rows against the supplied manuscript and benchmark records. Use `--revision 14` for the archived table.

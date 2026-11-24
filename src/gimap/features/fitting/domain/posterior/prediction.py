@@ -11,7 +11,7 @@ import numpy as np
 
 from .. import fit_engine
 from . import encoding as E
-from . import reporting
+from . import parallel, reporting
 from .infer import Composition, Cut, Mode, infer
 from .laplace import Local, local_posterior, pool_composition
 from .model_start import fit_model
@@ -89,6 +89,7 @@ def _comparison(groups, pools, bics, by_bic):
     return probabilities, shares, best
 
 
+@parallel.one_blas_thread
 def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Optional[float] = None,
             compositions: Optional[Sequence[int]] = None,
             allowed=None, shortlist: int = SHORTLIST, samples: int = SAMPLES, seed: int = 0,
@@ -96,7 +97,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
             grazing: Optional[dict] = None, local_samples: int = LOCAL_SAMPLES,
             refine_modes: int = REFINED, explored: int = EXPLORED, model_error_floor: float = MODEL_ERROR_FLOOR,
             cancelled=None, progress=None, partial=None, reflected_beam=None, known_heights=None, measured_qz=None,
-            substrate=None, upright_heights=None) -> list[PosteriorSolution]:
+            substrate=None, upright_heights=None, threads: int = 1) -> list[PosteriorSolution]:
     """Solutions of a cut (q in nm⁻¹, qz the vacuum q₊ = k_i + k_f of the Born term in nm⁻¹, 0: the effective
     interface; ``qz_minus`` k_i − k_f when both angles are known: spheres get the exit-reflected path with a free
     effective reflection coefficient, ``Cut.reflected``), most probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
@@ -119,7 +120,8 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
     network), ``refinement`` (compositions whose modes were refined), ``starts`` (compositions given moved starts),
     ``search`` (a search of the ranges), ``sampling`` (solutions whose posterior was sampled). ``partial``: given,
     after each sampling but the last, the solutions of those sampled so far, their probabilities over them alone
-    (step 4 on what is done). Neither changes what is computed nor the solutions returned."""
+    (step 4 on what is done). Neither changes what is computed nor the solutions returned, nor does ``threads``, the
+    threads of the batch likelihoods of steps 1 and 3 and of the least-squares fits of step 2 (``parallel``)."""
     from . import refine
 
     tick = time.perf_counter()
@@ -149,16 +151,41 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
         return float(residual @ residual + floor_fit.free * math.log(floor_fit.points))
 
     results = infer(network, counts, compositions, allowed=allowed, shortlist=shortlist, samples=samples, seed=seed,
-                    law=law, coupling=coupling,
+                    law=law, coupling=coupling, threads=threads,
                     progress=None if progress is None else (lambda done, total: tell("proposals", done, total)))
     lo, hi = E.bounds([data.ratio])
     tau_dim = E.GLOBAL.start + 3
     found = {r.index: [] for r in results}
 
-    def add(result, mode, refined) -> None:
+    def measured(result, mode, refined) -> Candidate:
         floor_fit = fit_engine.fit(refined.model, weighed, method="local") if model_error_floor > 0 else refined
         centre = refine.model_values(floor_fit.model, result.index)
-        candidate = Candidate(result, mode, refined, floor_fit, centre, bic(floor_fit))
+        return Candidate(result, mode, refined, floor_fit, centre, bic(floor_fit))
+
+    def fitted(job) -> Candidate:
+        """A start ``(result, mode, model)`` refined by least squares, then with the model-error floor."""
+        result, mode, start = job
+        return measured(result, mode, fit_engine.fit(start, fit_data, method="local"))
+
+    def add(result, mode, refined) -> None:
+        place(measured(result, mode, refined))
+
+    def place_all(jobs, numbers, stage: str, total: int) -> None:
+        """The starts ``jobs`` ((composition's number, (result, mode, start)), in order) refined on ``threads``
+        threads and placed in that order, the compositions ``numbers`` reported as ``stage``."""
+        refined = parallel.ordered(fitted, [job for _number, job in jobs], threads)
+        try:
+            for number in numbers:
+                check()
+                tell(stage, number, total)
+                for _ in range(sum(n == number for n, _job in jobs)):
+                    place(next(refined))
+        finally:
+            refined.close()
+
+    def place(candidate) -> None:
+        """Keep a candidate, or the better of it and an earlier one at the same values (so the order matters)."""
+        result, centre = candidate.result, candidate.centre
         types = E.composition_types(result.index)
         modes = found[result.index]
         for i, previous in enumerate(modes):
@@ -173,35 +200,33 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
         refined, without the tempered modes and the moves (their benchmarks have no random cylinders)."""
         return any(family == "cylinder" for family, _s in E.composition_types(index))
 
+    jobs = []  # (composition's number, (result, mode, start)), in the order they are placed
     for number, result in enumerate(results):
-        check()
-        tell("refinement", number, len(results))
         started = []
         for mode in result.modes[:refine_modes] + ([] if slow(result.index) else result.explore[:explored]):
             if any(np.array_equal(mode.best, s, equal_nan=True) for s in started):
                 continue
             started.append(mode.best)
-            add(result, mode, fit_engine.fit(fit_model(mode.best, result.index, counts, law, coupling, grazing),
-                                             fit_data, method="local"))
+            jobs.append((number, (result, mode, fit_model(mode.best, result.index, counts, law, coupling, grazing))))
+    place_all(jobs, range(len(results)), "refinement", len(results))
     tell("refinement", len(results), len(results))
     def ranked_compositions():
         return sorted((r for r in results if found[r.index]), key=lambda r: min(e.bic for e in found[r.index]))
 
     by_score = ranked_compositions()
+    moved = []  # (composition's number, (result, mode, start)): the solutions placed so far are the moves' centres
     for number, result in enumerate(by_score[:refine.RETRY_COMPOSITIONS]):
         placed = [e for e in found[result.index] if e.centre is not None]
         if not refine.MOVES or not placed or slow(result.index):
             continue
-        check()
-        tell("starts", number, len(by_score[:refine.RETRY_COMPOSITIONS]))
         for candidate in sorted(placed, key=lambda e: e.bic)[:refine.MOVED_SOLUTIONS]:
             tried = []
             for values in moved_starts(candidate.centre, result.index):
                 start = fit_model(values, result.index, counts, law, coupling, grazing)
                 residual = fit_engine.residuals(start, fit_data)
                 tried.append((float(residual @ residual), len(tried), start))
-            for _chi2, _i, start in sorted(tried)[:refine.MOVES]:
-                add(result, candidate.mode, fit_engine.fit(start, fit_data, method="local"))
+            moved += [(number, (result, candidate.mode, start)) for _chi2, _i, start in sorted(tried)[:refine.MOVES]]
+    place_all(moved, sorted({n for n, _job in moved}), "starts", len(by_score[:refine.RETRY_COMPOSITIONS]))
     by_score = ranked_compositions()
     for result in by_score[:refine.RETRY_COMPOSITIONS]:
         if result.modes and min(e.counts_fit.chi2_reduced for e in found[result.index]) > refine.CHI2_RETRY:
@@ -286,7 +311,8 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
             tau = entry.mode.median[tau_dim]
             entry.local = local_posterior(data, entry.result.index, entry.centre, float(tau) if np.isfinite(tau) else 0.02,
                                           rng, local_samples, law, coupling,
-                                          rounds=refine.SLOW_ROUNDS if slow(entry.result.index) else refine.LOCAL_ROUNDS)
+                                          rounds=refine.SLOW_ROUNDS if slow(entry.result.index) else refine.LOCAL_ROUNDS,
+                                          threads=threads)
         if partial is not None and number + 1 < len(kept):
             partial(finish(kept[:number + 1]))
     tell("sampling", len(kept), len(kept))
