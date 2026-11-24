@@ -1,6 +1,6 @@
 {
  "format": "gimap_ml1d_flow_v2",
- "encoding": 4,
+ "encoding": 5,
  "names": [
   "R_1",
   "sigma_R_1",
@@ -104,5 +104,5 @@
   ]
  ],
  "purpose": "reference network of tests/test_ml1d_flow.py (random weights)",
- "sha256": "71c8e1be26791be08ae18745228f11cd9a5c88db8c425589604ff5ccdbe7ad8d"
+ "sha256": "c088495acb265371cb631e0a5bda254a7b3d59b0bcce533af682bbc6413f95ef"
 }
