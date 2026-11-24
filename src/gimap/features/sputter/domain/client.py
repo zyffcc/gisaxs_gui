@@ -204,6 +204,9 @@ class ClientResult:
     """(key, name) of the physical terms the entries are split into (empty for an older package)."""
     process: Optional[object] = None
     """The analysis of the growth process (``process.ProcessAnalysis``), None when the package gives none."""
+    stop_hint: Optional["StopHint"] = None
+    """The package's reminder that the deposition seems to have stopped although no duration was given (None: no
+    reminder, or an older package)."""
 
     @property
     def static(self) -> bool:
@@ -354,6 +357,31 @@ def _window(record, keys) -> Optional[ClientWindow]:
                         bool(record.get("on_demand")))
 
 
+@dataclass(frozen=True)
+class StopHint:
+    """``analysis.json`` ``stop_hint`` with ``hint`` true: no deposition duration was given, but the lateral scale the
+    package reads from the counts stops growing and the windows after that fit clearly worse — the deposition may have
+    stopped there, and the windows after it are fitted with too much metal. A reminder, never a cut."""
+    time_s: float
+    """Seconds after the start of the deposition (what the duration field takes)."""
+    nominal_nm: Optional[float] = None
+    """The nominal amount deposited by then."""
+    deviation_before: Optional[float] = None
+    deviation_after: Optional[float] = None
+    """Median fit deviation of the windows before and after that time."""
+
+
+def stop_hint(record) -> Optional[StopHint]:
+    """The reminder of ``analysis.json`` (None when there is none or it is not well formed)."""
+    if not isinstance(record, dict) or record.get("hint") is not True:
+        return None
+    time_s = number(record.get("t_stop_s"))
+    if time_s is None or time_s <= 0:
+        return None
+    return StopHint(time_s, number(record.get("h_stop_nm")), number(record.get("dev_before")),
+                    number(record.get("dev_after")))
+
+
 def client_result(folder: Path, main: dict, analysis: Optional[dict] = None, on_demand=()) -> ClientResult:
     """The result described by ``main/main.json`` (and ``analysis.json`` when it is there), with the windows asked
     for after the analysis (``on_demand``: records of ``main/at_time.json``) among its windows in time order — a time
@@ -384,7 +412,8 @@ def client_result(folder: Path, main: dict, analysis: Optional[dict] = None, on_
         str(main.get("kind") or analysis.get("kind") or ""), str(axis.get("label") or ""), str(axis.get("unit") or ""),
         dict(analysis["mask"]) if isinstance(analysis.get("mask"), dict) else {},
         isinstance(analysis.get("joint_fit"), dict) and analysis["joint_fit"].get("done") is False,
-        components_listed(main.get("components")), process_analysis(main.get("process")))
+        components_listed(main.get("components")), process_analysis(main.get("process")),
+        stop_hint(analysis.get("stop_hint")))
 
 
 def window_patterns(window: ClientWindow, arrays) -> WindowPatterns:
@@ -417,5 +446,5 @@ def window_patterns(window: ClientWindow, arrays) -> WindowPatterns:
 
 __all__ = ["ANALYSIS_FILE", "BAD_ARRAYS", "BAD_MAIN", "CLIENT_RESULT_TEMPLATES", "ClientEntry", "ClientQuantity",
            "ClientResult", "ClientWindow", "LISTED_ONLY", "MAIN_FILE", "MAIN_FOLDER", "NO_ARRAYS", "NO_MAIN", "NO_SOLUTION",
-           "POROUS_KEYS", "QUANTITIES", "STATIC_KIND", "WindowPatterns", "client_result", "window_key",
-           "window_patterns"]
+           "POROUS_KEYS", "QUANTITIES", "STATIC_KIND", "StopHint", "WindowPatterns", "client_result", "stop_hint",
+           "window_key", "window_patterns"]

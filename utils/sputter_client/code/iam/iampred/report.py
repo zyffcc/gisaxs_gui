@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from . import registry as REG
+from . import stop_hint as SH
 from .replot import lines_of
 
 HERE = Path(__file__).resolve().parent
@@ -234,12 +235,28 @@ def model_limits(family, rows):
     return out + [""]
 
 
-def markdown(path, scan, fam_zh, rows, main, summ):
+def stop_lines(h):
+    'REPORT.md reminder (iampred.stop_hint, 2026-11-24): the deposition seems to have stopped but no duration was'
+    if not (h or {}).get("hint"):
+        return []
+    t = h["t_stop_s"]
+    at = f"起镀后约 {t:.0f} s" if t >= 10 else f"起镀后约 {t:.1f} s"
+    at += (f"（名义沉积量 {h['h_stop_nm']:.1f} nm）" if h.get("h_stop_nm") is not None else "")
+    return ["## 提醒：沉积可能已经停止", "",
+            f"没有给沉积时长，模型按一直在沉积来算。但直接读出的横向尺度在{at}以后不再长（后半段 ln L 对 ln t 的斜率 "
+            f"{round(h['slope'], 2) + 0.0:.2f}，低于判据 {h['slope_limit']:g}），这之后的窗拟合偏差中位数是 {h['dev_after']:.1f}，之前是 "
+            f"{h['dev_before']:.1f}。如果沉积在那时已经停止，请给出沉积时长（GIMaP 溅射页的“沉积持续时间”，命令行 "
+            "`--t-sput`）后重新分析：停镀以后的窗现在按过多的金属拟合，结果不可信。如果确实是连续沉积，可以不理会这条提醒"
+            "（金属还在增加时横向尺度也可能停住）。", ""]
+
+
+def markdown(path, scan, fam_zh, rows, main, summ, stop=None):
     keys = [("d_film_nm", "膜厚 (nm)", 1), ("h_grain_nm", "晶粒高度 (nm)", 1), ("density", "致密度 h/d", 2), ("yoneda_rel", "光学致密度 (α/α_c)²", 2),
             ("L_lateral_nm", "横向尺度 2π/q (nm)", 0)] + [(c, lab, 2 if not c.endswith("_nm") else 1) for c, lab in main]
     keys = [k for k in keys if any(k[0] in r["q"] for r in rows)]
     txt = [f"# {scan}：形貌报告（{fam_zh}）", "",
            "开发参考：结果没有经过独立表征（AFM、XRR、SEM）验证。数字前没有记号的是直接读数，ᵐ 是模型值，≈ 是估计；括号里是范围。", ""]
+    txt += stop_lines(stop)
     st_seq = []
     for r in rows:
         if not st_seq or st_seq[-1][0] != r["stage"]:
@@ -311,7 +328,8 @@ def report(d):
     names = same(tab.get("families", {})) or {}
     fam_en, fam_zh = names.get("en", summ["family"]), names.get("zh", summ["family"])
     figure(d / "report.png", rows, main, f"{summ['scan']} ({fam_en}; development reference)")
-    markdown(d / "REPORT.md", summ["scan"], fam_zh, rows, [(c, zh.get(c, lab)) for c, lab in main], summ)
+    markdown(d / "REPORT.md", summ["scan"], fam_zh, rows, [(c, zh.get(c, lab)) for c, lab in main], summ,
+             SH.for_folder(d))
     st = [r["stage"] for r in rows]
     print(f"{summ['scan']}: {len(rows)} windows; stages " + ", ".join(f"{s} {st.count(s)}" for s in dict.fromkeys(st))
           + f"; fit good {sum(r['fit_grade'] == 'good' for r in rows)} fair {sum(r['fit_grade'] == 'fair' for r in rows)} poor {sum(r['fit_grade'] == 'poor' for r in rows)}")

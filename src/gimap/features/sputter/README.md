@@ -151,6 +151,12 @@ geometry in one line with **Edit**, **Open Result…**):
   column of Details ▸ Windows — only when `main.json` lists it among its `wanted` quantities
   (`ClientResult.shows`, `domain/client.py` `LISTED_ONLY`); an older result keeps it for the real-space picture only. The
   live view's own result lists it once the package reports its steps.
+  `analysis.json` `stop_hint` (a package from 18a99de8 on): with `hint` true — no duration given, the lateral scale
+  read from the counts stops growing and the later windows fit clearly worse — `ClientResult.stop_hint`
+  (`domain/client.py` `StopHint`: seconds after the start, nominal deposit, fit deviation before and after) puts
+  `client_texts.STOP_HINT` on `result_note`, the line under the window selector (`client_panel._show_result_name`;
+  warning role, `STOP_HINT_DETAIL` in its tooltip), with the notes that the joint fit is running (`PRELIMINARY`, info
+  role) or did not finish (`JOINT_FAILED`): after the result's name they squeezed the window slider.
   Entries are named in `client_texts.entry_name`: *Candidate n*, *Refined*, *Joint fit (whole scan)*, *Model
   solution*; refined and joint entries have no network weight. A choice of the user is kept per window in
   `main/choices.json` (only where it differs from the default; in the user data folder when the result cannot be

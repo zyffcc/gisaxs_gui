@@ -34,7 +34,7 @@ from ..application import (FILM_SUBSTRATES, ClientFailed, ClientProgress, Client
                            LiveEvent, Stopped, folder_key)
 from .client_texts import (DONE, FAILED_TOAST, GEOMETRY_ALPHA, GEOMETRY_CENTRE, GEOMETRY_CENTRE_AUTO, GEOMETRY_DISTANCE,
                            GEOMETRY_ENERGY, GEOMETRY_MISSING, GEOMETRY_ROLL, GEOMETRY_TO_ENTER, GEOMETRY_WAVELENGTH,
-                           NO_REPORT, PACKAGE_LINE, PACKAGE_NONE, PRELIMINARY, READY_TOAST, SHOWN_AGAIN, STARTING,
+                           NO_REPORT, PACKAGE_LINE, PACKAGE_NONE, READY_TOAST, SHOWN_AGAIN, STARTING,
                            STOPPING_ANALYSIS, WAITING_TO_ANALYZE, wrappable)
 from .geometry import warning_style
 from .live_steps_panel import LIVE_PAGE
@@ -473,8 +473,8 @@ class SputterClientMixin:
             return
         self.show_client_result(result)
         if self.client_result is not None:
-            self.result_name.setText(f"{self.result_name.text()}  ·  {tr(PRELIMINARY)}")
             self._live_preliminary = self.client_result
+            self._show_result_name()  # with the note that the joint fit is running
             if self._live is not None:
                 self.result_stack.setCurrentIndex(LIVE_PAGE)
             self._live_show_status()

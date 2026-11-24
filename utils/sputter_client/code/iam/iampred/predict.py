@@ -209,8 +209,89 @@ def _variant_pass(args):
     for row in rows:
         row.pop("variants", None)
         if "best" in row:
-            vtodo += [(row, row["t"], v) for v in _variants(A.Context(cfg, s, row["t"]), row["best"]["x"], var, row)]
+            vtodo += [(row, row["t"], v) for v in _variants(A.Context(cfg, s, row["t"]), start_entry(row)["x"], var, row)]
     _refine_variants(cfg, s, vtodo, var)
+    return rows
+
+
+def start_entry(row):
+    "The window's best start: its best candidate, or a candidate of another network (--pool-from) with a lower dev5."
+    return min([row["best"]] + [e for e in row.get("foreign", ()) if np.isfinite(e.get("dev5", np.nan))],
+               key=lambda e: e["dev5"])
+
+
+def other_network_items(dirs, rows, info):
+    "--pool-from: {t: [dict(src, x)]} - the candidates of other networks' predict runs on this scan (DIR/state.json.gz)"
+    by_t = {float(r["t"]): [] for r in rows if "best" in r}
+    fams = {}
+    for d in dirs:
+        st = _load(Path(d) / "state.json.gz")
+        fam_, pn = st["key"]["family"], list(st["info"]["pnames"])
+        n_ = 0
+        for r in st["rows"]:
+            t = float(r["t"])
+            if t not in by_t:
+                continue
+            for j, c in enumerate(r.get("cands", ())):
+                if "x" not in c or not np.isfinite(c.get("dev5", np.nan)):
+                    continue
+                x = REG.map_params(pn, c["x"], info["pnames"], info["start"], info["lb"], info["ub"])[0]
+                by_t[t].append(dict(src=f"{fam_} candidate {j + 1}", x=x.tolist()))
+                n_ += 1
+        fams[fam_] = n_
+    return by_t, fams
+
+
+def _foreign_pass(args):
+    '--pool-from: the other networks\' candidates of every row drawn with this family\'s model (row["foreign"]).'
+    cfg, scan, rows, by_t = args
+    from . import adapter as A
+    s = A.get_scan(scan)
+    for n, row in enumerate(rows):
+        LV.progress("render", n, len(rows), family=cfg["family"])
+        es = by_t.get(float(row["t"])) or []
+        if not es or "best" not in row:
+            continue
+        ctx = A.Context(cfg, s, row["t"])
+        nf = len(ctx.names)
+        out = []
+        for e in es:
+            xv = np.asarray(e["x"], float)
+            xv[:nf] = np.clip(xv[:nf], ctx.f.lb + 1e-9, ctx.f.ub - 1e-9)
+            try:
+                (mu, _, _), m, p, h = ctx.render(xv)
+                d5, _ = ctx.dev5(mu)
+                out.append(dict(src=e["src"], dev5=d5, reported=ctx.reported(m, p, h).tolist(), x=xv.tolist(), h_m=h))
+            except (Exception, SystemExit) as err:
+                out.append(dict(src=e["src"], dev5=float("nan"), error=str(err)[:120]))
+        row["foreign"] = out
+    LV.progress("render", len(rows), len(rows), force=True, family=cfg["family"])
+    return rows
+
+
+def _pool_other_networks(cfg, a, rows, info, dirs, var, nw, notes):
+    "--pool-from with --sequence: the other networks' candidates drawn in every window (_foreign_pass), then - with"
+    t0 = time.time()
+    by_t, fams = other_network_items(dirs, rows, info)
+    LV.step("joint.pool", "running", summary="candidates of the other networks drawn with this model")
+    chunks = [rows[i::nw] for i in range(nw)]
+    rows = sum(runner.run(cfg, [(cfg, a.scan, c, by_t) for c in chunks if c], _foreign_pass, nw, data=a.data,
+                          shadow=a.shadow), [])
+    rows.sort(key=lambda r: r["t"])
+    better = sum(1 for r in rows if "best" in r and start_entry(r) is not r["best"])
+    print(f"--pool-from: {sum(fams.values())} candidates of {', '.join(fams) or 'no network'} drawn in "
+          f"{sum(bool(r.get('foreign')) for r in rows)} windows, better than this network's best in {better} "
+          f"({time.time() - t0:.0f} s)", flush=True)
+    notes.append(f"candidates of other networks in the whole-scan pools: "
+                 + ", ".join(f"{f_} ({n_})" for f_, n_ in fams.items()) + f"; the best start in {better} windows")
+    a._pool_note = dict(families=fams, windows_better=better)
+    if var:
+        chunks = [rows[i::nw] for i in range(nw)]
+        rows = sum(runner.run(cfg, [(cfg, a.scan, c, var) for c in chunks if c], _variant_pass, nw, data=a.data,
+                              shadow=a.shadow), [])
+        rows.sort(key=lambda r: r["t"])
+        print(f"--variant: {sum(len(r.get('variants', ())) for r in rows)} start variants in "
+              f"{sum(bool(r.get('variants')) for r in rows)} windows", flush=True)
     return rows
 
 
@@ -322,6 +403,9 @@ def scan_pools(sq, use, transplant, log=print):
     for (_, es), r in zip(pools, use):
         if "refined" in r and np.isfinite(r["refined"]["dev5"]):
             es.append(_entry(r["refined"], src="refined"))
+        for e in r.get("foreign", ()):
+            if np.isfinite(e.get("dev5", np.nan)):
+                es.append(_entry(e, src=e["src"]))
         for v in r.get("variants", ()):
             if np.isfinite(v.get("dev5", np.nan)):
                 es.append(_entry(v, src=f"variant {v['label']}"))
@@ -333,7 +417,8 @@ def scan_pools(sq, use, transplant, log=print):
         return pools
     t0 = time.time()
     own = [r["refined"] if "refined" in r and np.isfinite(r["refined"]["dev5"]) else r["best"] for r in use]
-    own = [min([o] + [v["refined"] for v in r.get("variants", ()) if np.isfinite((v.get("refined") or {}).get("dev5", np.nan))],
+    own = [min([o] + [v["refined"] for v in r.get("variants", ()) if np.isfinite((v.get("refined") or {}).get("dev5", np.nan))]
+               + [e for e in r.get("foreign", ()) if np.isfinite(e.get("dev5", np.nan))],
                key=lambda e: e["dev5"]) for o, r in zip(own, use)]
     nf = sq.nf
     jobs, src = {}, {}
@@ -599,6 +684,10 @@ def main():
                     "runs the chosen network a second time), the network steps were reported by the first run")
     ap.add_argument("--reuse", action="store_true", help="take features, candidates and per-window refinement from "
                     "OUT/state.json.gz when it was written for the same model, windows, --k and --refine")
+    ap.add_argument("--pool-from", default="", help="--sequence: DIR,... - predict outputs of other networks on the same "
+                    "scan (DIR/state.json.gz): their candidates, parameters carried over by name (registry.map_params), "
+                    "are drawn with this family's model in the windows both have and join the whole-scan pools; the "
+                    "start variants start from the best of this family's and these candidates (2026-11-24, conform round 18)")
     ap.add_argument("--like", default=None)
     ap.add_argument("--data")
     ap.add_argument("--shadow")
@@ -682,6 +771,7 @@ def main():
     key = json.loads(json.dumps(dict(family=cfg["family"], scan=a.scan, family_hash=cfg["family_hash"],
                                      forward_hash=cfg["forward_hash"], model="+".join(_sha(p_) for p_ in model_paths), k=a.k, refine=a.refine,
                                      like=a.like, times=[float(t) for t in times])))
+    pool_dirs = [Path(d_) for d_ in a.pool_from.split(",") if d_]
     st = None
     if a.reuse and (out / "state.json.gz").is_file():
         st = _load(out / "state.json.gz")
@@ -726,7 +816,8 @@ def main():
                  for d, cs in zip(okf, cands)]
         chunks = [items[i::nw] for i in range(nw)]
         var = parse_variants(a.variant, info["pnames"], a.variant_refine, a.variant_min_fb)
-        rows = sum(runner.run(cfg, [(cfg, a.scan, c, a.refine, str(out), len(items)) + ((var,) if var else ())
+        var_now = None if pool_dirs and a.sequence > 0 else var
+        rows = sum(runner.run(cfg, [(cfg, a.scan, c, a.refine, str(out), len(items)) + ((var_now,) if var_now else ())
                                     for c in chunks if c], _render, nw, data=a.data, shadow=a.shadow), [])
         rows.sort(key=lambda r: r["t"])
         _dump(out / "state.json.gz", dict(key=key, info=info, q=q, rows=rows,
@@ -735,10 +826,11 @@ def main():
         feats, info, q, rows = st["feats"], st["info"], np.array(st["q"], float), st["rows"]
         for r in rows:
             r.pop("seq", None)
+            r.pop("foreign", None)
         okf = [d for d in feats if d["ok"]]
         print(f"--reuse: {len(okf)} windows (features, candidates, per-window refinement) from state.json.gz", flush=True)
         var = parse_variants(a.variant, info["pnames"], a.variant_refine, a.variant_min_fb)
-        if var and a.sequence > 0:
+        if var and a.sequence > 0 and not pool_dirs:
             LV.step("joint.pool", "running", summary="film windows: start variants refined on their own")
             t_var = time.time()
             chunks = [rows[i::nw] for i in range(nw)]
@@ -747,6 +839,8 @@ def main():
             rows.sort(key=lambda r: r["t"])
             print(f"--variant: {sum(len(r.get('variants', ())) for r in rows)} start variants in "
                   f"{sum(bool(r.get('variants')) for r in rows)} windows ({time.time() - t_var:.0f} s)", flush=True)
+    if pool_dirs and a.sequence > 0:
+        rows = _pool_other_networks(cfg, a, rows, info, pool_dirs, var, nw, notes)
     if netfam != cfg["family"]:
         new_ = [n_ for n_ in info["pnames"] if n_ not in meta["params"]]
         dropped_ = [n_ for n_ in meta["params"] if n_ not in info["pnames"]]
@@ -846,6 +940,9 @@ def main():
                 setup_notes["variants"] = dict(specs=list(a.variant), refine=a.variant_refine, min_fb=a.variant_min_fb,
                                                windows=sorted(float(r["t"]) for r in use if r.get("variants")),
                                                start_from={f"{t:g}": chosen[t].get("src") for t, _ in pools})
+            if getattr(a, "_pool_note", None):
+                setup_notes["pool_from"] = dict(a._pool_note, start_from_other_network=sorted(
+                    float(t) for t, _ in pools if not str(chosen[t].get("src", "")).startswith(("candidate", "refined", "variant", "from t="))))
             if free:
                 setup_notes["film_free"] = dict(quantities=free, rule=f"film stage: {a.film_stage}",
                                                 windows=[float(r["t"]) for r, f in zip(use, film_) if f])

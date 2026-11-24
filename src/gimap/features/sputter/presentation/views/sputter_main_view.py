@@ -376,6 +376,7 @@ class SputterMainView:
         self.result_name = QLabel("", view)  # the scan, the metal and the model family: data, not translated
         self.result_name.setProperty("gimapRole", "muted")
         self.result_name.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.window_slider.setMinimumWidth(120)
         selector.addWidget(self.window_previous)
         selector.addWidget(self.window_slider, 1)
         selector.addWidget(self.window_next)
@@ -390,6 +391,15 @@ class SputterMainView:
         selector.addSpacing(8)
         selector.addWidget(self.image_switch)
         layout.addLayout(selector)
+        # the package's notes on the result shown (its joint fit is running or did not finish, the deposition may have
+        # stopped): a line of their own, wrapped, so that the window selector keeps its width
+        self.result_note = QLabel("", view)
+        self.result_note.setObjectName("sputterResultNote")
+        self.result_note.setProperty("gimapRole", "warning")
+        self.result_note.setWordWrap(True)
+        self.result_note.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.result_note.setVisible(False)
+        layout.addWidget(self.result_note)
         self.at_time_row = QWidget(view)  # a time between the windows, analysed on demand (at_time_panel.py)
         at_time = QHBoxLayout(self.at_time_row)
         at_time.setContentsMargins(0, 0, 0, 0)

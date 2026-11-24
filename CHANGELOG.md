@@ -41,6 +41,15 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter ▸ Analyze: a reminder when the deposition seems to have stopped.** Left empty, **Deposition duration** means
+  metal is added until the end of the scan; when the shutter closed earlier, every window after the stop was fitted
+  with too much metal and its values were wrong, with no sign of it but a poor fit. Now, when the field is empty, the
+  lateral scale read from the counts stops growing and the windows after that fit at least 1.5 times worse, a line
+  under the window selector says *the deposition may have stopped about … s after its start* in the warning colour
+  (where the notes that the joint fit is running or did not finish now go too, instead of after the result's name,
+  which squeezed the window slider), and the report begins with the same reminder (analysis package 18a99de8). Enter the duration and analyse again, or ignore it
+  if the deposition went on. The reminder changes nothing in the result. With the joint fit (mode Refine, Auto on a
+  polymer film) it may not appear although the deposition stopped: enter the duration whenever you know it.
 - **Sputter: opening the page and switching between In situ and After Deposition.** The switch could hang the window:
   the mark of the evolution plot was redrawn from inside the plot's own repaint. It is now drawn into the picture being
   painted. Opening a result (and the Sputter page with the last result) is also faster: the real-space picture finds

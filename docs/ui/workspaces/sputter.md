@@ -82,7 +82,9 @@
   右边是分析的 `JobStatus`（`analyze_status`：取消、详情——详情按钮切到详情视图并显示分析的消息）。
 - **主屏**（`_main_view`，默认）：没有结果时是空状态（`client_empty`：没有分析包时说明怎么给出它，按钮“选择文件夹…”；
   有分析包时说明怎么得到结果，按钮“打开结果…”）。有结果时（`client_view`）：时间窗选择（上一个、滑块、下一个、
-  “t = … s · 已沉积 … nm”）与切换**图样 ｜ 实空间**（`image_switch`）；实测图与模型图（`PatternPair`），或所选解的实空间
+  “t = … s · 已沉积 … nm”、结果名 `result_name`）与切换**图样 ｜ 实空间**（`image_switch`）；其下一行 `result_note`（换行显示，
+  没有时隐藏，`client_panel._show_result_name`）是分析包对所示结果的说明：联合精修进行中（初步结果）、联合精修没有完成，
+  或没给沉积持续时间而数据显示可能已停镀（`analysis.json` 的 `stop_hint`，警示色，提示框写理由）；实测图与模型图（`PatternPair`），或所选解的实空间
   示意（`RealSpacePicture`，同一个位置，`pattern_host` 是两页的 `QStackedWidget`）；解的选择（`SegmentedControl`，页面按时间窗的
   条目动态建立：候选 1…3、精修解、联合精修解，各带拟合偏差）、**恢复默认解**、一句说明；数值块（半径 R、高度 H、间距 D、间隙、
   尺寸分布宽度、覆盖率；没有的量不显示；连续金属层 t_b（`base_nm`）只在结果的 `wanted` 列出它时显示，`ClientResult.shows`）
