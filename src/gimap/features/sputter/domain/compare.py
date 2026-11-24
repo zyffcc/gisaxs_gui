@@ -8,8 +8,8 @@ horizontal cut; only the values the package marks as read from the data, not its
 
 Every curve is a quantity against the nominal deposit of each window (nm: rate x time, the package's value) or the
 time since the onset of the deposition: two scans sputtered at different rates are compared at the same amount of
-metal. The growth table lists the package's growth descriptors of each scan (``process.DESCRIPTORS``) and the metal
-amount at which each stage starts. GIMaP computes none of these values: it reads them and places them side by side.
+metal. The growth table says first how each result was analysed (metal, substrate, model family, mode), then lists the
+package's growth descriptors of each scan (``process.DESCRIPTORS``) and the metal amount at which each stage starts. GIMaP computes none of these values: it reads them and places them side by side.
 """
 
 from __future__ import annotations
@@ -126,6 +126,16 @@ def curves(scans) -> list:
                                            for scan in scans)]
 
 
+INFO_ROWS = (("Metal", "metal"), ("Substrate", "substrate"), ("Model family", "family"), ("Mode", "mode"))
+"""(name, ClientResult field) of the text rows above the growth table: results analysed with another network family
+or mode are compared with that in view."""
+
+
+def info_rows(scans) -> list:
+    """(name, (text per scan)) of the rows that say how each result was analysed."""
+    return [(name, tuple(str(getattr(scan.result, key) or "") for scan in scans)) for name, key in INFO_ROWS]
+
+
 def growth_rows(scans) -> list:
     """(name, fields, unit, (value or None per scan)) of the growth table: the descriptors at least one scan has, then
     the metal amount at which each stage starts (name ``STAGE_ROW`` with ``fields`` {stage: the stage's name}; the
@@ -178,6 +188,8 @@ def growth_csv(scans) -> str:
     out.write("# GIMaP Sputter ▸ Compare Scans: growth descriptors of the analysis package (process analysis of each "
               "result); metal amounts in nm as the package gives them\n")
     writer.writerow(["quantity", "unit", *(scan.name for scan in scans)])
+    for name, texts in info_rows(scans):
+        writer.writerow([name, "", *texts])
     for name, fields, unit, values in growth_rows(scans):
         writer.writerow([name.format(**fields), unit, *("" if value is None else _plain(value) for value in values)])
     return out.getvalue()
@@ -187,5 +199,6 @@ def _plain(value) -> str:
     return "" if value is None or not math.isfinite(float(value)) else f"{float(value):.6g}"
 
 
-__all__ = ["AXES", "COMPARE_TEMPLATES", "CURVES", "CURVE_NAMES", "ComparedScan", "NO_SCAN", "READ", "STAGE_ROW",
-           "compare_csv", "curves", "default_name", "growth_csv", "growth_rows", "report_readings", "series"]
+__all__ = ["AXES", "COMPARE_TEMPLATES", "CURVES", "CURVE_NAMES", "ComparedScan", "INFO_ROWS", "NO_SCAN", "READ",
+           "STAGE_ROW", "compare_csv", "curves", "default_name", "growth_csv", "growth_rows", "info_rows", "report_readings",
+           "series"]

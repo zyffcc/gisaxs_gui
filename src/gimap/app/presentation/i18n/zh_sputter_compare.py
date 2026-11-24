@@ -49,4 +49,5 @@ SPUTTER_COMPARE_ZH = {
     "Time since the onset (s)": "沉积开始后的时间（s）",
     "{stage} starts at (metal amount, nm)": "{stage}开始于（金属量，nm）",
     "Tick at least one result to compare.": "至少勾选一个结果来比较。",
+    "Model family": "模型族",
 }

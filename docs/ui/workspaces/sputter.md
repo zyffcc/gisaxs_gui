@@ -450,7 +450,8 @@ q_y，float16，各项之和为 1）。读取：`domain/process.py`（`ProcessAn
 - **曲线**（`ComparePlots`，Matplotlib）：`domain/compare.CURVES` 里至少一个结果有的量，各一张小图（不多于 4 个时一行，5–9 个三列，
   更多四列）；模型量画所示的解（与主屏的选择相同，按需求的时间窗 `on_demand` 不画），读数（来源为 `reading`，估计值不画）画空心
   方块。每个结果一种数据颜色（`SCAN_COLOURS`，两种主题都看得清）。`drawn` 记下画出的 {量: {名称: (x, 值)}}（测试用）。
-- **生长**（`growth_table`，`enable_table_copy`，`DATA_HEADERS`）：`domain/compare.growth_rows`——`process.DESCRIPTORS` 里至少
+- **生长**（`growth_table`，`enable_table_copy`，`DATA_HEADERS`）：先是 `domain/compare.info_rows`（金属、基底、模型族、模式，
+  原样显示，导出时也在表头下），再是 `growth_rows`——`process.DESCRIPTORS` 里至少
   一个结果有的描述量，然后每个阶段开始时的金属量（`STAGE_ROW`，模板与阶段名分别翻译）。数值三位有效数字（`shown_number`）。
 - **导出…**：`CompareService.write_tables` 写 `compare_curves.csv`（长表：scan、quantity、unit、source、横轴、value）和
   `compare_growth.csv`，`#` 头行写每个结果的文件夹、扫描、金属、基底、模型族、模式和“GIMaP 不计算这些值”；图在
