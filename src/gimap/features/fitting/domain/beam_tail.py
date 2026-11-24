@@ -14,7 +14,8 @@ Predict parameters keeps its own prior's ranges: a solution of it does not have 
 changed here. ``undetermined`` names the free values whose 1σ error is not finite, or (sizes, spreads, distances,
 the tail's shape) above ``UNDETERMINED`` × the value; ``tail_flags`` says when the tail is in use (A above the lower
 edge of its range) and A, w or ν is at an edge of its range or has no finite error. ``flagged``, what a series counts:
-a tail flag, or a value without a finite error.
+a tail flag, or a value without a finite error. ``tail_flags`` and ``undetermined`` treat the diffuse term
+(``fit_model.DIFFUSE``) as they treat the tail.
 """
 
 from __future__ import annotations
@@ -31,8 +32,9 @@ EXPONENT_HIGH = 6.0
 UNDETERMINED = 10.0
 """A free value whose 1σ error exceeds this many times its size is reported as not determined by the curve."""
 TAIL = ("res_amplitude", "res_width", "res_exponent")
+DIFFUSE = ("diffuse_amplitude", "diffuse_width", "diffuse_hurst")
 RELATIVE = frozenset({"R", "sigma_R", "h", "sigma_h", "D", "sigma_nn", "t_shell", "R_hs", "phi", "res_width",
-                      "res_exponent"})
+                      "res_exponent", "diffuse_width"})
 """Values that are sizes, spreads, distances or the tail's shape: their error is judged against the value."""
 LOW_POINTS = 6
 """Points at the start of the curve whose slope in log–log gives the tail's starting exponent."""
@@ -108,7 +110,7 @@ def _silent(model: FitModel, path: tuple) -> bool:
     if key in LINEAR:
         return model.get(path).value == 0
     if owner == "globals":
-        return key in TAIL and model.globals["res_amplitude"].value == 0
+        return any(key in keys and model.globals[keys[0]].value == 0 for keys in (TAIL, DIFFUSE))
     return model.components[owner].value("Int") == 0
 
 
@@ -117,18 +119,25 @@ def _upper_half(parameter) -> bool:
 
 
 def tail_flags(result) -> tuple:
-    """The tail's values that are a problem while the tail is in use (A free, above the lower edge of its range): at
-    an edge of their range, or without a finite error: ``(path, "bound" | "undetermined")``."""
+    """The values of the tail and the diffuse term that are a problem while the term is in use (its amplitude free,
+    above the lower edge of its range): at an edge of their range, or without a finite error:
+    ``(path, "bound" | "undetermined")``."""
     if getattr(result, "start_kept", False) or getattr(result, "stopped", False):
         return ()
-    model = result.model
-    amplitude = model.globals["res_amplitude"]
-    path_a = ("globals", "res_amplitude")
+    model, out = result.model, []
+    for keys in (TAIL, DIFFUSE):
+        out += _term_flags(result, model, keys)
+    return tuple(out)
+
+
+def _term_flags(result, model, keys) -> list:
+    amplitude = model.globals[keys[0]]
+    path_a = ("globals", keys[0])
     if amplitude.value <= 0 or not amplitude.free or amplitude.tie or (
             path_a in result.at_bounds and not _upper_half(amplitude)):
-        return ()  # no tail, or one at the lower edge of A: not in use
+        return []  # no term, or one at the lower edge of its amplitude: not in use
     out = []
-    for key in TAIL:
+    for key in keys:
         path, parameter = ("globals", key), model.globals[key]
         if not parameter.free or parameter.tie:
             continue
@@ -137,7 +146,7 @@ def tail_flags(result) -> tuple:
             out.append((path, "bound"))
         elif error is not None and not math.isfinite(error):
             out.append((path, "undetermined"))
-    return tuple(out)
+    return out
 
 
 def flagged(result) -> bool:
@@ -146,5 +155,5 @@ def flagged(result) -> bool:
     return bool(result is not None and (tail_flags(result) or undetermined(result, finite_only=True)))
 
 
-__all__ = ["AMPLITUDE_FACTOR", "EXPONENT_HIGH", "TAIL", "UNDETERMINED", "WIDTH_HIGH", "WIDTH_LOW", "flagged", "is_generic",
+__all__ = ["AMPLITUDE_FACTOR", "DIFFUSE", "EXPONENT_HIGH", "TAIL", "UNDETERMINED", "WIDTH_HIGH", "WIDTH_LOW", "flagged", "is_generic",
            "limits", "start", "tail_flags", "tied_to_curve", "undetermined"]

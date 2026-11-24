@@ -30,7 +30,7 @@ from scipy.stats import qmc
 
 from . import fit_links, linked_fit
 from .fit_resolution import INVALID_DQ
-from .fit_model import LINEAR, NETWORK_FAMILIES, FitModel, evaluate, particle_forms, resolution_shape
+from .fit_model import CURVE_SCALES, LINEAR, NETWORK_FAMILIES, FitModel, evaluate, particle_forms, term_shape
 
 TINY = 1e-300
 CORRELATED = 0.95
@@ -302,12 +302,15 @@ class _Problem:
             if (index, "Int") in self.linear:
                 continue
             fixed = fixed + k * component.value("Int") * forms[index]
-        peak = resolution_shape(model, q) if (g["res_amplitude"].value or ("globals", "res_amplitude") in self.linear) else None
-        if peak is not None and ("globals", "res_amplitude") not in self.linear:
-            fixed = fixed + k * g["res_amplitude"].value * peak
+        shapes = {}
+        for key in CURVE_SCALES:
+            if g[key].value or ("globals", key) in self.linear:
+                shapes[key] = term_shape(model, key, q)
+                if ("globals", key) not in self.linear:
+                    fixed = fixed + k * g[key].value * shapes[key]
         for path in self.linear:
             owner, key = path
-            columns.append(np.ones_like(q) if key == "background" else k * (peak if key == "res_amplitude" else forms[owner]))
+            columns.append(np.ones_like(q) if key == "background" else k * (shapes[key] if key in shapes else forms[owner]))
         matrix = np.column_stack(columns) * self.weights[:, None]
         target = (self.data.intensity - fixed) * self.weights
         if not (np.all(np.isfinite(matrix)) and np.all(np.isfinite(target))):

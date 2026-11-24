@@ -12,7 +12,7 @@ import numpy as np
 from scipy.optimize import lsq_linear
 
 from . import fit_links
-from .fit_model import LINEAR, FitModel, particle_forms, resolution_shape
+from .fit_model import CURVE_SCALES, LINEAR, FitModel, particle_forms, term_shape
 
 
 def inequalities(problem, model: FitModel) -> list:
@@ -119,8 +119,8 @@ def scales_linked(problem, model: FitModel) -> FitModel:
         owner, key = path
         if key == "background":
             return np.ones_like(q)
-        if key == "res_amplitude":
-            return k * resolution_shape(model, q)
+        if key in CURVE_SCALES:
+            return k * term_shape(model, key, q)
         return k * forms[owner]
 
     tied = list(problem.linear_ties)

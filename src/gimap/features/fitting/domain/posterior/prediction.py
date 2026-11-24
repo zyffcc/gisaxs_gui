@@ -154,7 +154,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
                     law=law, coupling=coupling, threads=threads,
                     progress=None if progress is None else (lambda done, total: tell("proposals", done, total)))
     lo, hi = E.bounds([data.ratio])
-    tau_dim = E.GLOBAL.start + 3
+    tau_dim = E.ERROR_DIM
     found = {r.index: [] for r in results}
 
     def measured(result, mode, refined) -> Candidate:

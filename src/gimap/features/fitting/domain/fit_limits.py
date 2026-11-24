@@ -8,20 +8,23 @@ from .cut_model.sizes import size_report
 from .fit_model import INFO, FitModel
 
 
-TAIL_RANGES = frozenset({"res_amplitude", "res_width", "res_exponent"})
-"""The beam tail's ranges: set from the curve by GIMaP (``beam_tail``), and kept with any composition (globals)."""
+TAIL_RANGES = frozenset({"res_amplitude", "res_width", "res_exponent", "diffuse_amplitude", "diffuse_width",
+                         "diffuse_hurst"})
+"""The low-q terms (beam tail, diffuse term): their ranges and whether they are fixed are set by GIMaP (``beam_tail``,
+Predict parameters), and kept with any composition (globals)."""
 
 
 def _explicit_limit(owner, key, parameter, *, include_tail=False):
     defaults = INFO[key]
+    if owner == "globals" and key in TAIL_RANGES and not include_tail:
+        return False
     changed_range = (parameter.lower, parameter.upper) != (defaults.lower, defaults.upper)
-    return (changed_range and (include_tail or owner != "globals" or key not in TAIL_RANGES)
-            or not parameter.free and (defaults.free or parameter.value != defaults.value))
+    return changed_range or not parameter.free and (defaults.free or parameter.value != defaults.value)
 
 
 def explicit_limits(model: FitModel) -> bool:
-    """Defaults do not count as user constraints when exploring different compositions (nor do the beam tail's
-    ranges, which GIMaP sets from the curve and a proposal of any composition keeps)."""
+    """Defaults do not count as user constraints when exploring different compositions (nor do the low-q terms,
+    which GIMaP sets from the curve and a proposal of any composition keeps)."""
     return any(_explicit_limit(owner, key, p) for (owner, key), p in model.parameters())
 
 

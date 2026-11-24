@@ -42,7 +42,7 @@ def _number(value):
 
 def amplitudes(model) -> dict:
     """The linear terms of a model by their keys (``res_amplitude``, ``background``, ``Int_1`` …)."""
-    found = {key: float(model.globals[key].value) for key in ("res_amplitude", "background")}
+    found = {key: float(model.globals[key].value) for key in ("res_amplitude", "diffuse_amplitude", "background")}
     found.update({f"Int_{n}": float(c.value("Int")) for n, c in enumerate(model.components, start=1)})
     return found
 
@@ -182,6 +182,7 @@ def batch_compositions(types) -> dict:
 
 
 ROW_NAMES = {"res_width": "sigma_Res", "res_exponent": "nu_Res"}
+DIFFUSE_ROWS = ("diffuse_width", "diffuse_hurst")
 """Fitting's global names as the keys of the rows (the other values keep their keys; what a person reads of them:
 ``shared/fit_names.display_name``)."""
 
@@ -195,14 +196,15 @@ def at_bounds(model, tolerance: float = 1e-4) -> list[dict]:
     """The free shape and tail values of ``model`` on a bound of their range (within ``tolerance`` of it), as the
     rows list them: ``parameter``, ``bound`` (lower / upper), ``component`` (index; None for the tail). With
     Tail A = 0 the tail is absent and its width and exponent are not listed; nor are the values of a population
-    whose Scale is 0."""
+    whose Scale is 0; nor, with Diffuse A = 0, the diffuse term's."""
     out = []
     no_tail = float(model.globals["res_amplitude"].value) <= 0.0
+    no_diffuse = float(model.globals["diffuse_amplitude"].value) <= 0.0
     for path, parameter in model.parameters():
         owner, key = path
-        if not parameter.free or key in ("Int", "background", "res_amplitude", "k", "q_resolution"):
+        if not parameter.free or key in ("Int", "background", "res_amplitude", "diffuse_amplitude", "k", "q_resolution"):
             continue
-        if owner == "globals" and (key not in ROW_NAMES or no_tail):
+        if owner == "globals" and not (key in ROW_NAMES and not no_tail or key in DIFFUSE_ROWS and not no_diffuse):
             continue
         if owner != "globals" and float(model.components[int(owner)].value("Int")) <= 0.0:
             continue
@@ -230,7 +232,8 @@ def curve_rows(item, solutions, render_q, *, chosen_by: str) -> list[dict]:
                       "bounded least squares, the posterior sampled around the best solutions",
             unit_contract=dict(q="nm^-1", R_h_D="nm", sigma_R_h_D="relative standard deviation",
                                sigma_nn="sigma_nn/D, Hosemann; sigma_D = sigma_nn / sqrt(2 pi)", sigma_Res="nm^-1",
-                               nu_Res="dimensionless", amplitudes="input intensity units"))
+                               nu_Res="dimensionless", diffuse_width="nm^-1 (1/xi)", diffuse_hurst="dimensionless",
+                               amplitudes="input intensity units"))
         rows.append(row)
     return rows
 
@@ -277,6 +280,7 @@ def solution_row(solution, item, render_q, points=None) -> dict:
             "scattering": f"four-term DWBA on {model.substrate.label}"} if model.substrate is not None else {}),
         global_params=dict(background=float(g["background"].value), resolution_amplitude=float(g["res_amplitude"].value),
                            sigma_Res=float(g["res_width"].value), nu_Res=float(g["res_exponent"].value),
+                           **{key: float(g[key].value) for key in ("diffuse_amplitude", "diffuse_width", "diffuse_hurst")},
                            q_resolution=float(g["q_resolution"].value),
                            **{key: float(g[key].value) for key in ("alpha_i", "alpha_f", "wavelength")}),
         **{key: record[key]}, posterior=record["values"], posterior_summary=record["posterior_summary"],

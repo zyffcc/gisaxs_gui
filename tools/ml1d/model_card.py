@@ -31,7 +31,7 @@ def card(network: dict, evaluation: dict, benchmarks: list[tuple[str, dict]]) ->
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from src.gimap.features.fitting.domain.posterior import encoding
     from tools.benchmarks.composition_scores import METHOD
-    tail_width, tail_exponent = encoding.TAIL_WIDTH_MAX, encoding.TAIL_EXPONENT
+    tail_width, diffuse_width = encoding.TAIL_WIDTH[1], encoding.DIFFUSE_WIDTH[1]
     lines = [
         f"# Model card: {name} (GIMaP's proposal network of 1D cuts)", "",
         f"Trained as `{trained}`, shipped as `{name}`." if trained != name else "", "",
@@ -46,7 +46,8 @@ def card(network: dict, evaluation: dict, benchmarks: list[tuple[str, dict]]) ->
         "**Architecture.** " + ", ".join(f"{k} {v}" for k, v in arch.items()) + ".", "",
         f"**Training data.** {data.get('count')} cuts simulated with cut_model from `{data.get('prior_file')}` "
         f"(seed {data.get('seed')}, code {data.get('commit')}): {prior.get('description', '')}. Every batch draws "
-        "the populations' shares, the beam tail, the background, the model error, the measured points, Poisson "
+        "the populations' shares, the amplitudes of the beam tail and the diffuse term, the background, the model "
+        "error, the measured points, Poisson "
         "counts and gaps anew.", "",
         f"**Training.** Neural posterior estimation (−log q of the values + cross-entropy of the head), AdamW, batch "
         f"{training.get('batch')}, learning rate {training.get('lr')} with warm-up and cosine decay, "
@@ -87,8 +88,8 @@ def card(network: dict, evaluation: dict, benchmarks: list[tuple[str, dict]]) ->
     lines += ["", "## Where it does not apply", "",
               "- cuts spanning less than a factor 10 in q; points below q_max/300 are left out;",
               "- more than three populations, other families, random cylinders larger than R q_max = 50 or "
-              f"h q_max = 200, beam tails wider than {tail_width:g} q_min or with an exponent outside "
-              f"{tail_exponent[0]:g}–{tail_exponent[1]:g} (encoding {network.get('encoding')});",
+              f"h q_max = 200, beam tails wider than {tail_width:g} q_min or falling other than as q⁻², diffuse "
+              f"terms with 1/ξ above {diffuse_width:g} q_min (encoding {network.get('encoding')});",
               "- the network itself knows Gaussian sizes by number and the LMA; other laws and the DA are weighted "
               "from its proposals; the four-term DWBA is not in the model (with both angles of the cut, spheres "
               "have the direct and the exit-reflected path with a free effective reflection coefficient: two paths); "

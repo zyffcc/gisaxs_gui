@@ -22,16 +22,19 @@ NAMES = {
     "res_amplitude": "Tail A", "resolution_amplitude": "Tail A",
     "res_width": "Tail w", "tail_width": "Tail w", "sigma_Res": "Tail w",
     "res_exponent": "Tail ν", "tail_exponent": "Tail ν", "nu_Res": "Tail ν",
+    "diffuse_amplitude": "Diffuse A", "diffuse_width": "Diffuse w", "diffuse_hurst": "Diffuse H",
     "q_resolution": "σ_q", "k": "Factor k", "refl_amp": "|r|", "refl_phase": "arg r",
 }
 """Every key a fit, a row or a record uses for a quantity → its name in the Model table."""
-UNITS = {"R": "nm", "h": "nm", "D": "nm", "arg r": "rad", "Tail w": "nm⁻¹", "σ_q": "nm⁻¹"}
+UNITS = {"R": "nm", "h": "nm", "D": "nm", "arg r": "rad", "Tail w": "nm⁻¹", "Diffuse w": "nm⁻¹", "σ_q": "nm⁻¹"}
 """The unit of a quantity, by its display name."""
 POPULATION = ("R", "sigma_R", "h", "sigma_h", "D", "sigma_nn", "sigma_D", "Int", "amplitude")
 """The keys of a population's own values; every other key is of the whole curve (background, beam tail, resolution)."""
 TAIL = ("res_width", "tail_width", "sigma_Res", "res_exponent", "tail_exponent", "nu_Res")
 """The beam tail's width and exponent: they change nothing when Tail A is 0."""
 TAIL_AMPLITUDE = ("res_amplitude", "resolution_amplitude")
+DIFFUSE = ("diffuse_width", "diffuse_hurst")
+"""The diffuse term's width and Hurst exponent: they change nothing when Diffuse A is 0."""
 GRAZING_FLAGS = ("qzR", "qzR_cov", "qzR_fail", "cyl_sphere")
 GENERAL = ("low_ess", "bic", "model_error")
 """Flags of the whole solution (no value named)."""
@@ -229,7 +232,8 @@ def split_flags(flags: Iterable[str]) -> tuple[list[str], list[str]]:
 
 def clean_flags(flags: Iterable[str], amplitudes: dict) -> tuple:
     """The flags without those of a term that is absent: with Tail A = 0 (``amplitudes["res_amplitude"]``) nothing is
-    said of Tail A at its bound, nor of Tail w and Tail ν, which then change nothing; a background at 0 is no flag;
+    said of Tail A at its bound, nor of Tail w and Tail ν, which then change nothing (nor, with Diffuse A = 0, of the
+    diffuse term's values); a background at 0 is no flag;
     a population whose Scale is 0 (``amplitudes["Int_n"]``) gets one ``absent:n`` in place of the flags of its
     values. ``amplitudes``: the linear terms' values by their keys."""
     def zero(key: str) -> bool:
@@ -241,6 +245,8 @@ def clean_flags(flags: Iterable[str], amplitudes: dict) -> tuple:
 
     def absent(name: str) -> bool:
         key, slot = split_name(name)
+        if key == "diffuse_amplitude" or key in DIFFUSE:
+            return zero("diffuse_amplitude")
         if key in TAIL_AMPLITUDE or key == "background":
             return zero("res_amplitude") if key in TAIL_AMPLITUDE else zero("background")
         if key in TAIL:
@@ -323,6 +329,7 @@ def legend(populations: int = 1) -> str:
         ("sigma_nn_1", "σnn/D"), ("sigma_D", "σD/D = σnn/D / √(2π)"), ("amplitude / Int_1", "Scale")]
     pairs += [("background", "Background"), ("res_amplitude / resolution_amplitude", "Tail A"),
               ("res_width / tail_width / sigma_Res", "Tail w"), ("res_exponent / tail_exponent / nu_Res", "Tail ν"),
+              ("diffuse_amplitude", "Diffuse A"), ("diffuse_width", "Diffuse w"), ("diffuse_hurst", "Diffuse H"),
               ("q_resolution", "σ_q"), ("chi2", "χ²ᵣ")]
     return "; ".join(f"{key}: {name}" for key, name in pairs)
 

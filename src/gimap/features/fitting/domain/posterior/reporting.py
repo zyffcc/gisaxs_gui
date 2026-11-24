@@ -120,8 +120,7 @@ def reflection_quantiles(local, phase, ess_min):
     """Marginal |r| and arg(r) in radians, on the branch centred on the refined phase."""
     from . import encoding as E
 
-    g = E.GLOBAL.start
-    re, im = local.samples[:, g + 4], local.samples[:, g + 5]
+    re, im = local.samples[:, E.REFLECTION].T
     angle = phase + (np.arctan2(im, re) - phase + np.pi) % (2 * np.pi) - np.pi
     weights = local.tempered(ess_min)
     out = {}

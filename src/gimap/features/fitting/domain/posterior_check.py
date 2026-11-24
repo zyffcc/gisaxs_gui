@@ -59,13 +59,13 @@ class PredictTarget:
         self.composition = int(composition)
         self.likelihood = Likelihood(self.data, self.composition, law, coupling)
         active = E.active(self.composition)[0]
-        reflection = {E.GLOBAL.start + 4, E.GLOBAL.start + 5}
+        reflection = set(range(E.REFLECTION.start, E.REFLECTION.stop))
         self.dims = [d for d in np.flatnonzero(active) if self.likelihood.free_reflection or d not in reflection]
         self.names = [PHYSICAL_NAMES[d] for d in self.dims]
         self.reported = [n for d, n in zip(self.dims, self.names) if E.NAMES[d] not in NUISANCE]
         centre = np.array(centre, float)
         self.best = centre[self.dims].copy()  # the checked physical values, including any outside the sampler's box
-        tau = E.GLOBAL.start + 3
+        tau = E.ERROR_DIM
         if not np.isfinite(centre[tau]):
             centre[tau] = TAU_START
         for d in reflection:

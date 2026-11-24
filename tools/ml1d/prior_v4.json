@@ -1,6 +1,6 @@
 {
  "name": "posterior_v4",
- "description": "As posterior_v3, with two terms at low q in place of one tail (encoding 6): the beam term, the Lorentzian wings 1/(1 + (q/w_b)^2) of the resolution function, and the diffuse term (1 + (q xi)^2)^-(1+H) of a rough interface; each with an amplitude of 0.001 to 10 times the particles at q_min; the bounds of the values are those of posterior/encoding.py",
+ "description": "As posterior_v3, with two terms at low q in place of one tail (encoding 6): the beam tail with the exponent 2, the Lorentzian wings 1/(1 + (q/w)^2) of the resolution function, and the diffuse term (1 + (q xi)^2)^-(1+H) of a rough interface; each with an amplitude of 0.001 to 10 times the particles at q_min; the bounds of the values are those of posterior/encoding.py",
  "k_weights": [
   0.3,
   0.4,
@@ -29,7 +29,7 @@
   0.9
  ],
  "share_decades": 2.5,
- "beam_relative": [
+ "tail_relative": [
   0.001,
   10
  ],

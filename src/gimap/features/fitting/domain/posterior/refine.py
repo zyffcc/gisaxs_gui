@@ -119,7 +119,7 @@ def model_values(model: fm.FitModel, composition: int) -> Optional[np.ndarray]:
     for offset, key in enumerate(GLOBAL_KEYS.values()):
         values[E.GLOBAL.start + offset] = model.globals[key].value
     r = reflection(model)
-    values[E.GLOBAL.start + 4:E.GLOBAL.start + 6] = (r.real, r.imag)
+    values[E.REFLECTION] = (r.real, r.imag)
     return values
 
 
@@ -238,7 +238,7 @@ def _outside(composition: int, model: fm.FitModel, limits) -> int:
     if values is None:
         return 0
     return sum(not limits[0, dim] <= values[dim] <= limits[1, dim] for dim, _name in _names(composition)
-               if dim < E.GLOBAL.start)  # the populations: a tail or a resolution at its bound is no disagreement
+               if dim < E.GLOBAL.start)  # the populations: a low-q term or a resolution at its bound is no disagreement
 
 
 def _within_posterior(composition: int, refined, again, local, data: Cut, weighed, law, coupling, grazing):

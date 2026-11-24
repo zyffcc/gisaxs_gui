@@ -15,7 +15,9 @@ from .infer import Cut
 from .substrate_level import ordered_model
 
 KEYS = ("R", "sigma_R", "h", "sigma_h", "D", "sigma_nn")
-GLOBAL_KEYS = {"tail_width": "res_width", "tail_exponent": "res_exponent", "q_resolution": "q_resolution"}
+GLOBAL_KEYS = {"tail_width": "res_width", "diffuse_width": "diffuse_width", "diffuse_hurst": "diffuse_hurst",
+               "q_resolution": "q_resolution"}
+"""The Fitting keys of the cut's values of the network, in their order (``encoding.TAIL_DIM`` …)."""
 
 
 def _cut_geometry(data, grazing):
@@ -84,10 +86,11 @@ def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", co
         components.append(fm.Component(family, params, structure, method, size_law, heights=height is not None))
     model = ordered_model(fm.FitModel(tuple(components), substrate=data.substrate, predict_level=data.level),
                           low, high)
-    g = E.GLOBAL.start
     model = model.with_parameter(("globals", "res_amplitude"), value=1.0, free=True)
-    for index, key in enumerate(GLOBAL_KEYS.values(), g):
-        scale = 1.0 if key == "res_exponent" else data.q_max
+    model = model.with_parameter(("globals", "res_exponent"), value=2.0, free=False)  # the Lorentzian wings
+    model = model.with_parameter(("globals", "diffuse_amplitude"), value=1.0, free=True)
+    for index, key in enumerate(GLOBAL_KEYS.values(), E.GLOBAL.start):
+        scale = 1.0 if key == "diffuse_hurst" else data.q_max
         lower, upper = low[index] * scale, high[index] * scale
         model = model.with_parameter(("globals", key), value=float(np.clip(values[index], lower, upper)),
                                      lower=lower, upper=upper, free=True)
@@ -96,7 +99,7 @@ def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", co
                        ("wavelength", geometry.wavelength_nm)):
         model = model.with_parameter(("globals", key), value=value)
     if data.reflected and any(family == "sphere" for family, _ in types):
-        r = complex(*(float(x) if np.isfinite(x) else 0.0 for x in values[g + 4:g + 6]))
+        r = complex(*(float(x) if np.isfinite(x) else 0.0 for x in values[E.REFLECTION]))
         size, phase = min(abs(r), 1.0), math.atan2(r.imag, r.real)
         model = model.with_parameter(("globals", "refl_amp"), value=size, free=True, lower=0.0, upper=1.0)
         model = model.with_parameter(("globals", "refl_phase"), value=phase, free=True, lower=phase - math.pi,

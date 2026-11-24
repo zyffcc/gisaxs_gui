@@ -31,6 +31,7 @@ NO_ERROR = {
     "bound": "No error: the value is at a bound of its range.",
     "scale": "No error: the Scale of this population is 0, so its values change nothing.",
     "tail": "No error: Tail A is 0, so this value changes nothing.",
+    "diffuse": "No error: Diffuse A is 0, so this value changes nothing.",
     "curve": "No error: the curve does not constrain this value.",
 }
 """Why a free value has no error after Refine (the ± column shows “–”)."""
@@ -192,6 +193,8 @@ def no_error_reason(path, parameter, result, model) -> str:
         return tr(NO_ERROR["scale"])
     if owner == "globals" and key in ("res_width", "res_exponent") and model.globals["res_amplitude"].value <= 0:
         return tr(NO_ERROR["tail"])
+    if owner == "globals" and key in ("diffuse_width", "diffuse_hurst") and model.globals["diffuse_amplitude"].value <= 0:
+        return tr(NO_ERROR["diffuse"])
     lower, upper = parameter.lower, parameter.upper
     if parameter.value <= lower or parameter.value >= upper:
         return tr(NO_ERROR["bound"])

@@ -251,13 +251,13 @@ def local_posterior(data: Cut, composition: int, centre, tau: float, rng: np.ran
     likelihood = Likelihood(data, composition, law, coupling)
     active = E.active(composition)[0]
     if data.substrate is not None:
-        active[E.GLOBAL.start + 4:E.GLOBAL.start + 6] = False   # both reflection coefficients are known
+        active[E.REFLECTION] = False   # both reflection coefficients are known
     centre = np.array(centre, float)
-    centre[E.GLOBAL.start + 3] = tau
+    centre[E.ERROR_DIM] = tau
     encoded = dimensionless(centre[None, :], data.q_max, disk=likelihood.free_reflection)
     unit = np.clip(E.to_unit(encoded, [data.ratio], composition), 1e-6, 1 - 1e-6)
     z_star = np.where(active, np.log(unit) - np.log1p(-unit), 0.0)[0]
-    tau_dim = E.GLOBAL.start + 3
+    tau_dim = E.ERROR_DIM
     dims = [d for d in np.flatnonzero(active) if d != tau_dim]
     every = dims + [tau_dim]
     gram = curvature(likelihood, z_star, data, composition, dims)

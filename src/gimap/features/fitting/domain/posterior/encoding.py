@@ -14,8 +14,8 @@ increasing mean radius (``COMPOSITIONS``; slot 1 is the smallest). Every populat
     D/2R                   [1, 20]     with a paracrystal only
     σnn/D                  [0.02, 0.5] with a paracrystal only
 
-and seven values belong to the cut: the width w̃_b = w_b/q_max of the beam term 1/(1 + (q/w_b)²), the Lorentzian
-wings of the resolution function about the direct and the specular beam, in ``BEAM_WIDTH`` × q̃_min (q̃_min = 1/ρ);
+and seven values belong to the cut: the width w̃ = w/q_max of the beam tail 1/(1 + (q/w)²), the Lorentzian
+wings of the resolution function about the direct and the specular beam, in ``TAIL_WIDTH`` × q̃_min (q̃_min = 1/ρ);
 the width w̃_d = 1/(ξ q_max) in ``DIFFUSE_WIDTH`` × q̃_min and the Hurst exponent H in ``HURST`` of the diffuse term
 (1 + (qξ)²)^−(1+H) of a rough interface with the K-correlation function (ξ the correlation length; H = 1 is also the
 Debye–Bueche form of large inhomogeneities); the Gaussian resolution σ_q/q_max in [10⁻⁴, 10⁻²], the amplitude τ in [0.003, 0.15] of a smooth multiplicative model
@@ -24,7 +24,7 @@ imaginary part of the effective reflection coefficient r of the exit-reflected p
 (``cut_model.geometry``, ``two_path``): they matter only when the cut's two paths are known (``conditions``), and
 are drawn from the prior otherwise.
 
-The prior is uniform in the unit box v of these values: ln for R̃, h/2R, D/2R, w̃_b, w̃_d, σ_q and τ, linear for the others,
+The prior is uniform in the unit box v of these values: ln for R̃, h/2R, D/2R, w̃, w̃_d, σ_q and τ, linear for the others,
 and for R̃ of slot j > 1 the fraction of the way from the previous slot's ln R̃ to the top (so the slots stay ordered).
 A random cylinder has R̃ ≤ ``CYLINDER_RADIUS`` (so the slots before it too) and h̃ ≤ ``CYLINDER_HEIGHT``: rods larger
 than that against the window are left to Search and Refine, and the tops above are those of their slots.
@@ -44,15 +44,15 @@ TYPES = tuple((family, structure) for family in FAMILIES for structure in (True,
 COMPOSITIONS = tuple(itertools.chain.from_iterable(
     itertools.product(range(len(TYPES)), repeat=k) for k in range(1, SLOTS + 1)))
 SLOT_NAMES = ("R", "sigma_R", "h_over_2R", "sigma_h", "D_over_2R", "sigma_nn")
-GLOBAL_NAMES = ("beam_width", "diffuse_width", "diffuse_hurst", "q_resolution", "model_error", "reflection_re",
+GLOBAL_NAMES = ("tail_width", "diffuse_width", "diffuse_hurst", "q_resolution", "model_error", "reflection_re",
                 "reflection_im")
 NAMES = tuple(f"{name}_{slot + 1}" for slot in range(SLOTS) for name in SLOT_NAMES) + GLOBAL_NAMES
 PER_SLOT = len(SLOT_NAMES)
 DIMS = len(NAMES)
 GLOBAL = slice(SLOTS * PER_SLOT, DIMS)
-BEAM_DIM, DIFFUSE_DIM, HURST_DIM, RESOLUTION_DIM, ERROR_DIM = range(GLOBAL.start, GLOBAL.start + 5)
+TAIL_DIM, DIFFUSE_DIM, HURST_DIM, RESOLUTION_DIM, ERROR_DIM = range(GLOBAL.start, GLOBAL.start + 5)
 REFLECTION = slice(GLOBAL.start + 5, GLOBAL.start + 7)
-"""Where the cut's values are: the beam term's width, the diffuse term's width and H, σ_q, τ and r (real, imaginary)."""
+"""Where the cut's values are: the beam tail's width, the diffuse term's width and H, σ_q, τ and r (real, imaginary)."""
 LOGARITHMIC = np.array([n.rsplit("_", 1)[0] in ("R", "h_over_2R", "D_over_2R") for n in NAMES[:GLOBAL.start]]
                        + [True, True, False, True, True, False, False])
 POINTS = 128
@@ -62,8 +62,8 @@ CONDITIONS = 4
 SLOT_CODE = 2 + len(FAMILIES)
 """Per slot of ``composition_code``: in use, the family (one-hot), a paracrystal."""
 ERROR_BASIS = 8
-BEAM_WIDTH = (0.03, 1.0)
-"""The beam term's width in units of q_min: the beam is narrower than the first point, its wings fall as q⁻²."""
+TAIL_WIDTH = (0.03, 1.0)
+"""The beam tail's width in units of q_min: the beam is narrower than the first point, its wings fall as q⁻²."""
 DIFFUSE_WIDTH = (0.03, 3.0)
 """1/ξ of the diffuse term in units of q_min: correlations longer than about the largest size the window resolves."""
 HURST = (0.0, 1.0)
@@ -84,7 +84,7 @@ def bounds(ratio) -> tuple[np.ndarray, np.ndarray]:
                          [0.0, 0.0, HURST[0], np.log(1e-4), np.log(3e-3), -1.0, -1.0]])[None, :] * np.ones_like(ratio)
     hi = np.concatenate([np.tile(slot_hi, SLOTS),
                          [0.0, 0.0, HURST[1], np.log(1e-2), np.log(0.15), 1.0, 1.0]])[None, :] * np.ones_like(ratio)
-    for dim, (low, high) in ((BEAM_DIM, BEAM_WIDTH), (DIFFUSE_DIM, DIFFUSE_WIDTH)):
+    for dim, (low, high) in ((TAIL_DIM, TAIL_WIDTH), (DIFFUSE_DIM, DIFFUSE_WIDTH)):
         lo[:, dim] = np.log(low / ratio[:, 0])
         hi[:, dim] = np.log(high / ratio[:, 0])
     hi[:, 0:GLOBAL.start:PER_SLOT] = np.log(5.0 * ratio)
@@ -321,7 +321,7 @@ def bin_curve(q, intensity, sigma, q_max: float, ratio: float, points: int = POI
     return out_i, out_s, mask
 
 
-__all__ = ["BEAM_DIM", "BEAM_WIDTH", "CHANNELS", "COMPOSITIONS", "CONDITIONS", "CYLINDER_HEIGHT", "CYLINDER_RADIUS",
+__all__ = ["TAIL_DIM", "TAIL_WIDTH", "CHANNELS", "COMPOSITIONS", "CONDITIONS", "CYLINDER_HEIGHT", "CYLINDER_RADIUS",
            "DIFFUSE_DIM", "DIFFUSE_WIDTH", "DIMS", "ERROR_BASIS", "ERROR_DIM", "FAMILIES", "GLOBAL", "HURST",
            "HURST_DIM", "NAMES", "PER_SLOT", "REFLECTION", "RESOLUTION_DIM", "VERSION",
            "POINTS", "RATIO_MAX", "RATIO_MIN", "SLOTS", "SLOT_CODE", "TYPES", "active", "bin_curve", "bounds",

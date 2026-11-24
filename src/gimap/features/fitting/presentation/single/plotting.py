@@ -42,6 +42,8 @@ def component_label(name: str) -> str:
         return tr("low-q term")
     if name == "resolution peak":
         return tr("beam-tail term")
+    if name == "diffuse scattering":
+        return tr("diffuse scattering")
     match = re.fullmatch(r"pop(\d+)_(sphere|random_cylinder|vertical_cylinder)", name)
     if match:
         family = {"sphere": "Sphere", "random_cylinder": "Random cylinder",
@@ -56,6 +58,8 @@ def component_style(name: str, index: int) -> tuple[str, LineStyle]:
         return "#7c8b9b", LineStyle(width=1.3, style=Qt.DotLine, z=0)
     if name in ("resolution peak", "low_q_term"):
         return "#b08728", LineStyle(width=1.4, style=Qt.DashDotLine, z=0)
+    if name == "diffuse scattering":
+        return "#8a6bb0", LineStyle(width=1.4, style=Qt.DashDotDotLine, z=0)
     return COMPONENT_COLORS[index % len(COMPONENT_COLORS)], LineStyle(width=1.4, style=Qt.DashLine, z=0)
 
 

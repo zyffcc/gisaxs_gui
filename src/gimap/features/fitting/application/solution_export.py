@@ -33,7 +33,8 @@ POSTERIOR_COLUMNS = ("least_squares_value", "posterior_median", "posterior_low68
                      "posterior_low95", "posterior_high95", "reported_interval_kind")
 INTERVAL_FIELDS = ("median", "low68", "high68", "low95", "high95", "error")
 GLOBAL_NAMES = {"tail_width": "res_width", "tail_exponent": "res_exponent", "q_resolution": "q_resolution",
-                "sigma_Res": "res_width", "nu_Res": "res_exponent"}
+                "sigma_Res": "res_width", "nu_Res": "res_exponent", "diffuse_width": "diffuse_width",
+                "diffuse_hurst": "diffuse_hurst"}
 """The posterior's names of values of the whole curve → the keys of the model's globals."""
 INTERVALS_NOTE = ("least_squares_value is the value in Model. posterior_median and posterior_low68/high68 are "
                   "the sampled central quantiles, before extension to the optimum. The reported low68/high68 and "

@@ -4,14 +4,14 @@ For a measured cut and each composition considered (given, or the network's most
 
 1. N samples z ~ q(z | curve, composition) from the network (``flow.Network``);
 2. per sample the cut_model terms on the measured points — every population T_j (with the sample's resolution), the
-   beam tail and a constant — and their amplitudes by non-negative least squares; the likelihood is Gaussian in the
+   beam tail (exponent 2), the diffuse term and a constant — and their amplitudes by non-negative least squares; the likelihood is Gaussian in the
    counts' σ, with the smooth multiplicative model error of amplitude τ (``encoding.error_basis``) integrated out
    exactly (Woodbury) and the amplitudes integrated out under uniform priors on [0, ``AMPLITUDE_RANGE`` × the curve's
    maximum] (each column is 1 at its maximum): Laplace for the positive ones, a half Gaussian for those at 0;
 3. weights w = L π(z)/q(z), the effective sample size (Σw)²/Σw² and the evidence Z = mean w (Dax et al. 2023).
 
-The beam tail's width is at most ``TAIL_WIDTH_MAX`` × the window's q_min and its exponent in ``TAIL_EXPONENT``, as in
-``encoding``; the weights of wider samples are 0.
+The widths of the beam tail and the diffuse term are at most those of ``encoding`` (``TAIL_WIDTH``, ``DIFFUSE_WIDTH``
+× the window's q_min) and H lies in ``encoding.HURST``; the weights of other samples are 0.
 
 The compositions' posterior is ∝ Z (each composition considered equally likely beforehand). The weighted samples are
 grouped into modes (``modes``): sizes and distances apart by more than ``MODE_SPACING`` (relative) or spreads by more
@@ -35,7 +35,6 @@ from . import encoding as E
 from . import parallel, reflection_disk, substrate_level
 
 AMPLITUDE_RANGE = 10.0
-TAIL_WIDTH_MAX = E.TAIL_WIDTH_MAX
 MODE_SPACING, MODE_SPREAD = 0.1, 0.05
 MAX_MODES = 4
 PROPOSAL_WIDTHS = (1.0,)
@@ -155,11 +154,10 @@ def physical(values, q_max: float, *, disk: bool = False) -> np.ndarray:
         out[..., j] = out[..., j] / q_max
         out[..., j + 2] = 2.0 * out[..., j] * out[..., j + 2]          # h (nm) from h/2R
         out[..., j + 4] = 2.0 * out[..., j] * out[..., j + 4]          # D (nm) from D/2R
-    g = E.GLOBAL.start
-    out[..., g] = out[..., g] * q_max
-    out[..., g + 2] = out[..., g + 2] * q_max
+    for dim in (E.TAIL_DIM, E.DIFFUSE_DIM, E.RESOLUTION_DIM):
+        out[..., dim] = out[..., dim] * q_max
     if disk:
-        out[..., g + 4:g + 6] = reflection_disk.from_square(out[..., g + 4:g + 6])
+        out[..., E.REFLECTION] = reflection_disk.from_square(out[..., E.REFLECTION])
     return out
 
 
@@ -171,11 +169,10 @@ def dimensionless(values, q_max: float, *, disk: bool = False) -> np.ndarray:
         out[..., j + 2] = out[..., j + 2] / (2.0 * out[..., j])
         out[..., j + 4] = out[..., j + 4] / (2.0 * out[..., j])
         out[..., j] = out[..., j] * q_max
-    g = E.GLOBAL.start
-    out[..., g] = out[..., g] / q_max
-    out[..., g + 2] = out[..., g + 2] / q_max
+    for dim in (E.TAIL_DIM, E.DIFFUSE_DIM, E.RESOLUTION_DIM):
+        out[..., dim] = out[..., dim] / q_max
     if disk:
-        out[..., g + 4:g + 6] = reflection_disk.to_square(out[..., g + 4:g + 6])
+        out[..., E.REFLECTION] = reflection_disk.to_square(out[..., E.REFLECTION])
     return out
 
 
@@ -197,14 +194,13 @@ class Likelihood:
         self.sharp_limit = resolution.predict_sharp_limit(q)
 
     def columns(self, values) -> np.ndarray:
-        """(B, K + 2, n) of physical values (B, DIMS): each population's T on the measured points with the sample's
-        resolution (normalised to its maximum), the beam tail, 1."""
+        """(B, K + 3, n) of physical values (B, DIMS): each population's T on the measured points with the sample's
+        resolution (normalised to its maximum), the beam tail (exponent 2), the diffuse term, 1."""
         v = np.atleast_2d(np.asarray(values, float))
         rows, n, k = v.shape[0], self.data.q.size, len(self.types)
-        g = E.GLOBAL.start
-        out = np.empty((rows, k + 2, n))
+        out = np.empty((rows, k + 3, n))
         geometry = self.data.geometry()
-        sigma = v[:, g + 2]
+        sigma = v[:, E.RESOLUTION_DIM]
         sharp = sigma <= self.sharp_limit
         groups = [(np.flatnonzero(sharp), self.data.q)]
         if not sharp.all():
@@ -221,7 +217,7 @@ class Likelihood:
                     terms = np.stack([cut.population_terms(
                         family, grid, radius=v[b, j], radius_spread=v[b, j + 1],
                         distance=v[b, j + 4] if structure else 0.0, distance_spread=v[b, j + 5] if structure else 0.0,
-                        geometry=self.data.geometry(complex(v[b, g + 4], v[b, g + 5])), **kwargs)[0] for b in rows_])
+                        geometry=self.data.geometry(complex(*v[b, E.REFLECTION])), **kwargs)[0] for b in rows_])
                 elif slot in self.height_fractions:
                     terms = substrate_level.upright_da_terms(
                         grid, v[rows_, j], v[rows_, j + 1], v[rows_, j + 4], v[rows_, j + 5], law,
@@ -240,12 +236,13 @@ class Likelihood:
                         out[b, slot] = resolution.tabulated(self.data.q, grid, terms[i], float(sigma[b]))[0]
             out[:, slot] /= np.maximum(out[:, slot].max(axis=1, keepdims=True), 1e-300)
         for b in range(rows):
-            out[b, k] = cut.tail(self.data.q, float(v[b, g]), float(v[b, g + 1]))
-        out[:, k + 1] = 1.0
+            out[b, k] = cut.tail(self.data.q, float(v[b, E.TAIL_DIM]), 2.0)
+            out[b, k + 1] = cut.diffuse(self.data.q, float(v[b, E.DIFFUSE_DIM]), float(v[b, E.HURST_DIM]))
+        out[:, k + 2] = 1.0
         return out
 
     def model_curves(self, values):
-        """(columns (B, K + 2, n), amplitudes (B, K + 2) by non-negative least squares in σ, model curves (B, n))."""
+        """(columns (B, K + 3, n), amplitudes (B, K + 3) by non-negative least squares in σ, model curves (B, n))."""
         x = self.columns(values)
         y, s = self.data.intensity, self.data.sigma
         scaled = x / s[None, None, :]
@@ -257,7 +254,7 @@ class Likelihood:
         return x, amplitudes, np.einsum("bm,bmn->bn", amplitudes, x)
 
     def __call__(self, values) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """(log marginal likelihood, amplitudes (B, K + 2), χ² at the amplitudes) of physical values (B, DIMS)."""
+        """(log marginal likelihood, amplitudes (B, K + 3), χ² at the amplitudes) of physical values (B, DIMS)."""
         values = np.atleast_2d(values)
         x, amplitudes, model = self.model_curves(values)
         y, s = self.data.intensity, self.data.sigma
@@ -265,7 +262,7 @@ class Likelihood:
         scaled = x / s[None, None, :]
         r = (y[None, :] - model) / s[None, :]
         chi2 = np.sum(r * r, axis=1)
-        tau = values[:, E.GLOBAL.start + 3]
+        tau = values[:, E.ERROR_DIM]
         u = self.basis[None, :, :] * (model / s[None, :])[:, None, :]  # (B, 8, n)
         gram = np.einsum("bkn,bln->bkl", u, u)
         inner = np.eye(E.ERROR_BASIS)[None] / (tau[:, None, None] ** 2) + gram
@@ -284,8 +281,11 @@ class Likelihood:
         at_zero = np.where(positive, 0.0, 0.5 * math.log(0.5 * math.pi) - 0.5 * np.log(diagonal))
         log_marginal = (log_like - m * math.log(top) + 0.5 * positive.sum(axis=1) * math.log(2 * math.pi)
                         - 0.5 * log_det_h + np.sum(at_zero, axis=1))
-        wide = values[:, E.GLOBAL.start] > TAIL_WIDTH_MAX * self.data.q_max / self.data.ratio
-        outside = wide
+        q_min, edge = self.data.q_max / self.data.ratio, 1.0 + 1e-9
+        hurst = values[:, E.HURST_DIM]
+        outside = ((values[:, E.TAIL_DIM] > E.TAIL_WIDTH[1] * q_min * edge)
+                   | (values[:, E.DIFFUSE_DIM] > E.DIFFUSE_WIDTH[1] * q_min * edge)
+                   | (hurst < E.HURST[0] - 1e-9) | (hurst > E.HURST[1] + 1e-9))
         if self.free_reflection:
             re, im = values[:, -2], values[:, -1]
             outside = outside | (np.hypot(re, im) > 1.0 + 4 * np.finfo(float).eps)
@@ -496,6 +496,6 @@ def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, a
     return sorted(out, key=lambda r: -r.probability)
 
 
-__all__ = ["AMPLITUDE_RANGE", "EXPLORE_ESS", "PROPOSAL_WIDTHS", "SIMPLE", "TAIL_WIDTH_MAX", "Composition", "Cut", "Likelihood",
+__all__ = ["AMPLITUDE_RANGE", "EXPLORE_ESS", "PROPOSAL_WIDTHS", "SIMPLE", "Composition", "Cut", "Likelihood",
            "Mode", "PHYSICAL_NAMES", "candidates", "conditions", "dimensionless", "infer", "modes", "physical",
            "sample_composition", "tempered"]

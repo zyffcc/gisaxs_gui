@@ -123,16 +123,19 @@ def substrate_of(material: str, delta: float = 0.0, beta: float = 0.0) -> Option
 
 def _without_tail(model: FitModel) -> FitModel:
     model = model.with_parameter(("globals", "res_amplitude"), value=0.0, free=False, tie=None)
+    model = model.with_parameter(("globals", "diffuse_amplitude"), value=0.0, free=False, tie=None)
     return model.with_parameter(("globals", "q_resolution"), value=0.0, free=False)
 
 
 def _tail_shape_fixed(model: FitModel) -> FitModel:
-    """A tail held at 0 has no shape to fit."""
-    tail = model.globals["res_amplitude"]
-    if tail.free or tail.tie or tail.value:
-        return model
-    for key in ("res_width", "res_exponent"):
-        model = model.with_parameter(("globals", key), free=False)
+    """A tail (or a diffuse term) held at 0 has no shape to fit."""
+    for amplitude, shape in (("res_amplitude", ("res_width", "res_exponent")),
+                             ("diffuse_amplitude", ("diffuse_width", "diffuse_hurst"))):
+        term = model.globals[amplitude]
+        if term.free or term.tie or term.value:
+            continue
+        for key in shape:
+            model = model.with_parameter(("globals", key), free=False)
     return model
 
 
@@ -396,7 +399,8 @@ def model_for_page(page_model: FitModel, result: JointResult, number: int = 0) -
     if any(c.heights for c in fitted.components):
         model = with_heights(model)
     values = {path: p.value for path, p in fitted.parameters() if path[0] != "globals" or path[1] in (
-        "background", "res_amplitude", "res_width", "res_exponent")}
+        "background", "res_amplitude", "res_width", "res_exponent", "diffuse_amplitude", "diffuse_width",
+        "diffuse_hurst")}
     model = model.with_values({path: value for path, value in values.items()
                                if path[0] == "globals" or path[0] < len(model.components)})
     for owner, component in enumerate(model.components):

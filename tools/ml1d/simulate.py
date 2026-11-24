@@ -2,8 +2,8 @@
 term from cut_model.
 
 Writes shards of noise-free unit terms (each population's T on its cut's grid, with the cut's resolution, and the
-shapes of the beam term and the diffuse term); the shares of the populations, the amplitudes of the beam and the
-diffuse term, the background, the model error, the measured
+shapes of the beam tail and the diffuse term); the shares of the populations, the amplitudes of the beam tail and
+the diffuse term, the background, the model error, the measured
 points, the counting noise and the gaps are drawn anew whenever a curve is used (``augment``), so one shard serves
 many epochs. Everything is dimensionless (q̃ = q/q_max, ``posterior.encoding``).
 
@@ -128,13 +128,13 @@ def evaluation_grid(fine: np.ndarray, sigma: float) -> np.ndarray:
 
 
 def terms(params: dict, law: str, coupling: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """(T of every slot (B, SLOTS, POINTS), zero where unused; the shapes of the beam term and of the diffuse term
+    """(T of every slot (B, SLOTS, POINTS), zero where unused; the shapes of the beam tail and of the diffuse term
     (B, POINTS) each) from cut_model: each
     population on ``fine_grid`` (extended for the resolution), convolved with the cut's resolution
     (``resolution.tabulated``), averaged over each bin."""
     rows = params["ratio"].size
     term = np.zeros((rows, E.SLOTS, E.POINTS))
-    beam = np.empty((rows, E.POINTS))
+    tail = np.empty((rows, E.POINTS))
     rough = np.empty((rows, E.POINTS))
     for i in range(rows):
         fine = fine_grid(params["ratio"][i])
@@ -146,21 +146,21 @@ def terms(params: dict, law: str, coupling: str) -> tuple[np.ndarray, np.ndarray
         smeared = resolution.tabulated(fine, grid, model.unit_terms(pops, settings, grid), sigma)
         for slot, t in enumerate(smeared):
             term[i, slot] = np.maximum(t.reshape(E.POINTS, SUB).mean(axis=1), FLOOR)
-        beam[i] = model.tail(fine, float(v[E.BEAM_DIM]), 2.0).reshape(E.POINTS, SUB).mean(axis=1)
+        tail[i] = model.tail(fine, float(v[E.TAIL_DIM]), 2.0).reshape(E.POINTS, SUB).mean(axis=1)
         rough[i] = model.diffuse(fine, float(v[E.DIFFUSE_DIM]), float(v[E.HURST_DIM])).reshape(
             E.POINTS, SUB).mean(axis=1)
-    return term, beam, rough
+    return term, tail, rough
 
 
 def shard(prior: dict, count: int, seed) -> dict:
     rng = np.random.default_rng(seed)
     params = draw(prior, count, rng)
-    term, beam, rough = terms(params, prior["law"], prior["coupling"])
+    term, tail, rough = terms(params, prior["law"], prior["coupling"])
     return {"values": params["values"].astype(np.float32),
             "z": E.to_z(params["values"], params["ratio"], params["composition"]).astype(np.float32),
             "composition": params["composition"].astype(np.int16), "ratio": params["ratio"].astype(np.float32),
             "qz": params["qz"].astype(np.float32), "qz_minus": params["qz_minus"].astype(np.float32),
-            "term": term.astype(np.float32), "beam": beam.astype(np.float32), "diffuse": rough.astype(np.float32)}
+            "term": term.astype(np.float32), "tail": tail.astype(np.float32), "diffuse": rough.astype(np.float32)}
 
 
 def _layout(rng, ratio, prior, rows):
@@ -181,7 +181,7 @@ def _layout(rng, ratio, prior, rows):
 
 def augment(data: dict, prior: dict, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(I, σ, mask) on the grid of a batch of shard rows: populations at peak shares 10^U[−decades, 0], the model
-    error, a beam term of ``beam_relative`` and a diffuse term of ``diffuse_relative`` × the particles at q̃_min, a
+    error, a beam tail of ``tail_relative`` and a diffuse term of ``diffuse_relative`` × the particles at q̃_min, a
     background of ``background_relative`` × their
     peak, measured at ``points`` points (each bin the mean of its points), Poisson counts with ``peak_counts`` at
     the highest point, gaps and a lost low-q edge."""
@@ -193,7 +193,7 @@ def augment(data: dict, prior: dict, rng: np.random.Generator) -> tuple[np.ndarr
     particles = np.einsum("bs,bsp->bp", shares / np.maximum(term.max(axis=2), FLOOR), term)
     background = _log_uniform(rng, *prior["background_relative"], rows) * particles.max(axis=1)
     clean = particles + background[:, None]
-    for key in ("beam", "diffuse"):
+    for key in ("tail", "diffuse"):
         shape = np.asarray(data[key], float)
         amplitude = _log_uniform(rng, *prior[f"{key}_relative"], rows) * particles[:, 0] / np.maximum(shape[:, 0], FLOOR)
         clean += amplitude[:, None] * shape

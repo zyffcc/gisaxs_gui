@@ -1,6 +1,6 @@
 """The model of one curve in Fitting: its parameters (value, free or fixed, range) and its intensity.
 
-    I(q) = BG + k · [ Σ_i Int_i · T_i(q)  +  A / (1 + (|q| / w)^ν) ]
+    I(q) = BG + k · [ Σ_i Int_i · T_i(q)  +  A / (1 + (|q| / w)^ν)  +  A_d (1 + (|q| / w_d)²)^−(1+H) ]
 
 The intensity is GIMaP's one forward model of a cut, ``cut_model`` (Physics and Methods, chapter 9):
 
@@ -15,8 +15,10 @@ The intensity is GIMaP's one forward model of a cut, ``cut_model`` (Physics and 
 * the families: sphere, random cylinder, vertical cylinder (the proposal network's, ``NETWORK_FAMILIES``) and, for
   manual fits, the core–shell sphere (``model_library.core_shell``);
 * links between parameters (``Parameter.tie``) and inequalities (``FitModel.inequalities``): ``fit_links``;
-* BG a constant background, A/(1+(|q|/w)^ν) the empirical beam tail at q = 0 (key ``resolution peak``), k an overall
-  factor; with σ_q > 0 the particle terms are convolved with a Gaussian q resolution.
+* BG a constant background, A/(1+(|q|/w)^ν) the beam tail at q = 0 (key ``resolution peak``; Predict parameters
+  takes ν = 2, the Lorentzian wings of the resolution function), A_d (1 + (|q|/w_d)²)^−(1+H) the diffuse scattering
+  of a rough interface with the K-correlation function, w_d = 1/ξ (key ``diffuse scattering``; off in a new model:
+  A_d = 0, fixed), k an overall factor; with σ_q > 0 the particle terms are convolved with a Gaussian q resolution.
 
 Spheres of a horizontal GISAXS cut: with αi = αf = 0 (the default) the sphere is evaluated at q_z = 0, the
 effective interface approximation. With the angles and λ of the cut it is the sum of the direct and the
@@ -43,7 +45,7 @@ from .cut_model import Geometry, size_averages
 from .cut_model import conventions, resolution, sizes
 from .cut_model import manual_sizes
 from .cut_model.geometry import from_angles
-from .cut_model.model import tail
+from .cut_model.model import diffuse, tail
 from . import fit_resolution
 from .cut_model.shapes import RADIUS_POWER
 from .cut_model.structure import paracrystal
@@ -74,13 +76,15 @@ INTERFERENCES = {
 """The interference functions of a component with ``structure`` (key: label, parameters); the first is the default
 and the only one of Predict parameters."""
 DEFAULT_INTERFERENCE = "paracrystal"
-BASE_GLOBALS = ("background", "res_amplitude", "res_width", "res_exponent", "k")
+DIFFUSE = ("diffuse_amplitude", "diffuse_width", "diffuse_hurst")
+"""The diffuse scattering of a rough interface: A_d, w_d = 1/ξ and the Hurst exponent H."""
+BASE_GLOBALS = ("background", "res_amplitude", "res_width", "res_exponent") + DIFFUSE + ("k",)
 RESOLUTION = ("q_resolution",)
 """The Gaussian q resolution (1σ) of the particle terms; 0, the default, is none."""
 GRAZING = ("alpha_i", "alpha_f", "wavelength", "refl_amp", "refl_phase")
 """Geometry of the cut and the effective reflection coefficient r of the two-path sphere (fixed by default)."""
 GLOBALS = BASE_GLOBALS + RESOLUTION + GRAZING
-LINEAR = frozenset({"Int", "background", "res_amplitude"})
+LINEAR = frozenset({"Int", "background", "res_amplitude", "diffuse_amplitude"})
 """Scales: with the others fixed, the intensity is linear in them (solved exactly while fitting)."""
 INF = math.inf
 SIZE_LAWS = manual_sizes.LABELS
@@ -124,6 +128,14 @@ INFO = {
                                        "the direct and reflected beam"),
     "res_width": ParameterInfo("Tail w", "nm⁻¹", 0.02, 0.001, 0.1, tip="Width w of the beam tail"),
     "res_exponent": ParameterInfo("Tail ν", "", 3.0, 1.0, 20.0, tip="Exponent ν of the beam tail (how fast it falls)"),
+    "diffuse_amplitude": ParameterInfo("Diffuse A", "", 0.0, 0.0, INF, free=False,
+                                       tip="Height at q = 0 of the diffuse scattering of a rough interface "
+                                           "A_d (1 + (|q|/w)²)^−(1+H); 0: no diffuse term"),
+    "diffuse_width": ParameterInfo("Diffuse w", "nm⁻¹", 0.02, 1e-4, 0.1, free=False,
+                                   tip="Width w = 1/ξ of the diffuse term, ξ the correlation length of the roughness"),
+    "diffuse_hurst": ParameterInfo("Diffuse H", "", 0.5, 0.0, 1.0, free=False,
+                                   tip="Hurst exponent H of the roughness: the diffuse term falls as q^−2(1+H) "
+                                       "(H = 1: also the Debye–Bueche form of large inhomogeneities)"),
     "k": ParameterInfo("Factor k", "", 1.0, 1e-6, 1e6, free=False,
                        tip="Overall factor of everything but the background (usually fixed at 1)"),
     "q_resolution": ParameterInfo("σ_q", "nm⁻¹", 0.0, 0.0, 0.1, free=False,
@@ -374,6 +386,19 @@ def resolution_shape(model: FitModel, q: np.ndarray) -> np.ndarray:
     return np.asarray(tail(q, model.globals["res_width"].value, model.globals["res_exponent"].value), float)
 
 
+def diffuse_shape(model: FitModel, q: np.ndarray) -> np.ndarray:
+    return np.asarray(diffuse(q, model.globals["diffuse_width"].value, model.globals["diffuse_hurst"].value), float)
+
+
+def term_shape(model: FitModel, key: str, q: np.ndarray) -> np.ndarray:
+    """The unit curve of a scale of the whole curve: the beam tail (``res_amplitude``) or the diffuse term."""
+    return resolution_shape(model, q) if key == "res_amplitude" else diffuse_shape(model, q)
+
+
+CURVE_SCALES = ("res_amplitude", "diffuse_amplitude")
+"""Scales of a term of the whole curve with a shape of its own (``term_shape``)."""
+
+
 def measured_form(model, component, q, dq, cache, geometry):
     """A scale column on the measured points, including their individual resolution when selected."""
     if model.resolution_mode != "file" or model.cut is not None:
@@ -414,6 +439,8 @@ def evaluate(model: FitModel, q: np.ndarray, *, parts: bool = False, cache: Opti
         terms[f"{index + 1}: {FAMILIES[component.family][0]}"] = g["k"] * component.value("Int") * form
     if g["res_amplitude"] != 0:
         terms["resolution peak"] = g["k"] * g["res_amplitude"] * resolution_shape(model, q)
+    if g["diffuse_amplitude"] != 0:
+        terms["diffuse scattering"] = g["k"] * g["diffuse_amplitude"] * diffuse_shape(model, q)
     total = g["background"] + (np.sum(list(terms.values()), axis=0) if terms else np.zeros_like(q))
     if parts:
         return total, {**terms, "constant background": np.full_like(q, g["background"])}
@@ -515,9 +542,11 @@ def model_from_dict(data: Mapping) -> FitModel:
 
 
 __all__ = [
-    "BASE_GLOBALS", "COUPLINGS", "DEFAULT_INTERFERENCE", "DEFAULT_LAW", "FAMILIES", "INTERFERENCES", "NETWORK_FAMILIES",
+    "BASE_GLOBALS", "COUPLINGS", "CURVE_SCALES", "DEFAULT_INTERFERENCE", "DEFAULT_LAW", "DIFFUSE", "FAMILIES",
+    "INTERFERENCES", "NETWORK_FAMILIES",
     "RESOLUTION", "GLOBALS", "GRAZING", "INFO", "LEGACY_LAWS",
     "LINEAR", "SIZE_LAWS", "Component", "FitModel", "Parameter", "ParameterInfo", "component_form", "evaluate",
     "grazing", "intensity_size", "number_size", "qz_plus_r", "sigma_nn_over_d", "from_manual", "model_from_dict",
-    "model_to_dict", "new_component", "parameter_info", "resolution_shape", "to_manual", "with_interference",
+    "model_to_dict", "new_component", "parameter_info", "diffuse_shape", "resolution_shape", "term_shape", "to_manual",
+    "with_interference",
 ]
