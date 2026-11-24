@@ -2255,7 +2255,7 @@ solution's "weight" `a_j / Σ a` is a normalised amplitude, not a probability or
 
 **Values at a bound.** The least squares of Predict parameters keep every population inside the box of the network's
 prior (section 9.13: R from 0.5/q_max to 5/q_min, σR/R, σh/h and σnn/D 0.02–0.5, D and h within the prior's D/2R and
-h/2R ranges at the current radius, the tail's ν 1.8–2.2 and w at most 30 q_min). A free shape or tail value
+h/2R ranges at the current radius, the tail's ν 1.8–4 and w at most 30 q_min). A free shape or tail value
 within 10⁻⁴ of its range of a bound has *ended on the bound*, and the solution names it in `at_bounds` (parameter,
 lower or upper bound, component). The keys `sigma_Res` and `nu_Res` are the tail's w and ν, which every text calls
 Tail w and Tail ν, the names of Fitting's Model table; `shared/fit_names.py` holds the one name of every quantity
@@ -2687,7 +2687,7 @@ in Model are kept, and the fit itself never changes a range (9.8). After Refine 
 lower edge of its range) is flagged when A, w or ν is at an edge of its range or has no finite error. The Results step
 and the report then show a warning. In a series the frame counts as **flagged**, as does a frame with any value
 without a finite error; the series record lists them under `flagged`. Predict parameters keeps its own prior's ranges
-(w ≤ 30 q_min, ν 1.8–2.2), and its solutions are left unchanged.
+(w ≤ 30 q_min, ν 1.8–4), and its solutions are left unchanged.
 
 Implementation: `src/gimap/features/fitting/domain/fit_model.py`, `domain/beam_tail.py`,
 `application/single_fit.py` (`tail_for_curve`)
@@ -2990,18 +2990,19 @@ the other values.
 range, with ρ = q_max/q_min at most 300 and at least 10; points below the window are left out and counted. The curve
 is binned on 128 logarithmic points: a bin holds the σ-weighted mean of its measured points, and a bin without points
 is masked. The network reads ln I relative to its median, ln(σ/I), the mask and the position. It is also told ln ρ,
-q₊/q_max and q₋/q_max and whether both angles are known (q₊ = k_i + k_f and q₋ = k_i − k_f, vacuum, encoding 4). The
+q₊/q_max and q₋/q_max and whether both angles are known (q₊ = k_i + k_f and q₋ = k_i − k_f, vacuum, encoding 5). The
 training curves with both angles have two sphere paths and a free r (section 9.10). On a known substrate the same
 network proposes values, and the four-path likelihood below weights them.
 
 **The prior.** The parameter coordinates are uniform over their ranges. R̃ is log-uniform from 0.5 to 5ρ, every
 population above the previous one (by stick-breaking). The other ranges: σR/R 0.02–0.5; h/2R 0.1–10, with h̃ ≤ 200
-and R̃ ≤ 50 for random cylinders; D/2R 1–20; σnn/D 0.02–0.5; w from 0.3 to 30 q_min (log); ν 1.8–2.2; σ_q/q_max
+and R̃ ≤ 50 for random cylinders; D/2R 1–20; σnn/D 0.02–0.5; w from 0.3 to 30 q_min (log); ν 1.8–4; σ_q/q_max
 10⁻⁴–10⁻² (log); τ 0.003–0.15 (log). The scales are uniform from 0 to 10 times the curve's maximum. For a sphere at
 level 3 the complex reflection coefficient r is uniform in area on |r| ≤ 1. An equal-area map takes the flow's two
 square coordinates onto this disk. The prior density in (Re r, Im r) is 1/π there, or 2a for the magnitude a = |r|
-with an independent uniform phase. The exponent of the beam tail stays near 2, the Lorentzian wings of a beam profile.
-With a free exponent, a wide tail would take over the particles' own scattering at low q.
+with an independent uniform phase. The exponent of the beam tail runs from the Lorentzian wings of a beam profile
+(ν = 2) through the diffuse scattering of a rough interface (ν = 2(1 + H), H the Hurst exponent) to Porod's q⁻⁴ of a
+sharp one.
 
 **The network** (`src/gimap/features/fitting/domain/posterior/flow.py`):
 

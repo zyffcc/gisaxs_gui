@@ -61,7 +61,7 @@ TAIL_WIDTH_MAX = 30.0
 TAIL_EXPONENT = (1.8, 4.0)
 VERSION = 5
 """Of this encoding, recorded with a network (``flow.Network`` refuses another): 5 since the tail's exponent reaches 4
-(a measured low-q rise of a rough film falls as q^−2.5 to q^−3; 4 and 3 had ν in [1.8, 2.2]); 4 since spheres can have
+(rough interfaces and large aggregates fall faster than q⁻²; 4 and 3 had ν in [1.8, 2.2]); 4 since spheres can have
 the exit-reflected path (r and the cut's k_i − k_f); 3: the tail's width at most ``TAIL_WIDTH_MAX`` q_min (2: ν in
 [1, 6], w at most 3 q_min; 1: at most 0.1 q_max)."""
 CYLINDER_RADIUS, CYLINDER_HEIGHT = 50.0, 200.0
