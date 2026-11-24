@@ -6,7 +6,9 @@ from tools.benchmarks import table3_sources as table3
 def test_shipped_archive_cells_and_missing_external_sources():
     rows = table3.verify(table3.HERE, {}, revision=14)
     assert len(rows) == 23
-    assert {key for key, row in rows.items() if row["issues"]} == {"all_pixel_q", "calibration_heldout", "au"}
+    # galaxi: the shipped galaxi_posterior.json is the revision-15 rerun (R 4.8 nm), not the archived cell (4.9)
+    assert {key for key, row in rows.items() if row["issues"]} == {"all_pixel_q", "calibration_heldout", "au", "galaxi"}
+    assert rows["galaxi"]["issues"] == ["disagrees with pinned historical cells [4.9, 6.2]"]
     assert rows["extended.composition"]["counts"]["measured"] == {"correct": 179, "eligible": 300}
     assert rows["third.choices"]["counts"]["all_high"] == {"correct": 135, "eligible": 153}
     assert rows["third.auto"]["counts"]["radii"] == 424
