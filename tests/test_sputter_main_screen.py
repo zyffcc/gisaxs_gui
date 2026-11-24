@@ -166,6 +166,21 @@ def test_windows_are_chosen_with_the_slider_the_arrows_and_a_click_on_the_evolut
     _close(page)
 
 
+def test_the_evolution_draws_its_mark_without_repainting_inside_its_own_paint(tmp_path, monkeypatch):
+    """2026-11-24 (a hanging switch to After Deposition): a full drawing can run inside the canvas's paint event; the
+    mark is then drawn into that picture, and only a moved mark is blitted (Qt: no recursive repaint)."""
+    page = _page(tmp_path)
+    page.show()
+    page.open_client_result(write_result(tmp_path / "out"))
+    canvas, blits = page.evolution.canvas, []
+    monkeypatch.setattr(canvas, "blit", lambda bbox=None: blits.append(bbox))
+    canvas.draw()  # a full drawing, as a resize or the paint event makes it
+    assert blits == [] and page.evolution._background is not None
+    page.evolution.mark(2)
+    assert len(blits) == 1 and page.evolution._marks[0].get_xdata()[0] == 6.0
+    _close(page)
+
+
 def test_images_that_are_missing_leave_the_values_and_say_so(tmp_path):
     page = _page(tmp_path)
     page.show()

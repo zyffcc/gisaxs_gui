@@ -39,6 +39,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter: opening the page and switching between In situ and After Deposition.** The switch could hang the window:
+  the mark of the evolution plot was redrawn from inside the plot's own repaint. It is now drawn into the picture being
+  painted. Opening a result (and the Sputter page with the last result) is also faster: the real-space picture finds
+  each grain's nearest neighbours first, with the same picture as before (about twice as fast on a 20-window scan,
+  more on scans with many small grains).
 - **Sputter ▸ Analyze, Refine and Full on a polymer film, whichever network is chosen**: the starts from the film-density
   fluctuation and from a dense film, and the no-decrease rule on the metal amount and the film thickness only, now apply
   whichever of the package's networks for Cu or Ag on a polymer film the comparison chose (before: only two of them; a

@@ -82,3 +82,27 @@ def test_the_film_closes_with_channels_and_never_opens_up_again():
     holes = height <= 0.0
     assert space.channels and 0.0 < holes.mean() <= 1.0 - CLOSED_COVER + 0.05   # channels down to the substrate
     assert height[~holes].min() >= space.base                                 # the layer under the metal footprint
+
+
+def test_the_cover_scale_is_that_of_comparing_every_grain():
+    """The look-up of the nearest grains (2026-11-24, a slow page) gives the scale of the full comparison."""
+    import importlib
+
+    import numpy as np
+
+    real_space = importlib.import_module("src.gimap.features.sputter.domain.real_space")
+    rng = np.random.default_rng(7)
+    for count, width, cover in ((0, 0.3, 0.5), (5, 0.3, 0.5), (40, 0.0, 0.2), (300, 0.3, 0.6), (900, 0.8, 0.9)):
+        field = 40.0 + count / 10
+        x, y = rng.uniform(0, field, count), rng.uniform(0, field, count)
+        z = np.clip(rng.normal(size=count), -2.5, 2.5)
+        axis = (np.arange(real_space.COVER_GRID) + 0.5) * field / real_space.COVER_GRID
+        gx, gy = (a.ravel() for a in np.meshgrid(axis, axis))
+        need = np.full(gx.size, np.inf)
+        if count:
+            need = (np.hypot(gx[:, None] - x[None, :], gy[:, None] - y[None, :]) * np.exp(-width * z)[None, :]).min(1)
+        with np.errstate(invalid="ignore"):
+            full = float(np.quantile(need, cover))
+            fast = real_space._cover_scale(x, y, z, width, field, cover)
+        assert (math.isinf(full) and math.isinf(fast)) or (math.isnan(full) and math.isnan(fast)) or \
+            math.isclose(fast, full, rel_tol=1e-12)

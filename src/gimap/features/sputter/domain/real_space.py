@@ -196,6 +196,8 @@ laterally homogeneous (its density below 1 stands for voids and channels the pac
 channels of the picture take at most the rest (illustration)."""
 COVER_GRID = 128
 """Points per side of the grid the drawn coverage is measured on."""
+NEAREST = (8, 32, 128)
+"""Grains looked up per grid point, stage by stage, before the exact comparison with all (``_cover_scale``)."""
 
 
 def _cover_scale(x, y, z, width: float, field: float, cover: float) -> float:
@@ -203,13 +205,27 @@ def _cover_scale(x, y, z, width: float, field: float, cover: float) -> float:
     share ``cover`` of the field: a grid point g is covered from s = min_i |g - x_i| exp(-width z_i) on."""
     axis = (np.arange(COVER_GRID) + 0.5) * field / COVER_GRID
     gx, gy = (a.ravel() for a in np.meshgrid(axis, axis))
-    need = np.full(gx.size, np.inf)
     weight = np.exp(-width * np.asarray(z, float))
     xs, ys = np.asarray(x, float), np.asarray(y, float)
+    need = np.full(gx.size, np.inf)
+    rest = np.arange(gx.size)
+    # 2026-11-24 (a slow Sputter page: this was most of the time of opening a result): the nearest grains of every grid
+    # point first (a k-d tree), k at a time; a farther grain can only come first where the k-th distance times the
+    # smallest weight is below the best found, and only those points go on. The same scale as comparing every grain
+    if len(xs):
+        from scipy.spatial import cKDTree
+
+        tree, grid, smallest = cKDTree(np.column_stack((xs, ys))), np.column_stack((gx, gy)), float(weight.min())
+        for k in NEAREST:
+            if k >= len(xs) or not rest.size:
+                break
+            distance, index = tree.query(grid[rest], k=k)
+            need[rest] = np.minimum(need[rest], (distance * weight[index]).min(axis=1))
+            rest = rest[distance[:, -1] * smallest < need[rest]]
     for first in range(0, len(xs), 256):                     # in blocks: grid points x grains
         sl = slice(first, first + 256)
-        d = np.hypot(gx[:, None] - xs[None, sl], gy[:, None] - ys[None, sl]) * weight[None, sl]
-        need = np.minimum(need, d.min(axis=1))
+        d = np.hypot(gx[rest, None] - xs[None, sl], gy[rest, None] - ys[None, sl]) * weight[None, sl]
+        need[rest] = np.minimum(need[rest], d.min(axis=1))
     return float(np.quantile(need, min(max(cover, 0.0), COVER_MAX)))
 
 

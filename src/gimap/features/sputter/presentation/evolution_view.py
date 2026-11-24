@@ -147,16 +147,23 @@ class EvolutionPlot:
         self._blit_marks()
 
     def _background_drawn(self, _event) -> None:
-        """After every full drawing: the plots without the mark kept, the mark drawn over them."""
+        """After every full drawing: the plots without the mark kept, the mark drawn over them into the same picture.
+        No blit here: a full drawing can run inside the canvas's paint event (a resize, the switch to After
+        Deposition), and a blit there repaints the widget from inside its own paint (Qt: recursive repaint; the window
+        could hang). The picture drawn here is the one that paint event shows."""
         if not self._marks:
             self._background = None
             return
         self._background = self.canvas.copy_from_bbox(self.figure.bbox)
-        self._blit_marks()
+        self._draw_marks()
 
-    def _blit_marks(self) -> None:
+    def _draw_marks(self) -> None:
         for artist in self._marks + self._rings:
             artist.axes.draw_artist(artist)
+
+    def _blit_marks(self) -> None:
+        """The mark moved between full drawings: drawn over the kept plots and shown (outside a paint event)."""
+        self._draw_marks()
         self.canvas.blit(self.figure.bbox)
 
     def redraw(self) -> None:
