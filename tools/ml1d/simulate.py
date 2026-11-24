@@ -1,8 +1,9 @@
 """Simulated cuts for training the 1D proposal network: compositions and parameters from a prior, every population's
 term from cut_model.
 
-Writes shards of noise-free unit terms (each population's T on its cut's grid, with the cut's resolution, and the beam
-tail's shape); the shares of the populations, the tail amplitude, the background, the model error, the measured
+Writes shards of noise-free unit terms (each population's T on its cut's grid, with the cut's resolution, and the
+shapes of the beam term and the diffuse term); the shares of the populations, the amplitudes of the beam and the
+diffuse term, the background, the model error, the measured
 points, the counting noise and the gaps are drawn anew whenever a curve is used (``augment``), so one shard serves
 many epochs. Everything is dimensionless (q̃ = q/q_max, ``posterior.encoding``).
 
@@ -87,8 +88,7 @@ def geometry(qz: float, qz_minus: float, values_row) -> Geometry:
         return Geometry()
     if not np.isfinite(qz_minus):
         return Geometry.born_at(qz)
-    g = E.GLOBAL.start
-    r = complex(float(values_row[g + 4]), float(values_row[g + 5]))
+    r = complex(*(float(x) for x in values_row[E.REFLECTION]))
     alpha_i = np.degrees(np.arcsin(0.5 * (qz + qz_minus)))
     alpha_f = np.degrees(np.arcsin(0.5 * (qz - qz_minus)))
     return Geometry("two_path", 2.0 * np.pi, float(alpha_i), float(alpha_f), abs(r), float(np.angle(r)))
@@ -127,37 +127,40 @@ def evaluation_grid(fine: np.ndarray, sigma: float) -> np.ndarray:
     return np.concatenate([lower, fine, upper])
 
 
-def terms(params: dict, law: str, coupling: str) -> tuple[np.ndarray, np.ndarray]:
-    """(T of every slot (B, SLOTS, POINTS), zero where unused; beam-tail shape (B, POINTS)) from cut_model: each
+def terms(params: dict, law: str, coupling: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(T of every slot (B, SLOTS, POINTS), zero where unused; the shapes of the beam term and of the diffuse term
+    (B, POINTS) each) from cut_model: each
     population on ``fine_grid`` (extended for the resolution), convolved with the cut's resolution
     (``resolution.tabulated``), averaged over each bin."""
     rows = params["ratio"].size
     term = np.zeros((rows, E.SLOTS, E.POINTS))
-    tail = np.empty((rows, E.POINTS))
-    g = E.GLOBAL.start
+    beam = np.empty((rows, E.POINTS))
+    rough = np.empty((rows, E.POINTS))
     for i in range(rows):
         fine = fine_grid(params["ratio"][i])
         v = params["values"][i]
-        sigma = float(v[g + 2])
+        sigma = float(v[E.RESOLUTION_DIM])
         grid = evaluation_grid(fine, sigma)
         settings = model.Settings(geometry=geometry(float(params["qz"][i]), float(params["qz_minus"][i]), v))
         pops = populations(v, int(params["composition"][i]), law, coupling)
         smeared = resolution.tabulated(fine, grid, model.unit_terms(pops, settings, grid), sigma)
         for slot, t in enumerate(smeared):
             term[i, slot] = np.maximum(t.reshape(E.POINTS, SUB).mean(axis=1), FLOOR)
-        tail[i] = model.tail(fine, float(v[g]), float(v[g + 1])).reshape(E.POINTS, SUB).mean(axis=1)
-    return term, tail
+        beam[i] = model.tail(fine, float(v[E.BEAM_DIM]), 2.0).reshape(E.POINTS, SUB).mean(axis=1)
+        rough[i] = model.diffuse(fine, float(v[E.DIFFUSE_DIM]), float(v[E.HURST_DIM])).reshape(
+            E.POINTS, SUB).mean(axis=1)
+    return term, beam, rough
 
 
 def shard(prior: dict, count: int, seed) -> dict:
     rng = np.random.default_rng(seed)
     params = draw(prior, count, rng)
-    term, tail = terms(params, prior["law"], prior["coupling"])
+    term, beam, rough = terms(params, prior["law"], prior["coupling"])
     return {"values": params["values"].astype(np.float32),
             "z": E.to_z(params["values"], params["ratio"], params["composition"]).astype(np.float32),
             "composition": params["composition"].astype(np.int16), "ratio": params["ratio"].astype(np.float32),
             "qz": params["qz"].astype(np.float32), "qz_minus": params["qz_minus"].astype(np.float32),
-            "term": term.astype(np.float32), "tail": tail.astype(np.float32)}
+            "term": term.astype(np.float32), "beam": beam.astype(np.float32), "diffuse": rough.astype(np.float32)}
 
 
 def _layout(rng, ratio, prior, rows):
@@ -178,20 +181,23 @@ def _layout(rng, ratio, prior, rows):
 
 def augment(data: dict, prior: dict, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(I, σ, mask) on the grid of a batch of shard rows: populations at peak shares 10^U[−decades, 0], the model
-    error, a beam tail of ``tail_relative`` × the particles at q̃_min, a background of ``background_relative`` × their
+    error, a beam term of ``beam_relative`` and a diffuse term of ``diffuse_relative`` × the particles at q̃_min, a
+    background of ``background_relative`` × their
     peak, measured at ``points`` points (each bin the mean of its points), Poisson counts with ``peak_counts`` at
     the highest point, gaps and a lost low-q edge."""
     term = np.asarray(data["term"], float)
-    tail = np.asarray(data["tail"], float)
     values = np.asarray(data["values"], float)
     rows = term.shape[0]
     used = np.any(term > 0, axis=2)
     shares = np.where(used, 10.0 ** rng.uniform(-prior["share_decades"], 0.0, (rows, E.SLOTS)), 0.0)
     particles = np.einsum("bs,bsp->bp", shares / np.maximum(term.max(axis=2), FLOOR), term)
-    amplitude = _log_uniform(rng, *prior["tail_relative"], rows) * particles[:, 0] / np.maximum(tail[:, 0], FLOOR)
     background = _log_uniform(rng, *prior["background_relative"], rows) * particles.max(axis=1)
-    clean = particles + amplitude[:, None] * tail + background[:, None]
-    tau = values[:, E.GLOBAL.start + 3]
+    clean = particles + background[:, None]
+    for key in ("beam", "diffuse"):
+        shape = np.asarray(data[key], float)
+        amplitude = _log_uniform(rng, *prior[f"{key}_relative"], rows) * particles[:, 0] / np.maximum(shape[:, 0], FLOOR)
+        clean += amplitude[:, None] * shape
+    tau = values[:, E.ERROR_DIM]
     basis = E.error_basis(np.linspace(0.0, 1.0, E.POINTS))
     clean *= np.exp((rng.normal(size=(rows, E.ERROR_BASIS)) * tau[:, None]) @ basis)
     per_bin = _layout(rng, np.asarray(data["ratio"], float), prior, rows)

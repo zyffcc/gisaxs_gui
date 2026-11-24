@@ -1,13 +1,15 @@
 """The intensity of a 1D GISAXS cut: GIMaP's one forward model for Fitting, the proposal network and refinement.
 
-    I(q) = BG + k · [ Σ_j c_j T_j(q) + A / (1 + (|q|/w)^ν) ]
+    I(q) = BG + k · [ Σ_j c_j T_j(q) + A / (1 + (|q|/w)^ν) + A_d (1 + (|q| ξ)²)^−(1+H) ]
 
 * T_j is population j's unit-scale term (P̂ and C of ``shapes``, S of ``structure``):
   LMA  T = P̂ · S  (every size among neighbours of its own size), DA  T = P̂ + C (S − 1) (sizes and positions
   independent); without a structure factor T = P̂. With a Gaussian q resolution σ_q > 0, every T_j is convolved with
-  it (``resolution``); the beam tail and BG are not.
+  it (``resolution``); the beam tail, the diffuse term and BG are not.
 * c_j is the forward intensity of population j (T(0) = 1 for every family in the effective interface
-  approximation), A, w, ν the beam tail of the direct and reflected beam, BG a constant, k an overall factor.
+  approximation), A, w, ν the beam tail of the direct and reflected beam (the Lorentzian wings of the resolution
+  function: ν = 2), A_d, ξ, H the diffuse scattering of a rough interface (``diffuse``), BG a constant, k an overall
+  factor.
 
 q in nm⁻¹ (|q| is used), lengths in nm. ``population_terms`` evaluates B parameter sets of one family at once (the
 training simulator); ``evaluate`` one model (Fitting).
@@ -57,6 +59,9 @@ class Settings:
     tail_amplitude: float = 0.0
     tail_width: float = 0.02
     tail_exponent: float = 3.0
+    diffuse_amplitude: float = 0.0
+    diffuse_width: float = 0.02
+    diffuse_hurst: float = 0.5
     q_resolution: float = 0.0
     k: float = 1.0
     geometry: Geometry = field(default_factory=Geometry)
@@ -68,6 +73,16 @@ def tail(q, width: float, exponent: float) -> np.ndarray:
     if width <= 0 or exponent <= 0:
         return np.ones_like(q)
     return 1.0 / (1.0 + np.power(q / width, exponent))
+
+
+def diffuse(q, width: float, hurst: float) -> np.ndarray:
+    """(1 + (|q|/w)²)^−(1+H), w = 1/ξ: the diffuse scattering of a rough interface whose height–height correlation is
+    the K-correlation function of correlation length ξ and Hurst exponent H (Sinha et al. 1988, Palasantzas 1993); with
+    H = 1 also the Debye–Bueche form of large inhomogeneities. 1 everywhere when w ≤ 0."""
+    q = np.abs(np.asarray(q, float))
+    if width <= 0:
+        return np.ones_like(q)
+    return np.power(1.0 + np.square(q / width), -(1.0 + hurst))
 
 
 def _column(value, rows: int) -> np.ndarray:
@@ -267,14 +282,17 @@ def unit_terms(populations: Sequence[Population], settings: Settings, q,
 
 
 def evaluate(populations: Sequence[Population], settings: Settings, q, *, parts: bool = False, term=None):
-    """I(q); with ``parts``, also ``{"populations": [k·c_j·T_j], "tail": k·A·tail, "background": BG}``."""
+    """I(q); with ``parts``, also ``{"populations": [k·c_j·T_j], "tail": k·A·tail, "diffuse": k·A_d·diffuse,
+    "background": BG}``."""
     q = np.abs(np.asarray(q, float))
     curves = [settings.k * p.scale * t for p, t in zip(populations, unit_terms(populations, settings, q, term))]
     beam = settings.k * settings.tail_amplitude * tail(q, settings.tail_width, settings.tail_exponent)
-    total = settings.background + beam + (np.sum(curves, axis=0) if curves else 0.0)
+    rough = settings.k * settings.diffuse_amplitude * diffuse(q, settings.diffuse_width, settings.diffuse_hurst)
+    total = settings.background + beam + rough + (np.sum(curves, axis=0) if curves else 0.0)
     total = np.broadcast_to(total, q.shape).astype(float)
     if parts:
-        return total, {"populations": curves, "tail": beam, "background": np.full_like(q, settings.background)}
+        return total, {"populations": curves, "tail": beam, "diffuse": rough,
+                       "background": np.full_like(q, settings.background)}
     return total
 
 
@@ -285,4 +303,4 @@ def size_moments(population: Population) -> dict:
 
 
 __all__ = ["COUPLINGS", "Population", "Settings", "couple", "evaluate", "population_term", "population_terms",
-           "size_averages", "size_moments", "tail", "unit_terms"]
+           "diffuse", "size_averages", "size_moments", "tail", "unit_terms"]
