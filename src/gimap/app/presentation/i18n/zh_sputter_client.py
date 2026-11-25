@@ -134,9 +134,9 @@ SPUTTER_CLIENT_ZH = {
         "扫描中沉积开始的时间（s）。留空：由数据确定。",
     "How long the deposition lasted after its start (s): the metal amount stays constant afterwards. Empty: to the "
     "end of the scan.": "沉积开始后持续了多久（s）：之后金属量不再增加。留空：持续到扫描结束。",
-    ("Thickness of the polymer film on the wafer. Leave it empty: the shipped networks fix the film themselves and "
-     "do not use a value entered here; for Ag on PNO a value makes the analysis compute the metal on Si."):
-        "晶圆上聚合物膜的厚度。请留空：随包网络自己固定了膜，不用这里输入的值；对 PNO 上的 Ag，输入一个值会让分析按 Si 上的金属计算。",
+    ("Thickness of the polymer film on the wafer: the analysis models the polymer as a film of this thickness on "
+     "Si. Empty: the networks' own setting (30 nm for Ag, 40 nm for Cu; on PNO the polymer is the substrate)."):
+        "晶圆上聚合物膜的厚度：分析把聚合物当作 Si 上这一厚度的膜。留空：用网络自己的设定（Ag 为 30 nm，Cu 为 40 nm；PNO 上聚合物本身就是基底）。",
     "Analysis package": "分析包",
     "The folder of the analysis package (it holds code and models).": "分析包的文件夹（里面有 code 和 models）。",
     "{folder} (from GIMAP_SPUTTER_CLIENT)": "{folder}（来自 GIMAP_SPUTTER_CLIENT）",

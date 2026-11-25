@@ -513,6 +513,17 @@ def NM_paths(nn_dir):
     return NM.member_paths(nn_dir)
 
 
+def polymer_film(cfg, scan, meta):
+    'The polymer film layer of the forward model (2026-11-25, poly_thickness_20261125): {thickness_nm, source}, or None'
+    env = REG.scan_env(cfg, scan)
+    if env.get("IAM_PFILM") != "1":
+        return None
+    given = (meta or {}).get("poly_t")
+    t = env.get("IAM_POLYT_NM")
+    t = float(t) if t else (float(given) if given else None)
+    from_intake = given is not None and float(given) > 0 and env.get("IAM_POLYT_NM") == repr(float(given))
+    return dict(thickness_nm=t, source="given at intake" if from_intake else "the network family's setting")
+
 def _client_entry(cfg, a, data_root):
     'Family entry of a scan outside the family: metal, onset override, per-scan forward settings (--like).'
     sj = data_root / a.scan / "scan.json"
@@ -539,6 +550,10 @@ def _client_entry(cfg, a, data_root):
             print(f"{a.scan}: {float(lam):.5f} nm is away from the wavelength of {cfg['family']} "
                   f"({REG.model_lam(cfg):g} nm): tabulated optics at the scan's energy, the network gives starts only",
                   flush=True)
+    pt = meta.get("poly_t")
+    if pt is not None and float(pt) > 0 and meta.get("sub") not in (None, "Si", "TiO2"):
+        env["IAM_PFILM"], env["IAM_POLYT_NM"] = "1", repr(float(pt))
+
     pm = data_root / a.scan / "pixmask.json"
     env["IAM_PIXMASK"] = json.loads(pm.read_text(encoding="utf-8"))["sha256"][:12] if pm.exists() else "none"
     return dict(metal=meta.get("metal", "?"), env=env, client=True), meta
@@ -1092,6 +1107,7 @@ def main():
                 metal=info["metal"], onset_s=info["t_dep"],
                 onset_source=("scan.json (given at intake)" if client and "t_dep" in scan_meta else "forward-model rule"),
                 position_factor=info["position_factor"], scan_json=scan_meta or None,
+                polymer_film=polymer_film(cfg, a.scan, scan_meta),
                 n_windows=len(feats), n_usable=len(okf), n_unusable_reasons=sorted({d["reason"] for d in feats if not d["ok"]}),
                 k=a.k, refine_nfev=a.refine,
                 median_dev5_first=float(np.median(c1)) if c1 else None, median_dev5_best=float(np.median(bd)) if bd else None,

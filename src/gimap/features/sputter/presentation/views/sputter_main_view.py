@@ -119,8 +119,8 @@ AT_TIME_CAPTION = "Structure at any time:"
 AT_TIME_BUTTON = "Analyze This Time"
 AT_TIME_TIP = ("A time of the scan that is not one of the analysed windows: the joint fit interpolated there at once, "
                "then refined to the frames of that time (about a minute or more)")
-FILM_TIP = ("Thickness of the polymer film on the wafer. Leave it empty: the shipped networks fix the film themselves and "
-            "do not use a value entered here; for Ag on PNO a value makes the analysis compute the metal on Si.")
+FILM_TIP = ("Thickness of the polymer film on the wafer: the analysis models the polymer as a film of this thickness on "
+            "Si. Empty: the networks' own setting (30 nm for Ag, 40 nm for Cu; on PNO the polymer is the substrate).")
 ONSET_TIP = "Time of the scan (s) at which the deposition started. Empty: found in the data."
 DURATION_TIP = ("How long the deposition lasted after its start (s): the metal amount stays constant afterwards. "
                 "Empty: to the end of the scan.")
