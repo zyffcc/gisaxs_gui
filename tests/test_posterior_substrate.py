@@ -24,7 +24,7 @@ Q = np.linspace(0.02, 2.0, 180)
 def _values():
     values = np.full(E.DIMS, np.nan)
     values[[0, 1, 4, 5]] = 4.8, 0.12, 16.0, 0.19
-    values[E.GLOBAL] = 0.008, 3.2, 0.00001, 0.01, -0.3, 0.7
+    values[E.GLOBAL] = 0.008, 0.01, 0.6, 0.00001, 0.01, -0.3, 0.7
     return values
 
 

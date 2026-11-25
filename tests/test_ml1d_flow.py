@@ -27,7 +27,7 @@ def _random_values(count, seed):
 
 
 def test_compositions_and_their_values():
-    assert len(E.COMPOSITIONS) == 6 + 36 + 216 and E.DIMS == 24
+    assert len(E.COMPOSITIONS) == 6 + 36 + 216 and E.DIMS == 25
     index = E.composition_index([("sphere", True), ("cylinder", False)])
     assert E.composition_types(index) == (("sphere", True), ("cylinder", False))
     assert E.composition_name(index) == "sphere (S) + random cylinder"
@@ -207,7 +207,7 @@ def test_simulator_rows_are_reproducible_and_usable():
         import simulate
     finally:
         sys.path.remove(str(TOOLS))
-    prior = simulate.load_prior(TOOLS / "prior_v2.json")
+    prior = simulate.load_prior(TOOLS / "prior_v4.json")
     one, two = simulate.shard(prior, 30, 7), simulate.shard(prior, 30, 7)
     assert all(np.array_equal(one[k], two[k], equal_nan=k in ("values", "qz_minus")) for k in one)
     used = E.active(one["composition"].astype(int))[:, 0:E.GLOBAL.start:E.PER_SLOT]

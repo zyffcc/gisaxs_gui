@@ -1,6 +1,6 @@
 {
  "format": "gimap_ml1d_flow_v2",
- "encoding": 5,
+ "encoding": 6,
  "names": [
   "R_1",
   "sigma_R_1",
@@ -21,7 +21,8 @@
   "D_over_2R_3",
   "sigma_nn_3",
   "tail_width",
-  "tail_exponent",
+  "diffuse_width",
+  "diffuse_hurst",
   "q_resolution",
   "model_error",
   "reflection_re",
@@ -72,7 +73,8 @@
    16,
    19,
    20,
-   21
+   21,
+   24
   ],
   [
    2,
@@ -85,8 +87,8 @@
    17,
    18,
    19,
-   20,
-   22
+   21,
+   23
   ],
   [
    0,
@@ -99,10 +101,11 @@
    13,
    14,
    15,
-   21,
-   23
+   20,
+   22,
+   24
   ]
  ],
  "purpose": "reference network of tests/test_ml1d_flow.py (random weights)",
- "sha256": "c088495acb265371cb631e0a5bda254a7b3d59b0bcce533af682bbc6413f95ef"
+ "sha256": "dbf9e171f73a8293fea3c291b7b6724b1590613e85d8458202e797fd2b71fb30"
 }

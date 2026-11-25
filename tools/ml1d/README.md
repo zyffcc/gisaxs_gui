@@ -13,13 +13,15 @@ Everything is dimensionless: q̃ = q/q_max and lengths × q_max, so one network 
 The curve is binned on 128 log-spaced points from q_max/ρ to q_max (ρ = q_max/q_min in [10, 300]); the network sees
 ln I relative to its median, ln(σ/I), the mask of bins with measured points and the position on the grid, and is told
 ρ, the cut's q₊/q_max = (k_i + k_f)/q_max, q₋/q_max = (k_i − k_f)/q_max and whether the cut has two paths
-(`posterior/encoding.py`, encoding 5): with both angles known, spheres have the direct and the exit-reflected path with
+(`posterior/encoding.py`, encoding 6): with both angles known, spheres have the direct and the exit-reflected path with
 an effective reflection coefficient r (`cut_model.geometry`, `two_path`), whose real and imaginary parts are two more
 values of the cut; with q₊ alone the Born term at q₊; with neither the effective interface.
 
 A composition is one to three populations listed by increasing radius, each a sphere, an upright cylinder or a random
 cylinder, with or without a paracrystal: 258 compositions. A population has R̃, σR/R, h/2R and σh/h (random cylinders),
-D/2R and σnn/D (with a paracrystal); the cut has the beam tail's width and exponent, the Gaussian resolution σ_q/q_max
+D/2R and σnn/D (with a paracrystal); the cut has the beam tail's width (its exponent is 2, the Lorentzian wings of the
+resolution function), the width 1/ξ and the Hurst exponent H of the diffuse term of a rough interface, the Gaussian
+resolution σ_q/q_max
 and the amplitude τ of a smooth multiplicative model error. The prior is uniform in a unit box of these values (ln for
 lengths, σ_q and τ; the radii ordered by stick-breaking); the flow works on the logit of the box position; values a
 composition does not have are never seen or moved by the flow, so the density of the others is exact.
@@ -30,7 +32,7 @@ composition does not have are never seen or moved by the flow, so the density of
 analysis, Batch Export and the command line all call it; there are no options for how the solutions are finished).
 For a measured cut and each composition considered (given, or the head's four most probable among those allowed: `refine.SHORTLIST`),
 1000 samples of the network are weighted by importance sampling against cut_model on the measured points: amplitudes
-of the populations, the beam tail and a constant by non-negative least squares and integrated out in the Laplace
+of the populations, the beam tail, the diffuse term and a constant by non-negative least squares and integrated out in the Laplace
 approximation, the model error integrated out exactly; weights L·π/q, effective sample size, and the evidence of the
 composition (Dax et al. 2023). The weighted samples fall into modes; the three heaviest modes of each composition are
 refined by Fitting's bounded least squares (`fit_engine`, method `local`). When no solution of one of the two best
@@ -46,8 +48,9 @@ probability and flags (at a bound, unconstrained, correlated, few effective samp
 
 | File | What it does |
 |---|---|
-| `simulate.py` | compositions and values from a prior file; every population's term from `cut_model` on 8 points per bin (then averaged, as a measured bin), convolved with the cut's resolution (`resolution.tabulated`); shards of noise-free terms. `augment` draws shares, beam tail, background, model error, measured-point layout (100–1000 points, linear or logarithmic), Poisson counts and gaps anew for every batch |
-| `prior_v3.json` | the prior of the network that comes with GIMaP (encoding 5): as `prior_v2.json`, with the beam tail's exponent ν in [1.8, 4] |
+| `simulate.py` | compositions and values from a prior file; every population's term from `cut_model` on 8 points per bin (then averaged, as a measured bin), convolved with the cut's resolution (`resolution.tabulated`); shards of noise-free terms. `augment` draws shares, the amplitudes of the beam tail and the diffuse term, background, model error, measured-point layout (100–1000 points, linear or logarithmic), Poisson counts and gaps anew for every batch |
+| `prior_v4.json` | the prior of the network that comes with GIMaP (encoding 6): as `prior_v3.json`, with the beam tail (ν = 2) and the diffuse term (1/ξ from 0.03 to 3 q_min, H from 0 to 1) in place of one tail, each with an amplitude of 10⁻³–10 times the particles at q_min |
+| `prior_v3.json` | the prior of `flow_v5` (encoding 5): as `prior_v2.json`, with the beam tail's exponent ν in [1.8, 4] |
 | `prior_v2.json` | the prior of the network before it (encoding 4): as `prior_v1.json`, and 70 % of the cuts at a q₊ have two paths, q₋ = q₊ × U(−0.5, 0.9), r uniform in [−1, 1]²; ν in [1.8, 2.2] |
 | `prior_v1.json` | the prior of the first network: K = 1, 2, 3 with weights 0.3, 0.4, 0.3; spheres 0.4, upright cylinders 0.35, random cylinders 0.25; a paracrystal in 70 %; the Born term at a q_z/q_max up to 1 in 60 % |
 | `flow_torch.py` | the network in PyTorch, with the names and layout of the numpy version |

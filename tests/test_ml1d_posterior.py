@@ -30,7 +30,7 @@ def _values(radius=4.0, distance=14.0, tau=0.01, sigma_q=1e-4):
     v = np.full(E.DIMS, np.nan)
     v[0:2] = radius, 0.15
     v[4:6] = distance, 0.2
-    v[E.GLOBAL] = 0.01, 3.0, sigma_q, tau, 0.0, 0.0
+    v[E.GLOBAL] = 0.01, 0.01, 0.5, sigma_q, tau, 0.0, 0.0
     return v
 
 
@@ -54,7 +54,7 @@ def test_likelihood_equals_the_dense_gaussian():
     x = like.columns(values)
     for b in range(2):
         model = amplitudes[b] @ x[b]
-        tau = values[b, E.GLOBAL.start + 3]
+        tau = values[b, E.ERROR_DIM]
         d = like.basis * model[None, :]
         cov = np.diag(sigma**2) + tau**2 * d.T @ d
         r = counts - model
@@ -76,10 +76,10 @@ def test_amplitudes_reproduce_a_noise_free_curve():
     data = infer.Cut.prepare(q, np.ones_like(q), np.ones_like(q))
     like = infer.Likelihood(data, SPHERE)
     x = like.columns(_values()[None])[0]
-    target = 3.0 * x[0] + 0.5 * x[1] + 0.2
+    target = 3.0 * x[0] + 0.5 * x[1] + 0.8 * x[2] + 0.2
     data = infer.Cut.prepare(q, target, 0.01 * target)
     _log, amplitudes, chi2 = infer.Likelihood(data, SPHERE)(_values()[None])
-    assert np.allclose(amplitudes[0], [3.0, 0.5, 0.2], rtol=1e-6) and chi2[0] < 1e-8
+    assert np.allclose(amplitudes[0], [3.0, 0.5, 0.8, 0.2], rtol=1e-6) and chi2[0] < 1e-8
 
 
 def test_the_right_values_are_more_likely():
@@ -114,7 +114,7 @@ def test_two_paths_give_every_sphere_sample_its_reflection():
     k = 2 * math.pi / 0.1
     assert k * (math.sin(math.radians(alpha_i)) - math.sin(math.radians(alpha_f))) == pytest.approx(QZ_MINUS)
     values = np.stack([_values(), _values()])
-    values[:, E.GLOBAL.start + 4:E.GLOBAL.start + 6] = [[REFLECTION.real, REFLECTION.imag], [-0.2, 0.5]]
+    values[:, E.REFLECTION] = [[REFLECTION.real, REFLECTION.imag], [-0.2, 0.5]]
     columns = infer.Likelihood(data, SPHERE).columns(values)
     for b, r in enumerate((REFLECTION, complex(-0.2, 0.5))):
         direct = cut.population_terms("sphere", q, radius=4.0, radius_spread=0.15, distance=14.0,
@@ -155,7 +155,7 @@ def test_predict_fits_the_reflection_of_two_paths():
     assert best.model.globals["refl_amp"].free and best.model.globals["refl_phase"].free
     assert abs(r) == pytest.approx(best.extras["reflection"]["amplitude"]) and 0.0 < abs(r) <= 1.0
     centre = refine.model_values(best.model, SPHERE)
-    assert centre[E.GLOBAL.start + 4] == pytest.approx(r.real) and centre[E.GLOBAL.start + 5] == pytest.approx(r.imag)
+    assert tuple(centre[E.REFLECTION]) == pytest.approx((r.real, r.imag))
 
 
 def test_weights_evidence_and_modes():
@@ -184,7 +184,8 @@ def test_predict_refines_to_the_truth():
     assert best.chi2_reduced < 1.5
     assert best.values["R_1"].best == pytest.approx(4.0, rel=0.03)
     assert best.values["D_1"].best == pytest.approx(14.0, rel=0.03)
-    assert set(best.values) == {"R_1", "sigma_R_1", "D_1", "sigma_nn_1", "tail_width", "tail_exponent", "q_resolution"}
+    assert set(best.values) == {"R_1", "sigma_R_1", "D_1", "sigma_nn_1", "tail_width", "diffuse_width", "diffuse_hurst",
+                                "q_resolution"}
 
 
 def test_several_compositions_at_once():

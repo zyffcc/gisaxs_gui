@@ -6,8 +6,8 @@ the first point for a power law A (w/q)^ν over the curve: A runs to 10¹⁷ and
 tail still has the generic ranges, a manual fit therefore uses ranges of its curve (``limits``):
 
 * A ≤ ``AMPLITUDE_FACTOR`` × the largest intensity of the fitted points (in units of k);
-* w between ``WIDTH_LOW`` × q_min and min(``WIDTH_HIGH`` × q_min, q_max) of the fitted points (the window of the
-  proposal network's prior; the shoulder of the tail stays near the curve's first point);
+* w between ``WIDTH_LOW`` × q_min and min(``WIDTH_HIGH`` × q_min, q_max) of the fitted points (the shoulder of the
+  tail stays near the curve's first point);
 * ν between 1 and ``EXPONENT_HIGH`` (steeper “tails” are steps, not the wings of a beam profile).
 
 Predict parameters keeps its own prior's ranges: a solution of it does not have the generic ranges, so it is never

@@ -72,8 +72,8 @@ def test_reflection_phase_summary_respects_the_branch_of_the_fit():
 
     angle = np.deg2rad([178, 179, -179, -178])
     samples = np.zeros((4, E.DIMS))
-    samples[:, E.GLOBAL.start + 4] = .8 * np.cos(angle)
-    samples[:, E.GLOBAL.start + 5] = .8 * np.sin(angle)
+    samples[:, E.REFLECTION.start] = .8 * np.cos(angle)
+    samples[:, E.REFLECTION.start + 1] = .8 * np.sin(angle)
     local = SimpleNamespace(samples=samples, tempered=lambda ess: np.full(4, .25))
     quantiles = reporting.reflection_quantiles(local, np.pi, 50)
     assert quantiles["refl_amp"]["median"] == pytest.approx(.8)

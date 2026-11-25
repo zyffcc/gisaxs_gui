@@ -85,7 +85,7 @@ INDICES = (0, 1, 4, 5, 8, 13)
 NETWORK = GIMAP / "src/gimap/features/fitting/domain/posterior/data/flow_v1"
 FAMILY = {"sphere": "sphere", "vc": "vertical_cylinder"}
 OTHER = {"sphere": "vertical_cylinder", "vertical_cylinder": "sphere"}
-TAU = E.GLOBAL.start + 3
+TAU = E.ERROR_DIM
 TAU_RANGE = (0.003, 0.15)
 TAU_START = 0.02
 """The model error at which ``local_posterior`` starts (Predict's own when the network's mode has none)."""

@@ -24,7 +24,7 @@ def _cut(level):
 def _values():
     v = np.full(E.DIMS, np.nan)
     v[:6] = 4.7, 0.16, 14.0, 0.14, 16.1, 0.10
-    v[E.GLOBAL] = 0.014, 1.97, 0.012, 0.031, -0.67, 0.34
+    v[E.GLOBAL] = 0.014, 0.02, 0.4, 0.012, 0.031, -0.67, 0.34
     return v
 
 
@@ -38,10 +38,10 @@ def test_likelihood_and_refinement_use_same_resolved_curve(level, family):
     # The width is near the upper end of the prior; convolution materially changes the correlation peak.
     x = like.columns(values)[0]
     sharp = values.copy()
-    sharp[E.GLOBAL.start + 2] = 0.0002
+    sharp[E.RESOLUTION_DIM] = 0.0002
     assert np.max(np.abs(like.columns(sharp)[0, 0] - x[0])) > 0.001
     second = values.copy()
-    second[E.GLOBAL.start + 2] *= 0.7
+    second[E.RESOLUTION_DIM] *= 0.7
     np.testing.assert_allclose(like.columns([second, values])[1], x, rtol=1e-12)
     data = replace(data, intensity=1120 * x[0] + 47 * x[1] + 3)
     model = refine.fit_model(values, index, data, grazing=angles)

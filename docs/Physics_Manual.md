@@ -2225,7 +2225,8 @@ the automatic fit uses four-term DWBA if the session or frame metadata identifie
 Otherwise it uses the Born term at the cut's vacuum q_z = (2π/λ)(sin α_i + sin α_f), in nm⁻¹ for λ in nm
 (level 2, section 9.13). When either angle is unknown, it uses the effective interface at q_z = 0 (level 1).
 The report states the level under *Decisions*. The other model settings are Fitting's defaults: sizes Gaussian
-by number, the paracrystal of section 9.5 in the LMA, the beam tail A / (1 + (q/w)^ν) and a constant background (9.1).
+by number, the paracrystal of section 9.5 in the LMA, the beam tail A / (1 + (q/w)²), the diffuse term of a rough
+interface and a constant background (9.1).
 
 Without a given composition (as in Run Automatic Analysis) the network chooses among one or two populations of
 spheres and upright cylinders, each with or without a paracrystal (the head's four most probable of these, and its
@@ -2255,12 +2256,14 @@ solution's "weight" `a_j / Σ a` is a normalised amplitude, not a probability or
 
 **Values at a bound.** The least squares of Predict parameters keep every population inside the box of the network's
 prior (section 9.13: R from 0.5/q_max to 5/q_min, σR/R, σh/h and σnn/D 0.02–0.5, D and h within the prior's D/2R and
-h/2R ranges at the current radius, the tail's ν 1.8–4 and w at most 30 q_min). A free shape or tail value
+h/2R ranges at the current radius, the tail's w at most q_min, the diffuse term's w_d at most 3 q_min and H 0–1). A
+free shape, tail or diffuse value
 within 10⁻⁴ of its range of a bound has *ended on the bound*, and the solution names it in `at_bounds` (parameter,
 lower or upper bound, component). The keys `sigma_Res` and `nu_Res` are the tail's w and ν, which every text calls
 Tail w and Tail ν, the names of Fitting's Model table; `shared/fit_names.py` holds the one name of every quantity
-and the sentence of every flag. With Tail A = 0 the tail is absent, and its w and ν are neither listed nor flagged;
-the same holds for the values of a population whose Scale is 0. The linear terms a_j, BG and A are solved by
+and the sentence of every flag. With Tail A = 0 the tail is absent, and its w and ν are neither listed nor flagged
+(with Diffuse A = 0, the same holds for Diffuse w and H);
+the same holds for the values of a population whose Scale is 0. The linear terms a_j, BG, A and A_d are solved by
 non-negative least squares and are not in `at_bounds`. One at 0 is held by that limit (a background the curve would
 want below zero, or an absent beam tail, so that w and ν no longer change the curve); the report names it for the
 reported solution among the *Decisions* (*fit caveat*: *Background at 0, the non-negativity limit*).
@@ -2315,8 +2318,8 @@ Implementation: `create_curve_fit()` in `src/gimap/features/fitting/bootstrap.py
 
 - With the Born term (level 2, section 8.5) the fit uses a single vacuum q_z for the Yoneda band; reflected paths,
   refraction and the change of the Yoneda enhancement across the band are left out.
-- The term `A / (1 + (q/w)^ν)` is an additive empirical tail of the direct and reflected beam; no resolution
-  convolution is applied.
+- The beam tail and the diffuse term are added to the particle terms; the particle terms are not convolved with the
+  beam's Lorentzian wings.
 - The Yoneda row is found without αc, and the beam-centre row is not refined (sections 8.1, 8.2).
 
 Like the GIWAXS report (section 7.9), the GISAXS report's *Decisions* always say what its numbers are:
@@ -2378,19 +2381,27 @@ Implementation: `src/gimap/features/fitting/application/curve_sources.py`, `src/
 ### 9.2 The intensity model
 
 ```text
-I(q) = BG + k · [ Σ_i Int_i · T_i(q) + A / ( 1 + (q / w)^ν ) ],   q = abs(q) in nm⁻¹        (9.1)
+I(q) = BG + k · [ Σ_i Int_i · T_i(q) + A / ( 1 + (q / w)^ν ) + A_d ( 1 + (q / w_d)² )^−(1+H) ],   q = abs(q) in nm⁻¹   (9.1)
 T_i = P_i · S_i  (LMA)   or   P_i + C_i (S_i − 1)  (DA),   P_i(0) = 1
 ```
 
 Int_i is the scale of component i. Every family is normalised to P(0) = 1 (section 9.4), so Int_i is the intensity
 of component i at q = 0 (times S_i(0)). BG is a constant background (not multiplied by k), A, w and ν the amplitude,
-width and exponent of the beam-tail term, and k an overall factor fixed at 1 by default. By default the model depends on
+width and exponent of the beam-tail term, A_d, w_d and H those of the diffuse term, and k an overall factor fixed at 1
+by default. By default the model depends on
 `abs(q)` only: spheres are evaluated at q_z = 0, the effective interface approximation. With the angles of the cut
 entered, spheres can use the direct and the exit-reflected path of the DWBA instead (section 9.10). The beam-tail term is
 additive, not a resolution convolution. With w ≤ 0 or ν ≤ 0 the term is 1.
 
+**The two terms at low q.** The beam tail is the wing of the resolution function about the direct and the specular
+beam; a Lorentzian profile gives ν = 2, the value Predict parameters uses. The diffuse term is the diffuse scattering
+of a self-affine rough interface (Sinha et al., 1988) with the power spectrum (1 + q²ξ²)^−(1+H) (Palasantzas, 1993):
+ξ = 1/w_d is the correlation length and H the Hurst exponent. Beyond q = w_d it falls as q^−2(1+H). With H = 1 it is
+also the form of Debye & Bueche (1949) for large inhomogeneities. In a new model the diffuse term is off (A_d = 0,
+fixed); Predict parameters uses it.
+
 **q resolution (σ_q, off by default).** With σ_q > 0 each particle term `Int_i·T_i` is convolved with a Gaussian
-of standard deviation σ_q in q; the beam-tail term and BG are not. The terms are made on a uniform grid from
+of standard deviation σ_q in q; the beam-tail term, the diffuse term and BG are not. The terms are made on a uniform grid from
 max(0, q_min − 5σ_q) to q_max + 5σ_q, at most σ_q/5 apart, folded at q = 0 (the cut is symmetric: I(−q) = I(q)),
 convolved with the Gaussian cut at ±5σ_q and interpolated back to the points (within 10⁻³ of a direct convolution).
 Set σ_q for well-ordered films: when σ_q is above about 0.3 of the width of the structure peak, a fit without it takes
@@ -2399,14 +2410,15 @@ up the resolution as disorder in σnn/D.
 **Resolution from the file (Refine and Search).** For a measured Gaussian standard deviation dQᵢ, each particle term
 T(qᵢ) in (9.1) becomes E[T(|qᵢ + dQᵢ Z|)], Z ∼ N(0,1); a zero width gives T(|qᵢ|).
 The integral uses the normalized Gaussian over −7 ≤ Z ≤ 7, with adaptive Gauss–Legendre quadrature and explicit
-subdivision at sharp 1D paracrystal peaks. Each scale column uses the same convolution. BG and the beam tail
-keep their values at the measured qᵢ. A named dQ or sigma_q text column, or a Gaussian NXcanSAS Qdev,
+subdivision at sharp 1D paracrystal peaks. Each scale column uses the same convolution. BG, the beam tail and
+the diffuse term keep their values at the measured qᵢ. A named dQ or sigma_q text column, or a Gaussian NXcanSAS Qdev,
 supplies one finite, nonnegative standard deviation in inverse length per fitted point. With both halves
 on |q| each measurement keeps its width. For their mean, the two Gaussian responses are approximated by
 one Gaussian with the mean of their variances, interpolating variances as needed. Where only one side contributes
 its width is used.
 
-The plot's **Components** are the additive intensities `k·Int_i·T_i`, the scaled beam-tail term and `BG`; their sum
+The plot's **Components** are the additive intensities `k·Int_i·T_i`, the scaled beam-tail and diffuse terms and `BG`;
+their sum
 is the total model. Component visibility and axis limits change only the plot. A logarithmic axis leaves out zero and
 negative values.
 
@@ -2645,6 +2657,9 @@ Implementation: `src/gimap/features/fitting/domain/cut_model/structure.py`, `src
 | res_amplitude | Tail A | – | 0 | ≥ 0 (solved) | yes |
 | res_width | Tail w | nm⁻¹ | 0.02 | 0.001–0.1 | yes |
 | res_exponent | Tail ν | – | 3 | 1–20 | yes |
+| diffuse_amplitude | Diffuse A | – | 0 | ≥ 0 (solved) | no |
+| diffuse_width | Diffuse w (1/ξ) | nm⁻¹ | 0.02 | 10⁻⁴–0.1 | no |
+| diffuse_hurst | Diffuse H | – | 0.5 | 0–1 | no |
 | k | Factor k | – | 1 | 10⁻⁶–10⁶ | no |
 | q_resolution | σ_q | nm⁻¹ | 0 | 0–0.1 | no |
 | alpha_i | αi | ° | 0 | 0–5 | no |
@@ -2681,13 +2696,13 @@ model has them:
 0 ≤ A ≤ 10 · max(I) / k,    0.3 q_min ≤ w ≤ min(30 q_min, q_max),    1 ≤ ν ≤ 6       (over the fitted points)
 ```
 
-The w window is that of Predict's prior (9.13). A starting model also takes w = q_min and ν = −(slope of the first six
+A starting model also takes w = q_min and ν = −(slope of the first six
 points in log–log) when that slope is below −1 (else 3; at most 6); A is then solved with the scales (9.17). Ranges typed
 in Model are kept, and the fit itself never changes a range (9.8). After Refine or Search, a tail in use (A above the
 lower edge of its range) is flagged when A, w or ν is at an edge of its range or has no finite error. The Results step
 and the report then show a warning. In a series the frame counts as **flagged**, as does a frame with any value
 without a finite error; the series record lists them under `flagged`. Predict parameters keeps its own prior's ranges
-(w ≤ 30 q_min, ν 1.8–4), and its solutions are left unchanged.
+(9.13), and its solutions are left unchanged.
 
 Implementation: `src/gimap/features/fitting/domain/fit_model.py`, `domain/beam_tail.py`,
 `application/single_fit.py` (`tail_for_curve`)
@@ -2979,10 +2994,10 @@ When sampling fails, the comparison uses the lowest BIC found for each compositi
 **Compositions and values.** A composition is one to three populations, listed by increasing mean radius. Each is a
 sphere, an upright cylinder or a random cylinder, with or without the paracrystal of section 9.5: 258 compositions in
 all. Sizes are Gaussian by number (section 9.3), and the coupling is the LMA. A population has R and σR/R, h/2R and
-σh/h (random cylinders), and D/2R and σnn/D (with a paracrystal). The cut adds the beam tail's width w and exponent ν
-(section 9.2), the Gaussian resolution σ_q of the particle terms and the amplitude τ of a smooth multiplicative model
+σh/h (random cylinders), and D/2R and σnn/D (with a paracrystal). The cut adds the beam tail's width w (with ν = 2), the
+diffuse term's w_d and H (section 9.2), the Gaussian resolution σ_q of the particle terms and the amplitude τ of a smooth multiplicative model
 error exp(Σ_k b_k B_k(x)), b_k ~ N(0, τ²), over 8 cubic B-splines in x = ln(q/q_min)/ln(q_max/q_min). The network
-does not propose the scales (every population's Int, the tail's A, the background): they are solved for every set of
+does not propose the scales (every population's Int, the A of the tail and of the diffuse term, the background): they are solved for every set of
 the other values.
 
 **What the network sees.** Everything is dimensionless: q̃ = q/q_max, lengths × q_max. The model depends on q·R only
@@ -2990,19 +3005,19 @@ the other values.
 range, with ρ = q_max/q_min at most 300 and at least 10; points below the window are left out and counted. The curve
 is binned on 128 logarithmic points: a bin holds the σ-weighted mean of its measured points, and a bin without points
 is masked. The network reads ln I relative to its median, ln(σ/I), the mask and the position. It is also told ln ρ,
-q₊/q_max and q₋/q_max and whether both angles are known (q₊ = k_i + k_f and q₋ = k_i − k_f, vacuum, encoding 5). The
+q₊/q_max and q₋/q_max and whether both angles are known (q₊ = k_i + k_f and q₋ = k_i − k_f, vacuum, encoding 6). The
 training curves with both angles have two sphere paths and a free r (section 9.10). On a known substrate the same
 network proposes values, and the four-path likelihood below weights them.
 
 **The prior.** The parameter coordinates are uniform over their ranges. R̃ is log-uniform from 0.5 to 5ρ, every
 population above the previous one (by stick-breaking). The other ranges: σR/R 0.02–0.5; h/2R 0.1–10, with h̃ ≤ 200
-and R̃ ≤ 50 for random cylinders; D/2R 1–20; σnn/D 0.02–0.5; w from 0.3 to 30 q_min (log); ν 1.8–4; σ_q/q_max
+and R̃ ≤ 50 for random cylinders; D/2R 1–20; σnn/D 0.02–0.5; w from 0.03 to 1 q_min (log); w_d from 0.03 to 3 q_min (log); H 0–1; σ_q/q_max
 10⁻⁴–10⁻² (log); τ 0.003–0.15 (log). The scales are uniform from 0 to 10 times the curve's maximum. For a sphere at
 level 3 the complex reflection coefficient r is uniform in area on |r| ≤ 1. An equal-area map takes the flow's two
 square coordinates onto this disk. The prior density in (Re r, Im r) is 1/π there, or 2a for the magnitude a = |r|
-with an independent uniform phase. The exponent of the beam tail runs from the Lorentzian wings of a beam profile
-(ν = 2) through the diffuse scattering of a rough interface (ν = 2(1 + H), H the Hurst exponent) to Porod's q⁻⁴ of a
-sharp one.
+with an independent uniform phase. The beam tail's width stays below the first point, so that it adds a q⁻² wing.
+The knee w_d = 1/ξ of the diffuse term lies at most at 3 q_min, so that it describes correlations longer than the
+window resolves; shorter ones belong to the populations.
 
 **The network** (`src/gimap/features/fitting/domain/posterior/flow.py`):
 
@@ -3015,10 +3030,11 @@ sharp one.
   the density of the others is exact; sampling runs the couplings backwards.
 
 It was trained by maximum likelihood (neural posterior estimation), with the cross-entropy of the head, on 5 million
-simulated cuts of `cut_model` (`tools/ml1d`, `prior_v2.json`). Of these, 40 % are at the effective interface, 18 % at
+simulated cuts of `cut_model` (`tools/ml1d`, `prior_v4.json`). Of these, 40 % are at the effective interface, 18 % at
 the Born term of a q₊/q_max from 0 to 1 and 42 % with two paths (q₋ = q₊ × U(−0.5, 0.9), real and imaginary r drawn
 from [−1, 1]²). Every population's term is computed on 8 points per bin, averaged as a measured bin is, and convolved
-with the cut's resolution. Every batch draws anew the populations' shares (2.5 decades), the tail, the background,
+with the cut's resolution. Every batch draws anew the populations' shares (2.5 decades), the amplitudes of the tail and the diffuse term (each
+10⁻³–10 times the particles at q_min), the background,
 the model error, 100–1000 measured points (linear or logarithmic in q), Poisson counts (10²–10⁷ at the highest point)
 and gaps. Training took 30 epochs (2 h) on one GPU. The weights (13 MB, float32) come with GIMaP with their SHA-256
 and model card. GIMaP evaluates them with numpy, so neither PyTorch nor TensorFlow is needed.
@@ -3479,9 +3495,10 @@ Implementation: `src/gimap/features/fitting/domain/substrates.py`, `domain/fit_m
 
 **Fitting ▸ Fit Several Curves Together…** fits a list of curves with one χ² (SasView's simultaneous fit; IsGISAXS's
 joint fit of a q_y and a q_z cut of the same frame). Every curve c has its own model: the components of Model with the
-same values, freedom and ranges, its own background, beam tail, factor k and cut geometry. A free non-linear value is
+same values, freedom and ranges, its own background, beam tail, diffuse term, factor k and cut geometry. A free non-linear value is
 **shared** (fitted once; by default every particle value: R, σR/R, h, σh/h, D, σnn/D …) or each curve's own (by default
-the tail's width and exponent). The scales (Int of every population, background, tail A) are always each curve's own
+the tail's width and exponent). The scales (Int of every population, background, tail A, diffuse A) are always each
+curve's own
 and solved exactly for that curve at every step ((9.17), section 9.7). With several populations, their ratio is not
 tied between the curves.
 
@@ -3532,7 +3549,8 @@ goes into the scale, and a vertical cut holds D and σnn/D only through the hori
 a vertical cut is among the curves, upright cylinders get their height h and σh/h as parameters in every curve
 (shared). The vertical cut samples the height oscillations. In the horizontal DA, height enters through the single
 coherence factor of section 9.5. Use in Model keeps h fixed at the joint value. A vertical cut
-has no beam tail (Tail A fixed at 0) and no q resolution; a tail held at 0 has its width and exponent fixed. Random
+has no beam tail and no diffuse term (Tail A and Diffuse A fixed at 0) and no q resolution; a term held at 0 has its
+shape fixed. Random
 cylinders and core–shell spheres are not available in a vertical cut.
 
 **Analyze ▸ Send Both Cuts to Fitting** writes the horizontal cut as Send to Fitting does (`<stem>_fit_input.dat`)
@@ -3600,7 +3618,7 @@ true value is measured by the benchmarks of section 9.13.
   ln p(z) = ln L(values(z) | cut) + ln π(z)                                                                     (9.46)
   ```
 
-  over the composition parameters, including the beam tail, σ_q and τ. For level-3 spheres the same equal-area
+  over the composition parameters, including the beam tail, the diffuse term, σ_q and τ. For level-3 spheres the same equal-area
   map gives |r| ≤ 1. The reference is
   Predict's sampled median and 68 % / 95 % intervals, with the same tempering as in section 9.13. If no sampled
   summary is available and the comparison used BIC, the reference is the reported least-squares interval.
@@ -4971,6 +4989,7 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Branch, M. A., Coleman, T. F. & Li, Y. (1999). *SIAM J. Sci. Comput.* **21**, 1–23. https://doi.org/10.1137/S1064827595289108
 - Bulut, Y. et al. (2024). *Langmuir*, **40**, 22591. https://doi.org/10.1021/acs.langmuir.4c02344
 - Cromer, D. T. & Mann, J. B. (1968). *Acta Cryst.* A**24**, 321–324. https://doi.org/10.1107/S0567739468000550
+- Debye, P. & Bueche, A. M. (1949). *J. Appl. Phys.* **20**, 518–525. https://doi.org/10.1063/1.1698419
 - Gensch, M. et al. (2019). *ACS Appl. Mater. Interfaces*, **11**, 29416. https://doi.org/10.1021/acsami.9b08594
 - Gensch, M. et al. (2021). *ACS Appl. Nano Mater.* **4**, 4245. https://doi.org/10.1021/acsanm.1c00829
 - Golub, G. H. & Pereyra, V. (1973). *SIAM J. Numer. Anal.* **10**, 413–432. https://doi.org/10.1137/0710036
@@ -5000,6 +5019,7 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Morháč, M. & Matoušek, V. (2008). *Appl. Spectrosc.* **62**, 91–106. https://doi.org/10.1366/000370208783412762
 - NIST (2017). *Certificate of Analysis, Standard Reference Material 674b, X-Ray Powder Diffraction Intensity Set*. Gaithersburg: National Institute of Standards and Technology. https://tsapps.nist.gov/srmext/certificates/674b.pdf
 - Otsu, N. (1979). *IEEE Trans. Syst. Man Cybern.* **9**, 62–66. https://doi.org/10.1109/TSMC.1979.4310076
+- Palasantzas, G. (1993). *Phys. Rev. B*, **48**, 14472–14478. https://doi.org/10.1103/PhysRevB.48.14472
 - Parratt, L. G. (1954). *Phys. Rev.* **95**, 359–369. https://doi.org/10.1103/PhysRev.95.359
 - Patterson, A. L. (1939). *Phys. Rev.* **56**, 978–982. https://doi.org/10.1103/PhysRev.56.978
 - Pospelov, G., Van Herck, W., Burle, J., Carmona Loaiza, J. M., Durniak, C., Fisher, J. M., Ganeva, M., Yurov, D. & Wuttke, J. (2020). *J. Appl. Cryst.* **53**, 262–276. https://doi.org/10.1107/S1600576719016789
@@ -5014,6 +5034,7 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Schwartzkopf, M. et al. (2015). *ACS Appl. Mater. Interfaces*, **7**, 13547. https://doi.org/10.1021/acsami.5b02901
 - Schwarz, G. (1978). *Ann. Stat.* **6**, 461–464. https://doi.org/10.1214/aos/1176344136
 - Sen, P. K. (1968). *J. Am. Stat. Assoc.* **63**, 1379–1389. https://doi.org/10.1080/01621459.1968.10480934
+- Sinha, S. K., Sirota, E. B., Garoff, S. & Stanley, H. B. (1988). *Phys. Rev. B*, **38**, 2297–2311. https://doi.org/10.1103/PhysRevB.38.2297
 - Smilgies, D.-M. (2009). *J. Appl. Cryst.* **42**, 1030–1034. https://doi.org/10.1107/S0021889809040126
 - Storn, R. & Price, K. (1997). *J. Glob. Optim.* **11**, 341–359. https://doi.org/10.1023/A:1008202821328
 - Theil, H. (1950). *Proc. K. Ned. Akad. Wet.* **53**, 386–392, 521–525, 1397–1412.

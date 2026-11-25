@@ -144,11 +144,11 @@ def own_curve(case) -> tuple[np.ndarray, np.ndarray]:
     for slot, p in enumerate(pops):
         j = slot * E.PER_SLOT
         values[j:j + E.PER_SLOT] = (p["R"], p["sR"], 2.0 * p["R"], 0.0, p["D"], p["s_nn"])
-    g = E.GLOBAL.start
-    values[g:g + 4] = (data.q_max / data.ratio, 2.0, 1e-6 * data.q_max, 0.003)
+    q_min = data.q_max / data.ratio
+    values[E.TAIL_DIM:E.ERROR_DIM + 1] = (q_min, q_min, 0.5, 1e-6 * data.q_max, 0.003)
     if data.reflected:  # the substrate's own reflection at the exit angle
         r = fr.exit_reflection()
-        values[g + 4:g + 6] = (r.real, r.imag)
+        values[E.REFLECTION] = (r.real, r.imag)
     columns = infer.Likelihood(data, _composition(case), coupling=case.get("coupling", "lma")).columns(values)[0]
     slot = {id(p): i for i, p in enumerate(pops)}
     total = np.zeros_like(fr.Q)
