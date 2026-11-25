@@ -65,25 +65,25 @@ probability and flags (at a bound, unconstrained, correlated, few effective samp
 
 ## The network that comes with GIMaP
 
-`src/gimap/features/fitting/domain/posterior/data/flow_v1.npz` was trained as `flow_v5` (encoding 5: the beam tail's
-exponent ν from 1.8 to 4, from the Lorentzian wings of a beam profile through the diffuse scattering of rough
-interfaces to Porod's q⁻⁴) at commit 860de8a7, on one V100 in 1.9 h, with:
+`src/gimap/features/fitting/domain/posterior/data/flow_v1.npz` was trained as `flow_v6` (encoding 6: the beam tail
+with the exponent 2 and the diffuse term of a rough interface) at commit e2161c2c, on one V100 in 1.9 h, with:
 
 ```bash
-python tools/ml1d/simulate.py --prior tools/ml1d/prior_v3.json --count 5000000 --seed 777 --out DATA/train_v5 --shard 10000 --workers 64
-python tools/ml1d/simulate.py --prior tools/ml1d/prior_v3.json --count 20000 --seed 888 --out DATA/test_v5 --shard 10000
-python tools/ml1d/train_flow.py --data DATA/train_v5 --prior tools/ml1d/prior_v3.json --out NET/flow_v5 --device cuda --loaders 24 --epochs 30 --batch 2048 --lr 7e-4 --validation 20000 --patience 6
-python tools/ml1d/evaluate_flow.py --network NET/flow_v5 --data DATA/test_v5 --prior tools/ml1d/prior_v3.json --curves 2000 --samples 1000 --out report.json --figure ranks.png
-python tools/ml1d/model_card.py --network NET/flow_v5 --evaluation report.json --out MODEL_CARD.md
+python tools/ml1d/simulate.py --prior tools/ml1d/prior_v4.json --count 5000000 --seed 777 --out DATA/train_v6 --shard 10000 --workers 64
+python tools/ml1d/simulate.py --prior tools/ml1d/prior_v4.json --count 20000 --seed 888 --out DATA/test_v6 --shard 10000
+python tools/ml1d/train_flow.py --data DATA/train_v6 --prior tools/ml1d/prior_v4.json --out NET/flow_v6 --device cuda --loaders 24 --epochs 30 --batch 2048 --lr 7e-4 --validation 20000 --patience 6
+python tools/ml1d/evaluate_flow.py --network NET/flow_v6 --data DATA/test_v6 --prior tools/ml1d/prior_v4.json --curves 2000 --samples 1000 --out report.json --figure ranks.png
+python tools/ml1d/model_card.py --network NET/flow_v6 --evaluation report.json --out MODEL_CARD.md
 ```
 
 (On Maxwell `maxwell/simulate.sbatch` ran the simulation as an array of tasks with `--first-shard/--shards`, joined
 with `--join`, and `maxwell/train.sbatch` the training.) Its record names the
 SHA-256 of the shards; the shipped record leaves out the paths of the computer it was trained on. On 2000 simulated
-cuts not trained on, its 68 %/95 % intervals hold the truth in 66–69 %/94–96 % for every value (the head ranks the
-true composition first in 20 %); the benchmarks are in Physics and Methods, section 9.13, and `MODEL_CARD.md`, whose benchmark
+cuts not trained on, its 68 %/95 % intervals hold the truth in 66–69 %/94–95 % for every value (the head ranks the
+true composition first in 22 %); the benchmarks are in Physics and Methods, section 9.13, and `MODEL_CARD.md`, whose benchmark
 sections `tools/benchmarks/summary_tables.py --only card` prints from the final runs of `tools/benchmarks/`. The
-networks shipped before it were trained the same way: `flow_v4` (encoding 4: the beam tail's ν from 1.8 to 2.2)
+networks shipped before it were trained the same way: `flow_v5` (encoding 5: one tail with the exponent ν from 1.8
+to 4) from `prior_v3.json` (seeds 777 and 888) at commit 860de8a7, `flow_v4` (encoding 4: the beam tail's ν from 1.8 to 2.2)
 from `prior_v2.json` (seeds 555 and 666) at commit a10d26d, and `flow_v3` (encoding 3: the Born term at q_z, no
 reflected path) from `prior_v1.json` (seeds 333 and 444) at commit e5a609e.
 
