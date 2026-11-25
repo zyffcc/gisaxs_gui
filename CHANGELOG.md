@@ -41,6 +41,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter ▸ Analyze on porous TiO₂: the Cap share and the Film share of Quick are marked as rough.** On the
+  development scans the joint fit of Refine kept the sizes of Quick but moved the cap share, and less the film share,
+  far from the network's values, mostly outside the network's own 16–84 % range. Their tooltips, the manual's porous-TiO₂
+  paragraph and *Known limitations* now say so and point to Refine; Auto still uses Quick for TiO₂ at 12 keV (making
+  it refine by itself when the network fits badly was tried and not adopted: it improved the fit too little).
 - **Sputter ▸ Analyze: a reminder when the deposition seems to have stopped.** Left empty, **Deposition duration** means
   metal is added until the end of the scan; when the shutter closed earlier, every window after the stop was fitted
   with too much metal and its values were wrong, with no sign of it but a poor fit. Now, when the field is empty, the

@@ -89,11 +89,13 @@ TILES = (("R_nm", "Radius R", "nm", "Radius of the grains."),
          ("f_islands", "Island share", "", "Share of the metal that is in resolvable islands. Early in the "
                                            "deposition it can be above 1."),
          ("cap_share", "Cap share", "", "Share of the optically active metal that is in the cap layer on the "
-                                        "particles of the substrate (0 to 1)."),
+                                        "particles of the substrate (0 to 1). From Quick (the network alone) it is "
+                                        "only roughly known: Refine often moves it far."),
          ("depth_nm", "Vertical correlation", "nm", "Vertical correlation length of the metal network in the pores."),
          ("xi_nm", "Lateral correlation", "nm", "Lateral correlation length of the metal network in the pores."),
          ("film_share", "Film share", "", "Share of the scattering of the layer that leaves through the metal film "
-                                          "(0 to 1)."))
+                                          "(0 to 1). From Quick (the network alone) it is only roughly known: Refine "
+                                          "can change it noticeably."))
 """(quantity, caption, unit, tooltip) of the value tiles, in their order. A result shows the tiles of the quantities
 it has: a flat substrate the first seven (the continuous layer only when the result lists it), a porous one the
 radius (as a relative size: the page says so in its caption), the width and the last five."""
