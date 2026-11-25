@@ -43,6 +43,14 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Physics and Methods 12.4: the forward model of Sputter as a library of its components.** What every system
+  shares (deviance, the measured pre-state as substrate, layer stack, optics, exit-angle smear, the assembly of the
+  model image), each component with its construction, parameters and bounds and the families that switch it on, the
+  components tested and not adopted, and the signals no component describes yet; later model work starts from it.
+- **Sputter ▸ Analyze: the Polymer film thickness is not used as entered — leave it empty.** Writing 12.4 showed that
+  the shipped networks fix the polymer film themselves (Ag on PS, PSBMA, PET, PEO: 30 nm on Si; Cu: 40 nm) and ignore
+  a thickness entered, and that for Ag on PNO a thickness entered makes the package compute the metal on Si. The
+  field's tooltip, the manual's row and *Known limitations* say so.
 - **Sputter ▸ Analyze on porous TiO₂: the Cap share and the Film share of Quick are marked as rough.** On the
   development scans the joint fit of Refine kept the sizes of Quick but moved the cap share, and less the film share,
   far from the network's values, mostly outside the network's own 16–84 % range. Their tooltips, the manual's porous-TiO₂

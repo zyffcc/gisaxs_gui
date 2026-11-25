@@ -134,6 +134,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [12.1 Analyze: what the main screen shows](#121-analyze-what-the-main-screen-shows)
   - [12.2 The deposition rate](#122-the-deposition-rate)
   - [12.3 The real-space picture](#123-the-real-space-picture)
+  - [12.4 The forward model: component library](#124-the-forward-model-component-library)
 - [13. Tool windows and Labs](#13-tool-windows-and-labs)
   - [13.1 XRR Series Extractor](#131-xrr-series-extractor)
   - [13.2 SEM Particle Analysis](#132-sem-particle-analysis)
@@ -4078,7 +4079,7 @@ Analyze records the curve of every row of a map (as reduced: both halves of a cu
 
 ## 12. Sputter
 
-The Sputter workspace follows an in-situ sputter deposition series. Its **Analyze** runs a separate analysis package (`iampred`, bundled with GIMaP as `utils/sputter_client`) as a subprocess and shows what the package writes. The networks, the physical forward model and the refinement are the package's and are documented with it; this chapter states what GIMaP does with the package's input and output (12.1), with the deposition rate (12.2), and how it draws a solution in real space (12.3).
+The Sputter workspace follows an in-situ sputter deposition series. Its **Analyze** runs a separate analysis package (`iampred`, bundled with GIMaP as `utils/sputter_client`) as a subprocess and shows what the package writes. The networks, the physical forward model and the refinement are the package's; this chapter states what GIMaP does with the package's input and output (12.1), with the deposition rate (12.2), how it draws a solution in real space (12.3), and the package's forward model as a library of its components (12.4).
 
 ### 12.1 Analyze: what the main screen shows
 
@@ -4096,7 +4097,7 @@ The Sputter workspace follows an in-situ sputter deposition series. Its **Analyz
 
 **Images.** The measured count rate and the model of each entry are arrays over the exit angle α_f (°) and q_y (nm⁻¹) on the package's cells, which need not be evenly spaced. Both are drawn on those cells (cell edges halfway between neighbouring centres), with q_y on a logarithmic axis when every q_y is positive, on identical axes and with one logarithmic colour scale. Its limits are the 1 % and 99.7 % percentiles of the positive measured values (of the model's when nothing was measured), so they do not depend on the entry shown. Cells without data are left empty; measured values below the lower limit, zero counts included, are drawn in the lowest colour. The arrays are not changed.
 
-**Components.** A newer package writes, for every entry, the model image split into the physical terms of its forward model, each alpha_f-smeared and scaled like the model so that the terms add up to the model image (the package checks this to about 10⁻¹⁵): grains and islands with their interference; large clusters; the film term (density fluctuation, connected network or roughness of a continuous film); voids under the continuous layer; buried clusters; metal-rich domains in a polymer; the rough top of the continuous layer; fluorescence (flat in q_y); the substrate scattering seen through the metal; and the beam-path background (the flat share of the pre-state and, where the family has it, the difference term of the beam path, which can be negative). On porous TiO₂ the terms are the clusters in the pores and on the cap layer, the metal network in the pores (the difference with the network strength set to zero) and the substrate seen through the metal. For each entry the package gives each term's share of the model counts on the fitted cells, Σ E c_k / Σ E μ (E the exposure, c_k the term, μ the model), and per cell the term's share of the model image (float16, about three significant digits). GIMaP draws a term's image as that share times the model image, on the colour scale of the measured image (12.1, Images); it draws terms with a share of at least 0.1 % and computes nothing else.
+**Components.** A newer package writes, for every entry, the model image split into the physical terms of its forward model, each alpha_f-smeared and scaled like the model so that the terms add up to the model image (the package checks this to about 10⁻¹⁵): grains and islands with their interference; large clusters; the film term (density fluctuation, connected network or roughness of a continuous film); voids under the continuous layer; buried clusters; metal-rich domains in a polymer; the rough top of the continuous layer; fluorescence (flat in q_y); the substrate scattering seen through the metal; and the beam-path background (the flat share of the pre-state and, where the family has it, the difference term of the beam path, which can be negative). On porous TiO₂ the terms are the clusters in the pores and on the cap layer, the metal network in the pores (the difference with the network strength set to zero) and the substrate seen through the metal. For each entry the package gives each term's share of the model counts on the fitted cells, Σ E c_k / Σ E μ (E the exposure, c_k the term, μ the model), and per cell the term's share of the model image (float16, about three significant digits). GIMaP draws a term's image as that share times the model image, on the colour scale of the measured image (12.1, Images); it draws terms with a share of at least 0.1 % and computes nothing else. What each term is and how it is computed: section 12.4.
 
 **Growth process.** From the entries shown by default (the joint fit when every window has one, else the smooth path) the package describes the growth against the metal amount h (nm; the equivalent thickness of the joint fit — mass factor × rate × time — so it does not depend on the X-ray wavelength): the amounts at which the coverage first reaches 0.5 and at which half of the metal is in the continuous layer (the film forms; log-linear interpolation between windows); the power laws D = D₁ h^p and R = R₁ h^q fitted by least squares in ln h over the windows before the film forms (at least three windows spanning at least a factor e^0.3 in h); the median D and R once the film has formed; for a scan whose deposition stopped, the amount then and the change of ln D per decade of time after it; the median fit deviation; and the number of steps back between neighbouring windows (R by more than 10 %, D by more than 5 %, the coverage by more than 0.03). The stage of a window is *islands* below coverage 0.5, *coalescence* above it, *continuous film* once half of the metal is in the continuous layer and *after the deposition* once the amount stays constant, taken on the running maximum of the coverage and of the film share, because sputtering only adds metal; on porous TiO₂ the stages are *clusters* and *metal film* (the film term above half of its largest value). The package lists the median and range of each descriptor over the scans of the same metal on the same substrate it was built from (development reference, without independent characterisation) and whether this scan lies within, below or above that range (only with at least two scans). GIMaP shows these values and draws the stages as bands behind the evolution plots (a boundary halfway between the windows of neighbouring stages); it computes none of them.
 
@@ -4131,6 +4132,154 @@ On a polymer film a line under the views says that no metal inside the polymer i
 Two grains touch when their centres are no farther apart than the sum of their radii; touching grains form a cluster. The arrangement is *islands* when no two grains of the view touch, *network* when a cluster connects two opposite edges of the square (percolated), else *coalescing*. A solution with b > 0 is a closed film: the top view is the metal of the base layer over the whole square, with the grains as relief on it.
 
 Implementation: `src/gimap/features/sputter/domain/real_space.py`, `src/gimap/features/sputter/presentation/real_space_view.py`
+
+### 12.4 The forward model: component library
+
+This section is the library of the analysis package's physical forward model. It states what every system shares (what the model is compared with, the layer stack, the optics, how the model image is assembled), every *component* — a physical term of the model image or an ingredient of the scatterers — with its construction as implemented, its parameters and the families that use it, the components that were tested on measured scans and not adopted, and the signals in measured scans that no component describes yet. Every in-situ deposition measured in this geometry (grazing incidence on a layer stack, a detector map over α_f and q_y) is described by the same framework and a choice of components; a new system — another metal, substrate or deposition process — chooses its components here and adds the ones it lacks, so that the list grows towards a complete library. A change of the forward model starts from this section and updates it in the same step (rules at the end of the section). Implementation: `utils/sputter_client/code/iam/` — `iam.py`, `iam2.py`, `iam4.py`, `underlayer.py`, `shadow_rows.py`, `xray_optics.py`; parameters and bounds in `iam_fit4.py` (grain families) and `iam_fit_t.py` (porous TiO₂); the switches of each family in `iampred/families/*.json`; the split of the model image into terms in `iampred/components.py` (section 12.1, *Components*).
+
+**Status of a component.** *In use*: switched on in at least one shipped family (table below). *Available*: implemented, off in every shipped family. *Not adopted*: tested on measured scans and rejected, or not resolved by the data. *Open*: a signal in measured scans that no component describes. The networks of every shipped family were trained with an earlier state of this code (the package's `MANIFEST.json`, `current_forward_code`); their outputs are starting solutions, and every value the package reports comes from rendering with the code described here (the package notes this in each result).
+
+**What the model is compared with.** A time window sums the frames within ±0.5 s of its centre into counts Y and exposure E (valid pixels × seconds) on a fixed grid: the two halves of the detector (±q_y), 176 cells in α_f from 0.02° to 1.5° and 70 cells in |q_y| from 0.05 to 1.8 nm⁻¹; the form factors take the cell's |q_y| as q_∥ (no q_x). A cell is fitted where E > 0, the pre-state is positive and α_f ≥ 0.03°. The model μ is a count rate per pixel and second, and its distance from the counts is the deviance per cell
+
+```text
+d = max(0, 2 [Y ln(Y/m) − Y + m] / (1 + f² m + V_pre E² / m)),   m = μ E,   f = 0.05      (12.3)
+```
+
+the Poisson deviance divided by the ratio of the total variance (counts, a 5 % model error and the noise V_pre of the measured pre-state) to the counting variance. The *fit deviation* of a window is the mean of d over its fitted cells.
+
+**The measured pre-state is the substrate.** The substrate is not modelled. The frames from 0.3 s after the start of the scan to 0.05 s before the onset, summed and smoothed over 3 × 3 cells, give the pre-state rate I_pre and its variance V_pre; the model changes I_pre only by what the metal changes in the fields, times c_fac, the ratio of the beam profile at the window's and the pre-state's position on the sample where such a profile was measured (else 1). Whatever scatters before the deposition — substrate roughness, a polymer film, porous TiO₂, the beam path — is thus in the model as measured, and every component describes the metal or what the metal does to the scattering of the rest.
+
+**Layer stack and fields.** The fields come from Parratt's recursion with sharp interfaces (no Névot–Croce factor), k_z = k₀ √(sin²α − 2(δ − iβ)) with Im k_z ≥ 0; the product P = E(α_i) E(α_f) of the total fields at a depth is the DWBA weight of a scatterer there. From the top: the metal as effective-medium slices (the grains' density profile in slices of at most 1 nm; the continuous base layer in slices of at most 2 nm at relative density r_b); a polymer film as one slab on Si where the family or the reference entry the scan is matched to sets it — Ag on PS, PSBMA, PET and PEO 30 nm, Cu on any film 40 nm — and otherwise (Ag on PNO) no film layer, the polymer being the substrate; Si as a semi-infinite substrate without native oxide; porous TiO₂ as a graded top of 150 nm in 10 slices with TiO₂ fraction fill(z) = 0.25 [1 + tanh((z − 75 nm)/30 nm)] at the slice centres, 50 slices of 20 nm at fill 0.5 down to 1000 nm, then a semi-infinite medium at fill 0.5, with the metal in the pores added to the slices' decrement (particles of radius 75 nm). The thickness entered in GIMaP for a polymer film (*Polymer film thickness*) is not used where the family fixes the slab, and for Ag on PNO it replaces the polymer below the metal by Si in the fields of the scattering terms; both are faults of the shipped package (User Manual, chapter 13).
+
+**Optical constants.** δ = r_e λ² n_at f₁ / (2π) and β = r_e λ² n_at f₂ / (2π) from the density and the scattering factors. Families with the networks of one wavelength (12 keV; Cu 0.105 nm) use fixed values (densities in g/cm³: Au 19.32, Ag 10.49, Cu 8.96, TiO₂ 3.9, Si 2.329; Au f₁ = 64.0, f₂ = 9.7; Ag f₁ = 47.0, f₂ = 2.15; Cu f₁ = 28.2, f₂ = 2.45 at 0.105 nm); the any-energy families scale them by the ratio of the tabulated factors at the scan's energy to those at the anchor energy (section 12.1, *Network and photon energy*); outside a family's range the package takes them from its table (Chantler's f′, f″ as tabulated by xraydb, f₁ = Z + f′, 4–30 keV). Fluorescence uses the fields at the emission energy (Au L₃: 9.70 keV; Cu K: 8.048 keV) and is off below the absorption edge.
+
+**Exit-angle smear.** The computed terms are smeared along α_f with a Gaussian of rms σ (a fitted parameter in [0, 0.3]°), on the cells' edges e_j:
+
+```text
+K_af[i, j] = Φ((e_(j+1) − α_f,i) / σ) − Φ((e_j − α_f,i) / σ)                                    (12.4)
+```
+
+with the tail beyond the last edge added to the last cell. The measured pre-state already carries the instrument's smear: only its field ratio is smeared, normalised by the smear of a constant, (K_af Γ)/(K_af 1). Large clusters and the film term can have their own σ_L (polymer and Cu families).
+
+**Assembly of the model image (grain families: Si, polymers, Cu).**
+
+```text
+μ = sub + K [K_af (I_gr − I_L + I_fl) + K_af,L I_L] + B                                       (12.5)
+sub = c_fac I_pre (1 + g r_rep) (K_af ratio) / (K_af 1),   ratio = bg + (1 − bg) Γ
+Γ = |ρ_S P_bot + r_b ρ_M (P_top − P_bot)|² / |ρ_S P_bare|²                                     (12.6)
+```
+
+I_gr is the scattering of the metal (grains, small islands, large clusters I_L, film term, voids), I_fl the fluorescence, B the beam-path difference term; K_af,L = K_af where σ_L is not a parameter. Γ is the change of the substrate's diffuse scattering by the metal: P_bot is the field product at the top of the substrate (or polymer film) under the metal, P_top at the top of the base layer, P_bare at the substrate's top without metal, ρ_M the electron density of the metal and ρ_S that of the layer under it (complex, f₁ − i f₂ per volume; the polymer where it is a film layer, else Si, also under a bulk polymer): the substrate's roughness repeated, fully correlated, at the top of the base layer. K converts dσ/dΩ per unit area into a count rate and is fixed (1.1 × 10⁵; Cu families 1.19 × 10⁵); the metal amount of a window is h = max(h_nom, 0.002 nm) exp(ln m_f), h_nom the nominal deposit (rate × time since the onset, constant after the duration) and m_f the fitted mass factor (|ln m_f| ≤ 1; none on TiO₂). The split into the terms of section 12.1 is this sum; each term's share is Σ E c_k / Σ E μ.
+
+**Grains, the interference function and the size distribution.** A grain is a cylinder of height (1 − f_cap) T topped by a hemispheroidal cap of height f_cap T, with T = (1 − f_L) h_g / (η (1 − f_cap/3)) the same for every radius (h_g the grains' metal, η their area coverage; with s_H, T itself is log-normal over 5 nodes). The radius is log-normal in number, R_j = R exp(s x − s²/2), on a dense grid of ±3.5 s; R is the number mean. The grains scatter in sliced DWBA, with four Gauss–Legendre nodes per slice and contrast against vacuum,
+
+```text
+I_gr(α_f, q) = r_e² |ρ_M|² n Σ_j w_j |Σ_n P_n σ(R_j r(z_n) / R, q)|² S(q; D R_j / R_m),   σ(r, q) = 2π r² J₁(q r)/(q r)      (12.7)
+```
+
+n = η / ⟨πR²⟩ the number density and D = R_m √(2π / (√3 η)) the spacing; the interference function is taken at the local spacing D R_j / R_m of each size (local monodisperse approximation; Renaud et al., 2009). S is the radial paracrystal
+
+```text
+S(q) = (1 − F²) / (1 − 2F cos(qD) + F²),   F = exp(−(q ω D)² / 2)                                  (12.8)
+```
+
+or, with the hard-disc option, the structure factor of a hard-disc fluid in Rosenfeld's (1990) form, S = 1 / (1 − (4η_d/π) ĉ(q σ_d)), packing fraction η_d = clip(0.67 − ω, 0.05, 0.62) and core diameter σ_d = D √(2√3 η_d / π). Small islands are hemispheroids (radius R_s, aspect a_s, log-normal width 0.25) in the area the grains leave free, number c_s (1 − η) / ⟨πR_s²⟩, with their own paracrystal ω_s.
+
+**The film term.** A density fluctuation that runs through the whole metal layer. Its vertical amplitude is coherent over all metal slices, a(α_f) = Σ_slices φ Σ_n w_n t E_i E_f, so it carries the film's thickness fringes; its lateral spectrum is that of discs of radius R_P (log-normal width 0.3) or, in the self-affine form, of a continuous film:
+
+```text
+I_film = r_e² |ρ_M|² |a(α_f)|² n_P Σ_j w_j σ(R_j, q)²,   n_P = A_P / (π ⟨R²⟩)                    (12.9)
+I_film = r_e² |ρ_M|² A_P |a(α_f)|² π R_P² (1 + q² R_P²)^(−(1 + H_f))       (self-affine)
+```
+
+A_P = area share × (density difference / mean density)².
+
+**Fluorescence.** Au L₃ or Cu K emission of the metal, flat in q_y:
+
+```text
+I_fl(α_f) = ε P μ_abs h Ē_i (ω / 4π) Ē_f(α_f)                                                    (12.10)
+```
+
+μ_abs the absorption coefficient of the metal at the beam energy, P the share of absorption in the shell (Au L₃ 0.58, Cu K 0.873), ω the fluorescence yield (0.32, 0.445), ε a fixed efficiency factor (1.1, 1.26), Ē_i and Ē_f the intensities of the incident field and of the exit field at the emission energy averaged over the metal slices. Ag has no fluorescence term.
+
+**Components of the grain families.**
+
+| Component (term in **Components**) | Object and construction | Parameters (bounds) | Status, families |
+|---|---|---|---|
+| Grains and islands (*grains*) | Columnar grains and small islands, equations (12.7)–(12.8) | ln R [ln 0.5, ln 60] nm, s [0.05, 0.6], η [0.15, 0.98], f_cap [0, 1], ω [0.05, 0.6], s_H [0, 0.4]; ln R_s [ln 0.5, ln 4] nm, ln a_s [ln 0.3, ln 2], c_s [0, 0.6], ω_s [0.15, 0.6] | In use, all grain families; hard disc in `si_p3h`, `si_u1`; s_H in the Si families |
+| Continuous base layer (in the fields and Γ, no term of its own) | Laterally uniform metal under the grains, thickness t_b = f_b h / r_b at relative density r_b; the grains get (1 − f_b) h | f_b [0, 0.98], r_b [0.5, 1] | In use, all grain families |
+| Large clusters (*large clusters*) | Flat hemispheroids (R_L, a_L, log-normal width 0.3) without positional order (S = 1), number f_L h / V_L; field products softened vertically by exp(−s_L² (±k_iz ± k_fz)² / 2); own smear σ_L | ln R_L [ln 10, ln 80] nm, ln a_L [ln 0.05, ln 1], ln f_L [ln 10⁻⁴, ln 0.8], s_L [0, 3] nm, σ_L [0, 0.3]° | In use, all grain families; σ_L in the polymer and Cu families |
+| Film term (*film*) | Equation (12.9) | ln R_P [ln 8, ln 150] nm (from ln 2 in the self-affine form), ln A_P [ln 10⁻⁶, ln 5], H_f [0, 1] | In use, all grain families; self-affine in `cu_p5`, `cu_u1` |
+| Voids under the film (*voids*) | Columnar voids through the base layer, area share k_v (1 − r_b), radius log-normal (width 0.25), paracrystal ω_v at the local spacing, contrast ρ_M r_b / (1 − f_v), amplitude coherent over the base | ln R_v [ln 0.5, ln 4] nm, ω_v [0.15, 0.6], k_v [0, 1] | In use, all grain families |
+| Fluorescence (*fluorescence*) | Equation (12.10) | none | In use, Au (Si and TiO₂ families), Cu families |
+| Substrate seen through the metal (*substrate*) | sub of (12.5), with the substrate's roughness carried by the deposit: r_rep = \|1 + i q_z (ρ_M/ρ_Si) n ⟨F(q, q_z)⟩\|² − 1 (Born, vacuum q_z, F the grains' and clusters' profiles) | g [0, 2] | In use, all grain families |
+| Beam-path background (*background*) | The share bg of the pre-state that the metal does not change; in the Si families also B = bg I_pre [S₀(window)/S₀(pre) − c_fac], S₀ the count rate in the detector rows just below the sample horizon (α_f from −0.10° to −0.06°), summed over 5 q_y columns (15 above 0.25 nm⁻¹) | bg [0, 1] | In use: bg all grain families; B the Si families |
+| Two optical environments at low q (Si; changes every metal term) | Every metal term = (1 − w) × (with the metal stack) + w × (in the fields of the bare substrate), w(q) = φ_S / (1 + (q L_c / 2π)⁶); phenomenological | ln L_c [ln(2π/0.30), ln 400] nm, φ_S [0, 1] | In use, the Si families |
+| Buried clusters (*buried*) | Inverted hemispheroids hanging into a host film, as composite slices | mass share, radius, depth | Available (not resolved on Cu on polymer films, table *Not adopted*) |
+| Metal-rich domains in a polymer (*domains*) | A composite base layer (the volume not taken by metal is polymer) whose metal content is modulated laterally with a Teubner–Strey spectrum | period, correlation length, amplitude | Available (not adopted) |
+| Rough top of the continuous layer (*base roughness*) | DWBA small-roughness term, C(q) = A_r ξ² / (1 + q² ξ²)^(1 + H) times the field products at the base top | A_r, ξ, H | Available (not adopted) |
+
+**Components of porous TiO₂** (families `tio2_v2`, `tio2_u1`). The grain model and the base layer are not available on TiO₂. The metal sits as clusters on the facets of the TiO₂ particles and in their pores; the optical metal h_opt = k_opt h is spread in the pores with an error-function depth profile (depth z₀, width w_b), of which the share k_cap forms a cap on the particle tops.
+
+| Component | Object and construction | Parameters (bounds) |
+|---|---|---|
+| Clusters in the pores (*clusters in the pores*) | Hemispheroids (R, aspect a, log-normal s, paracrystal ω, plus large clusters) on the particle facets, metal f_isl h; Born form factor averaged over the facet tilt θ ∈ [0, 90°] (weight sin θ cos θ, 4 nodes) and the azimuth (5 nodes), local spacing D / √cos θ; times the field factor averaged over the metal's depth profile | ln R [ln 0.4, ln 40] nm (a relative size), ln a [ln 0.2, ln 2.5], ω [0.08, 0.6], ln f_isl [ln 0.02, ln 3], ln k_opt [ln 0.05, ln 3], z₀ [0, 1000] nm, ln w_b [ln 5, ln 150] |
+| Clusters on the cap layer (*clusters on the cap*) | The same clusters at the top-surface fields, weight k_cap; the cap is a layer of density φ_cap and thickness k_cap h_opt / (c φ_cap) on the share c of the particle tops, the field intensities of the two regions mixed incoherently | k_cap [0, 1], φ_cap [0.6, 1], ln c [ln 0.02, 0] |
+| Metal network in the pores (*pore network*) | Equation (12.11) | ln A [ln 10⁻⁸, ln 1000], ln ξ [ln 3, ln 300] nm, H [0.1, 1.5], ln σ_z [ln 0.3, ln 30] nm |
+| Substrate seen through the metal (*substrate*) | c_fac G I_pre, G the fill-weighted field intensities of the graded stack, times the coating factor 1 + g T(α_f) (\|1 + i q_z (ρ_M/ρ_TiO₂) Φ\|² − 1) (metal coating the particle tops repeats their relief); with a cap, mixed with the cap film: (1 − w) sub + w X c_fac R(α_f) I_pre(α_f ≥ 0.25°), w(q) = φ_f / (1 + (q L_f / 2π)⁴), X = \|φ_cap ρ_M / (0.5 ρ_TiO₂)\|², R the ratio of the field products at the cap's top and at the bare graded top | g [0, 1], φ_f [0, 1], ln L_f [ln 10, ln 1000] nm |
+| Fluorescence (*fluorescence*) | Equation (12.10), Au only | none |
+
+```text
+I_net = A · 8π h_opt ξ³ r_e² |ρ_M|² ⟨E_i E_f⟩ exp(−(q_z σ_z)²) (1 + q² ξ²)^(−(1 + H))             (12.11)
+```
+
+⟨E_i E_f⟩ the field factor averaged over the metal's depth profile. Penalties keep the island coverage ≤ 1 and the cap ≤ 30 nm thick. The parameters reported as *Island share*, *Cap share*, *Vertical* and *Lateral correlation* and *Film share* are f_isl, k_cap, σ_z, ξ and w at q = 0.1 nm⁻¹; the radius is a relative size. The cap share and the film share are not identified separately by the network alone (User Manual, chapter 13).
+
+**Shipped families.**
+
+| Family | System | Optics | S(q) | s_H | σ_L | Film term | Fluorescence | Beam-path term B | Low-q environments | Polymer slab |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `si_p3h`, `si_u1` | Au, Ag on Si | fixed; `si_u1` any energy | hard disc | yes | no | discs | Au | yes | yes | — |
+| `si_v6` | Au, Ag on Si | fixed | paracrystal | yes | no | discs | Au | yes | yes | — |
+| `polyag_p3`, `polyag_v5`, `polyag_u1` | Ag on polymer films | fixed; `polyag_u1` any energy | paracrystal | no | yes | discs | — | no | no | 30 nm (none on PNO) |
+| `cu_p5`, `cu_u1` | Cu on polymer films | fixed (0.105 nm); `cu_u1` any energy | paracrystal | no | yes | self-affine | Cu | no | no | 40 nm |
+| `cu_v4` | Cu on polymer films | fixed (0.105 nm) | paracrystal | no | yes | discs | Cu | no | no | 40 nm |
+| `tio2_v2`, `tio2_u1` | Au, Ag on porous TiO₂ | fixed; `tio2_u1` any energy | paracrystal on the facets | — | — | cap film (above) | Au | no | no | — |
+
+The networks predict every free parameter of their family (27 for Si, 25 for Ag on polymers, 26 for `cu_p5` and `cu_u1`, 22 for TiO₂); K, the polymer slab, the TiO₂ stack and the fixed widths are not fitted. The reported quantities derived from them are those of section 12.1 (*Quantities*): for Si R, D = R_m √(2π/(√3 η)), the coverage min(η + large + small, 1), the height T + t_b and the base metal f_b h; for the polymer and Cu families number- and mass-weighted R and D over grains and small islands, the film thickness t_b + (1 − f_b) h and the top height (1 − f_b) h / coverage.
+
+**Not adopted.** Tested on measured scans; the criteria were fixed before the runs.
+
+| Component | Systems | Result |
+|---|---|---|
+| Connected-network (Teubner–Strey) spectrum of the film term | Cu on polymer films | Better in single windows; in the full analysis, as it was and after retraining, it did not pass its criteria (the difference between two trainings of one family was as large as the thresholds): not shown to be better |
+| Hard-disc interference function | Ag on polymers, Cu | No consistent gain (adopted on Si) |
+| Conformal interface: the base top's roughness repeated at its bottom, coherently | Polymer films | Rejected: the fringe residual and the attribution criteria failed, its amplitude went to its bound |
+| Roughness of the base layer's top (*base roughness*) | Polymer films, Si | Rejected: amplitude at its bound, the low-q deficit unchanged |
+| Narrower exit-angle smear as the cause of missing thickness fringes | Polymer films | Rejected |
+| Clusters buried in the polymer (*buried*) | Cu on polymer films | Not resolved: small gains in single windows, its criteria failed in the joint fit, and the check of its convergence failed, so no upper limit is given (section 12.3) |
+| Composite base layer with metal domains (*domains*) | Cu on polymer films | Rejected in the joint fit (it was not taken up in enough windows and did not lower the deviation enough) |
+| Dense film with narrow through-gaps instead of tall narrow grains | Cu on polymer films | Rejected in every window |
+| Lateral variation of the film thickness | Cu on polymer films | Rejected |
+| A thin film without base layer; an incidence or exit angle offset; non-wetting truncated-sphere grains; a scaled or mixed optical density of the metal layer; a thicker, sparser base | Si | Rejected (the angle offset only compensated a metal amount that was too low) |
+| q_z-corrected cluster terms on porous TiO₂ (four-channel DWBA with the slices' k_z; the clusters' height phase on the cap) | Au, Ag on TiO₂ | Passed the comparison with BornAgain; available, not in the shipped networks |
+| A waveguide in cap and porous layer | Au on TiO₂ | Withdrawn: the peak it was to explain was specular leakage into a coarse low-q cell |
+| Polymer interface-fluctuation layer; vertical shapes of the large clusters; grain height T ∝ R^γ; Debye–Waller damping in q_z; two variants of the TiO₂ film term | various | Rejected in the first model versions |
+
+**Open.** Signals in measured scans that no component describes (development scans, without independent characterisation):
+
+- The thickness fringes along α_f of a continuous Cu film on a polymer: the measured ones weaken with q_y, the model's do not unless the film term carries them; the joint fit takes them only in part (section 12.1, *Quantities*).
+- The model is brighter than the data below the metal's critical angle in the lowest q_y cells (Ag on polymers, Au and Ag on Si).
+- Au on Si whose film turns optically dense early: in the island-to-film transition about half of the misfit remains after the joint fit, and the model's grain height and the height read from the fringes do not agree in the same way on all scans.
+- Early coalescence of Cu on polymer films needs at once a structure a few nm tall through the film, objects of about 1 nm and the nominal metal amount; no combination of the components gives all three.
+- Ag on polymers in coalescence: the model's dominant size lies well above the lateral scale read from the data.
+- Strong diffuse scattering at low q_y reaching high exit angles from the first window on some Ag on PS samples: outside what the polymer networks were trained on.
+- Some Au scans on porous TiO₂: the model's Yoneda maximum is sharper than the measured one, and an early peak at high q_y is missing; the joint fit lowers their deviation little.
+- On Si, the optical density at large lateral scales can rise later than at small ones; not modelled.
+- An Au amount above the registered one on Si cannot be told from the uncertainty of Au's f₁ next to its L₃ edge at 12 keV.
+- On TiO₂ small steps at low α_f come from the slice grid (a model artefact), and for Au the split between clusters on the cap and the pore network is not determined.
+
+**Changing the library.** A component is added in this order: (1) an *Open* signal it is meant to explain, the object, the construction and its parameters with bounds are written here as a candidate; (2) it is implemented as a switch, off by default; (3) where the physics allows, it is compared with an independent calculation (BornAgain; Pospelov et al., 2020) before any fit; (4) it is tested on the reference scans of the systems concerned with criteria fixed before the runs; (5) it is *In use* only in a new family whose networks were trained with it and whose criteria passed — otherwise it goes into *Not adopted* with the reason. A component is described by what it is and how it is computed: values measured on samples do not belong here.
 
 ## 13. Tool windows and Labs
 
@@ -4988,6 +5137,7 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Black, D. R., Mendenhall, M. H., Brown, C. M., Henins, A., Filliben, J. & Cline, J. P. (2020). *Powder Diffr.* **35**, 17–22. https://doi.org/10.1017/S0885715620000068
 - Branch, M. A., Coleman, T. F. & Li, Y. (1999). *SIAM J. Sci. Comput.* **21**, 1–23. https://doi.org/10.1137/S1064827595289108
 - Bulut, Y. et al. (2024). *Langmuir*, **40**, 22591. https://doi.org/10.1021/acs.langmuir.4c02344
+- Chantler, C. T. (2000). *J. Phys. Chem. Ref. Data*, **29**, 597–1048. https://doi.org/10.1063/1.1321055
 - Cromer, D. T. & Mann, J. B. (1968). *Acta Cryst.* A**24**, 321–324. https://doi.org/10.1107/S0567739468000550
 - Debye, P. & Bueche, A. M. (1949). *J. Appl. Phys.* **20**, 518–525. https://doi.org/10.1063/1.1698419
 - Gensch, M. et al. (2019). *ACS Appl. Mater. Interfaces*, **11**, 29416. https://doi.org/10.1021/acsami.9b08594
@@ -5026,6 +5176,7 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Prince, E. (Ed.) (2004). *International Tables for Crystallography*, Vol. C, *Mathematical, Physical and Chemical Tables*, 3rd ed. Dordrecht: Kluwer.
 - Renaud, G., Lazzari, R. & Leroy, F. (2009). *Surf. Sci. Rep.* **64**, 255–380. https://doi.org/10.1016/j.surfrep.2009.07.002
 - Robertson, T., Wright, F. T. & Dykstra, R. L. (1988). *Order Restricted Statistical Inference*. Chichester: Wiley.
+- Rosenfeld, Y. (1990). *Phys. Rev. A*, **42**, 5978–5989. https://doi.org/10.1103/PhysRevA.42.5978
 - Ryan, C. G., Clayton, E., Griffin, W. L., Sie, S. H. & Cousens, D. R. (1988). *Nucl. Instrum. Methods Phys. Res. B*, **34**, 396–402. https://doi.org/10.1016/0168-583X(88)90063-8
 - Savikhin, V., Steinrück, H.-G., Liang, R.-Z., Collins, B. A., Oosterhout, S. D., Beaujuge, P. M. & Toney, M. F. (2020). *J. Appl. Cryst.* **53**, 1108–1129. https://doi.org/10.1107/S1600576720005476
 - Schrode, B., Pachmajer, S., Dohr, M., Röthel, C., Domke, J., Fritz, T., Resel, R. & Werzer, O. (2019). *J. Appl. Cryst.* **52**, 683–689. https://doi.org/10.1107/S1600576719004485
@@ -5037,6 +5188,7 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Sinha, S. K., Sirota, E. B., Garoff, S. & Stanley, H. B. (1988). *Phys. Rev. B*, **38**, 2297–2311. https://doi.org/10.1103/PhysRevB.38.2297
 - Smilgies, D.-M. (2009). *J. Appl. Cryst.* **42**, 1030–1034. https://doi.org/10.1107/S0021889809040126
 - Storn, R. & Price, K. (1997). *J. Glob. Optim.* **11**, 341–359. https://doi.org/10.1023/A:1008202821328
+- Teubner, M. & Strey, R. (1987). *J. Chem. Phys.* **87**, 3195–3200. https://doi.org/10.1063/1.453006
 - Theil, H. (1950). *Proc. K. Ned. Akad. Wet.* **53**, 386–392, 521–525, 1397–1412.
 - Thompson, P., Cox, D. E. & Hastings, J. B. (1987). *J. Appl. Cryst.* **20**, 79–83. https://doi.org/10.1107/S0021889887087090
 - Tiesinga, E., Mohr, P. J., Newell, D. B. & Taylor, B. N. (2021). *Rev. Mod. Phys.* **93**, 025010. https://doi.org/10.1103/RevModPhys.93.025010
