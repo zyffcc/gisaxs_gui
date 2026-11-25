@@ -218,12 +218,14 @@ SPUTTER_CLIENT_ZH = {
     "counts, not its value.": "可分辨的岛的半径。在多孔基底上它是相对尺寸：有意义的是它在扫描中的变化，而不是数值本身。",
     "Share of the metal that is in resolvable islands. Early in the deposition it can be above 1.":
         "金属中处在可分辨的岛里的份额。沉积初期可以大于 1。",
-    "Share of the optically active metal that is in the cap layer on the particles of the substrate (0 to 1).":
-        "光学上起作用的金属中，处在基底颗粒顶部帽层里的份额（0 到 1）。",
+    ("Share of the optically active metal that is in the cap layer on the particles of the substrate (0 to 1). From "
+     "Quick (the network alone) it is only roughly known: Refine often moves it far."):
+        "光学上起作用的金属中，处在基底颗粒顶部帽层里的份额（0 到 1）。“快速”（只用网络）给出的值只是大致的：“精修”常把它改动很多。",
     "Vertical correlation length of the metal network in the pores.": "孔内金属网络的竖直关联长度。",
     "Lateral correlation length of the metal network in the pores.": "孔内金属网络的横向关联长度。",
-    "Share of the scattering of the layer that leaves through the metal film (0 to 1).":
-        "这一层的散射中经金属膜出射的份额（0 到 1）。",
+    ("Share of the scattering of the layer that leaves through the metal film (0 to 1). From Quick (the network "
+     "alone) it is only roughly known: Refine can change it noticeably."):
+        "这一层的散射中经金属膜出射的份额（0 到 1）。“快速”（只用网络）给出的值只是大致的：“精修”可能明显改动它。",
     # -- the main screen: a series of static samples -------------------------------------------------------------------
     "Previous sample of the series": "上一个样品",
     "Next sample of the series": "下一个样品",
