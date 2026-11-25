@@ -39,10 +39,13 @@ fields, see [Running an independent validation](../README.md#running-an-independ
 | `posterior_own.json.gz` | 200 | 7179b85 | tree 7e68831a |
 | `posterior_dwba4_si.json.gz`, `posterior_dwba4_si_auto.json.gz` | 200 each | fda067c | tree edf4d396 |
 | `posterior_dwba4_ps100.json.gz`, `posterior_dwba4_ps100_auto.json.gz` | 200 each | fda067c | tree edf4d396 |
+| `posterior_r17_first.json.gz` | 200 | 69d8d668 | tree d8b9dffd |
+| `posterior_r17_fresh.json.gz` | 300 | 19578769 | tree d8b9dffd |
 
 The fitting tree identifies `src/gimap/features/fitting/domain` at the recorded commit.
 The two runs written at 2eb0243 predate the `code` field of the summaries, so their commit and tree
-are stated here and not added to the result files. The network is `flow_v1` (its SHA-256 is in every summary).
+are stated here and not added to the result files. The network is `flow_v1` (its SHA-256 is in every summary);
+the r17 runs use the `flow_v1` trained as `flow_v6` (encoding 6), the others the one before it.
 The four level-4 runs used per-cut checkpoints. Each stage's `seconds` measures that fit, including for resumed draws.
 The `code.source_sha256` in each level-4 summary identifies the benchmark scripts and fitting sources used for those draws.
 

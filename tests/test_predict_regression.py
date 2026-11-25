@@ -22,11 +22,11 @@ PER_CUT = ROOT / "tools/benchmarks/per_cut"
 REFERENCE = ROOT / "tests/data/ml1d/predict_regression.json"
 ARCHIVE_PLATFORM = sys.platform == "win32" and sys.version_info[:3] == (3, 10, 18)
 CASES = [
-    ("posterior_recovery", "fit", 184),
-    ("posterior_recovery", "fit", 167),
-    ("posterior_recovery", "choose", 176),
-    ("posterior_newseed_auto2", "auto", 89),
-    ("posterior_newseed", "fit", 208),
+    ("posterior_r17_first", "fit", 184),
+    ("posterior_r17_first", "fit", 167),
+    ("posterior_r17_first", "choose", 176),
+    ("posterior_r17_fresh", "auto", 89),
+    ("posterior_r17_fresh", "fit", 208),
 ]
 
 

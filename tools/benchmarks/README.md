@@ -232,10 +232,10 @@ On the Windows release-check machine, `python -m pytest --collect-only -q` colle
 Five tests skipped for missing optional Python packages. One reads an NXcanSAS export with SasView
 (`sasdata`), and four compare detector orientations with `pyFAI`. A separate test skipped because
 the `h5clear` executable was missing. Run `python -m pytest -q tests/test_predict_regression.py` for the
-five-cut Predict regression. The synthetic inputs and fit settings come from three historical records
+five-cut Predict regression. The synthetic inputs and fit settings come from two records of the r17 runs
 in `per_cut/`. The test replays known-composition fits 184 and 167 and composition choice 176 from
-`posterior_recovery.json.gz`, automatic level-2 fit 89 from `posterior_newseed_auto2.json.gz`, and
-known-composition fit 208 from `posterior_newseed.json.gz`.
+`posterior_r17_first.json.gz`, and automatic level-2 fit 89 and known-composition fit 208 from
+`posterior_r17_fresh.json.gz`.
 
 `tests/data/ml1d/predict_regression.json` contains the five expected outputs, the fitting-code commit
 and the runtime versions. After committing a numerical change, regenerate this file from the repository
@@ -243,11 +243,10 @@ root on Windows with Python 3.10.18 using `python tests/test_predict_regression.
 runs each selected stage in a fresh process with one BLAS thread and verifies the network SHA-256 from
 the original run.
 
-At fitting commit `f1628f3e`, all five leading compositions match their historical results. The
-shared bounds and floor-weighted refits change the fitted values, effective sample sizes and intervals.
-Cut 167 now passes the pooled sampling check for its supplied composition. Its leading solution takes
-0.99924 of the mass (previously 0.55095 under BIC). The leading composition on automatic cut 89 has
-probability 0.87457 (previously 0.87093). The leading weights for 184, 176 and 208 remain 1.
+The references were made with the network that comes with GIMaP (`flow_v1`, trained as `flow_v6`, encoding 6),
+and each leading composition is the one of its benchmark run. On cut 167 the leading solution takes 0.80 of
+the mass. The leading composition on automatic cut 89 has probability 0.88. The leading weights for 184,
+176 and 208 are 1.
 
 Windows with Python 3.10.18 checks every archived numerical field exactly, including alternative solutions.
 Run time is omitted. Other platforms check the composition, comparison branch and number of alternatives
