@@ -17,15 +17,17 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 import yaml
-from PyQt5.QtCore import QStandardPaths, QUrl
+from PyQt5.QtCore import QProcess, QStandardPaths, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QApplication
 
+from . import source_update
 from .error_guard import LOG_NAME
 from .logging_setup import CRASH_FILE, LOG_FILE, SECOND_LOG_FILE
 
@@ -35,7 +37,8 @@ from .presentation.app_dialogs import inform, warn
 from .presentation.components import show_toast
 from .presentation.help_dialogs import ask_example_folder, plain_text, system_summary
 from .presentation.i18n import tr, trf
-from .presentation.menu_bar import GITHUB_URL, ISSUES_URL
+from .presentation.menu_bar import GITHUB_URL, ISSUES_URL, RELEASES_URL
+from .presentation.update_dialog import UpdateActions, show_update_dialog
 from src.gimap.shared.version import APP_NAME, __version__
 from src.gimap.shared.resources import RESOURCE_ROOT
 
@@ -297,6 +300,42 @@ class HelpCommands:
     @staticmethod
     def citation() -> Citation:
         return read_citation()
+
+    def check_updates(self, installation: source_update.Installation | None = None):
+        """A source folder (Git clone or ZIP from GitHub): the update dialog; any other copy: the releases page."""
+        installation = installation or source_update.detect()
+        if installation.kind == "installed":
+            QDesktopServices.openUrl(QUrl(RELEASES_URL))
+            return None
+        root = installation.root
+        backup = Path(self.window.app_context.data_dir or ".") / "updates"
+        actions = UpdateActions(
+            kind=installation.kind, root=str(root), version=__version__,
+            check=lambda: source_update.check(installation),
+            apply=lambda status, progress, cancelled: source_update.apply(status, backup, progress=progress,
+                                                                          cancelled=cancelled),
+            restart=lambda: restart_window(self.window, source_update.restart_command(root)),
+            open_releases=lambda: QDesktopServices.openUrl(QUrl(RELEASES_URL)),
+            python=sys.executable, recorded=str(source_update.read_record(root).get("commit", "")))
+        return show_update_dialog(self.window, actions)
+
+
+def restart_window(window, command: list) -> bool:
+    """Close ``window`` (it asks about running work and unsaved changes as on any close) and, once the application
+    has quit, start ``command`` (a new GIMaP that waits for this one to let go of the user folder). ``False`` when
+    the window stays open; nothing is started then."""
+    app = QApplication.instance()
+
+    def start() -> None:
+        app.aboutToQuit.disconnect(start)
+        QProcess.startDetached(command[0], list(command[1:]), str(Path(command[1]).parent))
+
+    app.aboutToQuit.connect(start)
+    if window.close():
+        app.quit()  # also when a tool window of its own would keep the application running
+        return True
+    app.aboutToQuit.disconnect(start)
+    return False
 
 
 __all__ = ["CITATION_FILE", "Citation", "EXAMPLES", "EXAMPLES_FOLDER", "Example", "HelpCommands", "copy_example",

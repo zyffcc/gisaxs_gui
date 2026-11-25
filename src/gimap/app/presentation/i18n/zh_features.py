@@ -66,6 +66,7 @@ from .zh_frame_incidence import FRAME_INCIDENCE_ZH
 from .zh_series_chain import SERIES_CHAIN_ZH
 from .zh_series_selection import SERIES_SELECTION_ZH
 from .zh_signed_cut import SIGNED_CUT_ZH
+from .zh_source_update import SOURCE_UPDATE_ZH
 from .zh_texture_populations import TEXTURE_POPULATIONS_ZH
 from .zh_usability_analyze import USABILITY_ANALYZE_ZH
 from .zh_usability_calibration import USABILITY_CALIBRATION_ZH
@@ -76,6 +77,7 @@ from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 FEATURES_ZH = {
     **CHAIN_DRIFT_ZH,
     **EXAMPLE_INSTALL_ZH,
+    **SOURCE_UPDATE_ZH,
     **PHASE_GEOMETRY_ZH,
     **CELL_SENSITIVITY_ZH,
     **PREDICT_SUBSTRATE_ZH,

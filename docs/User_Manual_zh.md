@@ -300,6 +300,22 @@ TensorFlow 在 CPU 上运行；GPU 环境没有配置。
 **macOS 便携版。** 将新包解压到一个新文件夹，打开其中的 `Start_GIMaP.command`。
 首次启动会为该包准备运行环境；设置保留在用户数据文件夹中。
 
+**在 GIMaP 里更新（源码文件夹）。** 在源码文件夹里，即 Git 克隆或从 **Code ▸ Download ZIP** 得到的文件夹，
+**帮助 ▸ 检查更新…**（Help ▸ Check for Updates…）向 GitHub 查询该分支的最新版本，列出新内容，并提供**更新并重启**
+（Update and Restart）。它更新这个文件夹，然后重新启动 GIMaP；和平常关闭一样，有任务在运行或项目有未保存的修改时，
+关闭前会先询问。
+
+- Git 克隆前移到它在 GitHub 上的分支（`git merge --ff-only`；需要安装 Git）。下列情况它在改动任何东西之前停下：
+  你改过的文件新版本也改了；分支有自己的提交，或 GitHub 上的历史被改写过；分支没有跟随 GitHub 上的任何分支。
+  这时请用 `Update_GIMaP.bat`（见下文）或 `README.md` 中的步骤。
+- 从 Download ZIP 得到的文件夹只取与 GitHub 不同的文件。文件按 Git 哈希比较，每个下载的文件都按它核对；启动脚本保留
+  CRLF 换行。被替换的文件保存在用户数据文件夹的 `updates/` 里。有文件无法替换时，文件夹恢复原样。GitHub 上没有的文件
+  （你的数据、结果、`.gimap`）从不改动；GitHub 上删掉的文件留在文件夹里。文件夹现在对应的提交写在 `.gimap_source.json` 里。
+- Python 包列表（`requirements.txt`）变了时，对话框给出 `pip install` 命令并停下。在你自己的环境里先运行它；
+  `Start_GIMaP.bat` 会在下次启动时补装。然后按**重启**（Restart）。
+
+在便携版和用 pip 安装的版本里，这一项改为打开发布页。
+
 **源码版本（Git 克隆）。** 双击文件夹里的 `Update_GIMaP.bat`（需要 Git 2.16 或更新的版本），或者运行：
 
 ```powershell
@@ -318,7 +334,7 @@ powershell -ExecutionPolicy Bypass -File tools\update_source.ps1
 会补上新的包。在你自己建的环境（conda、venv）里，运行脚本为每个变了的列表打印出的命令，例如
 `python -m pip install -r requirements.txt`。
 
-从 **Code ▸ Download ZIP** 得到的文件夹没有 `.git`，不是 Git 克隆：脚本会说明，并且什么都不改。重新下载 ZIP，
+从 **Code ▸ Download ZIP** 得到的文件夹没有 `.git`，不是 Git 克隆：脚本会说明，并且什么都不改。可以在 GIMaP 里更新它（见上文）、重新下载 ZIP，
 或者用 Git 克隆仓库（`git clone https://github.com/zyffcc/gisaxs_gui.git`）；以后脚本就能更新这个克隆。
 把新的 ZIP 解压到一个新文件夹里；它第一次运行 `Start_GIMaP.bat` 时会重新建立环境（把 `.gimap` 搬过去行不通，见 2.2 节）。
 你的设置留在用户数据文件夹里。
@@ -478,7 +494,9 @@ GIMaP 发布的版本支持 Windows x64 和 macOS 15 或更新版本，Apple Sil
   （默认是 `Documents\GIMaP examples\<示例>`），并在分析页中打开它的帧（1.1 节）。
 - **帮助 ▸ 报告问题…**（Help ▸ Report a Problem…）把 GIMaP、操作系统、Python、Qt、PyQt 和 numpy 的版本
   （不含路径和数据）复制到剪贴板，并在浏览器中打开 GitHub 上的新问题页面：把它们粘贴进去。
-  **检查更新…**（Check for Updates…）在浏览器中打开 GitHub 上的发布页（最新的在前，含预发布版）；GIMaP 本身不发出任何网络请求。
+  **检查更新…**（Check for Updates…）把源码文件夹（Git 克隆或从 Download ZIP 得到的文件夹）从 GitHub 更新，然后重新启动
+  GIMaP（2.4 节）。在便携版和用 pip 安装的版本里，它在浏览器中打开 GitHub 上的发布页（最新的在前，含预发布版）。
+  只有选择这一项时 GIMaP 才会访问 GitHub。
 
 ![离线帮助阅读页面](manual_images/zh/25_help_reader.png)
 *帮助阅读页面：可展开的章节目录和正文搜索始终位于文档旁边。*
@@ -3679,15 +3697,15 @@ GIMaP 跟随操作系统的显示缩放，适配 1280 × 720 的屏幕。文字�
 分析的结果在它的子文件夹 `iampred-<代码>/` 里。
 它们一直保留，直到你自己删除。
 
-**有数据离开我的电脑吗？** 只有使用远程 AI 助手（Claude Code、Claude API 或其他服务商的服务器）时，数据才会离开本机：发送的是帧状态和约化曲线的数值。探测器文件留在本机。只有你允许时才会发送小幅 q 图（10.6 节）。模型在本机或实验室服务器上运行时，数据留在该网络内。StarDist、预测参数和二维预测都在本机运行，无需下载。GIMaP 本身不会自行联网。
+**有数据离开我的电脑吗？** 只有使用远程 AI 助手（Claude Code、Claude API 或其他服务商的服务器）时，数据才会离开本机：发送的是帧状态和约化曲线的数值。探测器文件留在本机。只有你允许时才会发送小幅 q 图（10.6 节）。模型在本机或实验室服务器上运行时，数据留在该网络内。StarDist、预测参数和二维预测都在本机运行，无需下载。只有在源码文件夹里选择**帮助 ▸ 检查更新…**时，GIMaP 才会联网：向 GitHub 查询最新版本并下载（2.4 节）。不会发送任何关于你或你的数据的信息。
 
-**帮助 ▸ GitHub 仓库**、**检查更新…**、**报告问题…**和二维预测的模型库会按你的选择在浏览器中打开网页。**报告问题…**会打开 GitHub 的新建问题页面，并将 GIMaP 和系统的版本复制到剪贴板。剪贴板摘要不含路径或数据，由你决定粘贴和提交哪些内容。
+**帮助 ▸ GitHub 仓库**、**报告问题…**、二维预测的模型库，以及源码文件夹以外的**检查更新…**，会按你的选择在浏览器中打开网页。**报告问题…**会打开 GitHub 的新建问题页面，并将 GIMaP 和系统的版本复制到剪贴板。剪贴板摘要不含路径或数据，由你决定粘贴和提交哪些内容。
 
 ### 14.12 版本与联系
 
 本手册对应 **GIMaP 0.2.0**（预发布版）。在**帮助 ▸ 关于 GIMaP**（Help ▸ About GIMaP）中查看已安装的版本。程序文件夹里的 `CHANGELOG.md` 列出自 0.0.2 以来的变化、尚未发布的改动和已知限制。
 
-- **帮助 ▸ 检查更新…**（Help ▸ Check for Updates…）在浏览器中打开 GitHub 发布页，按从新到旧的顺序列出各版本（含预发布版）。与“关于”中的版本号对照，按 2.4 节更新。GIMaP 本身不发送更新请求。
+- **帮助 ▸ 检查更新…**（Help ▸ Check for Updates…）在源码文件夹（Git 克隆或 Download ZIP）里列出 GitHub 上的新内容，并提供**更新并重启**（2.4 节）。在便携版和用 pip 安装的版本里，它在浏览器中打开 GitHub 发布页，按从新到旧的顺序列出各版本（含预发布版）：与“关于”中的版本号对照，按 2.4 节更新。
 - **帮助 ▸ 如何引用 GIMaP…**（Help ▸ How to Cite GIMaP…）显示 `CITATION.cff` 中的引文，文件中有 DOI 时也会列出。可用**复制**（Copy）或**复制 BibTeX**（Copy BibTeX）。请注明导出记录中 `software_version` 的版本（第 12 章）。如果记录中缺少这一项，例如较早的记录，请查看**帮助 ▸ 关于 GIMaP**（第 13 章）。
 - **许可证。** GIMaP 使用 MIT 许可证（`LICENSE`）。在**帮助 ▸ 第三方声明**（Help ▸ Third-party Notices）中可查随附组件（如采用 GPL-3.0 的 PyQt5）和示例数据的许可证。**帮助 ▸ 关于 GIMaP**显示许可证以及 Python、Qt、PyQt 和 numpy 的版本，可按**复制**。
 

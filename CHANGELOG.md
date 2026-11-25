@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- **Help ▸ Check for Updates…** updates a source folder from GitHub and starts GIMaP again. A Git clone moves forward to its branch (it stops before changing anything when you edited a file the update changes, or when the branch has commits of its own); a folder from Code ▸ Download ZIP gets only the files that differ, each checked against GitHub's hash, and keeps the files it replaces in `updates/` of the user data folder. The dialog lists what is new first, and waits when the list of Python packages changed. The portable version and a copy installed with pip still open the releases page. GIMaP goes online only when you choose this entry (User Manual 2.4).
+
 - **Predict parameters** describes the rise at low q with two physical terms: the beam tail, with the exponent 2 of the Lorentzian wings of the resolution function, and a new **diffuse term** A_d (1 + (|q|/w)²)^−(1+H), the diffuse scattering of a rough interface (w = 1/ξ with ξ the correlation length, H the Hurst exponent). The low-q rise of a rough film is no longer taken up by a very large particle population. Model has the term too (Diffuse A, w, H), off in a new model. The proposal network was retrained for it (encoding 6). *Physics and Methods* 9.2 and 9.13.
 
 - **Predict parameters** runs on several threads: half the logical processors, at most 12 (`GIMAP_PREDICT_THREADS` sets another number). The results are the same as on one thread. Sizes *Gaussian, by intensity*, which have no tables, gain most: on a 776-point cut the network's step went from about 6 to about 1 minute per composition.

@@ -356,6 +356,26 @@ so and changes nothing.
 **macOS portable version.** Extract the new package into a new folder and open its `Start_GIMaP.command`.
 Its first launch prepares the runtime for that package. Settings remain in the user data folder.
 
+**From inside GIMaP (a source folder).** In a source folder, a Git clone or a folder from **Code ▸ Download
+ZIP**, **Help ▸ Check for Updates…** asks GitHub for the newest version of the branch, lists what is new and
+offers **Update and Restart**. It updates the folder and starts GIMaP again; closing asks first, as on any
+close, while a job runs or a project has unsaved changes.
+
+- A Git clone moves forward to its branch on GitHub (`git merge --ff-only`; Git must be installed). It
+  stops before it changes anything when you edited a file the new version also changes, when the branch has
+  commits of its own or the history on GitHub was rewritten, or when the branch follows no branch on
+  GitHub. Then use `Update_GIMaP.bat` (below) or the steps in `README.md`.
+- A folder from Download ZIP gets only the files that differ from GitHub. Files are compared by their Git
+  hash, and each download is checked against it; the launchers keep their CRLF line endings. The files it
+  replaces are kept in `updates/` of the user data folder. When a file cannot be replaced, the folder is put
+  back as it was. Files GitHub does not have (your data, results, `.gimap`) are never touched; a file deleted
+  on GitHub stays in the folder. The commit the folder now holds is written to `.gimap_source.json`.
+- When the list of Python packages changed (`requirements.txt`), the dialog shows the `pip install` command
+  and waits. In an environment of your own run it first; `Start_GIMaP.bat` adds the packages at its next
+  start. Then press **Restart**.
+
+In the portable version and in a copy installed with pip, the entry opens the releases page instead.
+
 **Source checkout (a git clone).** Double-click `Update_GIMaP.bat` in the folder (it needs Git 2.16 or
 newer), or run:
 
@@ -379,7 +399,7 @@ you set up yourself (conda, venv), run the command the script prints for each ch
 `python -m pip install -r requirements.txt`.
 
 A folder from **Code ▸ Download ZIP** has no `.git` and is not a checkout: the script says so and
-changes nothing. Download the ZIP again, or clone the repository with Git
+changes nothing. Update it from inside GIMaP (above), download the ZIP again, or clone the repository with Git
 (`git clone https://github.com/zyffcc/gisaxs_gui.git`); the script updates a clone from then on.
 Extract a new ZIP into a new folder; its first `Start_GIMaP.bat` sets up the environment again (moving
 `.gimap` over does not work, section 2.2). Your settings stay in the user data folder.
@@ -568,8 +588,10 @@ the folders GIMaP keeps, and the links to GitHub, the citation, the notices and 
   choose (by default `Documents\GIMaP examples\<example>`) and opens its frame in Analyze (section 1.1).
 - **Help ▸ Report a Problem…** copies the versions of GIMaP, the operating system, Python, Qt, PyQt
   and numpy (no paths, no data) to the clipboard and opens a new issue on GitHub in your browser:
-  paste them there. **Check for Updates…** opens the releases page on GitHub in your browser (newest
-  first, pre-releases included); GIMaP itself makes no network request.
+  paste them there. **Check for Updates…** updates a source folder (a Git clone or a folder from
+  Download ZIP) from GitHub and starts GIMaP again (section 2.4). In the portable version and in a copy
+  installed with pip it opens the releases page on GitHub in your browser (newest first, pre-releases
+  included). GIMaP asks GitHub only when you choose this entry.
 
 ![The offline help reader](manual_images/en/25_help_reader.png)
 *The help reader: expandable chapters and text search stay beside the document while you read.*
@@ -4671,15 +4693,15 @@ the analysis package that comes with GIMaP in
 set with **More options ▸ Save results in** (section 8.2; chapter 12); a result of Analyze is in its subfolder
 `iampred-<code>/`. They are kept until you delete them.
 
-**Does anything leave my computer?** Your data leave it only when you use a remote AI assistant (Claude Code, Claude API or another provider's server), which receives the frame status and numerical values of reduced curves. The detector file stays on your computer. Sending a small q-map image requires your permission (section 10.6). With a model on your computer or lab server, the data stay on that network. StarDist, Predict parameters and 2D Prediction run locally without downloads. GIMaP itself does not go online.
+**Does anything leave my computer?** Your data leave it only when you use a remote AI assistant (Claude Code, Claude API or another provider's server), which receives the frame status and numerical values of reduced curves. The detector file stays on your computer. Sending a small q-map image requires your permission (section 10.6). With a model on your computer or lab server, the data stay on that network. StarDist, Predict parameters and 2D Prediction run locally without downloads. GIMaP itself goes online only when you choose **Help ▸ Check for Updates…** in a source folder: it then asks GitHub for the newest version and downloads it (section 2.4). Nothing about you or your data is sent.
 
-**Help ▸ GitHub Repository**, **Check for Updates…**, **Report a Problem…** and the 2D Prediction model library open your browser on request. **Report a Problem…** copies the GIMaP and system versions to the clipboard and opens a new GitHub issue. You choose what to paste and submit. The clipboard summary contains no paths or data.
+**Help ▸ GitHub Repository**, **Report a Problem…**, the 2D Prediction model library and, outside a source folder, **Check for Updates…** open your browser on request. **Report a Problem…** copies the GIMaP and system versions to the clipboard and opens a new GitHub issue. You choose what to paste and submit. The clipboard summary contains no paths or data.
 
 ### 14.12 Version and Contact
 
 This manual describes **GIMaP 0.2.0** (pre-release). Check your installed version in **Help ▸ About GIMaP**. The program folder contains `CHANGELOG.md` with changes since 0.0.2, unreleased changes and known limitations.
 
-- **Help ▸ Check for Updates…** opens GitHub Releases in your browser. Compare the latest version (pre-releases included, newest first) with the version in About. GIMaP itself sends no update request. See section 2.4 to update.
+- **Help ▸ Check for Updates…** in a source folder (a Git clone or Download ZIP) shows what is new on GitHub and offers **Update and Restart** (section 2.4). In the portable version and in a copy installed with pip it opens GitHub Releases in your browser: compare the latest version (pre-releases included, newest first) with the version in About, and update as in section 2.4.
 - **Help ▸ How to Cite GIMaP…** displays the reference from `CITATION.cff`, including a DOI if the file supplies one. Use **Copy** or **Copy BibTeX**. Cite the version recorded in `software_version` (chapter 12). If the field is missing, as in older records, check **Help ▸ About GIMaP** (chapter 13).
 - **Licence.** GIMaP uses the MIT licence (`LICENSE`). For the licences of bundled components (including PyQt5 under GPL-3.0) and example data, open **Help ▸ Third-party Notices**. **Help ▸ About GIMaP** shows the licence and the Python, Qt, PyQt and numpy versions. Use **Copy** to copy them.
 

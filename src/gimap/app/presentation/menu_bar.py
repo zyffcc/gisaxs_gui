@@ -38,7 +38,8 @@ APP_VERSION = __version__  # written once, in shared/version.py
 GITHUB_URL = "https://github.com/zyffcc/gisaxs_gui"
 ISSUES_URL = GITHUB_URL + "/issues/new"
 RELEASES_URL = GITHUB_URL + "/releases"  # newest first, pre-releases too: GitHub's /releases/latest never shows one
-"""Check for Updates opens this page; GIMaP itself makes no network request (beamline computers are often offline)."""
+"""Check for Updates opens this page for an installed copy; a source folder is updated from GitHub instead
+(``MenuCommands.check_updates``). Nothing is asked of GitHub before the user chooses the entry."""
 
 Command = Optional[Callable[[], object]]
 
@@ -84,6 +85,9 @@ class MenuCommands:
     """Help ▸ Example Data: ``(key, text, tip)`` of each example GIMaP comes with (``app/help_commands.py``)."""
     open_example: Optional[Callable[[str], object]] = None
     report_problem: Command = None
+    check_updates: Command = None
+    """Help ▸ Check for Updates…: a source folder is updated from GitHub and restarted (``app/help_commands.py``);
+    ``None`` opens the releases page."""
     open_error_log: Command = None
     citation: Optional[Callable[[], object]] = None
     """How to Cite: an object with ``text``, ``bibtex`` and ``doi`` (read from ``CITATION.cff``)."""
@@ -344,7 +348,8 @@ class MainMenuBar(QObject):
         menu.addSeparator()
         self._add(menu, "github", "&GitHub Repository",
                   lambda: QDesktopServices.openUrl(QUrl(GITHUB_URL)))
-        self._add(menu, "check_updates", "Check for Upda&tes…", lambda: QDesktopServices.openUrl(QUrl(RELEASES_URL)))
+        self._add(menu, "check_updates", "Check for Upda&tes…",
+                  c.check_updates or (lambda: QDesktopServices.openUrl(QUrl(RELEASES_URL))))
         if c.citation is not None:
             self._add(menu, "cite", "How to &Cite GIMaP…", self._show_citation,
                       tip="The reference to give when you publish results obtained with GIMaP")
@@ -367,8 +372,9 @@ class MainMenuBar(QObject):
         """Check for Updates names the version running (composed: in the interface language)."""
         action = self.actions.get("check_updates")
         if action is not None:
-            tip = trf("You are running {name} {version}. This opens the releases page on GitHub in your browser "
-                      "(newest first, pre-releases included); GIMaP itself makes no network request.",
+            tip = trf("You are running {name} {version}. A source folder (a Git clone, or a ZIP from GitHub's Code "
+                      "button) is brought to the newest version on GitHub and GIMaP starts again; an installed copy "
+                      "opens the releases page in your browser. GitHub is asked only when you choose this.",
                       name=APP_NAME, version=APP_VERSION)
             action.setToolTip(tip)
             action.setStatusTip(tip)
