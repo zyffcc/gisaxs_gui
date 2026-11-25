@@ -41,6 +41,13 @@ fields, see [Running an independent validation](../README.md#running-an-independ
 | `posterior_dwba4_ps100.json.gz`, `posterior_dwba4_ps100_auto.json.gz` | 200 each | fda067c | tree edf4d396 |
 | `posterior_r17_first.json.gz` | 200 | 69d8d668 | tree d8b9dffd |
 | `posterior_r17_fresh.json.gz` | 300 | 19578769 | tree d8b9dffd |
+| `posterior_r17_extended.json.gz` | 600 | 19578769 | tree d8b9dffd |
+| `posterior_r17_dwba_tp.json.gz`, `posterior_r17_dwba_born.json.gz`, `posterior_r17_dwba_eia.json.gz` | 200 each | 19578769 | tree d8b9dffd |
+| `posterior_r17_dwba4_si.json.gz`, `posterior_r17_dwba4_ps100.json.gz` | 200 each | 19578769 | tree d8b9dffd |
+| `posterior_r17_own.json.gz` | 200 | 19578769 | tree d8b9dffd |
+| `posterior_r17_floor03.json.gz`, `posterior_r17_floor08.json.gz`, `posterior_r17_amplitude100.json.gz` | 200 each | 19578769 | tree d8b9dffd |
+| `posterior_r17_timing.json.gz` | 24 | 19578769 | tree d8b9dffd |
+| `search_baseline_r17.json.gz` (`search_baseline.py`, not a Predict run) | 200 | 19578769 | tree d8b9dffd |
 
 The fitting tree identifies `src/gimap/features/fitting/domain` at the recorded commit.
 The two runs written at 2eb0243 predate the `code` field of the summaries, so their commit and tree

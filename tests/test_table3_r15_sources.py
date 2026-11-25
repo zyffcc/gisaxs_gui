@@ -100,7 +100,8 @@ def test_default_cli_compares_unpinned_cells_with_manuscript(tmp_path, capsys):
                        "model": {"R": {"median_abs": .37, "p90_abs": .65}},
                        "measured": {"R": {"median_abs": .52, "p90_abs": .78}}})
     write_json(tmp_path / "search_baseline_r15_summary.json", summary)
-    args = ["--bench", str(tmp_path), "--table", str(table), "--numbers", str(numbers), "--only", "search"]
+    args = ["--revision", "15", "--bench", str(tmp_path), "--table", str(table), "--numbers", str(numbers),
+            "--only", "search"]
     assert table3.main(args) == 0
     row = json.loads(capsys.readouterr().out)["search"]
     assert row["sources"][0]["producing_commit"] == "ba123456"
