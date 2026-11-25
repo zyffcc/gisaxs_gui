@@ -8,9 +8,9 @@ from .cut_model.sizes import size_report
 from .fit_model import INFO, FitModel
 
 
-TAIL_RANGES = frozenset({"res_amplitude", "res_width", "res_exponent", "core_amplitude", "diffuse_amplitude",
-                         "diffuse_width", "diffuse_hurst"})
-"""The low-q terms (beam tail, core of the beam, diffuse term): their ranges and whether they are fixed are set by GIMaP (``beam_tail``,
+TAIL_RANGES = frozenset({"res_amplitude", "res_width", "res_exponent", "diffuse_amplitude", "diffuse_width",
+                         "diffuse_hurst"})
+"""The low-q terms (beam tail, diffuse term): their ranges and whether they are fixed are set by GIMaP (``beam_tail``,
 Predict parameters), and kept with any composition (globals)."""
 
 

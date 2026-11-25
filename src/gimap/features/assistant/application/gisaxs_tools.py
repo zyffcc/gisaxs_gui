@@ -33,7 +33,7 @@ SPACING_WINDOW = 0.02
 AT_BOUND_FLAG = " stopped at a bound of its range"
 """The end of the fit's warning for a value at a bound: ``at_bounds`` names a non-linear one more exactly (which
 bound), the report names a linear term at 0 itself (``gisaxs_choice.zero_terms``)."""
-LINEAR_NAMES = ("background", "res_amplitude", "core_amplitude", "diffuse_amplitude", "Int")
+LINEAR_NAMES = ("background", "res_amplitude", "diffuse_amplitude", "Int")
 """How the fit names the linear terms in its warnings (``Int_1``: the amplitude of the first population)."""
 INTERVAL_NAMES = ("median", "low68", "high68", "low95", "high95")
 """The posterior of a value as a row gives it: best, then these, then the least-squares error."""

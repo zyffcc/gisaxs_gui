@@ -22,7 +22,6 @@ NAMES = {
     "res_amplitude": "Tail A", "resolution_amplitude": "Tail A",
     "res_width": "Tail w", "tail_width": "Tail w", "sigma_Res": "Tail w",
     "res_exponent": "Tail ν", "tail_exponent": "Tail ν", "nu_Res": "Tail ν",
-    "core_amplitude": "Core A",
     "diffuse_amplitude": "Diffuse A", "diffuse_width": "Diffuse w", "diffuse_hurst": "Diffuse H",
     "q_resolution": "σ_q", "k": "Factor k", "refl_amp": "|r|", "refl_phase": "arg r",
 }
@@ -248,8 +247,6 @@ def clean_flags(flags: Iterable[str], amplitudes: dict) -> tuple:
         key, slot = split_name(name)
         if key == "diffuse_amplitude" or key in DIFFUSE:
             return zero("diffuse_amplitude")
-        if key == "core_amplitude":
-            return zero("core_amplitude")
         if key in TAIL_AMPLITUDE or key == "background":
             return zero("res_amplitude") if key in TAIL_AMPLITUDE else zero("background")
         if key in TAIL:
@@ -332,8 +329,8 @@ def legend(populations: int = 1) -> str:
         ("sigma_nn_1", "σnn/D"), ("sigma_D", "σD/D = σnn/D / √(2π)"), ("amplitude / Int_1", "Scale")]
     pairs += [("background", "Background"), ("res_amplitude / resolution_amplitude", "Tail A"),
               ("res_width / tail_width / sigma_Res", "Tail w"), ("res_exponent / tail_exponent / nu_Res", "Tail ν"),
-              ("core_amplitude", "Core A"), ("diffuse_amplitude", "Diffuse A"), ("diffuse_width", "Diffuse w"),
-              ("diffuse_hurst", "Diffuse H"), ("q_resolution", "σ_q"), ("chi2", "χ²ᵣ")]
+              ("diffuse_amplitude", "Diffuse A"), ("diffuse_width", "Diffuse w"), ("diffuse_hurst", "Diffuse H"),
+              ("q_resolution", "σ_q"), ("chi2", "χ²ᵣ")]
     return "; ".join(f"{key}: {name}" for key, name in pairs)
 
 

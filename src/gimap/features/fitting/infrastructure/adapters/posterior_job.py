@@ -42,8 +42,7 @@ def _number(value):
 
 def amplitudes(model) -> dict:
     """The linear terms of a model by their keys (``res_amplitude``, ``background``, ``Int_1`` …)."""
-    found = {key: float(model.globals[key].value) for key in ("res_amplitude", "core_amplitude", "diffuse_amplitude",
-                                                             "background")}
+    found = {key: float(model.globals[key].value) for key in ("res_amplitude", "diffuse_amplitude", "background")}
     found.update({f"Int_{n}": float(c.value("Int")) for n, c in enumerate(model.components, start=1)})
     return found
 
@@ -203,8 +202,7 @@ def at_bounds(model, tolerance: float = 1e-4) -> list[dict]:
     no_diffuse = float(model.globals["diffuse_amplitude"].value) <= 0.0
     for path, parameter in model.parameters():
         owner, key = path
-        if not parameter.free or key in ("Int", "background", "res_amplitude", "core_amplitude", "diffuse_amplitude", "k",
-                                                  "q_resolution"):
+        if not parameter.free or key in ("Int", "background", "res_amplitude", "diffuse_amplitude", "k", "q_resolution"):
             continue
         if owner == "globals" and not (key in ROW_NAMES and not no_tail or key in DIFFUSE_ROWS and not no_diffuse):
             continue
@@ -282,8 +280,7 @@ def solution_row(solution, item, render_q, points=None) -> dict:
             "scattering": f"four-term DWBA on {model.substrate.label}"} if model.substrate is not None else {}),
         global_params=dict(background=float(g["background"].value), resolution_amplitude=float(g["res_amplitude"].value),
                            sigma_Res=float(g["res_width"].value), nu_Res=float(g["res_exponent"].value),
-                           **{key: float(g[key].value) for key in ("core_amplitude", "diffuse_amplitude", "diffuse_width",
-                                                                   "diffuse_hurst")},
+                           **{key: float(g[key].value) for key in ("diffuse_amplitude", "diffuse_width", "diffuse_hurst")},
                            q_resolution=float(g["q_resolution"].value),
                            **{key: float(g[key].value) for key in ("alpha_i", "alpha_f", "wavelength")}),
         **{key: record[key]}, posterior=record["values"], posterior_summary=record["posterior_summary"],
