@@ -11,7 +11,7 @@ from .. import fit_engine
 from .. import fit_model as fm
 from ..cut_model.geometry import Geometry
 from . import encoding as E
-from .infer import Cut
+from .infer import CORE_RANGE, Cut
 from .substrate_level import ordered_model
 
 KEYS = ("R", "sigma_R", "h", "sigma_h", "D", "sigma_nn")
@@ -89,6 +89,8 @@ def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", co
     model = model.with_parameter(("globals", "res_amplitude"), value=1.0, free=True)
     model = model.with_parameter(("globals", "res_exponent"), value=2.0, free=False)  # the Lorentzian wings
     model = model.with_parameter(("globals", "diffuse_amplitude"), value=1.0, free=True)
+    model = model.with_parameter(("globals", "core_amplitude"), value=0.0, free=True,  # the core of the beam
+                                 upper=CORE_RANGE * float(np.max(np.abs(data.intensity))))
     for index, key in enumerate(GLOBAL_KEYS.values(), E.GLOBAL.start):
         scale = 1.0 if key == "diffuse_hurst" else data.q_max
         lower, upper = low[index] * scale, high[index] * scale

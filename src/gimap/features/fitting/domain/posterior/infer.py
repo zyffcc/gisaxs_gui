@@ -35,6 +35,9 @@ from . import encoding as E
 from . import parallel, reflection_disk, substrate_level
 
 AMPLITUDE_RANGE = 10.0
+CORE_RANGE = 1e6
+"""The core of the beam at q = 0 is at most this many times the largest measured intensity (its prior; the direct
+beam can be far stronger than the scattering)."""
 MODE_SPACING, MODE_SPREAD = 0.1, 0.05
 MAX_MODES = 4
 PROPOSAL_WIDTHS = (1.0,)
@@ -194,11 +197,13 @@ class Likelihood:
         self.sharp_limit = resolution.predict_sharp_limit(q)
 
     def columns(self, values) -> np.ndarray:
-        """(B, K + 3, n) of physical values (B, DIMS): each population's T on the measured points with the sample's
-        resolution (normalised to its maximum), the beam tail (exponent 2), the diffuse term, 1."""
+        """(B, K + 4, n) of physical values (B, DIMS): each population's T on the measured points with the sample's
+        resolution (normalised to its maximum), the beam tail (exponent 2), the diffuse term, the Gaussian core of
+        the beam (width σ_q; 0 where no core of at most ``CORE_RANGE`` times the largest intensity rises above the
+        errors), 1."""
         v = np.atleast_2d(np.asarray(values, float))
         rows, n, k = v.shape[0], self.data.q.size, len(self.types)
-        out = np.empty((rows, k + 3, n))
+        out = np.empty((rows, k + 4, n))
         geometry = self.data.geometry()
         sigma = v[:, E.RESOLUTION_DIM]
         sharp = sigma <= self.sharp_limit
@@ -238,11 +243,16 @@ class Likelihood:
         for b in range(rows):
             out[b, k] = cut.tail(self.data.q, float(v[b, E.TAIL_DIM]), 2.0)
             out[b, k + 1] = cut.diffuse(self.data.q, float(v[b, E.DIFFUSE_DIM]), float(v[b, E.HURST_DIM]))
-        out[:, k + 2] = 1.0
+        centre = np.exp(-0.5 * np.square(self.data.q[None, :] / np.maximum(sigma[:, None], 1e-300)))
+        reach = CORE_RANGE * float(np.max(np.abs(self.data.intensity))) * np.linalg.norm(
+            centre / self.data.sigma[None, :], axis=1)
+        centre[reach <= math.sqrt(2 * math.pi)] = 0.0
+        out[:, k + 2] = centre
+        out[:, k + 3] = 1.0
         return out
 
     def model_curves(self, values):
-        """(columns (B, K + 3, n), amplitudes (B, K + 3) by non-negative least squares in σ, model curves (B, n))."""
+        """(columns (B, K + 4, n), amplitudes (B, K + 4) by non-negative least squares in σ, model curves (B, n))."""
         x = self.columns(values)
         y, s = self.data.intensity, self.data.sigma
         scaled = x / s[None, None, :]
@@ -254,7 +264,7 @@ class Likelihood:
         return x, amplitudes, np.einsum("bm,bmn->bn", amplitudes, x)
 
     def __call__(self, values) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """(log marginal likelihood, amplitudes (B, K + 3), χ² at the amplitudes) of physical values (B, DIMS)."""
+        """(log marginal likelihood, amplitudes (B, K + 4), χ² at the amplitudes) of physical values (B, DIMS)."""
         values = np.atleast_2d(values)
         x, amplitudes, model = self.model_curves(values)
         y, s = self.data.intensity, self.data.sigma
@@ -270,16 +280,19 @@ class Likelihood:
         solved = np.linalg.solve(inner, projected[..., None])[..., 0]
         _sign, log_det = np.linalg.slogdet(np.eye(E.ERROR_BASIS)[None] + tau[:, None, None] ** 2 * gram)
         log_like = self.log_norm - 0.5 * (chi2 - np.sum(projected * solved, axis=1)) - 0.5 * log_det
-        # the amplitudes, uniform on [0, top]: Laplace at the positive ones, a half Gaussian at those at 0
-        top = AMPLITUDE_RANGE * float(np.max(np.abs(y)))
+        # the amplitudes, uniform on [0, top] (the core of the beam on [0, CORE_RANGE × the largest intensity]):
+        # Laplace at the positive ones, a half Gaussian at those at 0, at most the whole range
+        top = np.full(m, AMPLITUDE_RANGE * float(np.max(np.abs(y))))
+        top[m - 2] = CORE_RANGE * float(np.max(np.abs(y)))
         positive = amplitudes > 0
         full = np.einsum("bmn,bln->bml", scaled, scaled)
         hessian = np.where(positive[:, :, None] & positive[:, None, :], full, 0.0)
         hessian += np.eye(m)[None] * (~positive)[:, :, None]
         _sign, log_det_h = np.linalg.slogdet(hessian)
         diagonal = np.maximum(np.einsum("bmm->bm", full), 1e-300)
-        at_zero = np.where(positive, 0.0, 0.5 * math.log(0.5 * math.pi) - 0.5 * np.log(diagonal))
-        log_marginal = (log_like - m * math.log(top) + 0.5 * positive.sum(axis=1) * math.log(2 * math.pi)
+        at_zero = np.where(positive, 0.0, np.minimum(0.5 * math.log(0.5 * math.pi) - 0.5 * np.log(diagonal),
+                                                     np.log(top)[None, :]))
+        log_marginal = (log_like - np.sum(np.log(top)) + 0.5 * positive.sum(axis=1) * math.log(2 * math.pi)
                         - 0.5 * log_det_h + np.sum(at_zero, axis=1))
         q_min, edge = self.data.q_max / self.data.ratio, 1.0 + 1e-9
         hurst = values[:, E.HURST_DIM]

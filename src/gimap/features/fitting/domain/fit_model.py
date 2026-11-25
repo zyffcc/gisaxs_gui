@@ -16,7 +16,8 @@ The intensity is GIMaP's one forward model of a cut, ``cut_model`` (Physics and 
   manual fits, the core–shell sphere (``model_library.core_shell``);
 * links between parameters (``Parameter.tie``) and inequalities (``FitModel.inequalities``): ``fit_links``;
 * BG a constant background, A/(1+(|q|/w)^ν) the beam tail at q = 0 (key ``resolution peak``; Predict parameters
-  takes ν = 2, the Lorentzian wings of the resolution function), A_d (1 + (|q|/w_d)²)^−(1+H) the diffuse scattering
+  takes ν = 2, the Lorentzian wings of the resolution function), A_c exp(−q²/2σ_q²) the Gaussian core of the beam
+  (key ``beam core``; its width is the q resolution σ_q; off in a new model: A_c = 0, fixed), A_d (1 + (|q|/w_d)²)^−(1+H) the diffuse scattering
   of a rough interface with the K-correlation function, w_d = 1/ξ (key ``diffuse scattering``; off in a new model:
   A_d = 0, fixed), k an overall factor; with σ_q > 0 the particle terms are convolved with a Gaussian q resolution.
 
@@ -45,7 +46,7 @@ from .cut_model import Geometry, size_averages
 from .cut_model import conventions, resolution, sizes
 from .cut_model import manual_sizes
 from .cut_model.geometry import from_angles
-from .cut_model.model import diffuse, tail
+from .cut_model.model import core, diffuse, tail
 from . import fit_resolution
 from .cut_model.shapes import RADIUS_POWER
 from .cut_model.structure import paracrystal
@@ -78,13 +79,13 @@ and the only one of Predict parameters."""
 DEFAULT_INTERFERENCE = "paracrystal"
 DIFFUSE = ("diffuse_amplitude", "diffuse_width", "diffuse_hurst")
 """The diffuse scattering of a rough interface: A_d, w_d = 1/ξ and the Hurst exponent H."""
-BASE_GLOBALS = ("background", "res_amplitude", "res_width", "res_exponent") + DIFFUSE + ("k",)
+BASE_GLOBALS = ("background", "res_amplitude", "res_width", "res_exponent", "core_amplitude") + DIFFUSE + ("k",)
 RESOLUTION = ("q_resolution",)
 """The Gaussian q resolution (1σ) of the particle terms; 0, the default, is none."""
 GRAZING = ("alpha_i", "alpha_f", "wavelength", "refl_amp", "refl_phase")
 """Geometry of the cut and the effective reflection coefficient r of the two-path sphere (fixed by default)."""
 GLOBALS = BASE_GLOBALS + RESOLUTION + GRAZING
-LINEAR = frozenset({"Int", "background", "res_amplitude", "diffuse_amplitude"})
+LINEAR = frozenset({"Int", "background", "res_amplitude", "core_amplitude", "diffuse_amplitude"})
 """Scales: with the others fixed, the intensity is linear in them (solved exactly while fitting)."""
 INF = math.inf
 SIZE_LAWS = manual_sizes.LABELS
@@ -128,6 +129,8 @@ INFO = {
                                        "the direct and reflected beam"),
     "res_width": ParameterInfo("Tail w", "nm⁻¹", 0.02, 0.001, 0.1, tip="Width w of the beam tail"),
     "res_exponent": ParameterInfo("Tail ν", "", 3.0, 1.0, 20.0, tip="Exponent ν of the beam tail (how fast it falls)"),
+    "core_amplitude": ParameterInfo("Core A", "", 0.0, 0.0, INF, free=False,
+                                    tip="Height at q = 0 of the Gaussian core of the direct and reflected beam, whose width is the q resolution σ_q; 0: no core"),
     "diffuse_amplitude": ParameterInfo("Diffuse A", "", 0.0, 0.0, INF, free=False,
                                        tip="Height at q = 0 of the diffuse scattering of a rough interface "
                                            "A_d (1 + (|q|/w)²)^−(1+H); 0: no diffuse term"),
@@ -390,12 +393,19 @@ def diffuse_shape(model: FitModel, q: np.ndarray) -> np.ndarray:
     return np.asarray(diffuse(q, model.globals["diffuse_width"].value, model.globals["diffuse_hurst"].value), float)
 
 
+def core_shape(model: FitModel, q: np.ndarray) -> np.ndarray:
+    return np.asarray(core(q, model.globals["q_resolution"].value), float)
+
+
 def term_shape(model: FitModel, key: str, q: np.ndarray) -> np.ndarray:
-    """The unit curve of a scale of the whole curve: the beam tail (``res_amplitude``) or the diffuse term."""
-    return resolution_shape(model, q) if key == "res_amplitude" else diffuse_shape(model, q)
+    """The unit curve of a scale of the whole curve: the beam tail (``res_amplitude``), the core of the beam
+    (``core_amplitude``) or the diffuse term."""
+    if key == "res_amplitude":
+        return resolution_shape(model, q)
+    return core_shape(model, q) if key == "core_amplitude" else diffuse_shape(model, q)
 
 
-CURVE_SCALES = ("res_amplitude", "diffuse_amplitude")
+CURVE_SCALES = ("res_amplitude", "core_amplitude", "diffuse_amplitude")
 """Scales of a term of the whole curve with a shape of its own (``term_shape``)."""
 
 
@@ -439,6 +449,8 @@ def evaluate(model: FitModel, q: np.ndarray, *, parts: bool = False, cache: Opti
         terms[f"{index + 1}: {FAMILIES[component.family][0]}"] = g["k"] * component.value("Int") * form
     if g["res_amplitude"] != 0:
         terms["resolution peak"] = g["k"] * g["res_amplitude"] * resolution_shape(model, q)
+    if g["core_amplitude"] != 0:
+        terms["beam core"] = g["k"] * g["core_amplitude"] * core_shape(model, q)
     if g["diffuse_amplitude"] != 0:
         terms["diffuse scattering"] = g["k"] * g["diffuse_amplitude"] * diffuse_shape(model, q)
     total = g["background"] + (np.sum(list(terms.values()), axis=0) if terms else np.zeros_like(q))

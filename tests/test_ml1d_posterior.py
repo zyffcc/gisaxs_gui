@@ -61,11 +61,13 @@ def test_likelihood_equals_the_dense_gaussian():
         _s, log_det = np.linalg.slogdet(cov)
         dense = -0.5 * (r @ np.linalg.solve(cov, r) + log_det + q.size * math.log(2 * math.pi))
         positive = amplitudes[b] > 0
-        top = infer.AMPLITUDE_RANGE * counts.max()
+        top = np.full(len(amplitudes[b]), infer.AMPLITUDE_RANGE * counts.max())
+        top[-2] = infer.CORE_RANGE * counts.max()  # the core of the beam
         scaled = x[b] / sigma[None, :]
         _s, log_det_h = np.linalg.slogdet(scaled[positive] @ scaled[positive].T)
-        half = [0.5 * math.log(math.pi / 2) - 0.5 * math.log(scaled[k] @ scaled[k]) for k in np.flatnonzero(~positive)]
-        laplace = (-len(amplitudes[b]) * math.log(top) + 0.5 * positive.sum() * math.log(2 * math.pi) - 0.5 * log_det_h
+        half = [min(0.5 * math.log(math.pi / 2) - 0.5 * math.log(max(scaled[k] @ scaled[k], 1e-300)), math.log(top[k]))
+                for k in np.flatnonzero(~positive)]
+        laplace = (-np.sum(np.log(top)) + 0.5 * positive.sum() * math.log(2 * math.pi) - 0.5 * log_det_h
                    + sum(half))
         assert log_marginal[b] == pytest.approx(dense + laplace, rel=1e-9)
         assert chi2[b] == pytest.approx(np.sum((r / sigma) ** 2), rel=1e-9)
@@ -79,7 +81,26 @@ def test_amplitudes_reproduce_a_noise_free_curve():
     target = 3.0 * x[0] + 0.5 * x[1] + 0.8 * x[2] + 0.2
     data = infer.Cut.prepare(q, target, 0.01 * target)
     _log, amplitudes, chi2 = infer.Likelihood(data, SPHERE)(_values()[None])
-    assert np.allclose(amplitudes[0], [3.0, 0.5, 0.8, 0.2], rtol=1e-6) and chi2[0] < 1e-8
+    assert np.allclose(amplitudes[0], [3.0, 0.5, 0.8, 0.0, 0.2], rtol=1e-6) and chi2[0] < 1e-8
+
+
+def test_the_core_of_the_beam_enters_only_within_reach():
+    """The Gaussian core of the beam (width σ_q) is a column where the first points lie within a few σ_q of
+    q = 0, and its height is recovered; with σ_q far below q_min it is no column, and its amplitude adds nothing
+    to the evidence."""
+    q = np.linspace(0.02, 2.0, 300)
+    data = infer.Cut.prepare(q, np.ones_like(q), np.ones_like(q))
+    wide, sharp = _values(sigma_q=0.006), _values(sigma_q=1e-4)
+    x = infer.Likelihood(data, SPHERE).columns(np.stack([wide, sharp]))
+    assert x.shape[1] == 5 and x[0, 3, 0] == pytest.approx(math.exp(-0.5 * (0.02 / 0.006) ** 2))
+    assert not np.any(x[1, 3])
+    target = 3.0 * x[0, 0] + 0.5 * x[0, 1] + 400.0 * x[0, 3] + 0.2
+    data = infer.Cut.prepare(q, target, 0.01 * target)
+    like = infer.Likelihood(data, SPHERE)
+    _log, amplitudes, chi2 = like(wide[None])
+    assert amplitudes[0, 3] == pytest.approx(400.0, rel=1e-6) and chi2[0] < 1e-8
+    log_sharp, amplitudes, _chi2 = like(sharp[None])
+    assert amplitudes[0, 3] == 0.0 and np.isfinite(log_sharp[0])
 
 
 def test_the_right_values_are_more_likely():

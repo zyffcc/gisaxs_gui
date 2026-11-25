@@ -29,7 +29,7 @@ FUNCTIONS = {"sqrt": math.sqrt, "exp": math.exp, "log": math.log, "log10": math.
 CONSTANTS = {"pi": math.pi, "e": math.e}
 RELATIONS = (">=", "<=")
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-LINEAR_KEYS = frozenset({"Int", "background", "res_amplitude", "diffuse_amplitude"})
+LINEAR_KEYS = frozenset({"Int", "background", "res_amplitude", "core_amplitude", "diffuse_amplitude"})
 """The scales (``fit_model.LINEAR``; repeated here: this module does not import the model)."""
 
 

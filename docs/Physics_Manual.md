@@ -2381,20 +2381,25 @@ Implementation: `src/gimap/features/fitting/application/curve_sources.py`, `src/
 ### 9.2 The intensity model
 
 ```text
-I(q) = BG + k · [ Σ_i Int_i · T_i(q) + A / ( 1 + (q / w)^ν ) + A_d ( 1 + (q / w_d)² )^−(1+H) ],   q = abs(q) in nm⁻¹   (9.1)
+I(q) = BG + k · [ Σ_i Int_i · T_i(q) + A / ( 1 + (q / w)^ν ) + A_c exp(−q²/2σ_q²) + A_d ( 1 + (q / w_d)² )^−(1+H) ],   q = abs(q) in nm⁻¹   (9.1)
 T_i = P_i · S_i  (LMA)   or   P_i + C_i (S_i − 1)  (DA),   P_i(0) = 1
 ```
 
 Int_i is the scale of component i. Every family is normalised to P(0) = 1 (section 9.4), so Int_i is the intensity
 of component i at q = 0 (times S_i(0)). BG is a constant background (not multiplied by k), A, w and ν the amplitude,
-width and exponent of the beam-tail term, A_d, w_d and H those of the diffuse term, and k an overall factor fixed at 1
+width and exponent of the beam-tail term, A_c the height of the core of the beam, A_d, w_d and H those of the
+diffuse term, and k an overall factor fixed at 1
 by default. By default the model depends on
 `abs(q)` only: spheres are evaluated at q_z = 0, the effective interface approximation. With the angles of the cut
 entered, spheres can use the direct and the exit-reflected path of the DWBA instead (section 9.10). The beam-tail term is
 additive, not a resolution convolution. With w ≤ 0 or ν ≤ 0 the term is 1.
 
-**The two terms at low q.** The beam tail is the wing of the resolution function about the direct and the specular
-beam; a Lorentzian profile gives ν = 2, the value Predict parameters uses. The diffuse term is the diffuse scattering
+**The terms at low q.** The direct and the specular beam appear in the cut as the resolution function: a Gaussian
+core of the width σ_q, the resolution of the particle terms, with Lorentzian wings. The beam tail is the wings
+(a Lorentzian profile gives ν = 2, the value Predict parameters uses), A_c exp(−q²/2σ_q²) the core, each with its
+own height. The core reaches the cut only where its first points lie within a few σ_q of q = 0; it is off in a new
+model (A_c = 0, fixed), and Predict parameters solves it with the other scales, at most 10⁶ times the largest
+intensity. The diffuse term is the diffuse scattering
 of a self-affine rough interface (Sinha et al., 1988) with the power spectrum (1 + q²ξ²)^−(1+H) (Palasantzas, 1993):
 ξ = 1/w_d is the correlation length and H the Hurst exponent. Beyond q = w_d it falls as q^−2(1+H). With H = 1 it is
 also the form of Debye & Bueche (1949) for large inhomogeneities. In a new model the diffuse term is off (A_d = 0,
@@ -2657,6 +2662,7 @@ Implementation: `src/gimap/features/fitting/domain/cut_model/structure.py`, `src
 | res_amplitude | Tail A | – | 0 | ≥ 0 (solved) | yes |
 | res_width | Tail w | nm⁻¹ | 0.02 | 0.001–0.1 | yes |
 | res_exponent | Tail ν | – | 3 | 1–20 | yes |
+| core_amplitude | Core A | – | 0 | ≥ 0 (solved) | no |
 | diffuse_amplitude | Diffuse A | – | 0 | ≥ 0 (solved) | no |
 | diffuse_width | Diffuse w (1/ξ) | nm⁻¹ | 0.02 | 10⁻⁴–0.1 | no |
 | diffuse_hurst | Diffuse H | – | 0.5 | 0–1 | no |

@@ -1839,8 +1839,8 @@ names the value to check. Refine from each starting solution in **Fitting** and 
 The report gives the refined R, h and D of the reported solution with their 68 % intervals (*fit intervals: R (1)
 3.17 [3.04, 3.26] nm …*: the refined value, then its interval). When the posterior's sampling did not converge,
 the intervals come from the least-squares errors. The table, the notes, Fit details and the report use the names
-of Fitting's Model table: Tail A, Tail w and Tail ν for the beam tail, Diffuse A, w and H for the diffuse term, σ_q,
-Scale, and with several populations the
+of Fitting's Model table: Tail A, Tail w and Tail ν for the beam tail, Core A for its core, Diffuse A, w and H for
+the diffuse term, σ_q, Scale, and with several populations the
 population's number in brackets (R (2), σR/R (1)). The report lists the keys of its CSV and JSON files with these
 names. The notes about the background, the beam tail and the resolution follow those about the particles.
 
@@ -1867,7 +1867,7 @@ open for later reports) follows the selected row:
   size, and where the ring is measured, shadowed or missing on the q map (how the peak was fitted and how
   peaks are found, with the thresholds of the run, is the tooltip of **Fit details**);
 - a model solution: every parameter (R, σR/R, h, D, σD/D, weight, Scale, Background, Tail A, Tail w, Tail ν,
-  Diffuse A, Diffuse w, Diffuse H, σ_q),
+  Core A, Diffuse A, Diffuse w, Diffuse H, σ_q),
   with the 68 % interval of R, h and D, its probability, χ²ᵣ with the points it is of, log RMSE, convergence and time, the points and q range, whether
   you gave the composition or the network chose it, its warnings and values at a bound, and **Show in Fitting**,
   which opens the curve in Fitting with that solution drawn.
@@ -2592,7 +2592,8 @@ Contributions are intensities that add up to the model, not particle fractions. 
   **∞** means no upper limit; untick it to enter a finite maximum.
 - **Background and beam tail**: a constant background, the beam tail A / (1 + (|q|/w)^ν) at q = 0 (**Tail A**,
   **Tail w**, **Tail ν**: the wings of the resolution function about the direct and reflected beam; Predict parameters
-  fixes ν at 2), and the q resolution **σ_q** (0, off,
+  fixes ν at 2; **Core A**: the height of the beam's Gaussian core, whose width is σ_q, off in a new model), and
+  the q resolution **σ_q** (0, off,
   by default). An overall factor k, fixed at 1 by default, multiplies the particles and the tail. The tail's ranges
   follow the curve: A up to 10× its largest intensity, w from 0.3 q_min to min(30 q_min, q_max), ν from 1 to 6.
   They are set when a curve opens with the starting model and when Refine or Search starts from the generic ranges

@@ -59,6 +59,7 @@ class Settings:
     tail_amplitude: float = 0.0
     tail_width: float = 0.02
     tail_exponent: float = 3.0
+    core_amplitude: float = 0.0
     diffuse_amplitude: float = 0.0
     diffuse_width: float = 0.02
     diffuse_hurst: float = 0.5
@@ -73,6 +74,15 @@ def tail(q, width: float, exponent: float) -> np.ndarray:
     if width <= 0 or exponent <= 0:
         return np.ones_like(q)
     return 1.0 / (1.0 + np.power(q / width, exponent))
+
+
+def core(q, sigma: float) -> np.ndarray:
+    """exp(−q²/2σ²): the Gaussian core of the resolution function about the direct and the reflected beam, of the
+    width σ of the q resolution; 0 everywhere when σ ≤ 0."""
+    q = np.abs(np.asarray(q, float))
+    if sigma <= 0:
+        return np.zeros_like(q)
+    return np.exp(-0.5 * np.square(q / sigma))
 
 
 def diffuse(q, width: float, hurst: float) -> np.ndarray:
@@ -282,16 +292,17 @@ def unit_terms(populations: Sequence[Population], settings: Settings, q,
 
 
 def evaluate(populations: Sequence[Population], settings: Settings, q, *, parts: bool = False, term=None):
-    """I(q); with ``parts``, also ``{"populations": [k·c_j·T_j], "tail": k·A·tail, "diffuse": k·A_d·diffuse,
-    "background": BG}``."""
+    """I(q); with ``parts``, also ``{"populations": [k·c_j·T_j], "tail": k·A·tail, "core": k·A_c·core,
+    "diffuse": k·A_d·diffuse, "background": BG}``."""
     q = np.abs(np.asarray(q, float))
     curves = [settings.k * p.scale * t for p, t in zip(populations, unit_terms(populations, settings, q, term))]
     beam = settings.k * settings.tail_amplitude * tail(q, settings.tail_width, settings.tail_exponent)
+    centre = settings.k * settings.core_amplitude * core(q, settings.q_resolution)
     rough = settings.k * settings.diffuse_amplitude * diffuse(q, settings.diffuse_width, settings.diffuse_hurst)
-    total = settings.background + beam + rough + (np.sum(curves, axis=0) if curves else 0.0)
+    total = settings.background + beam + centre + rough + (np.sum(curves, axis=0) if curves else 0.0)
     total = np.broadcast_to(total, q.shape).astype(float)
     if parts:
-        return total, {"populations": curves, "tail": beam, "diffuse": rough,
+        return total, {"populations": curves, "tail": beam, "core": centre, "diffuse": rough,
                        "background": np.full_like(q, settings.background)}
     return total
 

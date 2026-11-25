@@ -337,6 +337,7 @@ def cut_model_solution(row: Mapping) -> FitModel:
     g = row.get("global_params") or {}
     for key, source in (("background", "background"), ("res_amplitude", "resolution_amplitude"),
                         ("res_width", "sigma_Res"), ("res_exponent", "nu_Res"), ("q_resolution", "q_resolution"),
+                        ("core_amplitude", "core_amplitude"),
                         ("diffuse_amplitude", "diffuse_amplitude"), ("diffuse_width", "diffuse_width"),
                         ("diffuse_hurst", "diffuse_hurst"),
                         ("alpha_i", "alpha_i"), ("alpha_f", "alpha_f"), ("wavelength", "wavelength")):
