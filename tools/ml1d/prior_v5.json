@@ -1,0 +1,66 @@
+{
+ "name": "posterior_v5",
+ "description": "As posterior_v4 (same shards: the populations, the beam tail and the diffuse term are those of prior_v4), with the Gaussian core exp(-q^2/2 sigma_q^2) of the resolution function about the direct and the specular beam, of the cut's width sigma_q, drawn when a curve is used: in core_probability of the cuts, core_relative times the particles at q_min, at most core_peak times their peak at q = 0",
+ "k_weights": [
+  0.3,
+  0.4,
+  0.3
+ ],
+ "family_weights": {
+  "sphere": 0.4,
+  "vertical_cylinder": 0.35,
+  "cylinder": 0.25
+ },
+ "structure_probability": 0.7,
+ "law": "number_gauss",
+ "coupling": "lma",
+ "ratio": [
+  10,
+  300
+ ],
+ "born_probability": 0.6,
+ "born_qz": [
+  0.0,
+  1.0
+ ],
+ "reflected_probability": 0.7,
+ "qz_minus_fraction": [
+  -0.5,
+  0.9
+ ],
+ "share_decades": 2.5,
+ "tail_relative": [
+  0.001,
+  10
+ ],
+ "diffuse_relative": [
+  0.001,
+  10
+ ],
+ "background_relative": [
+  1e-05,
+  0.05
+ ],
+ "peak_counts": [
+  100,
+  10000000
+ ],
+ "points": [
+  100,
+  1000
+ ],
+ "log_spacing_probability": 0.4,
+ "gap_probability": 0.5,
+ "gap_fraction": [
+  0.0,
+  0.15
+ ],
+ "edge_probability": 0.3,
+ "edge_fraction": 0.1,
+ "core_probability": 0.5,
+ "core_relative": [
+  0.001,
+  10
+ ],
+ "core_peak": 1000000.0
+}

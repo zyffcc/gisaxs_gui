@@ -50,6 +50,7 @@ probability and flags (at a bound, unconstrained, correlated, few effective samp
 | File | What it does |
 |---|---|
 | `simulate.py` | compositions and values from a prior file; every population's term from `cut_model` on 8 points per bin (then averaged, as a measured bin), convolved with the cut's resolution (`resolution.tabulated`); shards of noise-free terms. `augment` draws shares, the amplitudes of the beam tail and the diffuse term, background, model error, measured-point layout (100–1000 points, linear or logarithmic), Poisson counts and gaps anew for every batch |
+| `prior_v5.json` | as `prior_v4.json` on the same shards, with the Gaussian core exp(−q²/2σ_q²) of the beam in half of the cuts, drawn by `augment`: 10⁻³–10 times the particles at q_min, at most 10⁶ times their peak at q = 0 |
 | `prior_v4.json` | the prior of the network that comes with GIMaP (encoding 6): as `prior_v3.json`, with the beam tail (ν = 2) and the diffuse term (1/ξ from 0.03 to 3 q_min, H from 0 to 1) in place of one tail, each with an amplitude of 10⁻³–10 times the particles at q_min |
 | `prior_v3.json` | the prior of `flow_v5` (encoding 5): as `prior_v2.json`, with the beam tail's exponent ν in [1.8, 4] |
 | `prior_v2.json` | the prior of the network before it (encoding 4): as `prior_v1.json`, and 70 % of the cuts at a q₊ have two paths, q₋ = q₊ × U(−0.5, 0.9), r uniform in [−1, 1]²; ν in [1.8, 2.2] |

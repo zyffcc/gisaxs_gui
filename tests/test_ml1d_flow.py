@@ -219,3 +219,25 @@ def test_simulator_rows_are_reproducible_and_usable():
     reflected = np.isfinite(one["qz_minus"])
     assert reflected.any() and np.array_equal(conditions[:, 3] == 1, reflected)
     assert np.all(np.abs(one["qz_minus"][reflected]) < one["qz"][reflected])
+
+
+def test_simulator_draws_the_beam_core_of_the_cuts_resolution():
+    sys.path.insert(0, str(TOOLS))
+    try:
+        import simulate
+    finally:
+        sys.path.remove(str(TOOLS))
+    prior = simulate.load_prior(TOOLS / "prior_v5.json")
+    ratio = np.full(3, 100.0)
+    sigma = np.array([0.5, 0.25, 0.01]) / 100.0  # q_min / sigma = 2, 4 and 100
+    particles = np.ones((3, E.POINTS))
+    sure = dict(prior, core_probability=1.0, core_relative=[1.0, 1.0])
+    shape = simulate.core(ratio, sigma, particles, sure, np.random.default_rng(0))
+    assert np.allclose(shape[:2, 0], 1.0) and np.all(np.diff(shape[:2], axis=1) <= 0)
+    assert np.all(shape[:2, 1] < shape[:2, 0])
+    assert shape[0, 10] > shape[1, 10] > 0 and shape[2].max() < 1e-12  # far below q_min: at most core_peak
+    none = dict(prior, core_probability=0.0)
+    assert not simulate.core(ratio, sigma, particles, none, np.random.default_rng(0)).any()
+    one = simulate.shard(simulate.load_prior(TOOLS / "prior_v4.json"), 20, 3)
+    features, *_ = simulate.inputs(one, np.arange(20), prior, np.random.default_rng(1))
+    assert np.all(np.isfinite(features))

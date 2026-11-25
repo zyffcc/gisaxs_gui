@@ -3,7 +3,7 @@ term from cut_model.
 
 Writes shards of noise-free unit terms (each population's T on its cut's grid, with the cut's resolution, and the
 shapes of the beam tail and the diffuse term); the shares of the populations, the amplitudes of the beam tail and
-the diffuse term, the background, the model error, the measured
+the diffuse term, the Gaussian core of the beam (when the prior has one), the background, the model error, the measured
 points, the counting noise and the gaps are drawn anew whenever a curve is used (``augment``), so one shard serves
 many epochs. Everything is dimensionless (q̃ = q/q_max, ``posterior.encoding``).
 
@@ -197,6 +197,8 @@ def augment(data: dict, prior: dict, rng: np.random.Generator) -> tuple[np.ndarr
         shape = np.asarray(data[key], float)
         amplitude = _log_uniform(rng, *prior[f"{key}_relative"], rows) * particles[:, 0] / np.maximum(shape[:, 0], FLOOR)
         clean += amplitude[:, None] * shape
+    if "core_relative" in prior:
+        clean += core(np.asarray(data["ratio"], float), values[:, E.RESOLUTION_DIM], particles, prior, rng)
     tau = values[:, E.ERROR_DIM]
     basis = E.error_basis(np.linspace(0.0, 1.0, E.POINTS))
     clean *= np.exp((rng.normal(size=(rows, E.ERROR_BASIS)) * tau[:, None]) @ basis)
@@ -206,6 +208,21 @@ def augment(data: dict, prior: dict, rng: np.random.Generator) -> tuple[np.ndarr
     n = np.maximum(per_bin, 1.0)
     mask = (per_bin > 0) & gaps(rng, rows, E.POINTS, prior)
     return counts / n, np.sqrt(np.maximum(counts, 1.0)) / n, mask
+
+
+def core(ratio, sigma, particles, prior: dict, rng: np.random.Generator) -> np.ndarray:
+    """The beam's Gaussian core exp(−q̃²/2σ²) on the grid of each row (B, POINTS), σ the cut's resolution, averaged
+    over each bin as ``fine_grid``: in ``core_probability`` of the rows, ``core_relative`` × the particles at q̃_min,
+    at most ``core_peak`` × their peak at q̃ = 0 (so a core far below q̃_min stays out of sight)."""
+    rows = ratio.size
+    step = np.log(ratio) / (E.POINTS - 1)
+    centres = np.exp(-np.log(ratio)[:, None] * (1.0 - np.linspace(0.0, 1.0, E.POINTS))[None, :])
+    fine = centres[:, :, None] * np.exp(((np.arange(SUB) + 0.5) / SUB - 0.5)[None, None, :] * step[:, None, None])
+    shape = np.exp(-0.5 * np.square(fine / np.asarray(sigma, float)[:, None, None])).mean(axis=2)
+    present = rng.uniform(size=rows) < prior.get("core_probability", 1.0)
+    amplitude = np.minimum(_log_uniform(rng, *prior["core_relative"], rows) * particles[:, 0]
+                           / np.maximum(shape[:, 0], FLOOR), prior["core_peak"] * particles.max(axis=1))
+    return np.where(present, amplitude, 0.0)[:, None] * shape
 
 
 def gaps(rng, rows: int, points: int, prior: dict) -> np.ndarray:
