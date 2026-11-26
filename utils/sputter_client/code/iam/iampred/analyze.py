@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from . import live as LV
+from . import numerics as NUM
 from . import registry as REG
 from . import stop_hint as SH
 
@@ -466,6 +467,7 @@ def _analysis(a, out, data, fam, tried, like, steps, status):
         if reading:
             res["reading"] = reading
     res["workers"] = int(a.workers)
+    res["numerics"] = NUM.describe()
 
 
     gp = None

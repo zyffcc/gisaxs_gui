@@ -99,7 +99,7 @@ def images(ctx, comps) -> np.ndarray:
 def check(family: str, scan: str, n: int = 2) -> int:
     "Closure check on the family's reference solutions of one scan (first and last of n windows; run in a process"
     from . import adapter as A
-    from . import references as RF
+    from . import ref_override as RF
     from . import registry as REG
     from . import runner
     cfg = REG.load(family)
