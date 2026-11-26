@@ -29,12 +29,13 @@ from .application import (
     PredictionSequenceRules,
 )
 from .infrastructure import (
-    FabioPredictionImageRepository,
+    DetectorPredictionImageRepository,
     LocalPredictionFileCatalog,
     LocalPredictionExportRepository,
     ModuleEntryPreprocessor,
     NumpyPredictionMaskRepository,
     PreferencesModelPathStore,
+    ProfileFrameContexts,
     YamlModuleRepository,
 )
 from .presentation import PredictionViewModel
@@ -49,13 +50,16 @@ def create_prediction_view_model(
     # The model folder a user imports is kept in the user preferences, never in module.yaml.
     modules = YamlModuleRepository(root, PreferencesModelPathStore(context.preferences))
     files = LocalPredictionFileCatalog()
-    images = FabioPredictionImageRepository()
+    images = DetectorPredictionImageRepository()  # CBF, EDF and TIFF through GIMaP's readers
+    # A module that asks is told about the frames: the geometry of the instrument profile matching them.
+    contexts = ProfileFrameContexts(context.instrument_profiles)
     masks = NumpyPredictionMaskRepository()
     preprocessor = ModuleEntryPreprocessor()
-    predictor = TensorFlowPredictor(runner=context.jobs)
+    # The model stays loaded in a kept worker between frames (about 10 s saved per frame).
+    predictor = TensorFlowPredictor(runner=context.model_jobs or context.jobs)
     exports = LocalPredictionExportRepository()
     load_image = LoadPredictionImage(images)
-    predict_image = PredictImage(preprocessor, predictor)
+    predict_image = PredictImage(preprocessor, predictor, contexts)
     predict_file = PredictFileBatch(load_image, predict_image)
     return PredictionViewModel(
         context=context,
@@ -68,7 +72,7 @@ def create_prediction_view_model(
         discover_files=DiscoverPredictionFiles(files),
         load_image=load_image,
         load_mask=LoadPredictionMask(masks),
-        prepare_input=PreparePredictionInput(preprocessor),
+        prepare_input=PreparePredictionInput(preprocessor, contexts),
         predict_prepared=PredictPreparedInput(predictor),
         predict_image=predict_image,
         predict_file=predict_file,

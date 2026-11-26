@@ -223,7 +223,7 @@ class PredictionViewModel:
         if selected is None:
             return None
         try:
-            return self._prepare_input.execute(image, selected)
+            return self._prepare_input.execute(image, selected, self.state.current_image)
         except Exception as exc:
             self.state = replace(self.state, prediction_status="error", error_message=str(exc))
             return None

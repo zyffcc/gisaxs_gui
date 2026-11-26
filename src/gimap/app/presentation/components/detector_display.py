@@ -85,10 +85,72 @@ def display_image(data: np.ndarray, valid: Optional[np.ndarray], log_scale: bool
     return logged, sample
 
 
+class GrowingDisplay:
+    """``display_image`` of a picture that grows by rows (a live Series map: ``series_growing``), made only for the
+    rows that are new: ``show(picture, same, log)`` gives what ``valid = np.isfinite(picture)`` and
+    ``display_image(picture, valid, log)`` give, value for value (``tests/test_series_growing.py``).
+
+    The rows made before stay in arrays that grow in place (``shared.growing_rows``). In log display the floor of
+    the pixels at or below 0 comes from the sample of all rows; when it changes, it is written again into the rows
+    before (the pixels that have it are kept). The sample is taken without the floor, as ``display_image`` takes it.
+    One picture is shown at a time (the caller sees to it)."""
+
+    def __init__(self) -> None:
+        self._kept = None  # (log, columns, valid rows, shown rows, floor pixels or None, floor or None)
+
+    def forget(self) -> None:
+        self._kept = None
+
+    def show(self, picture: np.ndarray, same: int, log_scale: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """``(valid, shown, level_sample)`` of ``picture``; ``same``: rows at its start that are the rows of the
+        picture shown before (``0``: all are new)."""
+        from src.gimap.shared.growing_rows import GrowingRows
+
+        picture = np.asarray(picture)
+        kept, self._kept = self._kept, None
+        if (kept is None or kept[0] != bool(log_scale) or kept[1] != picture.shape[1:] or not 0 < same == kept[2].rows
+                or picture.ndim != 2):
+            same, kept = 0, None
+        valid = np.isfinite(picture[same:])
+        shown = np.array(np.asarray(picture[same:], dtype=np.float32), dtype=np.float32, copy=True)
+        shown[~valid] = np.nan
+        floor_at = None
+        if log_scale:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                positive = shown > 0
+                floor_at = np.isfinite(shown) & ~positive
+                shown = np.where(positive, np.log10(shown), np.nan).astype(np.float32)
+        if kept is None:
+            kept = [bool(log_scale), picture.shape[1:], GrowingRows(valid), GrowingRows(shown),
+                    None if floor_at is None else GrowingRows(floor_at), None]
+        else:
+            kept[2].extend(valid)
+            kept[3].extend(shown)
+            if floor_at is not None:
+                kept[4].extend(floor_at)
+        all_valid, all_shown = kept[2].view(), kept[3].view()
+        if not log_scale:
+            self._kept = kept
+            return all_valid, all_shown, _sample(all_shown)
+        floors = kept[4].view()
+        sample = _sample(all_shown).copy()
+        sample[_sample(floors)] = np.nan  # (the sample of the logged values, without the floor)
+        finite = sample[np.isfinite(sample)]
+        lower = finite if finite.size else all_shown[np.isfinite(all_shown) & ~floors]
+        floor = np.float32(np.percentile(lower, FLOOR_PERCENTILE)) if lower.size else None
+        if floor != kept[5] or floor is None:
+            np.putmask(all_shown, floors, np.nan if floor is None else floor)  # (all rows: the floor changed)
+        else:
+            np.putmask(all_shown[same:], floors[same:], floor)
+        kept[5] = floor
+        self._kept = kept
+        return all_valid, all_shown, sample
+
+
 def display_array(data: np.ndarray, valid: Optional[np.ndarray], log_scale: bool) -> np.ndarray:
     """float32 array to draw (``display_image``): NaN where invalid (drawn transparent), log10 if asked, values at or
     below 0 at the lowest colour of a log display."""
     return display_image(data, valid, log_scale)[0]
 
 
-__all__ = ["FLOOR_PERCENTILE", "display_array", "display_image", "display_levels"]
+__all__ = ["FLOOR_PERCENTILE", "GrowingDisplay", "display_array", "display_image", "display_levels"]

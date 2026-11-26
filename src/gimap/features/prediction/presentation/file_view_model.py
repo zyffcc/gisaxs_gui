@@ -26,6 +26,11 @@ class PredictionFileViewModel:
             self._on_error(str(exc))
             return ()
 
+    def look_folder(self, folder: Path, suffixes: tuple[str, ...], skip: frozenset = frozenset()):
+        """The frame files of ``folder`` as a watch sees them, but those in ``skip``; raises ``OSError`` when it
+        cannot be listed."""
+        return self._files.look(Path(folder), suffixes, skip)
+
     def file_index(self, file_name: str):
         return self._sequence_rules.file_index(file_name)
 

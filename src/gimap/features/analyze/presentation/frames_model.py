@@ -372,8 +372,19 @@ class FramesModelMixin(ImportSelectionMixin):
 
     def frame_numbers(self) -> FrameNumbers:
         """``(source key, frame index)`` → the number of the frame in the listed series, from 1 (for one
-        multi-frame source: the frame in the file) — what the frame axis of a Series map counts in."""
-        return FrameNumbers((path, self.known_frame_count(path)) for path in self.state.files)
+        multi-frame source: the frame in the file) — what the frame axis of a Series map counts in.
+
+        Kept while the list and the frame counts stay as they were (a folder watch asks for every frame that
+        arrives; with 18 000 files listed, making the numbers took a tenth of a second, comparing the list a
+        millisecond: the same path objects). Not kept while a count could not be read (it is asked again)."""
+        files, counts = self.state.files, self._frame_counts
+        kept = getattr(self, "_numbers_kept", None)
+        if kept is not None and kept[0] == files and kept[1] == counts:
+            return kept[2]
+        numbers = FrameNumbers((path, self.known_frame_count(path)) for path in files)
+        read = all(source_key(path) in self._frame_counts for path in files)
+        self._numbers_kept = (list(files), dict(self._frame_counts), numbers) if read else None
+        return numbers
 
     def _watch_groups(self, frames: Sequence[FrameRef]) -> list[AnalysisRequest]:
         """Requests for frames the folder watch found (``sources_model.watch_requests``); with summing, only

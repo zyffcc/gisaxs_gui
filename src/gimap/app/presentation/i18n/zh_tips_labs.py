@@ -42,10 +42,12 @@ TIPS_LABS_ZH = {
     "PyTorch is checked when you press Predict": "按“预测”时检查 PyTorch",
     "Model: bundled with GIMaP · Python: {python}": "模型：随 GIMaP 提供 · Python：{python}",
     # -- 2D Prediction ----------------------------------------------------------------------------------------------
-    "A CBF detector frame (.cbf), or the first of a numbered series, to predict from: prediction reads CBF frames "
-    "only.": "用于预测的 CBF 探测器帧（.cbf），或编号序列的第一帧：预测只读取 CBF 帧。",
-    "A folder of numbered CBF frames (.cbf): those in the range below are used.":
-        "带编号的 CBF 帧（.cbf）所在的文件夹：使用下面范围内的帧。",
+    "A detector frame (CBF, EDF or TIFF), or the first of a numbered series, to predict from: use frames like "
+    "those the module was trained on.":
+        "用于预测的探测器帧（CBF、EDF 或 TIFF），或编号序列的第一帧：请使用与模块训练数据相同类型的帧。",
+    "A folder of numbered detector frames (CBF, EDF or TIFF; the format most of them have): those in the range "
+    "below are used.":
+        "带编号的探测器帧（CBF、EDF 或 TIFF；取大多数帧的格式）所在的文件夹：使用下面范围内的帧。",
     "How many consecutive detector files contribute to this prediction.": "叠加数决定有多少个连续的探测器文件参与这次预测。",
     "Model: Canceled": "模型：已取消",
     # -- Trainset Build -------------------------------------------------------------------------------------------

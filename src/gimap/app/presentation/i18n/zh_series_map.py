@@ -40,11 +40,14 @@ SERIES_MAP_ZH = {
     # -- what the map is (the line above it) ------------------------------------------------------------------------
     "{n} frames of {name}": "{name} 的 {n} 帧",
     "{n} of {listed} frames of {name}": "{name} 的 {listed} 帧中的 {n} 帧",
+    "{n} new frames still to be added": "还有 {n} 帧新帧待加入",
     "{n} rows of {name}": "{name} 的 {n} 行",
     "each row the sum of {n} frames": "每行是 {n} 帧之和",
     "each row the sum of {n} frames; the last row sums only {last} of {n} frames":
         "每行是 {n} 帧之和；最后一行只有 {n} 帧中的 {last} 帧",
     "time from the frames' time stamps": "时间取自各帧的时间戳",
+    "time from the files' modification times (they agree with the header time stamps)":
+        "时间取自各文件的修改时间（与文件头的时间戳相符）",
     "time = frame × exposure": "时间 = 帧号 × 曝光时间",
     "{axis} > 0 half": "{axis} > 0 半边",
     "{axis} < 0 half": "{axis} < 0 半边",
@@ -149,6 +152,42 @@ SERIES_MAP_ZH = {
     "The trace has no values yet.": "随帧变化的曲线还没有数值。",
     "Could not export the curve: {error}": "无法导出曲线：{error}",
     "Could not export the trace: {error}": "无法导出随帧变化的曲线：{error}",
+    # -- frames at several incidence angles, frames of several exposure times (bindings/series_mixed.py)
+    "αi {angle}° · {n} frames": "αi {angle}° · {n} 帧",
+    "All angles · {n} frames": "所有入射角 · {n} 帧",
+    "No αi · {n} frames": "无 αi · {n} 帧",
+    "αi {angle}° only ({n} frames at other angles: choose them in the αi list)":
+        "仅 αi {angle}°（其他入射角的 {n} 帧：在 αi 列表中选择）",
+    "The incidence angle αi this map holds. Frames measured at other angles are cut at the same detector rows, which "
+    "is another exit angle there: each angle has its own map, or choose all angles.":
+        "这张热图包含的入射角 αi。在其他入射角测得的帧切在相同的探测器行上，对它们而言那是另一个出射角："
+        "每个入射角各有一张热图，也可以选择所有入射角。",
+    "These frames have different exposure times ({times} s) and their intensities are not divided by them.":
+        "这些帧的曝光时间不同（{times} s），强度没有除以曝光时间。",
+    "Divide by the exposure time of the file header": "除以文件头中的曝光时间",
+    # -- events of the run on the map (bindings/series_events.py)
+    "Events": "事件",
+    "Events File…": "事件文件…",
+    "Events of the Run": "运行中的事件",
+    "Events of the run": "运行中的事件",
+    "Events (*.csv *.txt)": "事件文件 (*.csv *.txt)",
+    "No events file": "没有事件文件",
+    "{total} events of {name}: marked on the map once it is built": "{name} 的 {total} 个事件：生成热图后标在图上",
+    "No events on the map": "热图上不标事件",
+    "{n} of {total} events of {name} on the map": "{name} 的 {total} 个事件中有 {n} 个标在热图上",
+    "None of the {total} events of {name} lies within the frames' times: check that the events and the frames were "
+    "stamped by the same clock and time zone.":
+        "{name} 的 {total} 个事件都不在各帧的时间范围内：请检查事件和帧是否用同一个时钟和时区记录时间。",
+    "The frames carry no time: the events of {name} cannot be placed.": "这些帧没有时间：无法放置 {name} 的事件。",
+    "Could not read the events: {error}": "无法读取事件：{error}",
+    "{name} has no time column (utc, time, timestamp, datetime or date) with ISO times.":
+        "{name} 没有含 ISO 时间的时间列（utc、time、timestamp、datetime 或 date）。",
+    "{name} holds no event with a time.": "{name} 中没有带时间的事件。",
+    "Mark the events of the run (spray pulses, shutter openings) on the map: a CSV table with a time column (utc, "
+    "time or timestamp; ISO times) and optionally a label column. A file that grows during the run is read again as "
+    "the map is drawn.":
+        "在热图上标出运行中的事件（喷涂脉冲、快门打开）：一个 CSV 表，含时间列（utc、time 或 timestamp；ISO 时间），"
+        "可另有标签列。运行中不断增长的文件在每次重画热图时重新读取。",
 }
 
 __all__ = ["SERIES_MAP_ZH"]

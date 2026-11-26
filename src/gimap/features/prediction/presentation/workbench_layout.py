@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from PyQt5.QtCore import QPoint, Qt, QTimer
 from PyQt5.QtWidgets import (
+    QCheckBox,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QProgressBar,
     QScrollArea,
@@ -26,8 +28,11 @@ from .workflow_components import (
 )
 
 EMPTY_TITLE = "Import detector data"
-EMPTY_MESSAGE = "Choose or drop a CBF frame, or a folder of numbered CBF frames."
-EMPTY_ACTION = "Choose CBF frame…"
+EMPTY_MESSAGE = "Choose or drop a detector frame (CBF, EDF, TIFF), or a folder of numbered frames."
+EMPTY_ACTION = "Choose detector frame…"
+FOLLOW_TEXT = "Show the newest result"
+FOLLOW_TIP = ("While a folder batch runs, the canvas shows its newest completed prediction, at most once a second "
+              "(without the Preprocessed panel). Choosing a row unticks this, so that row stays in the canvas.")
 CANVAS_CARD_MIN_HEIGHT = 500
 CANVAS_TABS_MIN_HEIGHT = 430  # as set by control_style for gisaxsPredictImageShowTabWidget
 
@@ -205,7 +210,7 @@ class PredictionWorkbenchLayout:
             empty_message=EMPTY_MESSAGE,
         )
         self.plot_panel.setObjectName("predictionPlotPanel")
-        # A file dropped on the canvas is opened like a chosen one (the binding refuses what is not CBF).
+        # A file dropped on the canvas is opened like a chosen one (the binding refuses what is not a frame).
         self._input_chooser = None
         self._file_drop = FileDropFilter(self.plot_panel, self._file_dropped)
         self._drop_handler = None
@@ -253,7 +258,7 @@ class PredictionWorkbenchLayout:
         layout.addWidget(self.plot_panel, 1)
         self.input_empty_state = PredictionCanvasEmptyState(
             self.ui.gisaxsImageGraphicsView,
-            "Import a CBF frame or folder batch\nto preview the GISAXS input.",
+            "Import a detector frame or folder batch\nto preview the GISAXS input.",
         )
         self.result_empty_state = PredictionCanvasEmptyState(
             self.ui.predict2dGraphicsView,
@@ -276,7 +281,18 @@ class PredictionWorkbenchLayout:
         self.batch_current_file_label.setObjectName("predictionBatchCurrentFileLabel")
         self.batch_current_file_label.setProperty("cardMeta", True)
         self.batch_current_file_label.setWordWrap(True)
-        self.batch_results_section.add_widget(self.batch_current_file_label)
+        # Which result the canvas shows, and whether it follows a running batch (bindings/live_canvas.py).
+        self.batch_follow_newest_check = QCheckBox(FOLLOW_TEXT, right_contents)
+        self.batch_follow_newest_check.setObjectName("predictionBatchFollowNewestCheck")
+        self.batch_follow_newest_check.setToolTip(FOLLOW_TIP)
+        self.batch_follow_newest_check.setChecked(True)
+        shown_row = QWidget(right_contents)
+        shown_layout = QHBoxLayout(shown_row)
+        shown_layout.setContentsMargins(0, 0, 0, 0)
+        shown_layout.setSpacing(12)
+        shown_layout.addWidget(self.batch_current_file_label, 1)
+        shown_layout.addWidget(self.batch_follow_newest_check, 0, Qt.AlignVCenter)
+        self.batch_results_section.add_widget(shown_row)
         # The result table and its filter row scroll sideways in a narrow window instead of
         # widening the whole canvas column past the window edge.
         batch_scroll = QScrollArea(self.batch_results_section.content)
@@ -312,6 +328,7 @@ class PredictionWorkbenchLayout:
         self.ui.predictionBatchResultsHost = self.batch_results_host
         self.ui.predictionBatchResultsHostLayout = self.batch_results_host_layout
         self.ui.predictionBatchCurrentFileLabel = self.batch_current_file_label
+        self.ui.predictionBatchFollowNewestCheck = self.batch_follow_newest_check
         self._sync_canvas_actions(self.ui.gisaxsPredictImageShowTabWidget.currentIndex())
         self.sync_canvas_state(input_ready=False, result_ready=False)
 
@@ -418,8 +435,8 @@ class PredictionWorkbenchLayout:
     def sync_canvas_state(self, *, input_ready: bool, result_ready: bool) -> None:
         self._canvas_input_ready = bool(input_ready)
         self._canvas_result_ready = bool(result_ready)
-        if not input_ready:
-            # The empty state keeps its "Choose CBF frame…" button (show_empty without text keeps it).
+        if not input_ready and not result_ready:  # (a batch result is shown also without an input preview)
+            # The empty state keeps its "Choose detector frame…" button (show_empty without text keeps it).
             self._show_empty_content()
             self.plot_panel.show_empty()
             self.canvas_status_label.setText("")

@@ -326,7 +326,7 @@ class SetupStatusMixin:
             btn.clicked.connect(self._choose_gisaxs_file)
         workbench = getattr(self.ui, "predictionWorkbenchLayout", None)
         if workbench is not None and hasattr(workbench, "set_input_actions"):
-            # The empty canvas's "Choose CBF frame…" and a file dropped on the canvas open a frame here;
+            # The empty canvas's "Choose detector frame…" and a file dropped on the canvas open a frame here;
             # a dropped folder becomes the folder batch.
             workbench.set_input_actions(
                 choose=lambda: self._choose_gisaxs_file(), dropped=lambda path: self._handle_dropped_input(path)

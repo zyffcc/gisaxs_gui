@@ -100,7 +100,8 @@ class AnalyzeViewModel(
         self.state = AnalyzeState(
             corrections=Corrections(gap_guard_px=self.stored_gap_guard(), bad_pixels=self.stored_bad_pixels())
         )
-        self.watch = FolderWatch(frames.expand, frames.settled_size, source_stamp(frames))
+        self.watch = FolderWatch(frames.expand, frames.settled_size, source_stamp(frames),
+                                 getattr(frames, "complete", None))
         self._init_frames()
         self._init_sources()
 

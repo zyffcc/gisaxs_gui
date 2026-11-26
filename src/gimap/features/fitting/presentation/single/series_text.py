@@ -8,9 +8,10 @@ import os
 from pathlib import Path
 from typing import Sequence
 
-STATE_MARK = {"waiting": "·", "running": "▸", "done": "✓", "warn": "!", "stopped": "■", "failed": "✗"}
+STATE_MARK = {"waiting": "·", "running": "▸", "done": "✓", "warn": "!", "stopped": "■", "failed": "✗",
+              "other angle": "–"}
 """A frame's state in the list: not fitted yet, being fitted, fitted, fitted but not to be trusted as it is
-(not converged, a poor fit), stopped in the middle of its fit, no fit."""
+(not converged, a poor fit), stopped in the middle of its fit, no fit, measured at another αi (not fitted)."""
 STATE_COLOR = {"warn": "warning", "stopped": "warning", "failed": "danger"}
 """The theme colour of a frame's line by its state; the other states keep the list's own colour."""
 FIGURE_SPACE = " "

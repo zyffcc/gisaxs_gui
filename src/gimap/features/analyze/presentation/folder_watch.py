@@ -8,6 +8,7 @@ then has been in its files for a whole look and can be read, while its newest pa
 from __future__ import annotations
 
 import itertools
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +27,8 @@ class WatchScan:
     """``(path, why)`` of the sources that could not be measured (their writer still holds them)."""
     moment: float = field(default_factory=time.monotonic)
     """When the look was made (``time.monotonic``): how long a new source has rested (``FolderWatch.settle_s``)."""
+    complete: frozenset = frozenset()
+    """Keys of the new or changed sources that say themselves they are completely written (``complete_of``)."""
 
 
 class FolderWatch:
@@ -48,6 +51,10 @@ class FolderWatch:
     (0, the default: two looks the same are enough) — for a detector that pauses while it writes a file, so that
     a half-written frame is never read.
 
+    ``complete_of`` (optional): ``True`` for a source that is completely written by what it says itself (an EDF as
+    long as its header announces, with its side file). With ``settle_s`` 0 such a new source is reported at the first
+    look that sees it, without waiting for a second.
+
     ``poll`` is ``take(scan())``.  ``scan`` only reads the folder and changes nothing here, so it may
     run on another thread while the window stays free; ``take`` applies it on the caller's thread.
     """
@@ -57,10 +64,15 @@ class FolderWatch:
         expand: Callable[[Sequence[Path]], list[Path]],
         size_of: Optional[Callable[[Path], int]] = None,
         stamp_of: Optional[Callable[[Path], object]] = None,
+        complete_of: Optional[Callable[[Path], bool]] = None,
     ):
         self._expand = expand
+        self._complete_of = complete_of
         self._keys: dict[str, str] = {}
         """A path as given → its key (resolving a path asks the file system: thousands of times per look otherwise)."""
+        self._folders: dict[str, str] = {}
+        """A folder as given → resolved: a key is the resolved folder and the name (one call per folder, not per
+        file: resolving 20 000 frames one by one took 14 s)."""
         self._size_of = size_of or (lambda path: Path(path).stat().st_size)
         self._stamp_of = stamp_of
         self.folder: Optional[Path] = None
@@ -116,14 +128,22 @@ class FolderWatch:
         folder, number = self.folder, next(self._numbers)
         if folder is None or not folder.is_dir():
             return None
-        sources, waiting = [], []
+        sources, waiting, complete = [], [], set()
+        known = dict(self._known)  # (taken on the caller's thread meanwhile: a copy to read)
         for path in self._expand([folder]):
             state, why = self._measure(path)
             if state is None:
                 waiting.append((path, why))
-            else:
-                sources.append((path, self._key(path), state))
-        return WatchScan(number, folder, tuple(sources), tuple(waiting))
+                continue
+            key = self._key(path)
+            sources.append((path, key, state))
+            if self._complete_of is not None and key not in known:
+                try:
+                    if self._complete_of(path):
+                        complete.add(key)
+                except OSError:
+                    pass
+        return WatchScan(number, folder, tuple(sources), tuple(waiting), complete=frozenset(complete))
 
     def take(self, scan: Optional[WatchScan]) -> list[Path]:
         """Apply a look at the folder: the new, completely written frames since the last one (oldest name
@@ -144,7 +164,8 @@ class FolderWatch:
             if before != state:
                 self._since[key] = scan.moment
             rested = scan.moment - self._since.get(key, scan.moment) >= float(self.settle_s or 0.0)
-            if (known or state[0] > 0) and before == state and (known or rested):  # the same at two looks: it rests
+            whole = not known and state[0] > 0 and key in scan.complete and not float(self.settle_s or 0.0)
+            if whole or (known or state[0] > 0) and before == state and (known or rested):  # the same at two looks: it rests
                 self._sizes.pop(key, None)
                 self._since.pop(key, None)
                 self._known[key] = state
@@ -177,7 +198,12 @@ class FolderWatch:
         if key is None:
             if len(self._keys) > 200_000:  # (a watch of very many files: start the cache again)
                 self._keys.clear()
-            key = self._keys[text] = str(Path(path).resolve()).casefold()
+                self._folders.clear()
+            folder, name = os.path.split(text)
+            resolved = self._folders.get(folder)
+            if resolved is None:
+                resolved = self._folders[folder] = str(Path(folder or ".").resolve())
+            key = self._keys[text] = os.path.join(resolved, name).casefold()
         return key
 
 

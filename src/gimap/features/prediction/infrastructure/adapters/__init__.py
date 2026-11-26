@@ -1,5 +1,6 @@
 """Prediction adapters。"""
 
+from .detector_images import DetectorPredictionImageRepository, ProfileFrameContexts
 from .fabio_images import FabioPredictionImageRepository, LocalPredictionFileCatalog
 from .module_preprocessing import ModuleEntryPreprocessor
 from .model_paths import InMemoryModelPathStore, PreferencesModelPathStore
@@ -8,6 +9,7 @@ from .local_exports import LocalPredictionExportRepository
 from .numpy_masks import NumpyPredictionMaskRepository
 
 __all__ = [
+    "DetectorPredictionImageRepository",
     "FabioPredictionImageRepository",
     "InMemoryModelPathStore",
     "LocalPredictionFileCatalog",
@@ -15,6 +17,7 @@ __all__ = [
     "ModuleEntryPreprocessor",
     "NumpyPredictionMaskRepository",
     "PreferencesModelPathStore",
+    "ProfileFrameContexts",
     "YamlModuleRepository",
     "module_to_legacy_dict",
 ]

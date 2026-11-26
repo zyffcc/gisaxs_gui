@@ -134,6 +134,7 @@ class YamlModuleRepository:
                 params=dict(params),
             ),
             input_type=str(io.get("input_type", "cbf")),
+            needs_geometry=str(io.get("geometry", "") or "").strip().lower() == "required",
             stack_axis=int(io.get("stack_axis", 0)),
             input_shape=input_shape,
             outputs=output_spec,

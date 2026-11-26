@@ -239,3 +239,19 @@ def test_frames_of_another_detector_are_not_added_to_the_list() -> None:
     text = other_detector(sources, (2048, 2048), "Perkin")
     assert text.startswith("These frames are 1043×981 (detector not named); the frames listed are 2048×2048 (Perkin)")
     assert other_detector(sources, (1043, 981)) is None and other_detector(sources, None) is None
+
+
+def test_a_folder_that_changes_all_the_time_is_not_listed_again_for_every_frame(tmp_path: Path) -> None:
+    from src.gimap.features.analyze.application import geometry_files
+
+    frame = tmp_path / "run7_00012.cbf"
+    frame.write_bytes(b"")
+    (tmp_path / "LaB6.poni").write_text("x", encoding="utf-8")
+    assert sibling_poni(frame).name == "LaB6.poni"
+    key = str(tmp_path).casefold()
+    when, changed, found, _took = geometry_files._PONI_LISTINGS[key]
+    geometry_files._PONI_LISTINGS[key] = (when, changed, found, 60.0)  # as if listing the folder took a minute
+    (tmp_path / "run7.poni").write_text("x", encoding="utf-8")  # the folder changed meanwhile
+    assert sibling_poni(frame).name == "LaB6.poni"  # the listing before is still taken
+    geometry_files._PONI_LISTINGS[key] = (when - 601.0, changed, found, 60.0)  # ten listings' time later
+    assert sibling_poni(frame).name == "run7.poni"

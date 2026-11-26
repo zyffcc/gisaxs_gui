@@ -91,6 +91,10 @@ class TaskRunner(QObject):
     def is_busy(self) -> bool:
         return bool(self._pending)
 
+    def is_pending(self, ticket: int) -> bool:
+        """The task ``ticket`` was submitted and has not finished (also when it was cancelled: it still runs)."""
+        return ticket in self._pending
+
     def is_current(self, key: str, ticket: int) -> bool:
         return self._latest.get(key) == ticket
 

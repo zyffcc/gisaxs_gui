@@ -13,8 +13,13 @@
   `watch_series.py`（完整新帧追加到序列热图）、`frame_import.py`（后台检查源、虚拟帧列表；`show_summed` / `summed_locked`：
   溅射页“在分析中查看”把一个时间窗的帧换进列表并按全部帧求和显示，见 `docs/ui/workspaces/sputter.md`）、
   `fit_handover.py`（Send to Fitting）、`batch_export.py` / `batch_run.py`、`profile_actions.py`、`series.py`（及 `series_display.py`、
-  `series_pick.py`、`series_exports.py`、`series_stages.py`、`series_fit_results.py`）。视图模型的帧与源：
-  `frames_model.py`、`sources_model.py`、`frame_selection.py`、`frame_sequences.py`、`folder_watch.py`。
+  `series_pick.py`、`series_exports.py`、`series_stages.py`、`series_fit_results.py`、`series_mixed.py`（一张热图一个 αi、
+  曝光不同的提示，`application/series_angles.py`）、`series_events.py`（事件文件标在热图上，`application/series_events.py`））。
+  视图模型的帧与源：`frames_model.py`、`sources_model.py`、`frame_selection.py`、`frame_sequences.py`、`folder_watch.py`
+  （`complete_of`：自报写完的 EDF 第一次查看即读；`batch_watch.py` 的 `QFileSystemWatcher` 在文件夹变化时立刻查看）。
+- ALS 7.3.3 的帧：`shared/detector_io/module_gaps.py`（存为 0 的 Pilatus 模块缝隙）、`side_files.py`（`.txt` 旁文件的 αi 与
+  监视器）、`completeness.py`（EDF 是否写完）；模拟一次喷涂运行并按节奏回放：`tools/beamline_sim.py`。测试：
+  `tests/test_als733_frames.py`、`tests/test_beamline_sim.py`。
 - 共享组件：`app/presentation/components/`（DetectorView、CurvePlot、StepRail、SegmentedControl、EmptyState、Toast）。
 - NXcanSAS 导出：导出步骤的 “Also as NXcanSAS (.h5)”（`export_nxcansas_check`，记在 `preferences.nxcansas`，视图模型
   `export_nxcansas`）→ `ExportAnalysis(..., nxcansas=True)` / `.curves(..., nxcansas=True)` / `.nxcansas()`（批量导出
@@ -137,7 +142,7 @@ Ask AI… 用同样的工具（GIWAXS 或 GISAXS 的结果选项随当前模式�
   Change along the series；Stages as Table；Batch Export 可跳过异常帧；Send to Compare）。方法与验收见 [compare.md](compare.md)。
 
 - 列出多个文件、打开文件夹或多帧 NeXus 后，Series ▸ 选择曲线（只有一帧时这里只说明怎样得到序列，控件隐藏；Export 在有热图后出现）（GISAXS 默认水平切线，GIWAXS 默认 I(q)）▸ Build Map：
-  每帧（或每组相加帧）用当前设置处理，热图逐步长出来（至多每秒重画一次）；和 Batch Export 共用同一个运行器
+  每帧（或每组相加帧）用当前设置处理，热图逐步长出来（至多每秒重画一次；间隔至少为上次显示耗时的 `PACE` = 4 倍和上次拼图耗时的 `STACK_PACE` = 2 倍，`batch_live.redraw_wait_s`，监视时的 `watch_series` 同样；超过 `LATER_ROWS` = 1000 行时在热图自己的线程里拼图，`bindings/series_later.py`，界面线程只显示；帧轴只给视野里的行设刻度，`series_display.frame_ticks(shown=…)`；到达的行与之前的行 x 相同时共用一个数组，`application.series_map.share_x`）；和 Batch Export 共用同一个运行器
   （`bindings/batch_run.py`）：长序列在多个低优先级进程里同时处理，面板显示进度、剩余时间，可暂停 / 停止（已处理的行保留）。
 - Batch Export 运行时同样把每帧的行实时加进 Series 热图，下方曲线跟随最新的一帧（点热图某行即停止跟随）；
   速度 Gentle / Balanced / Fast（`application/batch_job.py: frames_at_once`：核心数、一半空闲内存、每帧约 100 B/像素；
@@ -446,6 +451,7 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
     带参考峰原位校正的 Batch Export 图会提示重新建图，不追加常规监视处理的新行；避免把已校正和未校正的数据混在一起。
     点选热图行会停止跟随最新行，并保留选中的行、q 窗口和缩放；Series ▸ Options ▸ Show the newest frame 可以恢复跟随。
     Stop Watch、Clear 和关闭页面丢弃迟到的热图结果。
+  - **长测量**（几万帧，每秒十帧）：同时只处理几帧新帧（`bindings/watch_pace.py`，`application.batch_job.watch_frames_at_once`：按核数 2 到 4 帧，空闲内存少时更少），其余排队按顺序开始，屏幕上的帧不排队；一百万像素及以上、只要热图行的帧交给监视自己的工作进程（`view_model.open_workers`、`batch_model.watch_frame_job`：`ROW_ONLY` 什么都不写，`_watch_poll` 每 50 ms 收结果；子进程没给出行时在本进程重算以说明原因，子进程停掉时改回线程），小帧仍在线程里；停止监视时清掉排队等热图的帧，等导出的帧照旧导出。每看一次只做与新帧有关的事：`frames_model.frame_numbers()` 在列表和帧数不变时沿用（与上次的列表逐个比对象），没有 Sum 和每 n 帧时用帧号判断新帧是否在热图范围内（`watch_series._watch_series_in_run`，不再每次把整个列表分组），`_series_row_of` 用索引找同一帧的行，数据列表的源名和帧沿用（`frame_import._frame_list_span`），`FrameListingModel.row_for` 用索引，文件夹列表沿用每帧的 `Path` 和自然排序的键（`adapters/frames.py`）。下一次查看至少隔上一次查看所用的时间（`batch_watch.NOTICED_MS`），监视最多占一半时间；文件夹的变化通知不再推迟已排好的查看。监视期间屏幕上的帧一次只分析一帧（`watch_pace._analysis_waits`：`page.run_analysis` 在上一次分析未完成时只记下“还要分析”，上一次的结果显示后由 `_analysis_done` / `_analysis_error` 接着分析当时选中的最新帧；上一次被取消、不再交结果时每 `ANALYSIS_CHECK_MS` 检查一次）。实时热图从上一张长出（`series_later.LiveStack`：`application.series_growing.GrowingSeriesMap`只为新到的行算行信息、拼图像行和显示图行，`GrowingDisplay` 只为新行做 `display_image`，对数显示的底值变了才重写旧行；数组用 `shared.growing_rows.GrowingRows` 原地增长，先前显示的热图是前几行的视图、不受影响）。前面的行换了对象、帧号变了、曲线 / 两半 / 标题 / 求和变了、或有一行的点与第一行不同时整张重拼；批量结束时的最后一张照样长出，换曲线、视图、入射角、生成热图、打开项目等不是实时的重画整张重拼（`_show_series_map(live=False)` 先 `_series_live_forget()`）。与整张重拼逐值相同：`tests/test_series_growing.py`。阶段一次只查找一张热图（`series_stages._stages_then`：查找未完成时只记下“还要查找”，结束后查找当时显示的热图；`tests/test_series_stage_pace.py`）。
   - **相加的末尾短组**：新帧补齐原分组后，重新处理这一组并替换短组行，分组起点不移动。自动导出的完整组可包含开始
     监视前已在短组中的帧，文件名里的 `_sumN` 和 JSON 都记录实际相加的帧；已经完成的完整组不重复导出。
   - **边写边跟**：每次看都在变的源（探测器一秒一帧写进一个文件或一组模块文件）在增长时就跟着：每次只交出上一次看时

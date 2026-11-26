@@ -35,7 +35,14 @@ _BURST = threading.local()
 
 
 def is_hdf5(path: str | Path) -> bool:
-    return Path(path).suffix.lower() in HDF5_SUFFIXES
+    """The suffix (as ``Path.suffix`` takes it) is an HDF5 one. Asked for every file at every look of a folder
+    watch: no ``Path`` is made."""
+    text = os.fspath(path).rstrip("/\\")
+    if not text.lower().endswith(HDF5_SUFFIXES):  # (nearly every frame of a folder: no more work)
+        return False
+    name = os.path.basename(text)
+    dot = name.rfind(".")
+    return 0 < dot < len(name) - 1 and name[dot:].lower() in HDF5_SUFFIXES
 
 
 class BeingWritten(OSError):

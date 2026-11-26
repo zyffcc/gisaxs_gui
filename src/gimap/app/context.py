@@ -24,6 +24,8 @@ class AppContext:
     session: SessionRepository
     preferences: UserPreferencesRepository
     jobs: JobRunner | None = None
+    model_jobs: JobRunner | None = None
+    """Runs model jobs in a worker kept between them (2D Prediction keeps its model loaded); None: ``jobs``."""
     project_parameters: ProjectParametersRepository | None = None
     instrument_profiles: InstrumentProfileRepository | None = None
     data_dir: Path | None = None

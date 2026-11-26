@@ -4,6 +4,104 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- **Folder watches keep up with long runs.** Analyze's folder watch measures the frames already in its folder from
+  one listing of the folder (with their 7.3.3 side files) instead of asking the file system three times for each
+  frame, and names them in the folder resolved once: on a test computer a look at a folder of 20 000 EDF frames went
+  from 23 s to under 1 s, and starting the watch from 51 s to about 3 s. 2D Prediction lists a folder batch in one
+  listing (20 000 frames: 14 s → 0.2 s), and Watch for new frames no longer opens the frames it has taken at every
+  look. A growing Series map of more than 1 000 rows is put together in the background and then shown (at most once
+  a second, as before, and less often the longer putting it together takes): with 20 000 rows the window is busy for
+  about 0.15 s per redraw instead of 2.7 s. The frame axis ticks the rows in view: a tick for every one of 20 000 rows
+  cost 0.6 s at every redraw, zoom and pan. Rows reduced alike now hold their x once: a map of 50 000 rows of
+  1 000 points takes about 1.3 GB instead of 1.8 GB. What is found, read and drawn is unchanged.
+
+- **A watch keeps up with ten frames a second for a whole run.** Tested with Analyze's watch, its live Series map and
+  2D Prediction's watch side by side on synthetic ALS 7.3.3 frames (Pilatus 2M, EDF) written at 10 Hz for 30 minutes:
+  - A watch reduces a few new frames at a time (2 to 4 by the processor cores, fewer when free memory is short); the
+    others wait in line, in order. Starting every frame at once used all the memory left within half a minute (frames
+    failed: "Unable to allocate …"), after which the map stopped growing until the detector paused, and the window
+    stopped answering for seconds.
+  - Frames of a million pixels and more are reduced in worker processes at below-normal priority, as Batch Export's
+    are. Reduced in GIMaP's own threads, they took turns at the interpreter with the window, the looks at the folder
+    and the map, and a run slowed down as these grew: from about 5 frames a second at the start to under 2 after
+    15 minutes on a busy computer.
+  - Hot and dead pixels of a sparse counting frame (a short exposure) are searched from its bright pixels: a 0.1 s
+    Pilatus 2M frame in about 30 ms instead of 230 ms, the same pixels found. A frame now takes about 0.13 s instead
+    of 0.42 s.
+  - With thousands of frames listed, the .poni beside a frame is no longer looked for by listing the whole folder for
+    every frame (0.22 s of each frame at 18 000 frames), and what a look at the folder works out is kept, or worked
+    out for the new frames alone: a look at 18 000 frames takes the window about 0.3 s instead of several seconds.
+    A folder that keeps changing is looked at again only after as long as the look before took.
+  - While a watch is on, the frame on screen is analysed one at a time: a new analysis waits for the one under way,
+    and the newest frame that arrived meanwhile is analysed next. Each look that found new frames had started an
+    analysis of the newest (1.5–3 s for a 2-megapixel frame on a busy computer) while the ones before went on unseen;
+    with a look every second, several ran at once and the frame shown was put off again and again.
+  - A live Series map grows from the map drawn before: only the rows that arrived are stacked and made into the
+    picture, the same map value for value as one stacked whole. A redraw at 20 000 rows takes about 0.1 s instead of
+    1 s. The mean of the halves of a cut is worked out about 14 times faster for rows of one geometry (0.08 ms
+    instead of 1.1 ms a row), the same values.
+  - The stages of a growing map are looked for one map at a time; the map shown when a search ends is searched next.
+    Every redraw had started one more search (10–30 s for a few thousand frames on a busy computer): while a watch
+    caught up after the detector stopped, a dozen ran at once, the window waited for them, and the memory grew by
+    gigabytes.
+
+- **ALS 7.3.3 frames.** The module gaps of a Pilatus that a file stores as 0 (7.3.3 EDF frames) are left out like
+  gap codes; before, they counted as measured zeros (about 8 % of a Pilatus 2M). The record gives their number
+  (`module_gaps_left_out`). The `.txt` side file beside each 7.3.3 image is read: `Sample Alpha Stage` gives αi frame
+  by frame, and `Izero`, `I1`, `GiSAXS Beamstop Counter` and `Beam Current` are offered as monitors; the side file is
+  recorded with the frame's files. *Physics and Methods* 4.1.
+
+- **Fitting ▸ Rank Incidence Angles…** scores candidate incidence angles with the fit in Single analysis: the
+  information an exposure at each angle adds (Fisher information with a model-error floor, the footprint and, optionally,
+  particles buried in a film), the relative error each parameter could reach, and a record of the angle chosen in
+  `angle_decisions.jsonl`. *Physics and Methods* 9.20.
+
+- **2D Prediction keeps its model loaded.** The model runs in a process that stays open between predictions:
+  TensorFlow and the model are loaded once (about 10 s, at **Import model...**), and each prediction after that
+  takes a fraction of a second (0.15 s for a small 256 × 256 model on a test computer, against about 10 s before).
+  The process ends after 15 minutes without a prediction, after a prediction past its time limit and when GIMaP
+  quits.
+
+- **2D Prediction reads EDF and TIFF frames** as well as CBF, with the readers of Analyze. Module gaps stored as 0
+  (ALS 7.3.3 EDF) are given to the module as −1, as a Pilatus CBF stores them; a P03 CBF gives the same input as
+  before. A module whose preprocessing takes a `context` parameter is told what is known about the frames (αi,
+  times, monitors and, with a matching instrument profile, the geometry and q of every pixel), and the export
+  record says what it was told; `io.geometry: required` in `module.yaml` refuses to predict without the geometry.
+  User Manual 11.1 and 11.3, *Physics and Methods* 13.4.
+
+- **2D Prediction can follow a measurement.** A folder batch with **Watch for new frames** goes on with every frame
+  written into its folder while it runs (an EDF as soon as it holds the size its header announces, other files once
+  they rest), each in a row of its own; open trend and heatmap windows are drawn again every second. **Keep up with the
+  detector** (on by default) lets at most two frames wait for the model and leaves out older ones (counted), so the
+  estimate stays a few frames behind the newest when frames come faster than the model; a model as fast as the
+  detector leaves nothing out. Unticked, every frame is predicted in turn. A module's Python file is now imported
+  once (again only when it changes), and the q maps of a geometry are computed once: preprocessing a Pilatus 2M frame
+  onto a q grid went from about 0.35 s to a few tens of ms. While any folder batch runs, **Show the newest result**
+  (Batch results, on by default) makes the canvas follow the newest completed prediction, at most once a second;
+  clicking a row unticks it. The canvas now also shows a batch result when no input preview was loaded (a watched
+  folder that was empty), where it used to stay on its empty state.
+  User Manual 11.1.
+
+- **An In-situ series fits the frames of one incidence angle.** Analyze names the αi of a GISAXS cut in its fit
+  input (`alpha_i_deg` in the `# observation:` line). Fitting's In-situ series fits the frames at the αi of Single
+  analysis' model; a frame at another angle is listed as *at another αi* with the reason, not fitted, and neither
+  breaks nor feeds the chain (before, a run that switched angles was fitted with one αi and chained across them).
+  Curves without an αi and models with αi 0 are fitted as before. User Manual 6.5.
+
+- **Watching a folder reacts at once.** The folder is looked at as soon as the system reports a change (and still
+  every 2 s), and an EDF frame as long as its header announces, with its side file, is read at the first look
+  instead of after two looks of the same size.
+
+- **Time of fast frames, and events of the run.** The `Date` of an EDF header is read as the frame's time stamp. For
+  frames faster than its whole seconds, the Series map takes the files' modification times when they agree with the
+  stamps. **Events File…** in the Series options marks spray pulses or other events from a CSV log on the map, also
+  while the log grows; the exports list them. *Physics and Methods* 11.1.
+
+- **Series map of a run at several incidence angles.** A map holds one αi, by default that of most frames; the
+  **αi** list shows another angle's map or all frames, and the exports say which angle the map holds. A map whose
+  frames have different exposure times without the exposure in the normalisation says so and offers to divide by
+  the exposure time of the file header. *Physics and Methods* 11.1.
+
 - **Predict parameters** describes the rise at low q with two physical terms: the beam tail, with the exponent 2 of the Lorentzian wings of the resolution function, and a new **diffuse term** A_d (1 + (|q|/w)²)^−(1+H), the diffuse scattering of a rough interface (w = 1/ξ with ξ the correlation length, H the Hurst exponent). The low-q rise of a rough film is no longer taken up by a very large particle population. Model has the term too (Diffuse A, w, H), off in a new model. The proposal network was retrained for it (encoding 6). *Physics and Methods* 9.2 and 9.13.
 
 - **Predict parameters** runs on several threads: half the logical processors, at most 12 (`GIMAP_PREDICT_THREADS` sets another number). The results are the same as on one thread. Sizes *Gaussian, by intensity*, which have no tables, gain most: on a 776-point cut the network's step went from about 6 to about 1 minute per composition.
@@ -1382,8 +1480,9 @@ hold.
   value.
 - **SEM sizes depend on the segmentation**, and the default StarDist weights are trained on cell nuclei, not
   SEM. The scale is never read from the image.
-- **2D Prediction reads CBF frames only and applies no geometry and no correction** to a frame: the module's
-  own preprocessing is all that runs. **The Ag and Cu distribution modules declare no axes**: their maps and
+- **2D Prediction reads CBF, EDF and TIFF frames, not NeXus/HDF5 series, and applies no geometry and no
+  correction** to a frame itself: the module's own preprocessing is all that runs (a module can ask for the
+  geometry). **The Ag and Cu distribution modules declare no axes**: their maps and
   curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale.
 
 - **Predict parameters knows Fitting's model only** (for example, a known substrate with four-term DWBA or

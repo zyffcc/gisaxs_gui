@@ -133,12 +133,12 @@ LABS_ZH = {
     "Export error: {error}": "导出出错：{error}",
     "Running stack ({count} file): {name}": "正在运行叠加（{count} 个文件）：{name}",
     "Running stack ({count} files): {name}": "正在运行叠加（{count} 个文件）：{name}",
-    "Failed to load CBF file {path}": "载入 CBF 文件失败：{path}",
+    "Failed to load the frame {path}": "载入帧失败：{path}",
     "Failed to save image {path}: {error}": "保存图像 {path} 失败：{error}",
     "Failed to setup multi-file UI: {error}": "设置多文件界面失败：{error}",
     "Module preprocess output shape {shape}": "模块预处理输出形状 {shape}",
     "Error scanning folder: {error}": "扫描文件夹出错：{error}",
-    "Range skipped missing CBF indices: {indices}": "范围内缺少的 CBF 编号已跳过：{indices}",
+    "Range skipped missing frame numbers: {indices}": "范围内缺少的帧编号已跳过：{indices}",
     "Error parsing range: {error}": "解析范围出错：{error}",
     "Skipped {count} trailing file(s) that do not make a full Every={every} stack.":
         "已跳过末尾 {count} 个凑不满 Every={every} 叠加的文件。",
@@ -186,7 +186,7 @@ LABS_ZH = {
     "Preview ready. The GUI remained responsive during simulation.": "预览已就绪。模拟期间界面保持可用。",
     "No input preview to export": "没有可导出的输入预览",
     "Index is outside the available range": "编号超出可用范围",
-    "No numbered CBF files detected in the current folder": "当前文件夹中没有带编号的 CBF 文件",
+    "No numbered detector frames (CBF, EDF, TIFF) in the current folder": "当前文件夹中没有带编号的探测器帧（CBF、EDF、TIFF）",
     "Showing Value must be a valid index": "显示的编号必须是有效编号",
     "No Multi File indices available": "没有可用的多文件编号",
     "Watching module.yaml for saved edits...": "正在监视 module.yaml 中保存的修改…",
@@ -343,20 +343,22 @@ LABS_ZH = {
     "Learning rate": "学习率",
     "Scheduler": "学习率调度",
     "Parameter:": "参数：",
-    "Choose CBF frame…": "选择 CBF 帧…",
+    "Choose detector frame…": "选择探测器帧…",
+    "Choose frame…": "选择帧…",
     "Detector frame": "探测器帧",
     "Prediction reads CBF frames (.cbf) only.": "预测只读取 CBF 帧（.cbf）。",
     "The numbered CBF frames (.cbf) in this folder are used.": "使用这个文件夹中带编号的 CBF 帧（.cbf）。",
     "Choose a CBF frame or a folder of numbered CBF frames, or drop a CBF frame here.":
         "选择一个 CBF 帧或一个含编号 CBF 帧的文件夹，或把 CBF 帧拖到这里。",
-    "Import a CBF frame or folder batch\nto preview the GISAXS input.": "导入 CBF 帧或文件夹批量\n以预览 GISAXS 输入。",
-    "Select CBF Frame": "选择 CBF 帧",
-    "CBF frames (*.cbf)": "CBF 帧 (*.cbf)",
+    "Import a detector frame or folder batch\nto preview the GISAXS input.": "导入探测器帧或文件夹批量\n以预览 GISAXS 输入。",
+    "Select Detector Frame": "选择探测器帧",
+    "Detector frames (*.cbf *.edf *.tif *.tiff)": "探测器帧 (*.cbf *.edf *.tif *.tiff)",
     "All files (*)": "所有文件 (*)",
-    "Select a Folder of CBF Frames": "选择 CBF 帧所在的文件夹",
+    "Select a Folder of Detector Frames": "选择探测器帧所在的文件夹",
     "File Not Found": "找不到文件",
     "Unsupported Format": "不支持的格式",
-    "Prediction reads CBF frames (.cbf) only; {name} is not one.": "预测只读取 CBF 帧（.cbf）；{name} 不是 CBF 帧。",
+    "2D Prediction reads CBF, EDF and TIFF frames; {name} is none of them.":
+        "二维预测读取 CBF、EDF 和 TIFF 帧；{name} 不是其中任何一种。",
     "Input preview": "输入预览",
     "Prediction result": "预测结果",
     "Display": "显示",
@@ -390,6 +392,7 @@ LABS_ZH = {
     "No completed parameter predictions yet.": "还没有已完成的参数预测。",
     "{parameter} trend": "{parameter} 的趋势",
     "Predicted value": "预测值",
+    "Predicted parameters": "预测参数",
     "SF parameter trends": "SF 参数趋势",
     "Import a detector image before exporting the input preview.": "先导入一张探测器图像，再导出输入预览。",
     "Save Input Preview": "保存输入预览",
@@ -403,7 +406,8 @@ LABS_ZH = {
     "Exported {files}": "已导出 {files}",
     "Saved {name} with its data and record": "已保存 {name}，以及它的数据和记录",
     "Saved {name} with its record": "已保存 {name} 及其记录",
-    "Choose or drop a CBF frame, or a folder of numbered CBF frames.": "选择或拖入一个 CBF 帧，或一个含编号 CBF 帧的文件夹。",
+    "Choose or drop a detector frame (CBF, EDF, TIFF), or a folder of numbered frames.":
+        "选择或拖入一个探测器帧（CBF、EDF、TIFF），或一个含编号帧的文件夹。",
     "Compare range": "比较范围",
     "Coverage samples": "覆盖样本数",
     "Minimum": "最小值",
@@ -505,6 +509,42 @@ LABS_ZH = {
     "Synthetic GISAXS background modelled on the generator of the original training data. "
     "Every component can be ranged and inspected below.":
         "合成的 GISAXS 背景，仿照原始训练数据的生成程序。下面每个分量都可以设定范围并查看。",
+    # -- 2D Prediction ▸ Folder batch ▸ Watch for new frames (bindings/frame_watch.py, 2026-11-26) -------
+    "Watch for new frames": "监视新帧",
+    "Keep up with the detector": "跟上探测器",
+    "After the frames of the folder, go on with every frame written into it while the batch runs (a frame is "
+    "taken once it is completely written). Stop ends the batch; unticking ends it once the frames taken are "
+    "predicted.":
+        "预测完文件夹里已有的帧之后，继续预测批量运行期间写入该文件夹的每一帧（一帧完整写完后才取用）。"
+        "点“停止”结束批量；取消勾选则在已取用的帧预测完后结束。",
+    "When frames arrive faster than the model predicts them, at most two frames (or stacks) wait for the "
+    "model and older ones are left out, so the prediction stays a few frames behind the newest at most. Left-out "
+    "frames are counted, stay in the folder and can be predicted later with a folder batch. Unticked, every "
+    "frame is predicted in turn, however far behind.":
+        "帧到达得比模型预测得快时，最多两帧（或两叠）等待模型，更早的帧被跳过，所以预测最多落后最新的帧几帧。"
+        "跳过的帧会计数，仍留在文件夹里，之后可以用文件夹批量预测。不勾选时，每一帧都依次预测，无论落后多少。",
+    "Watching {folder} for new frames … (Stop to end)": "正在监视 {folder} 中的新帧…（点“停止”结束）",
+    "{done} predicted · waiting for new frames": "已预测 {done} 个 · 正在等待新帧",
+    "{count} frames left out to keep up with the detector (a folder batch predicts them later)":
+        "为跟上探测器跳过了 {count} 帧（之后可以用文件夹批量预测它们）",
+    "{count} new frames outside the Range: not predicted": "{count} 个新帧不在范围内：未预测",
+    "The watched folder cannot be read: waiting for it … (Stop to end)":
+        "无法读取所监视的文件夹：正在等待它恢复…（点“停止”结束）",
+    "Watch ended: {taken} new frames taken, {left_out} left out to keep up.":
+        "监视已结束：取用了 {taken} 个新帧，为跟上探测器跳过了 {left_out} 个。",
+    "Show the newest result": "显示最新结果",
+    "Input Stack": "输入帧",
+    "While a folder batch runs, the canvas shows its newest completed prediction, at most once a second "
+    "(without the Preprocessed panel). Choosing a row unticks this, so that row stays in the canvas.":
+        "文件夹批量运行时，画布显示最新完成的预测，至多每秒更新一次（不含预处理面板）。选中某一行会取消这一勾选，"
+        "画布就停在那一行。",
+    "Showing the chosen row: tick Show the newest result to follow the run again.":
+        "正在显示选中的行：勾选显示最新结果，画布会重新跟随运行。",
+    "No frames in the folder yet: with Watch for new frames, the batch waits for them.":
+        "文件夹里还没有帧：勾选了监视新帧，批量会等待它们。",
+    "Watching for new frames · {predicted} predicted": "正在监视新帧 · 已预测 {predicted} 个",
+    "Watching for new frames · {predicted} predicted · {left_out} left out to keep up":
+        "正在监视新帧 · 已预测 {predicted} 个 · 为跟上探测器跳过 {left_out} 帧",
 }
 
 __all__ = ["LABS_ZH"]

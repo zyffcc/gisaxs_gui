@@ -55,14 +55,14 @@ class ImageLoadingMixin:
             try:
                 directory = os.path.dirname(file_path)
                 start_name = os.path.basename(file_path)
-                cbf_files = [
+                frame_files = [  # a stack is frames of one format: that of its first frame
                     path.name
                     for path in self.prediction_view_model.files.discover_files(
-                        Path(directory), (".cbf",)
+                        Path(directory), (Path(file_path).suffix.lower(),)
                     )
                 ]
-                start_idx = cbf_files.index(start_name)
-                stack_files = cbf_files[start_idx : start_idx + stack_count]
+                start_idx = frame_files.index(start_name)
+                stack_files = frame_files[start_idx : start_idx + stack_count]
             except Exception:
                 stack_files = []
 

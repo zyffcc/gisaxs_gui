@@ -475,7 +475,7 @@ def test_a_frame_without_the_chosen_half_fails_and_is_not_fitted_on_the_other() 
     assert (lost.points, lost.halves_used) == (0, "") and all(frame.ok for index, frame in enumerate(frames) if index != 2)
     assert [frame.halves_used for frame in frames] == ["positive", "positive", "", "positive", "positive"]
     assert next_start(lost, start, settings) is start  # the next frame does not start from a frame without a fit
-    assert series_counts(frames) == {"frames": 5, "ok": 4, "not_converged": 0, "stopped": 0, "failed": 1}
+    assert series_counts(frames) == {"frames": 5, "ok": 4, "not_converged": 0, "stopped": 0, "failed": 1, "other_angle": 0}
     # The mean of a frame with one half is that half — fitted, and named: the q < 0 half is 1.3 times as intense.
     mean = [fit_frame(index, f"run_{index + 1:05d}.dat", curve, start, SeriesSettings()) for index, curve in enumerate(curves)]
     assert [frame.halves_used for frame in mean] == ["mean", "mean", "negative", "mean", "mean"]
@@ -555,12 +555,12 @@ def test_a_stopped_frame_is_not_a_result_and_is_counted_apart() -> None:
     stopped = fit_frame(1, "b.dat", curve, start, settings, stop)
     done = fit_frame(0, "a.dat", curve, start, SeriesSettings())
     few = fit_frame(2, "c.dat", curve, start, SeriesSettings(q_range=(0.5, 0.51)))
-    assert STATES == ("ok", "not converged", "stopped", "failed")
+    assert STATES == ("ok", "not converged", "stopped", "failed", "other angle")
     assert (done.state, stopped.state, few.state) == ("ok", "stopped", "failed")
     assert stopped.ok and "Stopped" in stopped.reason and few.reason == "too few points in the fitting range" and few.points < 3
     assert next_start(stopped, start, settings) is start and next_start(done, start, settings) is done.result.model
     frames = [stopped, done, few]
-    assert series_counts(frames) == {"frames": 3, "ok": 1, "not_converged": 0, "stopped": 1, "failed": 1}
+    assert series_counts(frames) == {"frames": 3, "ok": 1, "not_converged": 0, "stopped": 1, "failed": 1, "other_angle": 0}
     record = series_record(start, settings, "folder", "*.dat", frames)
     assert record["stopped"] == [2] and record["not_converged"] == [] and [item["state"] for item in record["per_frame"]] == [
         "ok", "stopped", "failed"]

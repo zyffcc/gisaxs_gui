@@ -1,10 +1,18 @@
-"""Detector frames for Analyze, read through the shared detector_io loader."""
+"""Detector frames for Analyze, read through the shared detector_io loader.
+
+A folder of a long run holds tens of thousands of frames, and the folder watch looks at it every second or two: a
+listing of a folder (``_frames_in``) resolves the folder once and names its frames in it, and keeps what the listing
+gave — the bytes and time of every frame and side file — for ``LISTING_FRESH_S``. ``settled_size`` of a frame takes
+them from there (the watch measures the frames its look has just listed), not from three calls to the file system
+per frame (the frame, ``.txt``, ``.TXT``): those took 23 s per look in a folder of 20 000 frames.
+"""
 
 from __future__ import annotations
 
 import os
 import re
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -22,6 +30,8 @@ from src.gimap.shared.detector_io import (
 )
 from src.gimap.shared.detector_io.nexus_files import left_alone
 from src.gimap.shared.detector_io.nexus_layout import ERROR_TEMPLATES, FRAME_BEYOND
+from src.gimap.shared.detector_io.completeness import edf_written
+from src.gimap.shared.detector_io.side_files import read_side_values, side_file
 
 SUPPORTED_SUFFIXES = DETECTOR_SUFFIXES
 SKIPPED_FOLDERS = ("gimap_analysis",)
@@ -29,6 +39,12 @@ SKIPPED_FOLDERS = ("gimap_analysis",)
 NO_FRAMES_YET = "{name} holds no frames yet."
 NO_FILTER = "{name} is compressed with a filter this installation cannot read: install the Python package hdf5plugin."
 _NATURAL = re.compile(r"(\d+)")
+LISTING_FRESH_S = 5.0
+"""How long the sizes a folder listing gave stand for its files (``settled_size``)."""
+_LISTINGS: dict[str, tuple[float, dict[str, tuple[int, int]]]] = {}
+"""Folder (resolved, case-folded) → (when listed, ``{name case-folded: (bytes, mtime ns)}`` of its frame and side
+files). Replaced at each listing of the folder (written on the watch's thread, read anywhere: whole values only)."""
+_SIDE_SUFFIXES = (".txt",)
 
 
 def _sentence(template: str) -> re.Pattern:
@@ -42,8 +58,15 @@ writer holds or left unfinished, a file without a detector image, a dataset that
 _NO_FRAMES = _sentence(FRAME_BEYOND.replace("{frames}", "0"))  # “frame 1 of 0”
 
 
-def _natural_key(path: Path) -> list:
-    return [int(part) if part.isdigit() else part.casefold() for part in _NATURAL.split(path.name)]
+def _natural_key(path: Path) -> tuple:
+    return _name_key(path.name)
+
+
+@lru_cache(maxsize=1 << 18)
+def _name_key(name: str) -> tuple:
+    """“frame_10” after “frame_9”: the digits as numbers. Kept per name (a folder watch sorts every frame of the
+    folder at every look)."""
+    return tuple(int(part) if part.isdigit() else part.casefold() for part in _NATURAL.split(name))
 
 
 def readable_read_error(path: Path, exc: BaseException) -> str:
@@ -103,34 +126,129 @@ class FrameReadError(ValueError):
     """A frame file could not be read; the message says why in words."""
 
 
+def _list_frames(folder, below: Optional[list] = None) -> list[Path]:
+    """The frame files ``folder`` holds itself (one listing; its subfolders into ``below``), and what the listing
+    says of them and of the side files beside them kept for ``settled_size``. A frame of another format than
+    HDF5 is named in the resolved folder (as resolving it would name it: once for the folder, not per frame); an
+    HDF5 file keeps the folder as given (``expand``)."""
+    found: list[Path] = []
+    sizes: dict[str, tuple[int, int]] = {}
+    root = Path(folder).resolve()
+    named = _PATHS.setdefault(str(root).casefold(), {})
+    if len(named) > MAX_NAMED:
+        named.clear()
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            name = entry.name
+            lower = name.lower()
+            if lower.endswith(SUPPORTED_SUFFIXES):
+                if not entry.is_file():
+                    continue
+                if is_hdf5(name):  # (its size is that of every file of its source: not kept)
+                    found.append(Path(entry.path))
+                    continue
+                if entry.is_symlink():
+                    found.append(Path(entry.path).resolve())
+                    continue
+                else:
+                    path = named.get(name)
+                    if path is None:
+                        path = named[name] = root / name
+                    found.append(path)
+            elif lower.endswith(_SIDE_SUFFIXES):
+                if not entry.is_file():
+                    continue
+            else:
+                if below is not None and not name.startswith(".") and name.casefold() not in SKIPPED_FOLDERS \
+                        and entry.is_dir():
+                    below.append(entry.path)
+                continue
+            try:
+                state = entry.stat()  # (on Windows from the listing itself)
+            except OSError:
+                continue
+            sizes[name.casefold()] = (state.st_size, state.st_mtime_ns)
+    _LISTINGS[str(root).casefold()] = (time.monotonic(), sizes)
+    return found
+
+
+_PATHS: dict[str, dict[str, Path]] = {}
+"""Resolved folder → its frames by name as named before: a folder watch lists every frame of the folder at every look,
+and gets the same ``Path`` of each (not 20 000 new ones; what is made of them, such as their text, is kept with them)."""
+MAX_NAMED = 300_000
+
+
+def _listed_size(path: Path) -> Optional[int]:
+    """Bytes of a frame and its side file as the last listing of its folder gave them, while fresh (else ``None``)."""
+    text = os.fspath(path)
+    cut = max(text.rfind("\\"), text.rfind("/"))
+    folder, name = text[:cut], text[cut + 1:]
+    listing = _LISTINGS.get(folder.casefold())
+    if listing is None or time.monotonic() - listing[0] > LISTING_FRESH_S:
+        return None
+    sizes = listing[1]
+    own = sizes.get(name.casefold())
+    if own is None:  # written after the listing
+        return None
+    side = sizes.get(os.path.splitext(name)[0].casefold() + ".txt")
+    return own[0] + (side[0] if side is not None else 0)
+
+
 def _frames_in(folder: Path) -> list[Path]:
     """The frame files a folder holds itself; when it holds none, those of its subfolders, one level down
     (a scan folder whose detectors write into ``lmbdp03/``, ``pilatus/`` …). One listing per folder."""
-    found: list[Path] = []
     below: list[str] = []
     try:
-        with os.scandir(folder) as entries:
-            for entry in entries:
-                if entry.name.lower().endswith(SUPPORTED_SUFFIXES):
-                    if entry.is_file():
-                        found.append(Path(entry.path))
-                elif not entry.name.startswith(".") and entry.name.casefold() not in SKIPPED_FOLDERS and entry.is_dir():
-                    below.append(entry.path)
+        found = _list_frames(folder, below)
     except OSError:
         return []
     if found:
         return found
     for subfolder in sorted(below):
         try:
-            with os.scandir(subfolder) as entries:
-                found.extend(Path(entry.path) for entry in entries
-                             if entry.name.lower().endswith(SUPPORTED_SUFFIXES) and entry.is_file())
+            found.extend(_list_frames(subfolder))
         except OSError:
             continue
     return found
 
 
+SIDE_FILES_RECHECK_S = 10.0
+"""How long it is believed whether a folder's frames come with side files before it is looked at again."""
+
+
 class DetectorIoFrameSource:
+    def __init__(self) -> None:
+        self._side_folders: dict[str, tuple[float, bool]] = {}
+
+    def complete(self, path: str | Path) -> bool:
+        """Completely written as far as the file itself can tell — an EDF whose length reaches what its header
+        announces — and, in a folder whose frames come with side files (ALS 7.3.3), with its own side file readable.
+        A watch reports such a frame at the first look; ``False`` leaves it to two looks of the same size."""
+        path = Path(path)
+        if path.suffix.lower() != ".edf" or edf_written(path) is not True:
+            return False
+        side = side_file(path)
+        if side is not None:
+            return read_side_values(side) is not None
+        return not self._has_side_files(path.parent)
+
+    def _has_side_files(self, folder: Path) -> bool:
+        key = str(folder).casefold()
+        now = time.monotonic()
+        known = self._side_folders.get(key)
+        if known is not None and now - known[0] < SIDE_FILES_RECHECK_S:
+            return known[1]
+        names = set()
+        try:
+            with os.scandir(folder) as entries:
+                for entry in entries:
+                    names.add(entry.name.casefold())
+        except OSError:
+            return False
+        found = any(name.endswith(".edf") and name[:-4] + ".txt" in names for name in names)
+        self._side_folders[key] = (now, found)
+        return found
+
     def load(self, path: str | Path, frame_index: int = 0) -> DetectorImage:
         for pause in (*AGAIN_S, None):
             try:
@@ -175,6 +293,9 @@ class DetectorIoFrameSource:
         stood unreadable for a while is not waited for: the set is measured as it is (it says what it lacks, and
         is never whole). A file that cannot be read for another reason counts with its own size (it is listed,
         and reading it says why)."""
+        listed = _listed_size(path)  # a frame of another format than HDF5: the folder watch's look has just listed it
+        if listed is not None:
+            return listed
         path = Path(path)
         members: Sequence[Path] = (path,)
         if is_hdf5(path):
@@ -189,6 +310,9 @@ class DetectorIoFrameSource:
                 if changing:
                     raise self._why_unread(changing[0])
                 members = (*layout.members, *layout.pending)
+        else:
+            side = side_file(path)  # the beamline's .txt (αi, monitors) may be written just after the image
+            members = (path, side) if side is not None else members
         return sum(member.stat().st_size for member in members)
 
     @staticmethod
@@ -242,8 +366,10 @@ class DetectorIoFrameSource:
             elif path.suffix.lower() in SUPPORTED_SUFFIXES and path.is_file():
                 named.append(path)
         unique: dict[str, Path] = {}
+        resolved = {str(path) for path in in_folders}  # (a folder's frames: named in it resolved, ``_list_frames``)
         for path in group_sources(in_folders) + group_sources(named, keep_without_image=True):
-            source = path if is_hdf5(path) else path.resolve()  # an HDF5 source keeps the folder its files are in
+            # An HDF5 source keeps the folder its files are in.
+            source = path if is_hdf5(path) or str(path) in resolved else path.resolve()
             unique.setdefault(str(source).casefold(), source)
         return sorted(unique.values(), key=lambda path: (_natural_key(path.parent), _natural_key(path)))
 

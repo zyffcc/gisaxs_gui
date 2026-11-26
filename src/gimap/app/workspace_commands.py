@@ -262,6 +262,7 @@ class WorkspaceCommands:
             "fitting_fit": MenuEntry(fitting(lambda: fit().run_fit()), self._fit),
             "fitting_stop": MenuEntry(fitting(lambda: fit().stop_fit()), self._stop_fit),
             "fitting_joint": MenuEntry(fitting(lambda: self._fitting.open_joint_fit())),
+            "fitting_angles": MenuEntry(fitting(lambda: self._fitting.open_angle_rank())),
             "fitting_load_model": MenuEntry(fitting(lambda: fit().load_model_dialog())),
             "fitting_save_model": MenuEntry(fitting(lambda: fit().save_model_dialog())),
             "fitting_save_data": MenuEntry(fitting(lambda: fit().export_data_dialog()), self._curve),

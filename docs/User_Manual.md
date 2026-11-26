@@ -527,7 +527,7 @@ spreadsheet.
 | Edit | Undo (`Ctrl+Z`), Redo (`Ctrl+Y`; `Ctrl+Shift+Z` also works): the set-up in Analyze, the model in Fitting's Single analysis |
 | View | *Workspaces* and *Labs*: the pages (`Ctrl+1`…`Ctrl+6`), Collapse Sidebar (`Ctrl+B`), Full Screen (`F11`), Theme ▸ Light / Dark, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`), Language ▸ English / 中文 |
 | Analyze | Run Automatic Analysis, Stop Automatic Analysis, Repeat Analysis (`F5`), Absolute Scale from a Standard…, Export Curves… (`Ctrl+E`), Batch Export… (`Ctrl+Shift+E`), Batch Export a Folder…, Send to Fitting, Send Both Cuts to Fitting, Send Series to Fitting…, Send Series to Compare, Set-up Files ▸ Save Settings… / Load Settings… / Save Cuts… / Load Cuts… / Save Masks… / Load Masks…, Figures ▸ Save Image… / Save q-Map Data… / Save View Data…, Tools ▸ Reproduce from Record…, Clear Frame List |
-| Fitting | Open Curve…, Import Curves…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Fit Several Curves Together…, Load Model…, Save Model…, Save Curve and Parameters…, Save Plot…, Batch / In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
+| Fitting | Open Curve…, Import Curves…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Fit Several Curves Together…, Rank Incidence Angles…, Load Model…, Save Model…, Save Curve and Parameters…, Save Plot…, Batch / In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
 | Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), SEM Particle Analysis…, 1D Predict — Fit Many Curves…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
 | Help | User Manual (`F1`), Physics and Methods, Keyboard Shortcuts…, Example Data ▸ GISAXS — Ag Nanoparticles (GALAXI)… / SAXS — AgBh Calibrant (pyFAI)… / GIWAXS — MAPbI₃ Film (DESY P08)… / GIWAXS — PbTe, Tilted Detector (Xeuss)…, Report a Problem…, Open Log Folder, Open User Data Folder, GitHub Repository, Check for Updates…, How to Cite GIMaP…, Third-party Notices, About GIMaP |
 
@@ -776,8 +776,8 @@ The step **Geometry** shows the geometry in use (`811.8 mm · λ 0.6888 Å · α
 instead.
 
 **αi** in the command bar shows the angle used for the current frame. An incidence angle with a unit
-in a mini-CBF or NeXus sample header comes before the profile value; for a sum, the headers of all
-summed frames must agree. When the header has such an angle, right-click the field ▸
+in a mini-CBF or NeXus sample header, or the `Sample Alpha Stage` of a 7.3.3 side file (section 5.1), comes before
+the profile value, frame by frame; for a sum, the headers of all summed frames must agree. When the header has such an angle, right-click the field ▸
 **Use frame-header αi** to go back to it.
 
 A value you type is shown in orange and is used as the reference for every frame. It is remembered
@@ -1204,6 +1204,13 @@ GIMaP reads CBF, TIFF and EDF frames, and NeXus/HDF5 files (`.nxs`, `.nx`, `.nx5
 a master is read with its data files, and every frame of a multi-frame file is a frame of the series
 (*NeXus and HDF5 files* below).
 
+**Side files (ALS 7.3.3).** Beside every EDF, beamline 7.3.3 writes a text file of the same name
+(`<frame>.txt`) with the motors and counters of that exposure; the EDF header itself has no incidence angle and
+no monitor. GIMaP reads from it the incidence angle αi (`Sample Alpha Stage`) and the counters `Izero`, `I1`,
+`GiSAXS Beamstop Counter` and `Beam Current`, which the normalisation offers as monitors. The side file is one of
+the frame's files: the JSON record lists it with its SHA-256, and a watched folder waits until it is complete too. A
+`.txt` of the same name without the list of motors (`Motors: …`) is not read.
+
 1. Open frames in one of these ways:
    - **Open…** in the command bar or **File ▸ Open Data…** (`Ctrl+O`), or the arrow of **Open…** ▸
      **Open Folder…** or **File ▸ Open Folder…** (`Ctrl+Shift+O`);
@@ -1257,8 +1264,11 @@ or from a NeXus stack:
   its files have changed (name, time or size).
 
 **Watch** (next to **Clear**) watches a folder during a measurement: choose the folder, and it is
-looked at every 2 s. New frames are listed and the newest is shown as soon as it is completely
-written. Press **Watch** again to stop.
+looked at as soon as the system reports a change in it, and at least every 2 s (on a network share that reports
+nothing, every 2 s). New frames are listed and the newest is shown as soon as it is completely
+written. While frames arrive faster than the frame on screen is analysed, the analysis of the next one waits for the
+one under way, and the newest frame that arrived meanwhile is shown next: a new frame on screen after every analysis,
+one at a time (the frames between are listed, and added to the map, but not shown). Press **Watch** again to stop.
 
 - A file, or a set of module files, that grows frame by frame while the detector writes is followed,
   even when its size and timestamp stay the same. Files written recently or still held by their writer
@@ -1286,11 +1296,19 @@ written. Press **Watch** again to stop.
   Stopping the watch also ends a pause.
 - **Settle Time**: **Two Looks (2 s)** (the default: a new file is read once it is the same at two looks), **5 s**,
   **10 s** or **30 s** — for a detector that pauses while it writes a file, so that a frame is never read
-  half-written.
+  half-written. With the default, an EDF file as long as its header announces (and, in a folder whose frames come
+  with side files, with its own side file) is read at the first look: an ALS 7.3.3 frame is listed within a fraction
+  of a second.
 - **Add New Frames to the Series Map** (on by default): every complete new frame is reduced with the set-up on
   screen and its curve appended to the Series map (section 5.6), its traces and its timeline, also when no map was
   built and nothing is exported. A map started by the watch begins with the frame on screen when watching began.
-  Only the curves are kept, never the frames: 1000 frames of 200 points take about 3 MB.
+  Only the curves are kept, never the frames: 1000 frames of 200 points take about 3 MB. A few new frames are
+  reduced at a time — 2 to 4, by the number of processor cores, fewer when free memory is short — and the others
+  wait in line in the order they were written; the frame on screen is not in this line. When frames arrive faster than
+  they are reduced, the map falls behind and catches up when the detector pauses; the line above the map then says
+  how many new frames are still to be added. Frames of a million pixels and more are reduced in worker processes at
+  below-normal priority, as Batch Export does, so that the window, the looks at the folder and the map are not slowed
+  by them; smaller frames are reduced in GIMaP itself. A Pilatus 2M frame takes about 0.13 s of one core.
 - **Record Every Frame in the Results Database**: the curve of every frame appended to the map also goes into
   `gimap_analysis/gimap_series.sqlite` next to the data (about once a second), with its frame, file, time and the
   settings of the map, and so does every skipped file. Compare reads it (section 7.2), so a run can be compared
@@ -1304,7 +1322,23 @@ written. Press **Watch** again to stop.
   status line then asks you to set the model up on a frame and press **Start**.
 
 These choices are remembered between sessions. On a desktop computer, listing, reducing, appending and recording
-a frame of 20,000 pixels takes about 60 ms (`tools/benchmarks/insitu_online.py`).
+a frame of 20,000 pixels takes about 60 ms (`tools/benchmarks/insitu_online.py`). With 18 000 frames in the folder,
+a look at it takes the window about 0.3 s; while frames keep arriving, the folder is looked at again only after as
+long as the look before took, so the watch takes at most half of the time.
+
+**Rehearsing a run without beamtime** (source checkout). `tools/beamline_sim.py` writes a synthetic spray run as
+ALS 7.3.3 writes it — Pilatus EDF frames with module gaps stored as 0 and `.txt` side files, 0.1 s frames during and
+after each spray pulse, 1 s frames later, short looks at other incidence angles between pulses — and replays it into a
+folder at the beamline's pace, with `spray_log.csv` growing as the pulses happen:
+
+```text
+python tools/beamline_sim.py render --out D:/rehearsal/staged --pulses 3
+python tools/beamline_sim.py replay --src D:/rehearsal/staged --dst D:/rehearsal/live
+```
+
+Watch the `live` folder (with an instrument profile of the geometry in `staged/manifest.json`), load
+`spray_log.csv` as **Events File…** in the Series options, and the run plays as at the beamline. The frames are a test
+signal from a simple model, not a sample; a Pilatus 2M run of three pulses takes about 1.7 GB.
 
 #### NeXus and HDF5 files
 
@@ -1363,7 +1397,10 @@ gap guard, the intensity range, the background, and how many pixels were filled 
 circles = hot or dead pixels, cyan = filled from the mirror side (used in the curves).
 
 **Which pixels count as data.** On an integer counting detector, negative values are gap codes
-and are left out. On a floating-point frame (dark- or background-subtracted) negative values are
+and are left out. Some files (ALS 7.3.3 EDF frames) store the module gaps of a Pilatus as 0: on an integer frame of
+a Pilatus 300K, 300K-W, 1M, 2M or 6M size, a gap band of the module layout that holds nothing above 0 is left out
+too, and the JSON record says how many pixels (`module_gaps_left_out`). A zero inside a module is a measured zero
+and is kept. On a floating-point frame (dark- or background-subtracted) negative values are
 data and are kept.
 
 **Bad pixels** — **Leave out hot and dead pixels** (on by default, remembered). In every frame
@@ -1444,7 +1481,7 @@ each frame is multiplied by **A_abs / (t_exp · M · T · d)**:
 | Term | Enter |
 |---|---|
 | **Exposure t_exp** | *From the file header* (the exposure time the file states; of a sum of frames, their sum) or *Typed* (s) |
-| **Monitor M** | a monitor of the header (*Header: I0 = …*: EDF keywords, the `Flux` of a Pilatus CBF, a NeXus `NXmonitor`; of a sum of frames, their sum) or *Typed* |
+| **Monitor M** | a monitor of the header (*Header: I0 = …*: EDF keywords, the `Flux` of a Pilatus CBF, a NeXus `NXmonitor`, the counters of a 7.3.3 side file such as `Izero`; of a sum of frames, their sum) or *Typed* |
 | **Transmission T** | 0 < T ≤ 1 |
 | **Thickness d** | mm |
 | **Absolute scale A_abs** | a factor from a glassy-carbon or water measurement in the same set-up |
@@ -1924,7 +1961,13 @@ qy 0.05 Å⁻¹); the red arrow beside the map marks it, and it does not make a 
    *every n frame* (for example *every 5 frame*).
 2. Press **Build Map**. Every imported frame (or group of summed frames) is reduced with the current
    settings; the map grows as frames are done. Long series use several low-priority processes;
-   progress, time left, **Pause** and **Stop** are shown, and rows already done stay.
+   progress, time left, **Pause** and **Stop** are shown, and rows already done stay. A growing map (also one a
+   folder watch adds to) is drawn again at most once a second. A map of more than 1 000 rows is put together in the
+   background and then shown, less often the longer that takes, so the window stays free to use. It grows from the
+   map drawn before: only the rows that arrived are added, the same map as one put together whole. On a busy test
+   computer a map of 50 000 rows of 1 000 points was put together in about 0.25 s instead of 2 s, drawn about once a
+   second, the window busy for 0.1–0.25 s each time; it takes about 1.3 GB of memory, also at its peak (put together
+   whole each time: up to 2.3 GB). A map of a curve, halves or Sum chosen is put together whole.
 3. Drag the horizontal band to pick a frame: its curve is drawn below; **Open** shows that frame in
    Analyze, with the cut of the series.
 4. Drag the vertical band to pick a q window: further below, against frame, the **Mean intensity** or
@@ -1965,7 +2008,7 @@ every frame anyway.
 - Every point is drawn at the x where it was measured: a line sits at its q, and a detector gap stays a
   gap (the exports keep the measured x).
 - The frame axis counts the frames from 1, in whole numbers — for one multi-frame file the frame in the
-  file, for several files the place in the list.
+  file, for several files the place in the list. Zoomed in to 300 rows or fewer, every row has a tick.
 - For the GISAXS horizontal cut, the box beside the map chooses the halves: **±** both as measured,
   **+** or **−** one half, **|x|** both on |x|, or **mean**. The stages, the traces and the exports
   follow the choice.
@@ -1973,6 +2016,16 @@ every frame anyway.
   When the settings change after the map was built it says *Built with other settings — Build Map
   again.*
 - **Wide** gives the Series tab more room; the frame's curve and the trace below the map grow with it.
+- **Frames at several incidence angles** (a reference angle and short looks at other angles between spray
+  pulses): the cut lies at the same detector rows in every frame, which is another exit angle at another αi, so a
+  map holds one angle — by default the angle of most frames. The **αi** list beside the line above the map shows
+  another angle's map, or **All angles**; the line says *αi 0.4° only (12 frames at other angles …)* and the
+  exports say which angle the map holds. Frames written while watching join the map of their angle. A scan in which
+  every frame has its own angle stays one map. The angle of a frame is its nominal αi: typed, from the header or
+  side file, or from the profile.
+- **Frames of different exposure times** (0.1 s during spraying, 1 s afterwards) while **Normalisation ▸
+  Exposure t_exp** is off: a note under the line says so; its link **Divide by the exposure time of the file header**
+  turns the exposure on and builds the map again.
 
 **Options: frames, cut, axes** (folded under the plots):
 
@@ -1983,6 +2036,16 @@ every frame anyway.
 - **Frame axis**: **Frame number**, or **Time (s)** when the frames carry a time (their time stamps, or
   frame × exposure). In a saved picture every row has the same height, so the picture of skipped or
   unevenly timed frames does not show real time intervals; the CSV keeps every row's frame and time.
+  An EDF header gives its `Date` in whole seconds; for frames faster than that (0.1 s at ALS 7.3.3), the time comes
+  from the files' modification times when they agree with those stamps (*time from the files' modification
+  times*). Files copied without their times disagree and are not used.
+- **Events**: **Events File…** marks the events of the run — spray pulses, shutter openings — on the map, as a
+  dashed line above the first frame measured after each, named by its label. The file is a CSV table with a time
+  column (`utc`, `time`, `timestamp`, `datetime` or `date`; ISO times, with or without a time zone) and optionally
+  a `label`, `event`, `pulse` or `name` column. A file that grows during the run (the log of the spray controller)
+  is read again whenever the map is drawn. The line beside the button says how many events lie on the map; when none
+  lies within the frames' times, it says to check the clocks (the files' times come from the computer that wrote
+  them). The exports list the events with their frames (`events`).
 - **Stages compare**: **The whole x axis**, or **The x range shown in the map** (zoom the map and the
   stages follow).
 - **Show the picked frame's image**: picking a row also shows that frame in Analyze.
@@ -2009,7 +2072,10 @@ a new batch fit or another import selection.
 the odd frames*; **Change along the series** in the drop-down of the plot under the map). **Leave the odd frames out of
 Batch Export** skips them in the next Batch Export of this list. **Send to Compare** (or **Analyze ▸
 Send Series to Compare**) puts the series beside others. How stages and odd frames are found, and how to
-read them, is in chapter 7.
+read them, is in chapter 7. The stages of a growing map (a batch, a watched folder) are looked for one map at a time:
+when one search ends, the map shown then is searched next. A search of a few thousand frames can take 10–30 s, and
+a map that has grown meanwhile shows its stages only once a search of it ends — when frames come more slowly or
+stop.
 
 ### 5.7 Batch Export
 
@@ -3003,6 +3069,13 @@ counted as a failed fit. **Pause** lets the current frame finish first. Complete
 - **Watch for new curves**: while the series runs, the folder is checked every 2 s, and curves written into it
   (for example by Analyze during a measurement) are fitted too. A new file is taken once its size and time are the
   same at two checks. A file changed after it was read is fitted again. A folder that cannot be read is waited for.
+- **Frames of another incidence angle**: a series fits the frames measured at the αi of Single analysis' model
+  (Model ▸ Geometry). Analyze names the αi of each GISAXS cut in its fit input; a frame at another angle (a run
+  that switches between 0.4° and 0.1°, say) is listed with **–** and *measured at αi 0.1°, the model's αi is
+  0.4°…*, is not fitted and does not break the chain or start the next frame. The summary counts them
+  (*2 at another αi*), and the record lists them under `other_angle`. To fit another angle, set the model up on
+  one of its frames and run a series of its own. Curves without an αi in their header, and a model with αi 0,
+  are fitted as before.
 - **Halves of the cut**: every frame is fitted on one curve — **Mean of both halves**, **q > 0 half** or **q < 0
   half**. Until you choose, it takes the halves Analyze sent the curves with; else those of Single analysis, unless
   they are both on |q|; else the mean. The line under it says where the value comes from. Curves with q on one side
@@ -3158,6 +3231,31 @@ height.
 
 **Fit Several Curves Together** warns when the exported vertical band crosses qy = 0 or its centre has |qy| below 0.02 nm⁻¹. The particle model leaves out the specular reflection: if the band includes it, move the cut beside the ridge and send both curves again. The vertical-cut model and its check against BornAgain are in
 [Physics and Methods, section 9.18](Physics_Manual.md#918-several-curves-fitted-together-the-vertical-cut).
+
+### 6.7 Which incidence angle next
+
+**Fitting ▸ Rank Incidence Angles…** answers, for the fit in Single analysis, which incidence angle to measure next
+(the method: [Physics and Methods 9.20](Physics_Manual.md#920-which-incidence-angle-tells-most-fisher-information-of-a-fitted-cut)).
+The fit needs a known substrate (the four-term DWBA of section 9.17 says how the intensity changes with αi) and the
+αi of the curve.
+
+1. Fit the horizontal cut (at the Yoneda row) in Single analysis.
+2. Open **Fitting ▸ Rank Incidence Angles…**. Enter the **Candidate angles** (°), the **Exposure per angle**, what
+   was **Measured so far** as angle:exposure pairs (empty: the curve's own angle and exposure), the **Exposure of
+   the curve** its counts are per, the **Model-error floor** (5 % by default) and the **Footprint** (beam height and
+   sample length along the beam).
+3. For particles partly buried in a film (spray on a cellulose film), open **Particles buried in a film**: tick it
+   and give the film's δ and β at the wavelength, the buried share and the depth ζ.
+4. **Rank Angles**: the table gives each angle's rank, the information it adds to what was measured (**Gain**, in
+   nats), its expected counts and, per parameter, the relative error a joint fit of all measurements could reach at
+   best (σ/θ). The row of the largest gain is picked.
+5. Pick the row of the angle you choose, write a note if you like, and press **Record Choice**: one line goes into
+   `angle_decisions.jsonl` next to the curve — the time, the curve, the fit's parameters, every candidate with its
+   scores, the angle chosen and the note. The lines of a run are its trail of decisions.
+
+The points' pixels come from their errors (a Poisson count averaged over n pixels has σ² = I/n), so fit a curve whose
+σ are counting errors. The score is only as good as the model: a model that misses the sample gives confident but
+wrong advice. It weighs only the horizontal cut; positions, beam damage and motor time are not weighed.
 
 ## 7. Compare and stages
 
@@ -4300,12 +4398,31 @@ the canvas on the right.
 *A CBF frame is loaded and shown under Input preview; no model is imported yet. The three states under 3. Predict say what is still missing, and Predict stays disabled until all three are ready.*
 
 1. **Import data.**
-   - **Single file**: **Choose CBF frame…**, or drop a CBF frame on the canvas. **Stack** is how many
-     consecutive detector files make one input.
+   - **Single file**: **Choose frame…**, or drop a frame on the canvas. **Stack** is how many
+     consecutive detector files (of the format of the first) make one input.
    - **Folder batch**: a folder of numbered frames, the **Range** of frame numbers and **Files per
-     prediction**; a line under the fields says how many files and predictions that makes.
+     prediction**; a line under the fields says how many files and predictions that makes. In a folder with
+     frames of several formats, the numbered frames of the format most of them have are used.
+   - **Watch for new frames** (folder batch): after the frames in the folder, the batch goes on with every frame
+     written into it while it runs — for a measurement in progress; the folder may still be empty when you press
+     **Predict**. A new frame is taken once it is completely written: an EDF as soon as it holds the size its
+     header announces, any other file once its size and time are the same at two looks (the folder is looked at
+     when it changes, and at least every second). An EDF that stays shorter than its header says is taken after
+     5 s without a change; its row then says why it could not be predicted. With **Files per prediction** above 1, new frames are summed in
+     stacks of that many; a frame outside the **Range** is not predicted (the Activity log counts them). Each new
+     prediction gets its row under **Batch results**, and an open trend or heatmap window is drawn again every
+     second. **Stop** ends the batch; unticking **Watch for new frames** ends it once the frames taken are predicted.
+   - **Keep up with the detector** (on by default, with Watch): when frames arrive faster than the model predicts
+     them, at most two frames (or stacks) wait for the model and older ones are left out, so what is predicted is
+     never more than a few frames behind the newest. A model as fast as the detector leaves nothing out. The status
+     line counts the frames left out; they stay in the folder, and a folder batch afterwards predicts them all.
+     Unticked, every frame is predicted in turn, however far behind the detector that falls.
 
-   Prediction reads CBF frames (`.cbf`) only.
+   2D Prediction reads CBF, EDF and TIFF frames, with the readers of Analyze. Values stay as stored; pixels the
+   reader knows hold no data (module gaps stored as 0 on a Pilatus EDF or TIFF, an EDF `Dummy` value) are given to
+   the module as −1, the code a Pilatus CBF stores in its gaps. A NeXus/HDF5 series: convert it first
+   (**Tools ▸ Format Converter**). Use frames like those the module was trained on: a model trained on one
+   beamline's detector and geometry does not know another's.
 2. **Import model.** Choose the **Prediction setup** — a module from `modules/` (section 11.3) — and
    press **Import model...**; the *Model* state under 3. Predict says whether it is loaded. Folded: **Advanced model
    configuration** (the framework check, **Reload Config**, **Edit Config**) and **Advanced model
@@ -4320,6 +4437,11 @@ the canvas on the right.
 3. **Predict.** Three states — *Input*, *Model*, *Framework* — say what is still missing; **Predict** is
    enabled when all three are ready. A prediction runs in the background; **Stop** ends it.
 
+   The model runs in a separate process that stays open: **Import model...** loads it there (TensorFlow and the
+   model take about 10 s), and each prediction after that uses the loaded model (a fraction of a second for a
+   256 × 256 input). The process ends after 15 minutes without a prediction, when a prediction runs past its
+   time limit, and when GIMaP quits; the next prediction starts it again.
+
 The canvas shows **Input preview** once a frame is loaded and **Prediction result** after a prediction.
 *Preprocessed* shows the steps of the module in order with the image each one produced (click one to see
 it large).
@@ -4327,7 +4449,11 @@ it large).
 - **Export input...** saves the frame as displayed, with a JSON record.
 - **Export result...** saves the result as a picture, its data beside it, and a JSON record of the
   module, the model, the preprocessing steps and the input file.
-- A folder batch lists its results under **Batch results**, with filter, sorting and export.
+- A folder batch lists its results under **Batch results**, with filter, sorting and export. Click a completed
+  row to see it in the canvas. While a batch runs, **Show the newest result** (beside the name of the result
+  shown, on by default) makes the canvas follow its newest completed prediction, drawn at most once a second and
+  without the *Preprocessed* panel (that would read the frame again); the panel in view stays in view. Clicking a
+  row during the run unticks it, so the row you chose stays; tick it again to follow the run.
 - The **Activity log** is folded at the bottom.
 
 **SEM comparison…** (above the canvas) opens **SEM Particle Analysis** (section 9.3) with the current
@@ -4358,7 +4484,8 @@ A prediction module is a folder under `modules/` with a `module.yaml`. Its main 
 | `framework` | the model framework, for example TensorFlow/Keras |
 | `model.model_path` | the default model: empty, or a path relative to the module folder. A folder chosen with **Import model...** is kept in your user data folder and takes precedence |
 | `preprocess.entry`, `preprocess.steps`, `preprocess.params` | the preprocessing entry point, steps and parameters |
-| `io.input_type`, `io.stack_axis`, `io.input_shape` | the input type (for example `cbf`), the stack axis, the model's input shape |
+| `io.input_type`, `io.stack_axis`, `io.input_shape` | the format of the training frames (for example `cbf`; for information, not checked), the stack axis, the model's input shape |
+| `io.geometry` | `required`: predict only with the geometry of the frames (a saved instrument profile that matches the detector and image size); otherwise the module runs without it |
 | `outputs` | the outputs: parameter names, ranges or output type; for a distribution, `axes: row` and `axes: column` with `key`, `label`, `unit`, `min`, `max` |
 
 When you add a module, make sure the input type, the preprocessing code and the output definition match
@@ -4367,6 +4494,22 @@ writes into `module.yaml`. A path that a `module.yaml` already names is used whe
 that external training tools register names the model file of this computer in its `module.yaml`. What 2D
 Prediction does with a frame, and what it does not correct, is in
 [Physics and Methods, section 13.4](Physics_Manual.md#134-2d-prediction-labs).
+
+**What a module may know about the frames.** A module whose preprocessing entry takes a `context` parameter, as
+in `def run(image, config, *, module_folder="", return_steps=False, context=None)`, is given what GIMaP knows of
+the frames: `files`, `format`, `shape`, `detector`, `frame` (the reader's facts: αi and where it came from, the
+exposure time, time stamps, monitors of a side file) and, when an instrument profile matches the detector and image
+size, `geometry` (pixel size, distance, beam centre in GIMaP's pixel coordinates, wavelength, αi) with
+`geometry_source`. `context["q_map"]()` gives q_x, q_y, q_z, q_∥ (Å⁻¹) and α_f (°) for every pixel, row 0 at the
+top, the same q as Analyze. αi is the frame's when its header or side file states one, otherwise the profile's.
+A module that resamples the frame onto a q grid with these does not depend on the beamline's pixels. What the
+module was given, without the q maps, is written into the first preprocessing step (`frame_context`) and so into
+the record of an exported result. A module without a `context` parameter is called as before.
+
+The q maps of a geometry are computed once and kept for the frames after it (their arrays are read-only: copy one
+before changing it). A module's Python file is imported once and again only when it changes on disk, so what it
+keeps between calls — a table from pixels to its q grid, say — stays from frame to frame, and an edited file is used
+at the next prediction.
 
 For the SEM comparison, the module must declare the radius axis: `outputs: axes: row` with `key: r`,
 `unit: nm`, `min` and `max`, as in `Au_Silicon_15nm`. A distribution whose module declares no axes is
@@ -4548,8 +4691,8 @@ Version 0.2.0 is a pre-release. For the assumptions of each method, see [Physics
 | **In uint16 TIFF or CBF, missing pixels read back as valid 65535 values.** | In Format Converter, keep the stored data type (the default) or write HDF5 to preserve gaps and bad pixels (§9.1). |
 | **SEM extraction needs a scale for each image.** | Enter the known nm per pixel or calibrate from a scale bar of known length. |
 | **SEM sizes depend on segmentation.** | Check every outline and prefer a model trained on SEM images. The default StarDist weights were trained on cell nuclei. |
-| **2D Prediction reads CBF frames only.** | Convert other frames to CBF with the Format Converter. |
-| **2D Prediction uses only the module’s preprocessing.** | Choose a module trained for your setup because 2D Prediction applies no frame geometry or corrections (§11.3). |
+| **2D Prediction reads CBF, EDF and TIFF frames, not NeXus/HDF5 series.** | Convert a series with the Format Converter (§9.1). |
+| **2D Prediction uses only the module’s preprocessing.** | Choose a module trained for your setup: 2D Prediction applies no frame geometry or corrections itself; a module can ask for the geometry (§11.3). |
 | **The Ag and Cu distribution modules have no calibrated axes.** | Read only the distribution shape on the 0.05–15 nm placeholder axes. Add the trained model’s axes to `module.yaml` for physical sizes, including the radius axis for SEM comparison (§11.3). |
 | **Some text keeps its original language after a language switch.** | Run the analysis again or restart GIMaP. |
 | **Older reduction or fit records may lack a reproduction recipe.** | Look for the `reproduction` block (§12). If it is missing, export a fresh record from the original inputs and settings. |
@@ -4590,7 +4733,7 @@ Without the network, Fitting skips its GISAXS recommendation for Predict paramet
 
 ### 14.4 Predict is disabled, or the model is not imported (2D Prediction)
 
-**Predict** needs all three states above it to be ready. For *Input*, select a CBF frame or folder. For *Model*, press **Import model...**. For *Framework*, install the framework the module needs.
+**Predict** needs all three states above it to be ready. For *Input*, select a detector frame (CBF, EDF, TIFF) or a folder of them. For *Model*, press **Import model...**. For *Framework*, install the framework the module needs.
 
 If the model fails to load, the Activity log shows the folder GIMaP tried. Use **Import model...** to choose a local folder if the one in `module.yaml` is missing or belongs to another computer. The same button changes the folder of a loaded model.
 

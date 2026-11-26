@@ -19,7 +19,8 @@ from PyQt5.QtWidgets import (
 )
 
 
-from src.gimap.app.presentation.i18n import trf
+from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.figures import cjk_fallback
 from src.gimap.shared.numbers import format_number
 
 
@@ -88,8 +89,8 @@ class RenderControlsMixin:
             bars = ax.bar(x, vals, color=["#2563eb", "#16a34a", "#f59e0b", "#dc2626"][: vals.size])
             ax.set_xticks(x)
             ax.set_xticklabels(labels[: vals.size])
-            ax.set_ylabel("Predicted value")
-            ax.set_title("SF Predicted Parameters")
+            ylabel = ax.set_ylabel(tr("Predicted value"))
+            title = ax.set_title(tr("Predicted parameters"))
             ax.grid(axis="y", alpha=0.25)
             for bar, value in zip(bars, vals):
                 ax.text(
@@ -100,6 +101,7 @@ class RenderControlsMixin:
                     va="bottom",
                     fontsize=9,
                 )
+            cjk_fallback(fig, [ylabel, title])  # (the interface language: no empty boxes)
             fig.tight_layout()
             canvas.draw()
             buf = np.asarray(canvas.buffer_rgba())

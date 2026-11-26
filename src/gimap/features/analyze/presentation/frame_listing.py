@@ -11,14 +11,15 @@ FRAME_DETAIL = "Frame {frame} of {total}"
 class FrameListingModel(QAbstractListModel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.spans, self.ends = [], []
+        self.spans, self.ends, self._where = [], [], {}
 
     def reset_sources(self, spans):
         self.beginResetModel()
-        self.spans, self.ends = [], []
+        self.spans, self.ends, self._where = [], [], {}
         total = 0
         for path, indices, name, count, tip in spans:
             if len(indices):
+                self._where.setdefault(str(path).casefold(), len(self.spans))
                 total += len(indices)
                 self.spans.append((path, indices, name, count, tip))
                 self.ends.append(total)
@@ -40,17 +41,17 @@ class FrameListingModel(QAbstractListModel):
         return path, indices[offset]
 
     def row_for(self, path, frame):
-        before = 0
-        for candidate, indices, _name, _count, _tip in self.spans:
-            if str(candidate).casefold() == str(path).casefold():
-                if isinstance(indices, range):
-                    return before + (frame - indices.start) // indices.step if frame in indices else -1
-                try:
-                    return before + indices.index(frame)
-                except ValueError:
-                    return -1
-            before += len(indices)
-        return -1
+        span = self._where.get(str(path).casefold())
+        if span is None:
+            return -1
+        before = self.ends[span - 1] if span else 0
+        indices = self.spans[span][1]
+        if isinstance(indices, range):
+            return before + (frame - indices.start) // indices.step if frame in indices else -1
+        try:
+            return before + indices.index(frame)
+        except ValueError:
+            return -1
 
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid() or index.row() >= self.rowCount():

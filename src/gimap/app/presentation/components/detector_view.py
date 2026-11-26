@@ -209,10 +209,12 @@ class DetectorView(QWidget):
         keep_view: bool = False,
         context: str = "image",
         fit_rect: Optional[tuple[float, float, float, float]] = None,
+        prepared: Optional[tuple] = None,
     ) -> None:
         """Show ``data``; ``rect = (x, y, width, height)`` places row 0 at ``y``. ``context`` (detector, q map
         …): each keeps its own colour limits. ``fit_rect``: the part ``fit_view`` shows (the measured cells of a
-        q map) instead of the whole picture.
+        q map) instead of the whole picture. ``prepared``: ``(log, *display_image(data, valid, log))`` made
+        beforehand (on another thread, for a large picture): drawn while the log display is ``log``.
 
         With ``y_down`` (pixel frames) row 0 is drawn at the top; otherwise the
         y axis points up and row 0 is the bottom row.
@@ -220,7 +222,7 @@ class DetectorView(QWidget):
         array = np.asarray(data)
         if array.ndim != 2 or array.size == 0:
             raise ValueError("DetectorView needs a non-empty 2D array.")
-        self._data = array
+        self._data, self._prepared = array, prepared
         self._valid = None if valid is None else np.asarray(valid, dtype=bool)
         self._rect = None if rect is None else tuple(float(value) for value in rect)
         self._y_down = bool(y_down)
@@ -300,7 +302,11 @@ class DetectorView(QWidget):
     def _redraw(self, *, keep_view: bool) -> None:
         if self._data is None:
             return
-        shown, self._level_sample = display_image(self._data, self._valid, self.log_check.isChecked())
+        prepared, self._prepared = getattr(self, "_prepared", None), None
+        if prepared is not None and prepared[0] == self.log_check.isChecked():
+            shown, self._level_sample = prepared[1], prepared[2]
+        else:
+            shown, self._level_sample = display_image(self._data, self._valid, self.log_check.isChecked())
         levels = self.levels.levels_for(shown, self.log_check.isChecked(), self._level_sample)
         self.image_item.setImage(shown, autoLevels=False, levels=levels or (0.0, 1.0))
         if self._rect is not None:

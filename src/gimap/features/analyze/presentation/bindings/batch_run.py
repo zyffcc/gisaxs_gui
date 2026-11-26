@@ -262,6 +262,8 @@ class BatchRunMixin(BatchPanelMixin, BatchLiveMixin, BatchFinishMixin):
         """The page closes: no new frames, worker processes ended."""
         if not self._batch_inflight and not self.tasks.is_busy():
             self.view_model.release_series_spool()
+        self._series_later_forget()  # (a live map being stacked is not shown)
+        self._series_live_forget()
         self._batch = []
         self._batch_timer.stop()
         if self._batch_workers is not None:
@@ -416,7 +418,7 @@ class BatchRunMixin(BatchPanelMixin, BatchLiveMixin, BatchFinishMixin):
     def _batch_folded(self, outcome, *, later: bool = False) -> None:
         self._series_fit_changed()
         if self._batch_live and outcome.live_row is not None:
-            self._series_rows.append(outcome.live_row)
+            self._series_rows.append(self._series_live_row(outcome.live_row))
         if later:
             self._batch_folding = False
             self._batch_fold_next()

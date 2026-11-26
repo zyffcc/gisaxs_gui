@@ -71,6 +71,16 @@ def frames_at_once(speed: str, *, cores: int, free_bytes: Optional[int], frame_p
     return max(1, min(wanted, int(frames), cores))
 
 
+def watch_frames_at_once(*, cores: int, free_bytes: Optional[int], frame_pixels: int) -> int:
+    """How many new frames a folder watch reduces at the same time, in the application: as many as a balanced batch
+    (a quarter of the cores, 2 to 4), and no more than half the free memory holds (``BYTES_PER_PIXEL`` a pixel)."""
+    cores = max(1, int(cores))
+    wanted = min(4, max(2, cores // 4))
+    if free_bytes is not None:
+        wanted = min(wanted, int(MEMORY_SHARE * free_bytes // (BYTES_PER_PIXEL * max(1, int(frame_pixels)))))
+    return max(1, min(wanted, cores))
+
+
 def batch_cost(choices: BatchChoices, *, frames: int, frame_pixels: int, curve_points: int = 0, fit_points: int = 0,
                map_cells: int = 0, cake_cells: int = 0, at_once: int = 1) -> tuple[int, int, float]:
     """``(bytes per frame, bytes in all, seconds)`` of a batch, roughly — for saying it before the batch starts.
@@ -244,5 +254,5 @@ def run_frame_job(tools: FrameTools, job: FrameJob) -> FrameOutcome:
 
 __all__ = [
     "BALANCED", "BYTES_PER_PIXEL", "FAST", "GENTLE", "SPEEDS", "FrameJob", "FrameOutcome", "FrameTools",
-    "batch_cost", "frames_at_once", "run_frame_job", "write_frame_images",
+    "batch_cost", "frames_at_once", "run_frame_job", "watch_frames_at_once", "write_frame_images",
 ]

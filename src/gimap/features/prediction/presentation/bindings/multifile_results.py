@@ -38,6 +38,7 @@ class MultifileResultsMixin:
 
     def _on_multifile_result_selected(self, result: PredictResult) -> None:
         """多文件结果选中处理 - 双击显示单文件结果"""
+        self._live_result_chosen()  # during a run the chosen row stays (Show the newest result is unticked)
         if result.status != PredictStatus.COMPLETED or not result.prediction_data:
             # 如果结果还未完成，只更新当前文件显示
             self._update_current_file_display(
@@ -146,6 +147,7 @@ class MultifileResultsMixin:
     def _on_multifile_prediction_started(self) -> None:
         """多文件预测开始"""
         self._multifile_prediction_active = True
+        self._live_run_started()
         # 禁用Predict按钮
         btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
         if btn:
@@ -170,6 +172,8 @@ class MultifileResultsMixin:
             stop_btn.setEnabled(False)
             stop_btn.setVisible(False)
 
+        self._end_frame_watch()
+        self._live_run_ended()
         self._append_status_message("Multi-file prediction completed!", level="INFO")
         self._render_prediction_workflow()
 
@@ -177,7 +181,10 @@ class MultifileResultsMixin:
         """多文件预测结果更新"""
         if self._multifile_results_widget:
             self._multifile_results_widget.updatePredictResult(index, **update_data)
+            if update_data.get("status") == PredictStatus.COMPLETED:
+                self._live_result_completed(index)
             if update_data.get("status") == PredictStatus.RUNNING:
+                self._frame_watch_feed()  # the frame left the queue: the next one waiting to keep up goes in
                 result = self._multifile_results_widget.table_model.getResult(index)
                 if result is not None:
                     first = (
@@ -195,6 +202,7 @@ class MultifileResultsMixin:
         """多文件预测进度更新"""
         if self._multifile_results_widget:
             self._multifile_results_widget.updateProgress(completed, total)
+        self._frame_watch_after_frame(completed)
 
         # 更新主进度条
         if total > 0:
@@ -297,7 +305,7 @@ class MultifileResultsMixin:
             return loaded.image
         self._append_status_message(
             self.prediction_view_model.state.error_message
-            or trf("Failed to load CBF file {path}", path=file_path),
+            or trf("Failed to load the frame {path}", path=file_path),
             level="ERROR",
         )
         return None

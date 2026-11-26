@@ -11,6 +11,8 @@ import numpy as np
 
 from .metadata import extract_cbf_metadata, extract_edf_metadata, extract_nxs_metadata
 from .models import DetectorImage
+from .module_gaps import zero_gaps
+from .side_files import side_file_metadata
 from .nexus_datasets import (  # noqa: F401  (re-exported: the dataset choosers import them from here)
     DEFAULT_DATASET_PATH,
     AmbiguousDatasetError,
@@ -68,6 +70,16 @@ def _companion_nxs_paths(scan_root: Path) -> list[Path]:
     return sorted(candidates)
 
 
+def _gap_pixels(raw, metadata: dict) -> Optional[np.ndarray]:
+    """The module gaps of a Pilatus frame that hold 0 (``module_gaps.zero_gaps``), recorded in ``metadata``."""
+    gaps, record = zero_gaps(raw)
+    if record is not None:
+        metadata["module_gaps"] = record
+        if metadata.get("mask_semantics"):
+            metadata["mask_semantics"] += "; module gaps of the detector layout that hold 0"
+    return gaps
+
+
 def _read_cbf(path: Path) -> DetectorImage:
     try:
         import fabio
@@ -79,7 +91,10 @@ def _read_cbf(path: Path) -> DetectorImage:
         data = np.asarray(cbf.data, dtype=np.float32)
         metadata = extract_cbf_metadata(cbf.header, data.shape)
         metadata["stored_dtype"] = str(np.asarray(cbf.data).dtype)  # Pilatus: int32 counts, −1/−2 gap codes
+        gaps = _gap_pixels(cbf.data, metadata)
     invalid = ~np.isfinite(data) | (data < 0)
+    if gaps is not None:
+        invalid |= gaps
     # Beam_xy is (column, row) in pixels of the stored image, which is also
     # the canonical frame here (row 0 at the top, origin at the pixel corner,
     # as pyFAI reads it).  Headers are often stale; Analyze uses this centre
@@ -135,6 +150,9 @@ def _read_edf(path: Path) -> DetectorImage:
         dummy, tolerance = 0.0, 0.0
     if dummy != 0.0:  # the SAXS-package convention: |value − Dummy| ≤ DDummy marks a pixel without data
         invalid |= np.abs(data - dummy) <= max(tolerance, 0.0)
+    gaps = _gap_pixels(raw, metadata)
+    if gaps is not None:
+        invalid |= gaps
     metadata["reader"] = "fabio"
     fields = {key: metadata[key] for key in (
         "detector_name", "pixel_size_x_m", "pixel_size_y_m", "energy_kev", "wavelength_angstrom", "distance_m",
@@ -167,13 +185,13 @@ def _read_tiff(path: Path) -> DetectorImage:
     if data.ndim == 3:
         data = np.mean(data[..., :3], axis=2)
     stored_dtype = str(np.asarray(data).dtype)
+    metadata = {"format": "tiff", "reader": reader, "transformations": [], "stored_dtype": stored_dtype}
+    gaps = _gap_pixels(data, metadata)
     data = np.asarray(data, dtype=np.float32)
-    return DetectorImage(
-        data,
-        ~np.isfinite(data),
-        path,
-        metadata={"format": "tiff", "reader": reader, "transformations": [], "stored_dtype": stored_dtype},
-    )
+    invalid = ~np.isfinite(data)
+    if gaps is not None:
+        invalid |= gaps
+    return DetectorImage(data, invalid, path, metadata=metadata)
 
 
 def load_detector_image(
@@ -188,13 +206,25 @@ def load_detector_image(
     suffix = source.suffix.lower()
     if suffix in HDF5_SUFFIXES:
         return read_nexus_frame(cached_layout(source, dataset_path), frame_idx, source_path=source)
-    if suffix == ".cbf":
-        return _read_cbf(source)
-    if suffix in {".tif", ".tiff"}:
-        return _read_tiff(source)
-    if suffix == ".edf":
-        return _read_edf(source)
-    raise ValueError(f"Unsupported detector image {source.name}: use CBF, NeXus/HDF5, TIFF or EDF.")
+    readers = {".cbf": _read_cbf, ".tif": _read_tiff, ".tiff": _read_tiff, ".edf": _read_edf}
+    if suffix not in readers:
+        raise ValueError(f"Unsupported detector image {source.name}: use CBF, NeXus/HDF5, TIFF or EDF.")
+    image = readers[suffix](source)
+    image.metadata.update(side_file_metadata(source, image.metadata))  # the beamline's .txt beside the image
+    image.metadata["file_time"] = _file_time(source)
+    return image
+
+
+def _file_time(path: Path) -> Optional[str]:
+    """When the file was last written (its modification time, local, to the microsecond): a time of the frame finer
+    than a header stamp of whole seconds, as long as the file was not copied without its times (``series_times``
+    checks it against the header)."""
+    from datetime import datetime
+
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="microseconds")
+    except (OSError, ValueError, OverflowError):
+        return None
 
 
 def dump_metadata(image: DetectorImage) -> str:

@@ -27,10 +27,12 @@ What a look can find:
 
 from __future__ import annotations
 
+import time
+
 from pathlib import Path
 from typing import Optional
 
-from PyQt5.QtCore import QSignalBlocker
+from PyQt5.QtCore import QFileSystemWatcher, QSignalBlocker, QTimer
 from PyQt5.QtWidgets import QFileDialog
 
 from src.gimap.app.presentation.components import show_toast
@@ -45,6 +47,11 @@ from ..texts import left_unfinished, message_text
 from .watch_series import WatchSeriesMixin
 
 WATCH_WAITS = "Watching {folder}: {reason}"
+NOTICED_MS = 40
+"""After the system says the watched folder changed: a look this soon (several changes at once make one look) — or,
+after a look that took longer, as long as that look took: a folder written ten times a second is then looked at
+again and again, and a look at thousands of frames takes a good part of a second; so the watch works at most half the
+time and the window keeps the rest."""
 """A file of the watched folder cannot be read yet; ``reason`` is the reader's sentence."""
 EXPORT_WAITS = "{name} is not exported yet: {reason}"
 """Export New Frames While Watching holds a source back: a part of the detector is missing."""
@@ -249,6 +256,7 @@ class BatchWatchMixin(WatchSeriesMixin):
         self.refresh_batch_entry()
         self.watch_button.setChecked(True)
         self._watch_timer.start()
+        self._notice_folder(folder)
         listed = len(self.view_model.state.files) > before
         if listed:
             self._series_list_grew(existing=True)  # files already there are listed, not queued as newly measured frames
@@ -260,6 +268,9 @@ class BatchWatchMixin(WatchSeriesMixin):
     def stop_watch(self) -> None:
         self._stop_watch_series()
         self._watch_timer.stop()
+        self._notice_folder(None)
+        self._watch_look_again = False
+        self._notice_timer.stop()
         self.view_model.stop_watch()
         self.watch_button.setChecked(False)
         self._status(tr("Stopped watching."))
@@ -270,6 +281,39 @@ class BatchWatchMixin(WatchSeriesMixin):
         self._watch_found(added)
         return added
 
+    def _notice_folder(self, folder: Optional[Path]) -> None:
+        """Look at the folder as soon as the system says it changed (a frame written, renamed into it), besides the
+        look every two seconds, which stays for folders the system does not report on (some network shares)."""
+        watcher = getattr(self, "_folder_notices", None)
+        if watcher is None:
+            watcher = self._folder_notices = QFileSystemWatcher(self)
+            self._notice_timer = QTimer(self)
+            self._notice_timer.setSingleShot(True)
+            self._notice_timer.setInterval(NOTICED_MS)
+            self._notice_timer.timeout.connect(self._watch_noticed)
+            watcher.directoryChanged.connect(self._folder_changed)
+        if watcher.directories():
+            watcher.removePaths(watcher.directories())
+        if folder is not None:
+            watcher.addPath(str(folder))
+
+    def _folder_changed(self, _path=None) -> None:
+        """The system says the watched folder changed: a look after ``NOTICED_MS`` (not later for every change
+        meanwhile: a detector writing ten frames a second would put it off for ever)."""
+        if not self._notice_timer.isActive():
+            self._notice_timer.start()
+
+    def _watch_noticed(self) -> None:
+        """The system said the folder changed: look now, or once more right after the look under way (what changed
+        during it may not be in it). Only while the timer looks too: a watch whose timer was stopped is looked at by
+        whoever stopped it."""
+        if not self._watch_timer.isActive():
+            return
+        if getattr(self, "_watch_looking", False):
+            self._watch_look_again = True
+            return
+        self._watch_tick()
+
     def _watch_tick(self) -> None:
         """The timer: look at the folder on the watch's own thread (one look at a time), then act on it here."""
         if getattr(self, "_watch_looking", False) or not self.view_model.watch.active or self.watch_paused():
@@ -278,6 +322,7 @@ class BatchWatchMixin(WatchSeriesMixin):
         if runner is None:  # its own runner: a look every two seconds is no "busy" for the progress bar
             runner = self._watch_runner = TaskRunner(self, max_threads=1)
         self._watch_looking = True
+        self._watch_look_began = time.monotonic()
         runner.submit("watch", self.view_model.watch.scan, on_done=self._watch_looked,
                       on_error=lambda _message, _details: setattr(self, "_watch_looking", False))
 
@@ -285,6 +330,12 @@ class BatchWatchMixin(WatchSeriesMixin):
         self._watch_looking = False
         if self.view_model.watch.active:  # (stopped meanwhile: what it saw is of no use)
             self._watch_found(self.view_model.take_watch(scan))
+        took = time.monotonic() - getattr(self, "_watch_look_began", time.monotonic())
+        self._notice_timer.setInterval(max(NOTICED_MS, int(1000 * took)))  # (the next look as long after: ``NOTICED_MS``)
+        if getattr(self, "_watch_look_again", False):
+            self._watch_look_again = False
+            if self.view_model.watch.active:
+                self._notice_timer.start()
 
     def _watch_found(self, added) -> None:
         """Act on a look at the folder: list the new files, write the rows of the sources that changed, follow
@@ -333,7 +384,7 @@ class BatchWatchMixin(WatchSeriesMixin):
             job = f"{'export' if exporting else 'watch-series'}:{request.path}:{request.frame_index}"
             if not exporting:
                 self._watch_series_jobs.add(job)
-            self.tasks.submit(
+            self._watch_submit(  # (a few frames at a time, a large one in a worker process: ``watch_pace.py``)
                 job,
                 (lambda request=request, key=key: model.analyze_and_export(request, destination, live_key=key))
                 if exporting else (lambda request=request, key=key: model.series_row(request, key)),
@@ -341,6 +392,7 @@ class BatchWatchMixin(WatchSeriesMixin):
                     self._watch_series_done(value, key, token, built, job),
                 on_error=lambda message, _details, name=request.path.name, token=token, job=job, exporting=exporting:
                     self._watch_series_failed(message, name, token, job, exporting=exporting),
+                frame_job=None if exporting else model.watch_frame_job(request, key),
             )
         return True
 

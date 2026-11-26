@@ -10,6 +10,8 @@ from PyQt5.QtCore import Qt, QSortFilterProxyModel, QAbstractTableModel, QModelI
 
 from PyQt5.QtGui import QFont, QBrush
 
+from src.gimap.app.presentation.i18n import language_changed, tr
+
 
 from .result_types import (
     PredictResult,
@@ -25,6 +27,13 @@ class PredictResultsTableModel(QAbstractTableModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.results: List[PredictResult] = []
+        language_changed().connect(self._language_changed)
+
+    def _language_changed(self, *_args) -> None:
+        """The headers and the states are shown in the interface language (file names and errors as they are)."""
+        self.headerDataChanged.emit(Qt.Horizontal, 0, len(self.COLUMNS) - 1)
+        if self.results:
+            self.dataChanged.emit(self.index(0, 2), self.index(len(self.results) - 1, 2))
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return len(self.results)
@@ -34,7 +43,7 @@ class PredictResultsTableModel(QAbstractTableModel):
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int) -> QVariant:
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.COLUMNS[section]
+            return tr(self.COLUMNS[section])
         return QVariant()
 
     def data(self, index: QModelIndex, role: int) -> QVariant:
@@ -50,7 +59,7 @@ class PredictResultsTableModel(QAbstractTableModel):
             elif col == 1:  # Stack count
                 return f"{max(1, int(getattr(result, 'stack_count', 1)))}"
             elif col == 2:  # Status
-                return result.status.value
+                return tr(result.status.value)
             elif col == 3:  # Duration
                 return result.duration_str
             elif col == 4:  # Error

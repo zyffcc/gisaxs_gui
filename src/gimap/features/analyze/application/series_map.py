@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
@@ -17,8 +18,9 @@ import numpy as np
 
 from src.gimap.shared.version import SOFTWARE as RELEASE
 
-from ..domain import SeriesMap, q_from_two_theta, series_map
+from ..domain import GISAXS, GIWAXS, SeriesMap, q_from_two_theta, series_map
 from ..domain.series_map import VIEW_BOTH, VIEW_FOLDED, VIEW_MEAN, VIEW_NEGATIVE, VIEW_POSITIVE, RowFacts
+from .incidence_record import nominal_incidence
 from .models import FrameAnalysis
 from .ports import FRAME_OF, CurveWriter, source_name
 from .series_reproduction import series_recipe
@@ -42,14 +44,19 @@ TIME_WORDS = {
     "exposure": "seconds since the first row, frame number x exposure time (no time stamp per frame in the file)",
     "start_exposure": "seconds since the first row, start time of each file + frame number x exposure time (no "
                       "time stamp per frame in the files)",
+    "file_times": "seconds since the first row, from the files' modification times (finer than the whole-second time "
+                  "stamps of their headers, which they agree with)",
 }
+FILE_TIME_AGREEMENT_S = 1.5
+"""How far the files' modification times may stray from their header time stamps (whole seconds, plus writing)."""
 WIDTH_NOTE = (
     "fwhm is the moment width: 2.355 x the standard deviation of the intensity above the background inside the "
     "window. It is the FWHM of a Gaussian peak well inside the window and grows with the window; a fitted FWHM "
     "with its error: Batch Export > Fit > Peaks of the ring regions"
 )
 """Said with the peak table and at the trace (``track_peak``)."""
-_FACTS = ("name", "source", "frame_index", "frame_count", "summed", "timestamp", "exposure_s", "frame_time_s")
+_FACTS = ("name", "source", "frame_index", "frame_count", "summed", "timestamp", "exposure_s", "frame_time_s",
+          "incidence_deg", "file_time")
 
 
 class RowLabel(str):
@@ -67,6 +74,10 @@ class RowLabel(str):
     timestamp: str = ""
     exposure_s: Optional[float] = None
     frame_time_s: Optional[float] = None
+    incidence_deg: Optional[float] = None
+    """The nominal αi of a grazing-incidence frame (``series_angles``: one map per angle)."""
+    file_time: str = ""
+    """When the frame's file was last written (``series_times`` uses it when it agrees with the header)."""
 
     def __new__(cls, text: str = "", **facts):
         label = super().__new__(cls, text)
@@ -109,10 +120,13 @@ def row_label(analysis: FrameAnalysis) -> RowLabel:
     summed = 1 + len(analysis.summed_frames or ())
     text = name + (" " + frame_text(analysis.frame_index, count) if count > 1 else "")
     text += ALSO_SUMMED.format(n=summed - 1) if summed > 1 else ""
+    grazing = getattr(analysis, "kind", None) in (GISAXS, GIWAXS) and getattr(analysis, "resolution", None) is not None
     return RowLabel(
         text, name=name, source=str(analysis.path), frame_index=int(analysis.frame_index), frame_count=count,
         summed=summed, timestamp=str(metadata.get("timestamp") or ""), exposure_s=_number(metadata.get("exposure_time_s")),
         frame_time_s=_number(metadata.get("frame_time_s")),
+        incidence_deg=_number(nominal_incidence(analysis)[0]) if grazing else None,
+        file_time=str(metadata.get("file_time") or "") if not summed > 1 else "",
     )
 
 
@@ -129,19 +143,42 @@ def frame_key(path, frame_index: int) -> tuple[str, int]:
     return str(path).casefold(), int(frame_index)
 
 
-def row_facts(rows: Sequence[tuple], *, numbers: Optional[Mapping] = None, group: int = 1) -> tuple[RowFacts, ...]:
+SHARED_X = 4
+"""How many different x a live map keeps to share (``share_x``): one per incidence angle of a run, as a rule."""
+
+
+def share_x(row: tuple, known: list) -> tuple:
+    """``row`` (``(x, intensity, …)``) with its x replaced by an equal x of a row before (``known``: those x, the
+    newest last; at most ``SHARED_X`` are kept). Frames reduced alike give the same x, each its own copy: a long
+    live map then holds it once instead of once per row (20 000 rows of 1 000 points: 160 MB), and stacking finds
+    rows on the same points at once. The values are the same; no x of a row is changed in place."""
+    x = row[0]
+    for other in reversed(known):
+        if other is x:
+            return row
+        if other.shape == x.shape and other.dtype == x.dtype and np.array_equal(other, x):
+            return (other, *row[1:])
+    known.append(x)
+    del known[:-SHARED_X]
+    return row
+
+
+def row_facts(rows: Sequence[tuple], *, numbers: Optional[Mapping] = None, group: int = 1,
+              start: int = 0) -> tuple[RowFacts, ...]:
     """``RowFacts`` of ``rows`` (``(x, intensity, x_label, label, ref)``): from each label (``RowLabel``) and
     ref. ``numbers``: ``frame_key`` → the frame's number in the list, from 1 (the row when it is not there);
-    ``group``: the Sum N in force, so a row summing fewer frames is known as incomplete."""
+    ``group``: the Sum N in force, so a row summing fewer frames is known as incomplete; ``start``: the row of the
+    map the first of ``rows`` is (the rows that arrive for a live map: ``series_growing``)."""
     facts = []
-    for row, (_x, _y, _x_label, label, ref) in enumerate(rows):
+    for row, (_x, _y, _x_label, label, ref) in enumerate(rows, start):
         path, index = (ref[0], int(ref[1])) if ref else (getattr(label, "source", ""), int(getattr(label, "frame_index", 0)))
         summed = int(getattr(label, "summed", group if not isinstance(label, RowLabel) else 1))
         facts.append(RowFacts(
             number=int((numbers or {}).get(frame_key(path, index), row + 1)), source=str(path), frame_index=index,
             frame_count=int(getattr(label, "frame_count", 1)), summed=summed, group=max(1, int(group)),
             timestamp=str(getattr(label, "timestamp", "") or ""), exposure_s=getattr(label, "exposure_s", None),
-            frame_time_s=getattr(label, "frame_time_s", None),
+            frame_time_s=getattr(label, "frame_time_s", None), incidence_deg=getattr(label, "incidence_deg", None),
+            file_time=str(getattr(label, "file_time", "") or ""),
         ))
     return tuple(facts)
 
@@ -154,7 +191,12 @@ _STAMP = re.compile(
 def _seconds(stamp: str) -> Optional[float]:
     """Seconds of an ISO time stamp, also as detectors write it: “+0200” for “+02:00” (the P03 Lambda), “Z”, a
     space for the “T”, a fraction of any length (Python 3.10 reads only 3 or 6 digits and “+HH:MM”)."""
-    text = str(stamp or "").strip()
+    return _text_seconds(str(stamp or "").strip())
+
+
+@lru_cache(maxsize=1 << 16)
+def _text_seconds(text: str) -> Optional[float]:
+    """``_seconds`` of a stripped text, kept (a live map reads the time stamps of all its rows at every drawing)."""
     found = _STAMP.fullmatch(text)
     if found is not None:
         zone = found["zone"] or ""
@@ -190,6 +232,9 @@ def series_times(facts: Sequence[RowFacts]) -> tuple[Optional[np.ndarray], str]:
     if len(facts) < 2:
         return None, ""
     starts = [_seconds(fact.timestamp) for fact in facts]
+    files = _file_times(facts, starts)
+    if files is not None:
+        return files, "file_times"
     for values in ([fact.frame_time_s for fact in facts], starts):
         if all(value is not None for value in values) and _per_frame(facts, values):
             times = np.asarray(values, dtype=float) - float(values[0])
@@ -210,6 +255,26 @@ def series_times(facts: Sequence[RowFacts]) -> tuple[Optional[np.ndarray], str]:
     if np.all(np.diff(times) >= 0) and times[-1] > 0:
         return times, "start_exposure"
     return None, ""
+
+
+def _file_times(facts: Sequence[RowFacts], starts: Sequence[Optional[float]]) -> Optional[np.ndarray]:
+    """Seconds since the first row from the files' modification times, when every row is a file of its own with a
+    header time stamp of whole seconds that two rows share somewhere (frames faster than the stamps), and the files'
+    times agree with those stamps (one offset, within ``FILE_TIME_AGREEMENT_S``) and never run backwards. Files
+    copied without their times disagree, and are not used."""
+    if any(fact.frame_time_s is not None or fact.frame_count > 1 for fact in facts):
+        return None
+    files = [_seconds(fact.file_time) for fact in facts]
+    if any(value is None for value in [*files, *starts]):
+        return None
+    stamps, written = np.asarray(starts, dtype=float), np.asarray(files, dtype=float)
+    if not np.any(np.diff(stamps) == 0) or np.any(np.diff(written) < 0):
+        return None
+    offsets = written - stamps
+    if float(offsets.max() - offsets.min()) > FILE_TIME_AGREEMENT_S:
+        return None
+    times = written - written[0]
+    return times if times[-1] > 0 else None
 
 
 def build_series_map(
@@ -295,6 +360,13 @@ def series_header(series: SeriesMap) -> list[str]:
         lines.append(f"series: {built['name']}{listed}{every}")
     if built.get("cut_text"):
         lines.append(f"cut of the series: {built['cut_text']}")
+    if built.get("incidence"):
+        lines.append(f"incidence: {built['incidence']}")
+    events = (built.get("events") or {}).get("events") or []
+    if events:
+        marked = [f"{event['label']} at frame {event['row']}" for event in events if event["row"] is not None]
+        lines.append(f"events: {len(marked)} of {len(events)} from {Path(built['events']['file']).name}"
+                     + (f" ({'; '.join(marked)})" if marked else ""))
     groups = {fact.group for fact in series.facts}
     if groups - {1}:
         short = [fact.number for fact in series.facts if fact.incomplete]
@@ -316,12 +388,14 @@ def series_record(series: SeriesMap) -> dict[str, Any]:
         "x_label": series.x_label, "halves": series.view, "halves_in_words": view_words(series),
         "series": built.get("name"), "listed_frames": built.get("listed"), "every": built.get("every"),
         "cut_of_the_series": built.get("cut"), "cut_in_words": built.get("cut_text"),
-        "time_from": series.time_from or None,
+        "time_from": series.time_from or None, "incidence": built.get("incidence") or None,
+        "events": built.get("events") or None,
         "rows": [
             {"frame": fact.number, "label": str(series.labels[row]), "file": fact.source,
              "frame_index": fact.frame_index, "frame_count": fact.frame_count, "summed_frames": fact.summed,
              "sum_of": fact.group, "incomplete_sum": fact.incomplete,
-             "time_s": None if times is None else times[row], "timestamp": fact.timestamp or None}
+             "time_s": None if times is None else times[row], "timestamp": fact.timestamp or None,
+             "incidence_deg": fact.incidence_deg, "file_time": fact.file_time or None}
             for row, fact in enumerate(series.facts)
         ],
         "settings": built.get("settings"),
@@ -404,5 +478,5 @@ __all__ = [
     "axis_name", "build_series_map",
     "export_series_curve", "export_series_map", "export_series_trace", "export_series_track", "frame_key",
     "frame_text", "row_facts", "row_label", "row_words", "series_header", "series_record", "series_row",
-    "series_times", "view_words",
+    "series_times", "SHARED_X", "share_x", "view_words",
 ]

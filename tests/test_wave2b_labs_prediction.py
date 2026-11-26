@@ -73,10 +73,10 @@ def test_the_import_card_says_cbf_only_and_keeps_its_fields_beside_their_labels(
     window = _window()
     try:
         ui = window
-        assert ui.gisaxsPredictChooseGisaxsFileButton.text() == "Choose CBF frame…"
-        # The format limit is the button's tooltip (no line under it, no caption repeating the button).
-        assert "prediction reads CBF frames only" in ui.gisaxsPredictChooseGisaxsFileButton.toolTip()
-        assert "CBF frames (.cbf)" in ui.gisaxsPredictChooseFolderButton.toolTip()
+        assert ui.gisaxsPredictChooseGisaxsFileButton.text() == "Choose frame…"
+        # The formats are the button's tooltip (no line under it, no caption repeating the button).
+        assert "(CBF, EDF or TIFF)" in ui.gisaxsPredictChooseGisaxsFileButton.toolTip()
+        assert "(CBF, EDF or TIFF;" in ui.gisaxsPredictChooseFolderButton.toolTip()
         hints = [label.text() for label in ui.predictionInputModePanel.findChildren(QLabel)]
         assert not {"Prediction reads CBF frames (.cbf) only.", "Detector frame", "Choose data folder"} & set(hints)
         grid = ui.gisaxsPredictStackLabel.parentWidget().layout()
@@ -105,7 +105,8 @@ def test_the_empty_canvas_opens_the_cbf_chooser_and_dropped_files_go_to_the_file
 
         monkeypatch.setattr(input_parameters.QFileDialog, "getOpenFileName", staticmethod(choose))
         empty.action_button.click()
-        assert asked and asked[0][0] == "Select CBF Frame" and asked[0][1].startswith("CBF frames (*.cbf)")
+        assert asked and asked[0][0] == "Select Detector Frame"
+        assert asked[0][1].startswith("Detector frames (*.cbf *.edf *.tif *.tiff)")
 
         handled = []
         monkeypatch.setattr(binding, "_handle_new_file_selection", handled.append)
@@ -128,17 +129,18 @@ def test_the_empty_canvas_opens_the_cbf_chooser_and_dropped_files_go_to_the_file
         window.close()
 
 
-def test_a_dropped_tiff_is_refused_with_a_message_that_says_cbf_only(tmp_path, monkeypatch):
+def test_a_dropped_file_that_is_no_frame_is_refused_with_a_message_naming_the_formats(tmp_path, monkeypatch):
     window = _window()
     binding = window.runtime.prediction
     shown = []
     monkeypatch.setattr(input_parameters.QMessageBox, "warning", staticmethod(lambda *args: shown.append(args)))
     try:
-        tiff = tmp_path / "frame.tif"
-        tiff.write_bytes(b"II*\x00")
-        window.predictionWorkbenchLayout._file_dropped(str(tiff))
-        assert shown and shown[0][1] == "Unsupported Format" and "CBF" in shown[0][2] and "frame.tif" in shown[0][2]
-        assert binding.current_parameters.get("input_file") != str(tiff)
+        picture = tmp_path / "frame.png"
+        picture.write_bytes(b"\x89PNG")
+        window.predictionWorkbenchLayout._file_dropped(str(picture))
+        assert shown and shown[0][1] == "Unsupported Format" and "frame.png" in shown[0][2]
+        assert all(name in shown[0][2] for name in ("CBF", "EDF", "TIFF"))
+        assert binding.current_parameters.get("input_file") != str(picture)
     finally:
         window.close()
 

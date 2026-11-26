@@ -18,6 +18,7 @@ from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.shared.file_paths import normalize_path
 
+from ...application import FRAME_SUFFIXES
 from ..prediction_worker import PredictionWorker
 
 BUSY_TEXT = "Predicting… (the model starts in a separate process)"
@@ -244,11 +245,12 @@ class PredictionExecutionMixin:
                 continue  # already finished and deleted
 
     def _cancel_model_jobs(self) -> None:
-        """Cancel the model processes still registered with the job runner (quitting only)."""
+        """Cancel the model processes still registered with the job runners (quitting only)."""
         context = getattr(self.prediction_view_model, "context", None)
-        jobs = getattr(context, "jobs", None)
-        shutdown = getattr(jobs, "shutdown", None)
-        if shutdown is not None:
+        for name in ("jobs", "model_jobs"):
+            shutdown = getattr(getattr(context, name, None), "shutdown", None)
+            if shutdown is None:
+                continue
             try:
                 shutdown()
             except Exception:  # noqa: BLE001 - quitting goes on
@@ -321,26 +323,29 @@ class PredictionExecutionMixin:
             self._append_status_message("No input folder selected", level="WARN")
             return None
 
-        files = [
+        all_files = [
             str(path)
             for path in self.prediction_view_model.files.discover_files(
-                Path(folder), (".cbf", ".tif", ".tiff")
+                Path(folder), FRAME_SUFFIXES
             )
         ]
-        if not files and self.prediction_view_model.state.error_message:
+        # Watch for new frames: a folder still empty (the measurement about to begin) is watched all the same.
+        watch = self._frame_watch_wanted()
+        if not all_files and self.prediction_view_model.state.error_message:
             self._append_status_message(
                 trf("Error scanning folder: {error}", error=self.prediction_view_model.state.error_message),
                 level="ERROR",
             )
             return None
 
-        if not files:
+        if not all_files and not watch:
             self._append_status_message("No compatible image files found in folder", level="WARN")
             return None
+        files = list(all_files)
 
         # 应用范围过滤
         range_text = self.current_parameters.get("range_value", "")
-        if range_text:
+        if range_text and files:
             try:
                 indices = self._parse_range_text(range_text)
                 if indices:
@@ -349,17 +354,17 @@ class PredictionExecutionMixin:
                     files = [
                         self._index_to_file[idx] for idx in indices if idx in self._index_to_file
                     ]
-                    if missing:
+                    if missing and not watch:  # watched, the frames still to come are not missing
                         missing_text = ", ".join(f"{idx:05d}" for idx in missing[:10])
                         if len(missing) > 10:
                             missing_text += ", ..."
                         self._append_status_message(
-                            trf("Range skipped missing CBF indices: {indices}", indices=missing_text), level="WARN"
+                            trf("Range skipped missing frame numbers: {indices}", indices=missing_text), level="WARN"
                         )
             except Exception as e:
                 self._append_status_message(trf("Error parsing range: {error}", error=e), level="WARN")
 
-        if not files:
+        if not files and not watch:
             self._append_status_message("No files selected by range", level="WARN")
             return None
 
@@ -370,30 +375,24 @@ class PredictionExecutionMixin:
             self._set_line_edit("gisaxsPredictEveryValue", "1")
             self._append_status_message("Every must be a positive integer; using 1.", level="WARN")
 
-        if every > 1:
-            batches = [
-                list(batch)
-                for batch in self.prediction_view_model.files.complete_batches(files, every)
-            ]
-            skipped = len(files) - (len(batches) * every)
-            if skipped:
-                self._append_status_message(
-                    trf(
-                        "Skipped {count} trailing file(s) that do not make a full Every={every} stack.",
-                        count=skipped, every=every,
-                    ),
-                    level="WARN",
-                )
-        else:
-            batches = [[file_path] for file_path in files]
-        self._multifile_batch_map = {batch[0]: batch for batch in batches if batch}
-        files_to_process = list(self._multifile_batch_map.keys())
-        if not files_to_process:
+        batches = [list(batch) for batch in self.prediction_view_model.files.complete_batches(files, every)] if (
+            every > 1) else [[file_path] for file_path in files]
+        trailing = files[len(batches) * every:] if every > 1 else []
+        if trailing and not watch:  # watched, they wait for the frames that complete their stack
+            self._append_status_message(
+                trf(
+                    "Skipped {count} trailing file(s) that do not make a full Every={every} stack.",
+                    count=len(trailing), every=every,
+                ),
+                level="WARN",
+            )
+        files_to_process = [batch[0] for batch in batches if batch]
+        if not files_to_process and not watch:
             self._append_status_message(
                 "No complete multi-file stacks selected by range/every.", level="WARN"
             )
             return None
-        if every > 1:
+        if every > 1 and files_to_process:
             self._append_status_message(
                 trf(
                     "Multi-file range grouped into {count} batch(es), Every={every}.",
@@ -402,42 +401,28 @@ class PredictionExecutionMixin:
                 level="INFO",
             )
 
-        # 清空现有结果并添加新的待处理项目
+        # Every prediction gets its row (a stack is named first - last); the rows are the run's order.
+        self._multifile_batch_map = {}
         if self._multifile_results_widget:
             self._multifile_results_widget.clearResults()
-
-            # 添加所有文件到结果列表
-            for file_path in files_to_process:
-                row = self._multifile_results_widget.addPredictResult(file_path)
-                batch = self._multifile_batch_map.get(file_path, [])
+            for batch in batches:
+                self._add_batch_row(batch)
                 if len(batch) > 1:
-                    result = self._multifile_results_widget.table_model.getResult(row)
-                    if result is not None:
-                        result.file_name = (
-                            f"{os.path.basename(batch[0])} - {os.path.basename(batch[-1])}"
-                        )
-                        result.file_path = "\n".join(batch)
-                        result.stack_count = len(batch)
-                        self._multifile_results_widget.table_model.updateResult(row, result)
-                        self._append_status_message(
-                            trf(
-                                "Queued stack: {first} - {last} ({count} files)",
-                                first=os.path.basename(batch[0]), last=os.path.basename(batch[-1]), count=len(batch),
-                            ),
-                            level="INFO",
-                        )
-                elif batch:
-                    result = self._multifile_results_widget.table_model.getResult(row)
-                    if result is not None:
-                        result.stack_count = 1
-                        self._multifile_results_widget.table_model.updateResult(row, result)
+                    self._append_status_message(
+                        trf(
+                            "Queued stack: {first} - {last} ({count} files)",
+                            first=os.path.basename(batch[0]), last=os.path.basename(batch[-1]), count=len(batch),
+                        ),
+                        level="INFO",
+                    )
 
         # 开始批量预测
         if self._multifile_manager:
+            follow = self._prepare_frame_watch(folder, all_files, every, trailing)
             self._multifile_prediction_active = True
             self._show_multifile_results_window()
             self._multifile_manager.start_batch_prediction(
-                files_to_process, self._predict_single_file_for_batch
+                files_to_process, self._predict_single_file_for_batch, follow=follow
             )
 
         # 立即返回，实际处理将在后台进行

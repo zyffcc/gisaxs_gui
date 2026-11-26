@@ -113,12 +113,31 @@ class SeriesStagesMixin:
         self.series_stages_combo.show()
         self._stages_failure = None
         self.series_stages_label.setText(tr("Looking for stages and odd frames …"))
+        ticket = getattr(self, "_stages_ticket", None)
+        if ticket is not None and self.tasks.is_pending(ticket):
+            self._stages_wanted = True  # (one search at a time: ``_stages_then``)
+            return
+        self._stages_wanted = False
         x_range = self._stages_wanted_range()
-        self.tasks.submit(
+        self._stages_ticket = self.tasks.submit(
             "series-stages", lambda: stages_of(series, x_range),
-            on_done=lambda stages: self._stages_found(series, stages, x_range),
-            on_error=lambda message, _trace: self._stages_failed(series, message, x_range),
+            on_done=lambda stages: self._stages_then(self._stages_found, series, stages, x_range),
+            on_error=lambda message, _trace: self._stages_then(self._stages_failed, series, message, x_range),
         )
+
+    def _stages_then(self, show, *values) -> None:
+        """Show what the search found, then search the map shown now if it was asked for meanwhile.
+
+        One search at a time: a live map is drawn again every second or so, and a search of a few thousand rows
+        took 10–30 s of a busy computer. Each drawing started one more, the ones before going on unseen — a dozen at
+        once while a watch caught up, with some 160 MB each, and the window waited for them. Now the map shown
+        when the search under way ends is the one searched next (a search of a map since grown is not shown)."""
+        try:
+            show(*values)
+        finally:
+            if getattr(self, "_stages_wanted", False):
+                self._stages_wanted = False
+                self._find_stages()
 
     def _stages_failed(self, series, message: str, x_range=None) -> None:
         """No stages in this map (or in the x range it shows): nothing of stages found before stays — not on
@@ -346,13 +365,13 @@ def change_share(stages) -> float:
     return 100.0 * float(stages.explained[0]) if stages.explained.size else 0.0
 
 
-def series_name(files: list) -> str:
+def series_name(files: list, stems: Optional[list] = None) -> str:
     """A short name for the series: what the file names share (or the one file's stem), without
-    frame numbers and NeXus module suffixes."""
+    frame numbers and NeXus module suffixes. ``stems``: those of ``files``, when known (a live map keeps them)."""
     import os
     import re
 
-    stems = [path.stem for path in files] or ["series"]
+    stems = (list(stems) if stems is not None else [path.stem for path in files]) or ["series"]
     common = os.path.commonprefix(stems) if len(stems) > 1 else stems[0]
     name = re.sub(r"(_m\d{2})$", "", common)
     name = re.sub(r"[_\-.]*\d*$", "", name) if len(stems) > 1 else re.sub(r"_\d{5}$", "", name)

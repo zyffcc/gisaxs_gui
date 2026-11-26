@@ -843,11 +843,27 @@ valid(p) = finite(I_p) ∧ ¬mask_reader(p) ∧ (I_p ≥ 0 unless the stored typ
 
 - On an integer counting detector, negative values are gap or defect codes (Pilatus writes −1 and −2) and are left out.
 - On a floating-point frame (dark- or background-subtracted), negative values are data and are kept.
+- **Module gaps stored as 0.** Some files (ALS 7.3.3 EDF frames, some converted TIFFs) store the gaps between the
+  modules of a Pilatus as 0, which reads like a measured zero. For an integer CBF, EDF or TIFF frame of a Pilatus size
+  (300K 619 × 487, 300K-W 195 × 1475, 1M 1043 × 981, 2M 1679 × 1475, 6M 2527 × 2463 pixels, rows × columns, also
+  turned by 90°), the gaps follow from the layout: modules of 195 × 487 pixels, 17 rows between two rows of
+  modules, 7 columns between two modules of a row. A gap band (whole rows, or whole columns) that holds no value
+  above 0 is a gap of the file; its zeros are added to the reader's mask, and the record gives their number
+  (`module_gaps_left_out`, section 14.4). A gap band that holds counts (a file that filled its gaps, or a detector
+  whose modules sit closer) is left as it is, and so is a zero inside a module. The layout, not the counts, says
+  where a gap can be: in a short exposure a whole detector row can be zero and still be measured.
 - The rule follows the stored type, not the physical meaning of the values (section 6.4). A floating-point type counts as such in either byte order (`float32`, or `>f4` as h5py and fabio report a big-endian one).
 
 Examples: the GALAXI frame is stored as int32 and has between 5 000 and 10 000 gap pixels at −1. The P08 frame is stored as float32 (dark-subtracted); about 9.8 × 10⁵ of its pixels (23 %) are negative and are kept as data.
 
-Implementation: `src/gimap/features/analyze/domain/validity.py`, `src/gimap/shared/detector_io/loading.py`, `src/gimap/shared/detector_io/nexus_reading.py`
+**Side files.** ALS 7.3.3 writes beside each EDF a text file `<stem>.txt` with the motors and counters of the
+exposure. It is read when it has the line `Motors: n` and one of the names below: `Sample Alpha Stage` gives the
+nominal incidence angle αi of the frame, frame by frame, unless the image header states one (the source is recorded as
+`side file <name>: Sample Alpha Stage`); `Izero`, `I1`, `GiSAXS Beamstop Counter` and `Beam Current` are offered as
+monitors (section 4.12). The side file is recorded with the frame's files and their SHA-256. The motor reading is
+taken as αi as it is; the frame measurement of section 2.3 compares it with the frame.
+
+Implementation: `src/gimap/features/analyze/domain/validity.py`, `src/gimap/shared/detector_io/loading.py`, `src/gimap/shared/detector_io/nexus_reading.py`, `src/gimap/shared/detector_io/module_gaps.py`, `src/gimap/shared/detector_io/side_files.py`
 
 ### 4.2 NeXus and HDF5 sources
 
@@ -897,7 +913,7 @@ dead:  I ≤ 0    and    every valid neighbour ≥ 20 counts         (integer fr
 
 - A pixel needs at least one valid neighbour to be judged. In (4.4), `S_8` is the sum of the valid neighbours (invalid ones count as 0), and the robust noise is taken over the whole frame (on a sample of about 2 × 10⁵ pixels). On a floating frame with fewer than 16 valid pixels, or with a zero spread, no hot pixel is flagged.
 - For the dead test, a true zero next to neighbours of at least 20 counts has a Poisson probability of at most e⁻²⁰.
-- A separable 3 × 3 sum selects candidates first; only these are compared with their eight neighbours.
+- Candidates are selected first; only these are compared with their eight neighbours. On an integer frame with no valid pixel below 0 and at most 2 % of its pixels above 10 counts (a short exposure), the candidates are the pixels above 10 counts and the pixels next to one of at least 20 counts: by (4.3) and (4.5) every hot pixel, pixel of a defective line and dead pixel is among them. On other frames a separable 3 × 3 sum selects them. Both ways flag the same pixels; the first is several times faster (a Pilatus 2M frame of 0.1 s: about 30 ms instead of 230 ms).
 - **Defective rows and columns.** A pixel is a line candidate when it passes (4.3) against the two pixels across the line (the pixels above and below for a row, left and right for a column), with `b` the larger of the two. A row or column is defective when it has at least 10 candidates, spread over at least 50 px, with no run longer than 10 consecutive pixels. Only the candidate pixels are left out, never a whole line. Pixels already flagged as hot are not counted again.
 
 Anything wider than one pixel, such as a Bragg spot, a streak, a rod, the beam-stop edge or the Yoneda band, is kept. The numbers go into the record as `bad_pixels_left_out` (`hot`, `dead`, `defective_line_pixels`). Clusters of bad pixels and bad pixels of the background frame are not searched for.
@@ -1025,7 +1041,7 @@ I_norm,p = c · I′_p,      c = A_abs / (t_exp · M · T · d)                 
 | Term | Meaning | Source |
 | --- | --- | --- |
 | `t_exp` | exposure time (s) | the file header (`exposure_time_s` of the reader: CBF `Exposure_time`, EDF `ExposureTime` / `count_time`, NeXus `count_time` / `frame_time`) or typed |
-| `M` | monitor (ion chamber, diode, `Flux` of a Pilatus CBF, ring current) | a header value chosen by its name (EDF keywords such as `Monitor`, `I0`, `Intensity0`; NeXus `NXmonitor` `data` / `integral` or `control/integral` of the frame) or typed |
+| `M` | monitor (ion chamber, diode, `Flux` of a Pilatus CBF, ring current) | a header value chosen by its name (EDF keywords such as `Monitor`, `I0`, `Intensity0`; NeXus `NXmonitor` `data` / `integral` or `control/integral` of the frame; the counters of a 7.3.3 side file, `Izero`, `I1`, `GiSAXS Beamstop Counter`, `Beam Current`, section 4.1) or typed |
 | `T` | transmission of the sample, `0 < T ≤ 1` | typed |
 | `d` | thickness entered in mm, converted to cm for a standard-derived scale | typed |
 | `A_abs` | absolute-scale factor | typed or fitted to a standard measured in the same set-up |
@@ -1842,7 +1858,7 @@ share of measured 1° bins), C_w, measured f ± σ_f [systematic range], isotrop
 - *peak search* records the candidate cap, *texture rule* gives the isotropic comparison, and *ring orientation* states the exit cut and polarisation.
 - *phase assignment* when phases were given, and *pole figure* when rings were analysed (sections 7.10, 7.11).
 
-*Incidence angle* records the nominal value from the run options, notes, Analyze command bar, a unit-labelled sample incidence in the selected frame header, or instrument profile, in that order. A frame sum uses a header value only when its members agree. The frame measurement in §2.3 supplies a missing nominal angle and replaces a nominal angle that differs by more than three measured standard errors. **Keep entered αi** or `--keep-incidence` retains the nominal angle and still reports the comparison. When both sources are missing, the run uses 0° and asks for αi. The JSON record keeps geometry and peak-fit values to 15 significant digits. The tool-response snapshots use the precision specified in section 14.10.
+*Incidence angle* records the nominal value from the run options, notes, Analyze command bar, a unit-labelled sample incidence in the selected frame header (or the `Sample Alpha Stage` of its side file, section 4.1), or instrument profile, in that order. A frame sum uses a header value only when its members agree. The frame measurement in §2.3 supplies a missing nominal angle and replaces a nominal angle that differs by more than three measured standard errors. **Keep entered αi** or `--keep-incidence` retains the nominal angle and still reports the comparison. When both sources are missing, the run uses 0° and asks for αi. The JSON record keeps geometry and peak-fit values to 15 significant digits. The tool-response snapshots use the precision specified in section 14.10.
 
 Implementation: `src/gimap/features/assistant/application/pipeline_rows.py`
 
@@ -3664,6 +3680,53 @@ row: 4000 steps of 16 walkers about 90 s, of 24 walkers on Predict's posterior a
 Implementation: `src/gimap/features/fitting/domain/mcmc.py`, `domain/posterior_check.py`,
 `application/posterior_check.py`, `presentation/single/posterior_check.py`
 
+### 9.20 Which incidence angle tells most: Fisher information of a fitted cut
+
+For a run that changes the incidence angle between measurements, the fitted horizontal cut predicts what an exposure
+at another angle would add. The expected counts of point `j` at incidence `α_i` and exposure `t`, at the exit angle
+of the cut (the substrate's Yoneda row in the DWBA of section 9.17), are
+
+```text
+μ_j(θ; α_i) = n_j (t / t_0) A(α_i) [ (1 − b) I_j^top(θ; α_i) + b B(α_i) I_j^in(θ; α_i) ]          (9.20.1)
+B = |t(α_i)|² |t(α_f)|² / (1 + ζ (1/Λ(α_i) + 1/Λ(α_f)))                                             (9.20.2)
+Λ(α) = 1 / (2k Im √(sin²α − 2δ_f + 2iβ_f))                                                            (9.20.3)
+```
+
+- `I^top`: particles on the surface, the four DWBA paths (section 9.17); `n_j` the pixels of point `j`; `t_0` the
+  exposure of the fit; `A` the footprint relative to the fitted angle, `min(L, h / sin α_i) / min(L, h / sin α_0)`
+  for a beam of height `h` on a sample of length `L` (0.03 mm and 20 mm by default).
+- **Buried particles** (optional): a fraction `b` of the particles lies in a film `1 − δ_f + iβ_f` with a number
+  density falling as `exp(−z/ζ)`. They see the transmitted wave `|t|²` damped over the intensity penetration depth
+  `Λ` (9.20.3); their form factor is taken at the vacuum `q_z` (Born; refraction of `q_z` in the film and
+  reflection at the film's lower interface are left out). Below the film's critical angle `Λ` is a few nm (5.7 nm at
+  0.10° in a cellulose film at 10 keV, `α_c` = 0.140°) and buried particles fall dark; above it `Λ` is microns.
+- **Information.** With each point's variance the Poisson count plus a model-error floor `f` (5 % by default),
+
+```text
+F_ab = Σ_j (∂μ_j/∂ln θ_a)(∂μ_j/∂ln θ_b) / (μ_j + f² μ_j²)                                         (9.20.4)
+```
+
+  Beyond about `1/f²` counts per point the model, not the photons, limits the error, so more exposure adds little.
+  Information adds over measurements. A candidate angle is scored by its gain
+  `log det(F_made + F_α) − log det(F_made)` (nats) and by the relative Cramér–Rao bounds `√diag(F_made + F_α)⁻¹`:
+  the errors a joint fit of all measurements could reach at best, every other parameter free. Derivatives are central
+  differences of relative step 10⁻³.
+- **Candidate solutions** that fit the frame equally well are told apart by the expected χ² between their counts,
+  `Σ_j (μ_j^a − μ_j^b)² / (μ_j + f² μ_j²)` at their mean; an angle where it is large settles which is right.
+
+**Example.** Spheres of radius 5 nm (σ_R/R = 0.1) at a distance of 40 nm on Si at 10 keV, 30 % of them buried with
+`ζ` = 50 nm in a cellulose film, 10 s measured at 0.4°: the bound of `ζ` is about 700 % — the reference angle sees all
+depths alike — while 1 s more at 0.12°, just below the film's critical angle, brings it to about 45 %; 0.15°, just
+above it, leaves it above 400 %. Radius and spacing, already fixed to below 1 %, change little. This is the reason for short looks below
+and above the film's critical angle between spray pulses.
+
+**What it does not cover.** Only the horizontal cut at one exit angle is scored; the vertical cut, the exit angles
+below the Yoneda band (where the vertical information is, section 2.3) and a refracted `q_z` are not yet in it. The
+score is only as good as the model: a wrong model gives confident but wrong advice. Positions, beam damage and the
+time the motors take are not weighed.
+
+Implementation: `src/gimap/features/fitting/domain/angle_information.py`
+
 ## 10. 1D Predict (many curves)
 
 The 1D Predict window (**Tools ▸ 1D Predict — Fit Many Curves…**) fits a list of curve files, or the curve open in
@@ -3739,7 +3802,32 @@ t_r = (T_file(r) + j_r · t_exp) − (T_file(1) + j_1 · t_exp)   (several multi
 
 Here `T` is a time stamp, `T_file(r)` the start time of the file of row `r`, `j_r` the frame index in its file and t_exp the single exposure time of all frames. Times from (11.2) and (11.3) are lower bounds: the read-out time between frames is not in the file. The time axis changes only the drawing and the exports. Stages (section 11.7) are always cut in row order.
 
-Implementation: `src/gimap/features/analyze/domain/series_map.py`, `src/gimap/features/analyze/application/series_map.py`
+**Frames faster than their time stamps.** An EDF header stamps whole seconds (`Date`), so at 10 frames per second ten
+rows share a stamp. When every row is a file of its own, two rows share a stamp somewhere, and the files'
+modification times `M_r` never run backwards and agree with the stamps, `max_r(M_r − T_r) − min_r(M_r − T_r) ≤ 1.5 s`,
+the time is taken from them, `t_r = M_r − M_1` (`time_from`: `file_times`). The agreement test rejects files copied
+without their times. Otherwise (11.1) holds with the whole-second stamps.
+
+**Events.** An events file (Analyze ▸ Series ▸ Options) gives absolute times `E_k`. With the absolute time `A_1` of the
+first row (its file time when the map's times come from files, else its header stamp), event `k` lies on the first
+row `r` with `t_r ≥ E_k − A_1`, and outside the map when `E_k − A_1` falls before `t_1` or after the last row's time.
+A time without a time zone is local time, as are the header stamps and file times; a clock offset between the computer
+that wrote the frames and the one that wrote the events moves every event by that offset.
+
+**Frames at several incidence angles.** The cut of the series lies at the same detector rows in every frame. At
+another αi those rows are another exit angle αf and another q_z, so rows of different αi do not belong in one map.
+The angle of a row is its nominal αi (typed, from the header or side file, or from the profile; section 4.1).
+Angles within 0.005° are one angle. When the rows have more than one angle and the most frequent angle has at least
+two rows, the map holds the rows of that angle (a tie: the angle of the first row), and the others are kept aside;
+the αi list shows another angle's map or all rows. A scan with a new angle in every frame stays one map. The exports
+state the angle of the map and how many frames of each other angle were left out (`incidence`). The map of another
+angle keeps the same detector rows of the cut, so its rows are again one exit angle.
+
+**Exposure times.** When the rows of a map have different exposure times and the exposure term of the normalisation
+(section 4.12) is off, their intensities differ by the exposure alone; Analyze says so and offers to divide by the
+exposure time of the file header.
+
+Implementation: `src/gimap/features/analyze/domain/series_map.py`, `src/gimap/features/analyze/application/series_map.py`, `src/gimap/features/analyze/application/series_angles.py`
 
 ### 11.2 Traces and the peak in a window
 
@@ -4648,13 +4736,18 @@ records), `src/gimap/features/format_converter/domain/rules.py` ((13.31), (13.32
 ### 13.4 2D Prediction (Labs)
 
 **Purpose.** 2D Prediction runs a trained neural network ("prediction module") on GISAXS detector frames and
-shows what it predicts: a joint size distribution or a set of sample parameters (Labs ▸ 2D Prediction). It applies
-no geometry: no beam centre, no q map and no physical model enter the computation. The result is what the module's
+shows what it predicts: a joint size distribution or a set of sample parameters (Labs ▸ 2D Prediction). GIMaP
+applies no geometry itself: no beam centre, no q map and no physical model enter the computation unless a module
+asks for the geometry and uses it (below). The result is what the module's
 network was trained to output, on the axes the module declares.
 
-**Input.** Only CBF frames are read, directly with fabio (Knudsen et al., 2013), as float32 of the stored values.
-The shared reader of Analyze is bypassed: no P03 transform and no mask are applied, and negative gap codes stay in
-the image. A stack of N consecutive files (sorted by name; in a folder batch, each group of *Files per prediction*) is summed:
+**Input.** CBF, EDF and TIFF frames are read with the shared readers of Analyze (fabio, Knudsen et al., 2013), as
+float32 of the stored values: no transform and no mask are applied, and negative gap codes stay in the image. The
+one change to a value: a pixel the reader marks as holding no data while its stored value is 0 or more (a Pilatus
+module gap stored as 0, section 4.1; an EDF `Dummy` value) becomes −1, the code a Pilatus CBF stores in its gaps,
+which the modules' `set_invalid`, `mask` and `experiment_mask` steps treat as invalid. A P03 CBF stores −1 in its
+gaps already, so its input is unchanged. A stack of N consecutive files of one format (sorted by name; in a folder
+batch, each group of *Files per prediction*) is summed:
 
 ```text
 I = Σ_{f=1…N} I_f                                                                (13.33)
@@ -4662,7 +4755,11 @@ I = Σ_{f=1…N} I_f                                                            
 
 **Module.** A module is a folder under `modules/` with a `module.yaml` and its own `preprocess.py`. GIMaP calls the
 entry named in `preprocess.entry` with the image, the configured steps and parameters, and the module folder. The
-steps are the module's own code. The shipped modules use these steps:
+steps are the module's own code. An entry that takes a `context` parameter is also given the frames' facts and,
+with an instrument profile matching the detector and image size, their geometry and a function for q of every pixel
+(`grazing_q_map`, chapter 2, in Å⁻¹ with the exact exit-angle model; αi from the frame's header or side file when it
+states one, otherwise from the profile). The plain part is recorded in the first step (`frame_context`). None of
+the shipped modules takes it: their input is the stored pixels. The shipped modules use these steps:
 
 | Module folder | Steps (in order) | Model input | Output |
 |---|---|---|---|
@@ -4837,8 +4934,9 @@ UTF-8 without a byte-order mark; GIMaP's own symbols are written in ASCII (`1/A`
   GISAXS, `radial_bins` for GIWAXS), `file_format`, `intensity_unit` (`counts_per_pixel` by default, cm⁻¹ for absolute intensity), `counting_model_valid`
   (whether σ may be taken from Poisson statistics: true for photon counts in the sense of section 6.4, without
   GIWAXS intensity corrections or a reference-peak normalisation), `threshold_enabled` (a value range
-  was set), `gap_guard_px`, `summed_frames`, for GISAXS the halves a fit should take when they were chosen, and for a
-  frame of a multi-frame source `frame_index` (0-based) and `frame_count`. The file is written under a temporary name
+  was set), `gap_guard_px`, `summed_frames`, for GISAXS the halves a fit should take when they were chosen and
+  `alpha_i_deg` (the αi the q of the cut were computed with; Fitting's In-situ series fits the frames of the
+  model's αi only), and for a frame of a multi-frame source `frame_index` (0-based) and `frame_count`. The file is written under a temporary name
   and renamed when complete.
 - q-map and cake CSV: a title line saying what the cells hold (mean intensity per cell, blank = no pixel), the
   source and frame lines and a line naming the row and column axes.
@@ -4862,7 +4960,8 @@ Implementation: `src/gimap/features/analyze/infrastructure/adapters/csv_export.p
 ### 14.4 Pixels left out
 
 `bad_pixels_left_out` gives, per frame, the numbers of hot pixels, dead pixels (counting detectors only) and pixels
-on defective detector lines that were excluded automatically (the rules are in section 4.4). `drawn_mask_pixels` is the number of pixels of the user's mask, and `pixels_filled_from_mirror` the
+on defective detector lines that were excluded automatically (the rules are in section 4.4). `module_gaps_left_out` gives
+the detector and the number of module-gap pixels stored as 0 that the reader left out (section 4.1). `drawn_mask_pixels` is the number of pixels of the user's mask, and `pixels_filled_from_mirror` the
 number of pixels filled from the mirror image. A value `null` means that the step was off. The reproduction
 recipe stores both the user mask (`mask`) and the final excluded pixels (`excluded_pixels`). Each bitmap gives its
 shape and alternating run lengths in row-major order, starting with zeros. Lengths are unsigned 64-bit

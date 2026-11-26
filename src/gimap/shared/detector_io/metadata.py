@@ -118,6 +118,20 @@ def _edf_float(header: dict[str, Any], *keys: str) -> Optional[float]:
     return None
 
 
+def _edf_date(header: dict[str, Any]) -> Optional[str]:
+    """The ``Date`` of an EDF header (“Thu Sep 11 20:51:25 2014”, as ALS 7.3.3 and the SAXS package write it) as an
+    ISO time stamp without a time zone, or ``None``. Whole seconds only."""
+    from datetime import datetime
+
+    text = " ".join(str(header.get("Date") or header.get("date") or "").split())
+    for pattern in ("%a %b %d %H:%M:%S %Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%d-%b-%Y %H:%M:%S"):
+        try:
+            return datetime.strptime(text, pattern).isoformat()
+        except ValueError:
+            continue
+    return None
+
+
 def extract_edf_metadata(header: dict[str, Any], shape: tuple[int, int]) -> dict[str, Any]:
     """Metadata from an ESRF data format (EDF) header, in the SAXS-package keywords.
 
@@ -148,7 +162,7 @@ def extract_edf_metadata(header: dict[str, Any], shape: tuple[int, int]) -> dict
         "header_distance_m": _edf_float(header, "SampleDistance"),
         "header_beam_xy_px": None if center_x is None or center_y is None else (center_x, center_y),
         "exposure_time_s": _edf_float(header, "ExposureTime", "count_time", "acq_expo_time"),
-        "timestamp": None,
+        "timestamp": _edf_date(header),
         "format": "edf",
         "header": {str(key): str(value) for key, value in header.items()},
         "transformations": [],

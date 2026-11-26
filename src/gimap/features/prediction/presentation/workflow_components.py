@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PyQt5.QtCore import QEvent, Qt, pyqtSignal
 from PyQt5.QtWidgets import (
+    QCheckBox,
     QFrame,
     QGraphicsView,
     QGridLayout,
@@ -21,12 +22,27 @@ from src.gimap.app.presentation.layout_primitives import CARD_SPACING
 from .workflow_state import PredictionWorkflowSnapshot
 
 CBF_FILE_TIP = (
-    "A CBF detector frame (.cbf), or the first of a numbered series, to predict from: "
-    "prediction reads CBF frames only."
+    "A detector frame (CBF, EDF or TIFF), or the first of a numbered series, to predict from: "
+    "use frames like those the module was trained on."
 )
-CBF_FOLDER_TIP = "A folder of numbered CBF frames (.cbf): those in the range below are used."
+CBF_FOLDER_TIP = (
+    "A folder of numbered detector frames (CBF, EDF or TIFF; the format most of them have): those in the range "
+    "below are used."
+)
 STACK_TIP = "How many consecutive detector files contribute to this prediction."
 RANGE_TIP = "Use an inclusive file-number range and choose how many files form one prediction."
+WATCH_TEXT = "Watch for new frames"
+EMPTY_WATCHED = "No frames in the folder yet: with Watch for new frames, the batch waits for them."
+WATCHING_SUMMARY = "Watching for new frames · {predicted} predicted"
+WATCHING_SUMMARY_LEFT_OUT = "Watching for new frames · {predicted} predicted · {left_out} left out to keep up"
+KEEP_UP_TEXT = "Keep up with the detector"
+WATCH_TIP = ("After the frames of the folder, go on with every frame written into it while the batch runs (a frame is "
+             "taken once it is completely written). Stop ends the batch; unticking ends it once the frames taken are "
+             "predicted.")
+KEEP_UP_TIP = ("When frames arrive faster than the model predicts them, at most two frames (or stacks) wait for the "
+               "model and older ones are left out, so the prediction stays a few frames behind the newest at most. Left-out "
+               "frames are counted, stay in the folder and can be predicted later with a folder batch. Unticked, every "
+               "frame is predicted in turn, however far behind.")
 
 
 def range_field_tip(is_batch: bool, indices=()) -> str:
@@ -210,9 +226,9 @@ class PredictionInputModePanel(QWidget):
 
         self.pages = QStackedWidget(self)
         self.pages.setObjectName("predictionInputModePages")
-        # Prediction reads CBF frames only: the button says so, its tooltip says it in full (a dropped
-        # file that is not CBF is refused with a message).
-        ui.gisaxsPredictChooseGisaxsFileButton.setText("Choose CBF frame…")
+        # Prediction reads CBF, EDF and TIFF frames: the tooltip says so (a dropped file of another kind is
+        # refused with a message).
+        ui.gisaxsPredictChooseGisaxsFileButton.setText("Choose frame…")
         ui.gisaxsPredictChooseGisaxsFileButton.setToolTip(CBF_FILE_TIP)
         ui.gisaxsPredictChooseFolderButton.setToolTip(CBF_FOLDER_TIP)
         single_page = self._make_picker_page(
@@ -239,6 +255,22 @@ class PredictionInputModePanel(QWidget):
         range_layout.addWidget(ui.gisaxsPredictStackValue, 0, 1, Qt.AlignLeft)
         range_layout.addWidget(ui.gisaxsPredictEveryLabel, 1, 0)
         range_layout.addWidget(ui.gisaxsPredictEveryValue, 1, 1, Qt.AlignLeft)
+        # A folder batch can go on with the frames written into its folder (bindings/frame_watch.py).
+        ui.gisaxsPredictWatchCheck = QCheckBox(WATCH_TEXT, range_panel)
+        ui.gisaxsPredictWatchCheck.setObjectName("gisaxsPredictWatchCheck")
+        ui.gisaxsPredictWatchCheck.setToolTip(WATCH_TIP)
+        ui.gisaxsPredictKeepUpCheck = QCheckBox(KEEP_UP_TEXT, range_panel)
+        ui.gisaxsPredictKeepUpCheck.setObjectName("gisaxsPredictKeepUpCheck")
+        ui.gisaxsPredictKeepUpCheck.setToolTip(KEEP_UP_TIP)
+        ui.gisaxsPredictKeepUpCheck.setChecked(True)
+        ui.gisaxsPredictKeepUpCheck.setEnabled(False)  # with Watch only
+        watch_row = QHBoxLayout()
+        watch_row.setContentsMargins(0, 2, 0, 0)
+        watch_row.setSpacing(16)
+        watch_row.addWidget(ui.gisaxsPredictWatchCheck)
+        watch_row.addWidget(ui.gisaxsPredictKeepUpCheck)
+        watch_row.addStretch(1)
+        range_layout.addLayout(watch_row, 2, 0, 1, 3)
         # The free width goes to an empty third column: each field stays right beside its label.
         range_layout.setColumnStretch(2, 1)
         layout.addWidget(range_panel)
@@ -279,17 +311,24 @@ class PredictionInputModePanel(QWidget):
         self.pages.setCurrentIndex(1 if is_batch else 0)
         self.summary.setVisible(is_batch)
         self.ui.gisaxsPredictShowMultiFileResultsButton.setVisible(is_batch)
+        for name in ("gisaxsPredictWatchCheck", "gisaxsPredictKeepUpCheck"):  # a folder batch only
+            box = getattr(self.ui, name, None)
+            if box is not None:
+                box.setVisible(is_batch)
         self.mode_changed.emit("multi_files" if is_batch else "single_file")
 
     def refresh_language(self) -> None:
         """The batch plan in the interface language (after a switch)."""
-        if getattr(self, "_summary_values", None) is not None:
+        if getattr(self, "_watch_values", None) is not None:
+            self.set_watch_summary(**self._watch_values)
+        elif getattr(self, "_summary_values", None) is not None:
             self.set_batch_summary(**self._summary_values)
 
-    def set_batch_summary(self, *, files: int, jobs: int, skipped: int = 0) -> None:
-        self._summary_values = dict(files=files, jobs=jobs, skipped=skipped)
+    def set_batch_summary(self, *, files: int, jobs: int, skipped: int = 0, watch: bool = False) -> None:
+        self._summary_values = dict(files=files, jobs=jobs, skipped=skipped, watch=watch)
+        self._watch_values = None
         if files <= 0:
-            self.summary.setText(tr("No detector files selected by the current folder and range."))
+            self.summary.setText(tr(EMPTY_WATCHED if watch else "No detector files selected by the current folder and range."))
             return
         if jobs == 1:
             message = trf("{files} files selected · {jobs} prediction job", files=files, jobs=jobs)
@@ -300,6 +339,14 @@ class PredictionInputModePanel(QWidget):
         elif skipped:
             message = trf("{summary} · {skipped} trailing files skipped", summary=message, skipped=skipped)
         self.summary.setText(message)
+
+    def set_watch_summary(self, *, predicted: int, left_out: int = 0) -> None:
+        """While a batch watches its folder: how many new predictions, and how many frames were left out."""
+        self._watch_values = dict(predicted=predicted, left_out=left_out)
+        if left_out:
+            self.summary.setText(trf(WATCHING_SUMMARY_LEFT_OUT, predicted=predicted, left_out=left_out))
+        else:
+            self.summary.setText(trf(WATCHING_SUMMARY, predicted=predicted))
 
 
 class PredictionCanvasEmptyState(QLabel):

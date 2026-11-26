@@ -20,6 +20,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
 from src.gimap.shared.file_paths import normalize_path
 
+from ...application import FRAME_SUFFIXES
 from ..workflow_components import range_field_tip
 
 
@@ -79,7 +80,7 @@ class InputParametersMixin:
 
     def _choose_gisaxs_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
-            self.main_window, tr("Select a Folder of CBF Frames"), self.current_parameters.get("input_folder", "")
+            self.main_window, tr("Select a Folder of Detector Frames"), self.current_parameters.get("input_folder", "")
         )
         if folder:
             self._use_gisaxs_folder(folder)
@@ -93,7 +94,7 @@ class InputParametersMixin:
         self._refresh_predict_readiness()
 
     def _handle_dropped_input(self, path: str) -> None:
-        """A path dropped on the canvas: a folder becomes the folder batch, a file is opened (CBF only)."""
+        """A path dropped on the canvas: a folder becomes the folder batch, a frame is opened (CBF, EDF, TIFF)."""
         if os.path.isdir(path):
             radio = getattr(self.ui, "gisaxsPredictMultiFilesRadioButton", None)
             if radio is not None and not radio.isChecked():
@@ -121,9 +122,9 @@ class InputParametersMixin:
     def _choose_gisaxs_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self.main_window,
-            tr("Select CBF Frame"),
+            tr("Select Detector Frame"),
             self.current_parameters.get("input_folder", ""),
-            tr("CBF frames (*.cbf)") + ";;" + tr("All files (*)"),
+            tr("Detector frames (*.cbf *.edf *.tif *.tiff)") + ";;" + tr("All files (*)"),
         )
         if file_path:
             file_path = normalize_path(file_path)
@@ -187,10 +188,11 @@ class InputParametersMixin:
         if not os.path.exists(file_path):
             QMessageBox.warning(self.main_window, tr("File Not Found"), file_path)
             return
-        if not file_path.lower().endswith(".cbf"):
+        if Path(file_path).suffix.lower() not in FRAME_SUFFIXES:
             QMessageBox.warning(
                 self.main_window, tr("Unsupported Format"),
-                trf("Prediction reads CBF frames (.cbf) only; {name} is not one.", name=os.path.basename(file_path)),
+                trf("2D Prediction reads CBF, EDF and TIFF frames; {name} is none of them.",
+                    name=os.path.basename(file_path)),
             )
             return
 
@@ -259,15 +261,21 @@ class InputParametersMixin:
 
         try:
             discovered = self.prediction_view_model.files.discover_numbered_files(
-                Path(folder), ".cbf"
+                Path(folder), FRAME_SUFFIXES
             )
+            # One format: the one most of the numbered frames have (a 7.3.3 folder: .edf beside .txt).
+            counts: Dict[str, int] = {}
+            for item in discovered:
+                counts[item.path.suffix.lower()] = counts.get(item.path.suffix.lower(), 0) + 1
+            common = max(counts, key=lambda suffix: (counts[suffix], suffix == ".cbf")) if counts else ""
+            discovered = [item for item in discovered if item.path.suffix.lower() == common]
             for item in discovered:
                 entries.append((item.path.name, item.index))
                 index_to_file[item.index] = str(item.path)
 
             if not entries:
                 self._append_status_message(
-                    "No numbered CBF files detected in the current folder", level="WARN"
+                    "No numbered detector frames (CBF, EDF, TIFF) in the current folder", level="WARN"
                 )
 
             self._folder_entries = entries
@@ -414,7 +422,8 @@ class InputParametersMixin:
         files = len(indices)
         jobs = files if every == 1 else files // every
         skipped = 0 if every == 1 else files % every
-        panel.set_batch_summary(files=files, jobs=jobs, skipped=skipped)
+        watch = getattr(self, "_frame_watch_wanted", lambda: False)()
+        panel.set_batch_summary(files=files, jobs=jobs, skipped=skipped, watch=watch)
 
     def _on_showing_value_committed(self) -> None:
         if self._ui_updating:
@@ -503,7 +512,8 @@ class InputParametersMixin:
         range_text = self.current_parameters.get("range_value") or self._get_line_edit_text(
             "gisaxsPredictStackValue"
         )
-        return bool(range_text.strip() or self._available_indices or self._folder_entries)
+        watching = getattr(self, "_frame_watch_wanted", lambda: False)()  # an empty folder waits for frames
+        return bool(range_text.strip() or self._available_indices or self._folder_entries or watching)
 
     def _model_ready(self) -> bool:
         return self._current_model is not None and not self._model_loading

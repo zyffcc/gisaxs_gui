@@ -1,7 +1,7 @@
 """A detector file or folder dropped on the Prediction canvas: the panel takes local paths and hands on the first one.
 
 Taken here, a drop does not travel on to the main window (which would open it in Analyze): the binding opens a
-CBF frame, refuses another file with a message, and uses a folder as a folder batch.
+detector frame (CBF, EDF, TIFF), refuses another file with a message, and uses a folder as a folder batch.
 """
 
 from __future__ import annotations

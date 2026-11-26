@@ -25,6 +25,7 @@ from .models import (
     PredictionArrayExportRequest,
 )
 from .ports import (
+    FrameContexts,
     ModuleRepository,
     PredictionFileCatalog,
     PredictionImageRepository,
@@ -39,6 +40,12 @@ from ..domain import (
     PredictionResult,
     normalize_prediction_output,
 )
+
+NEEDS_GEOMETRY = (
+    "{module} needs the geometry of the frames (io.geometry: required): {reason}. Save an instrument profile "
+    "for this detector in Analyze."
+)
+
 
 
 def _module_output_values(module) -> dict[str, object]:
@@ -300,7 +307,7 @@ class DiscoverNumberedPredictionFiles:
     def __init__(self, catalog: PredictionFileCatalog):
         self._catalog = catalog
 
-    def execute(self, folder: Path, suffix: str = ".cbf"):
+    def execute(self, folder: Path, suffix: str | tuple[str, ...] = ".cbf"):
         return self._catalog.numbered_files(Path(folder), suffix)
 
 
@@ -311,13 +318,34 @@ class DiscoverPredictionFiles:
     def execute(self, folder: Path, suffixes: tuple[str, ...]):
         return self._catalog.compatible_files(Path(folder), suffixes)
 
+    def look(self, folder: Path, suffixes: tuple[str, ...], skip: frozenset = frozenset()):
+        """The frame files of ``folder`` with their size, time and completeness (``FolderEntry``), for a watch;
+        those in ``skip`` (the frames the watch has taken) are left out."""
+        return self._catalog.look(Path(folder), suffixes, frozenset(skip))
+
 
 class PreparePredictionInput:
-    def __init__(self, preprocessor: Preprocessor):
-        self._preprocessor = preprocessor
+    """Preprocess an image with the module; ``source``: the loaded frames it came from (or ``None``).
 
-    def execute(self, image, module):
-        return self._preprocessor.preprocess(image, module)
+    A module is told about the frames (``FrameContexts``) only when ``source`` holds this very image, so a
+    context never describes another frame. A module that needs the geometry (``io.geometry: required``) is
+    not run without it.
+    """
+
+    def __init__(self, preprocessor: Preprocessor, contexts: FrameContexts | None = None):
+        self._preprocessor = preprocessor
+        self._contexts = contexts
+
+    def execute(self, image, module, source=None):
+        context = None
+        if source is not None and self._contexts is not None and getattr(source, "image", None) is image:
+            context = self._contexts.describe(source)
+        if getattr(module, "needs_geometry", False) and not (context or {}).get("geometry"):
+            reason = (context or {}).get("geometry_source") or "the frames this image came from are not known"
+            raise ValueError(NEEDS_GEOMETRY.format(module=module.name, reason=reason))
+        if context is None:
+            return self._preprocessor.preprocess(image, module)
+        return self._preprocessor.preprocess(image, module, context)
 
 
 class PredictPreparedInput:
@@ -346,12 +374,12 @@ class PredictPreparedInput:
 
 
 class PredictImage:
-    def __init__(self, preprocessor: Preprocessor, predictor: Predictor):
-        self._prepare = PreparePredictionInput(preprocessor)
+    def __init__(self, preprocessor: Preprocessor, predictor: Predictor, contexts: FrameContexts | None = None):
+        self._prepare = PreparePredictionInput(preprocessor, contexts)
         self._predict_prepared = PredictPreparedInput(predictor)
 
     def execute(self, request: PredictImageRequest) -> ImagePredictionResult:
-        prepared = self._prepare.execute(request.image, request.module)
+        prepared = self._prepare.execute(request.image, request.module, request.source)
         return self._predict_prepared.execute(
             PredictPreparedInputRequest(
                 values=prepared.values,
@@ -383,6 +411,7 @@ class PredictFileBatch:
                     allow_unsafe_lambda=request.allow_unsafe_lambda,
                     precision_policy=request.precision_policy,
                     timeout_seconds=request.timeout_seconds,
+                    source=loaded,
                 )
             )
         except Exception as exc:

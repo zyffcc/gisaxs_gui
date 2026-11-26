@@ -135,3 +135,128 @@ def test_a_real_gisaxs_series_stacks_the_horizontal_cut_and_can_be_cancelled() -
     finally:
         page.tasks.wait(60)
         page.dispose()
+
+
+def test_curves_on_the_same_points_stack_as_they_are_however_many_and_close_points_still_count_as_the_same() -> None:
+    """A live map of a long run stacks tens of thousands of curves on each drawing: curves of one geometry have
+    exactly the same points (compared as such first), and points the same within rounding still count as the
+    same (no row of the map is put on another grid)."""
+    x = np.linspace(-0.1, 0.1, 50)
+    curves = [(x.copy(), np.full(50, float(row))) for row in range(300)]
+    curves.append((x * (1 + 1e-12), np.full(50, 300.0)))  # the same within rounding
+    grid, image = stack_curves(curves)
+    assert np.array_equal(grid, x) and image.shape == (301, 50) and np.isfinite(image).all()
+    assert np.array_equal(image[:, 7], np.arange(301, dtype=np.float32))
+
+
+def test_a_live_map_of_many_rows_waits_longer_between_drawings() -> None:
+    from src.gimap.features.analyze.presentation.bindings.batch_live import PACE, REDRAW_S, STACK_PACE, redraw_wait_s
+
+    assert redraw_wait_s(0.05) == REDRAW_S  # a small map: once a second
+    assert redraw_wait_s(1.5) == pytest.approx(PACE * 1.5)  # a drawing of 1.5 s: the window drawing a fifth of the time
+    assert redraw_wait_s(-1.0) == REDRAW_S
+    # Stacked on its own thread: that thread works at most half the time; the window's drawing still counts.
+    assert redraw_wait_s(0.1, 1.2) == pytest.approx(STACK_PACE * 1.2)
+    assert redraw_wait_s(0.6, 0.2) == pytest.approx(PACE * 0.6)
+
+
+def _live_rows(first: int, count: int, points: int = 48) -> list:
+    from src.gimap.features.analyze.application.series_map import RowLabel
+
+    x = np.linspace(-0.1, 0.1, points)
+    rows = []
+    for number in range(first, first + count):
+        name = f"live_{number:05d}.edf"  # (invented frames)
+        label = RowLabel(name, name=name, source=f"C:/run/{name}", frame_index=0, exposure_s=0.1)
+        rows.append((x, 100.0 + number + np.cos(x * 40.0), "qy (Å⁻¹)", label, (f"C:/run/{name}", 0)))
+    return rows
+
+
+def test_a_live_map_of_many_rows_is_stacked_on_its_own_thread_and_rows_that_arrive_meanwhile_come_next() -> None:
+    from src.gimap.features.analyze.presentation.bindings.series_later import LATER_ROWS
+    from tests.test_analyze_workspace import _page
+
+    page = _page(_context(None))
+    try:
+        page._series_rows = _live_rows(1, LATER_ROWS + 40)
+        page._series_key, page._series_built = "horizontal", {}
+        page._batch_live, page._batch_last_draw, page._batch_rows_drawn = True, 0.0, 0
+        page.batch_panel.follow_check.setChecked(True)
+
+        page._batch_live_redraw()
+        assert page._series_later_busy() and page._series_map is None  # being stacked: not drawn here
+        assert not page.tasks.is_busy()  # (no work of the page's: its progress bar stays hidden)
+        page._series_rows.extend(_live_rows(LATER_ROWS + 41, 5))  # frames that arrive meanwhile
+        page._batch_last_draw = 0.0
+        page._batch_live_redraw()  # one map at a time: these rows wait for the next
+        assert page._series_later_runner.wait(60.0)
+        _app().processEvents()
+        assert not page._series_later_busy()
+        assert page._series_map.rows == LATER_ROWS + 40 and page._series_row == LATER_ROWS + 39
+        assert page._series_map.numbers[-1] == LATER_ROWS + 40
+        page._batch_last_draw = 0.0
+        page._batch_live_redraw()
+        assert page._series_later_runner.wait(60.0)
+        _app().processEvents()
+        assert page._series_map.rows == LATER_ROWS + 45  # the rows that arrived while the map before was stacked
+
+        page._batch_last_draw = 0.0
+        page._series_rows.extend(_live_rows(LATER_ROWS + 46, 3))
+        page._batch_live_redraw()
+        assert page._series_later_busy()
+        page._batch_live_redraw(force=True)  # the last map of a run: drawn here, the one being stacked is dropped
+        drawn = page._series_map
+        assert drawn.rows == LATER_ROWS + 48 and not page._series_later_busy()
+        assert page._series_later_runner.wait(60.0)
+        _app().processEvents()
+        assert page._series_map is drawn
+
+        calls = []  # a watched folder's redraw: the stages cleared and looked for again around the map shown
+        page._series_rows.extend(_live_rows(LATER_ROWS + 49, 1))
+        assert page._series_redraw_live(keep_view=True, keep_q=True, before=lambda: calls.append("before"),
+                                        then=lambda: calls.append(("then", page._series_map.rows)))
+        assert calls == [] and not page._series_redraw_live(keep_view=True, keep_q=True)  # (one at a time)
+        assert page._series_later_runner.wait(60.0)
+        _app().processEvents()
+        assert calls == ["before", ("then", LATER_ROWS + 49)]
+
+        page._batch_last_draw = 0.0
+        page._series_rows.extend(_live_rows(LATER_ROWS + 50, 2))
+        page._batch_live_redraw()
+        page._reset_series()  # the list cleared while a map is being stacked: it is not shown
+        assert page._series_later_runner.wait(60.0)
+        _app().processEvents()
+        assert page._series_map is None and page.series_map_view.isHidden()
+    finally:
+        page.dispose()
+
+
+def test_the_rows_of_a_live_map_hold_an_equal_x_once() -> None:
+    from src.gimap.features.analyze.application.series_map import SHARED_X, share_x
+
+    known: list = []
+    x = np.linspace(0.01, 0.2, 7)
+    first = share_x((x, np.ones(7), "q (Å⁻¹)", "a", ("f.edf", 0)), known)
+    second = share_x((x.copy(), np.full(7, 2.0), "q (Å⁻¹)", "b", ("f.edf", 1)), known)  # (a reduction's own copy)
+    assert second[0] is first[0] is x and second[1][0] == 2.0 and second[2:] == ("q (Å⁻¹)", "b", ("f.edf", 1))
+    other = share_x((x * 1.01, np.ones(7), "q (Å⁻¹)", "c", ("f.edf", 2)), known)  # another grid (another angle)
+    assert other[0] is not x and len(known) == 2
+    assert share_x((x.copy(), np.ones(7), "q (Å⁻¹)", "d", ("f.edf", 3)), known)[0] is x  # alternating angles
+    assert share_x((x[:-1].copy(), np.ones(6), "q (Å⁻¹)", "e", ("f.edf", 4)), known)[0] is not x
+    for step in range(SHARED_X + 2):
+        share_x((x + step + 1.0, np.ones(7), "q (Å⁻¹)", "g", ("f.edf", 5 + step)), known)
+    assert len(known) == SHARED_X and np.array_equal(x, np.linspace(0.01, 0.2, 7))  # no x changed
+
+
+def test_the_frame_axis_ticks_the_rows_in_view() -> None:
+    from src.gimap.features.analyze.presentation.bindings.series_display import MINOR_ROWS, frame_ticks
+
+    numbers = range(1, 20001)
+    major, minor = frame_ticks(numbers)  # every row of a long map at once: round numbers, not a tick per row
+    assert [name for _at, name in major] == ["5000", "10000", "15000", "20000"]
+    assert len(minor) == 36 and all(int(name) % 500 == 0 for _at, name in minor)
+    major, minor = frame_ticks(numbers, shown=(99.6, 139.2))  # zoomed in on 40 rows: each of them
+    assert sorted(at for at, _name in major + minor) == [row + 0.5 for row in range(99, 140)]
+    assert dict(major + minor)[120.5] == "121"
+    major, minor = frame_ticks(numbers, shown=(5000.0, 5000.0 + 2 * MINOR_ROWS))
+    assert all(5000 <= at <= 5000 + 2 * MINOR_ROWS for at, _name in major + minor) and len(minor) < 60

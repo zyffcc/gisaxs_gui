@@ -171,8 +171,7 @@ class SeriesPickMixin:
             self.series_trace_plot.set_curves([])
             return
         # A row that sums fewer frames than the others is no point of the line: drawn apart, and named.
-        short = np.array([fact.incomplete for fact in series.facts], dtype=bool) if len(series.facts) == series.rows else (
-            np.zeros(series.rows, dtype=bool))
+        short = series.short_rows
         # (one point alone draws no line: a dot)
         curves, markers = [(legend, axis[~short], np.asarray(values)[~short])], [True if (~short).sum() == 1 else False]
         if short.any():

@@ -198,6 +198,11 @@ class ImportSelectionMixin:
         return int(index) in self.selected_frame_indices(path)
 
     def imported_frame_count(self) -> int:
+        if not self._import_selections:  # (every frame of every source: the counts, without a Path per file)
+            counts = self._frame_counts
+            known = [counts.get(str(path).casefold()) for path in self.state.files]
+            if None not in known:
+                return sum(known)
         return sum(len(self.selected_frame_indices(path)) for path in self.state.files)
 
     def total_frame_count(self) -> int:

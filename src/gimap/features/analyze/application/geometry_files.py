@@ -10,12 +10,17 @@
 * **The .poni beside a frame**: in the frame's own folder, the ``.poni`` whose name begins like the frame's (or the
   frame's like its), else the only ``.poni`` there. Several unrelated ones are no answer (none is taken). Its
   geometry is used for the frame when the file fits it (as above), ahead of an instrument profile matched only by
-  detector name and frame size; the source says which file it was.
+  detector name and frame size; the source says which file it was. The ``.poni`` files of a folder are listed again
+  whenever the folder changed; a folder whose listing takes longer than ``SLOW_LISTING_S`` (thousands of entries) not
+  sooner after the listing before than ``SIBLING_PACE`` times what that listing took (a folder written ten frames a
+  second changes all the time, and listing its 36 000 entries for every frame took a fifth of a second of each: such a
+  folder is now listed at most about every 1.5 s).
 """
 
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -32,6 +37,13 @@ NO_WAVELENGTH = "The .poni file states no wavelength: enter the wavelength or th
 SIBLING_SOURCE = ".poni beside the frame: {path}"
 LOADED_SOURCE = ".poni loaded: {path}"
 POSSIBLE_ENCODINGS = ("utf-8", "latin-1")
+SIBLING_PACE = 10.0
+"""A folder of slow listing that changed is listed again for its ``.poni`` files once this many times the listing
+before took has passed since it."""
+SLOW_LISTING_S = 0.02
+"""A listing that took longer than this is of a folder of many entries (``SIBLING_PACE``); others are redone at once."""
+_PONI_LISTINGS: dict[str, tuple[float, int, list, float]] = {}
+"""Folder → (when listed, its modification time then, its ``.poni`` files sorted, how long the listing took)."""
 
 
 def geometry_references(resolution):
@@ -98,12 +110,34 @@ def write_poni_file(geometry: DetectorGeometry, path, *, shape=None, source: str
     return target
 
 
+def _poni_files(folder: Path) -> list:
+    """The ``.poni`` files in ``folder``, sorted; listed again when the folder changed (``SIBLING_PACE``;
+    ``OSError``: the folder cannot be listed)."""
+    key = str(folder).casefold()
+    changed = os.stat(folder).st_mtime_ns
+    now = time.monotonic()
+    kept = _PONI_LISTINGS.get(key)
+    if kept is not None and (kept[1] == changed
+                             or (kept[3] > SLOW_LISTING_S and now - kept[0] < SIBLING_PACE * kept[3])):
+        return kept[2]
+    found = []
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            if os.path.splitext(entry.name)[1].lower() == ".poni" and entry.is_file():  # (as ``Path.suffix``)
+                found.append(Path(entry.path))
+    found.sort()
+    if len(_PONI_LISTINGS) > 1000:
+        _PONI_LISTINGS.clear()
+    _PONI_LISTINGS[key] = (now, changed, found, time.monotonic() - now)
+    return found
+
+
 def sibling_poni(frame_path) -> Optional[Path]:
     """The ``.poni`` beside a frame (see the module docstring), or ``None``."""
     frame = Path(frame_path)
     folder = frame.parent
     try:
-        found = sorted(entry for entry in folder.iterdir() if entry.suffix.lower() == ".poni" and entry.is_file())
+        found = _poni_files(folder)
     except OSError:
         return None
     if not found:

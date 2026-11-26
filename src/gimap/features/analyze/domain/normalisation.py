@@ -107,12 +107,16 @@ def _number(text: Any) -> Optional[float]:
 def header_values(metadata: Optional[Mapping[str, Any]]) -> dict[str, Any]:
     """What the header of a frame offers for the normalisation: ``{"exposure_time_s": t or None, "monitors":
     {name: value}}``. Monitors: a NeXus monitor the reader found (named by its place in the file) and the header
-    values whose names hold monitors (EDF keywords, ``# Flux`` of a Pilatus CBF)."""
+    values whose names hold monitors (EDF keywords, ``# Flux`` of a Pilatus CBF) and the counters of a side file
+    (``side_monitors``: ``Izero``, ``I1`` … of ALS 7.3.3)."""
     metadata = metadata or {}
     exposure = _number(metadata.get(EXPOSURE_KEY)) if metadata.get(EXPOSURE_KEY) is not None else None
     monitors: dict[str, float] = {}
     if metadata.get("monitor") is not None and _number(metadata["monitor"]) is not None:
         monitors[str(metadata.get("monitor_source") or "monitor")] = _number(metadata["monitor"])
+    for key, value in (metadata.get("side_monitors") or {}).items():  # counters of the beamline's side file
+        if _number(value) is not None:
+            monitors[str(key)] = _number(value)
     header = metadata.get("header") or {}
     if isinstance(header, Mapping):
         for key, text in header.items():

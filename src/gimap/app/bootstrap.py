@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .context import AppContext
 from .ports import SessionRepository
-from ..integrations.jobs import LocalProcessJobRunner
+from ..integrations.jobs import KeptProcessJobRunner, LocalProcessJobRunner
 from ..integrations.state import (
     InMemoryInstrumentProfileRepository,
     InMemorySessionRepository,
@@ -50,6 +50,7 @@ def create_app_context(
         preferences=StorePreferencesRepository(store),
         session=session or JsonSessionRepository(folder / SESSION_FILE),
         jobs=LocalProcessJobRunner(),
+        model_jobs=KeptProcessJobRunner(),
         project_parameters=JsonProjectParametersRepository(),
         instrument_profiles=profiles,
         data_dir=folder,
