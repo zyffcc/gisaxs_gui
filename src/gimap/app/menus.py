@@ -98,6 +98,7 @@ class ApplicationMenus:
             examples=self.help.examples(),
             open_example=self.help.open_example,
             report_problem=self.help.report_problem,
+            check_updates=self.help.check_updates,  # a source folder: updated from GitHub, then restarted
             open_error_log=self.help.open_error_log,
             citation=self.help.citation,
             current_page=components.current_page_key,  # F1: the manual at the chapter of the workspace shown

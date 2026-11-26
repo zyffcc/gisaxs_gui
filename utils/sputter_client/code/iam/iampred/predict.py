@@ -15,11 +15,12 @@ from pathlib import Path
 import numpy as np
 
 from . import features as FE
+from . import numerics as NUM
 from . import kinput as KI
 from . import live as LV
 from . import observe as OB
 from . import registry as REG
-from . import references as RF
+from . import ref_override as RF
 from . import runner
 
 HERE = Path(__file__).resolve().parent
@@ -1104,6 +1105,7 @@ def main():
     summ = dict(family=cfg["family"], scan=a.scan, new_scan=client, like=a.like, model=str(a.model), network_family=netfam,
                 models=model_paths if n_net > 1 else None, n_networks=n_net, model_family_hash=meta["family_hash"], model_forward_hash=meta["forward_hash"],
                 family_hash=cfg["family_hash"], forward_hash=cfg["forward_hash"], warnings=warn, notes=notes,
+                numerics=NUM.describe(),
                 metal=info["metal"], onset_s=info["t_dep"],
                 onset_source=("scan.json (given at intake)" if client and "t_dep" in scan_meta else "forward-model rule"),
                 position_factor=info["position_factor"], scan_json=scan_meta or None,

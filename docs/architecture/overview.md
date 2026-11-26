@@ -41,7 +41,7 @@ features/
 `app/single_instance.py` 的单实例锁、`app/logging_setup.py` 的日志，然后才导入重模块）→ `app/window.py`（`MainWindow`
 与 `run_window`：`app/document_session.py` 的未保存标记、自动保存与崩溃恢复，`app/layout_memory.py` 的分隔条记忆）→
 `app/main_window.py`（页面与侧栏；比较、溅射页第一次用到时才构建，见 `app/lazy_pages.py`）、`app/menus.py`（菜单命令；Edit、Analyze、Fitting
-菜单的命令在 `app/workspace_commands.py`，Help 菜单里要读文件和页面的命令在 `app/help_commands.py`）、
+菜单的命令在 `app/workspace_commands.py`，Help 菜单里要读文件和页面的命令在 `app/help_commands.py`；Check for Updates 在源码文件夹里用 `app/source_update.py` 从 GitHub 更新（Git 克隆快进，Download ZIP 文件夹按 Git 哈希只取不同的文件），对话框在 `presentation/update_dialog.py`，重启的新进程带 `--restarted` 等单实例锁）、
 `app/runtime.py`（feature 运行时与按 key 导航）；`app/presentation/theme/` 为唯一的样式来源
 （浅色 / 深色 token），缩放交给 Qt high-DPI。应用级样式表只在启动时设置一次；之后切换主题或字号时，新样式表放在
 各个无父窗口上（`theme/restyle.py`），因为 Qt 5 重设应用样式表时，每个控件会按祖先层数重复 polish（主窗口 20 秒以上）。用户数据（设置、偏好、仪器配置、会话、模型参数）

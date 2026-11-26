@@ -111,9 +111,6 @@ MENUS_ZH = {
     "The reference to give when you publish results obtained with GIMaP": "发表用 GIMaP 得到的结果时应当引用的文献",
     "What GIMaP and its Windows package contain that is not GIMaP's own work, and the licences":
         "GIMaP 及其 Windows 便携包中不属于 GIMaP 自己的内容，以及它们的许可证",
-    "You are running {name} {version}. This opens the releases page on GitHub in your browser (newest first, "
-    "pre-releases included); GIMaP itself makes no network request.":
-        "你正在运行 {name} {version}。这一项在浏览器中打开 GitHub 上的发布页（最新的在前，含预发布版）；GIMaP 本身不发出任何网络请求。",
     # the documents
     "Physics and Methods": "物理与方法",
     "The physics and methods manual was not found:\n{path}": "找不到物理与方法手册：\n{path}",

@@ -20,6 +20,8 @@ from typing import Optional, Sequence
 from src.gimap.shared.version import APP_NAME, __version__
 
 EXIT_OK = 0
+RESTART_FLAG = "--restarted"  # source_update.restart_command: GIMaP started again after its folder was updated
+RESTART_WAIT_MS = 60000  # how long it waits for the GIMaP before it to close (the user folder's lock)
 
 
 def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -57,6 +59,8 @@ def launch(argv: Optional[Sequence[str]] = None) -> int:
     if arguments[:1] == ["reproduce"]:
         from src.gimap.app.reproduce import reproduce_cli
         return reproduce_cli(arguments[1:])
+    restarted = RESTART_FLAG in arguments  # Help ▸ Check for Updates restarted GIMaP after updating its folder
+    arguments = [argument for argument in arguments if argument != RESTART_FLAG]
     options = parse_arguments(arguments)  # --version and --help end here, before Qt starts
     # Matplotlib must use the Qt backend of PyQt5; Qt must find its platform plugin.
     os.environ.setdefault("MPLBACKEND", "Qt5Agg")
@@ -95,7 +99,7 @@ def launch(argv: Optional[Sequence[str]] = None) -> int:
 
     instance = SingleInstance(data_dir)
     read_only = False
-    if not instance.acquire():
+    if not instance.acquire(RESTART_WAIT_MS if restarted else 100):
         from src.gimap.app.presentation.app_dialogs import ask_already_running
 
         splash.hide()

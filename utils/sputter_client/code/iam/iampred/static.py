@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 
 from . import live as LV
+from . import numerics as NUM
 
 HERE = Path(__file__).resolve().parent
 IAM = HERE.parent
@@ -638,7 +639,7 @@ def main(argv=None):
         ok = step("report", do_report)
     files = {k: (str(out / v) if (out / v).exists() else None) for k, v in FILES.items()}
     res = dict(status=status, kind="static", label=a.label, samples=labels, mode=a.mode, data_root=str(root), steps=steps, files=files,
-               mask=_mask_of(root, a.label),
+               mask=_mask_of(root, a.label), numerics=NUM.describe(),
                note="development reference: not validated against independent characterisation")
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     forward.__exit__(None, None, None)

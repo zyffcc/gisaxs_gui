@@ -414,7 +414,13 @@ contributors and coding agents (in Chinese) are in [AGENTS.md](AGENTS.md).
 
 ## Updating a source checkout
 
-Double-click `Update_GIMaP.bat` in the folder (it needs Git), or run in the folder of the checkout:
+From inside GIMaP: **Help ▸ Check for Updates…** in a source folder (a clone, or a folder from **Code ▸ Download
+ZIP**) lists what is new on GitHub and offers **Update and Restart**. A clone is moved forward to its branch
+(`git merge --ff-only`) and left alone when that is not a plain step forward or would overwrite one of your
+edits; a ZIP folder gets only the files that differ from GitHub, checked against their Git hash, and the files
+it replaces are kept in `updates/` of the user data folder. Then GIMaP starts again (User Manual, section 2.4).
+
+Outside GIMaP, double-click `Update_GIMaP.bat` in the folder (it needs Git), or run in the folder of the checkout:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\update_source.ps1
@@ -449,7 +455,7 @@ or newer and says so when it finds an older one.
 
 A folder without `.git` is not a checkout, and the script changes nothing in it. A portable version is
 updated by installing the new version (its ZIP or its installer) into a new folder. A folder from **Code ▸
-Download ZIP** is downloaded again,
+Download ZIP** is updated from inside GIMaP (above), downloaded again,
 or replaced by a clone (`git clone https://github.com/zyffcc/gisaxs_gui.git`), which the script updates
 from then on.
 

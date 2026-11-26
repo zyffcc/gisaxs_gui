@@ -2,6 +2,9 @@
 Experiment_data/
 Experiment_SAXS_data/
 .gimap_cache/
+# Help ▸ Check for Updates in a folder from Download ZIP: the commit it holds, and its downloads in progress
+.gimap_source.json
+.gimap_update/
 SF_test.ipynb
 SF_training.ipynb
 SF_training.py

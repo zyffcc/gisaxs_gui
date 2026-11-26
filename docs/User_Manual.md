@@ -356,6 +356,26 @@ so and changes nothing.
 **macOS portable version.** Extract the new package into a new folder and open its `Start_GIMaP.command`.
 Its first launch prepares the runtime for that package. Settings remain in the user data folder.
 
+**From inside GIMaP (a source folder).** In a source folder, a Git clone or a folder from **Code ▸ Download
+ZIP**, **Help ▸ Check for Updates…** asks GitHub for the newest version of the branch, lists what is new and
+offers **Update and Restart**. It updates the folder and starts GIMaP again; closing asks first, as on any
+close, while a job runs or a project has unsaved changes.
+
+- A Git clone moves forward to its branch on GitHub (`git merge --ff-only`; Git must be installed). It
+  stops before it changes anything when you edited a file the new version also changes, when the branch has
+  commits of its own or the history on GitHub was rewritten, or when the branch follows no branch on
+  GitHub. Then use `Update_GIMaP.bat` (below) or the steps in `README.md`.
+- A folder from Download ZIP gets only the files that differ from GitHub. Files are compared by their Git
+  hash, and each download is checked against it; the launchers keep their CRLF line endings. The files it
+  replaces are kept in `updates/` of the user data folder. When a file cannot be replaced, the folder is put
+  back as it was. Files GitHub does not have (your data, results, `.gimap`) are never touched; a file deleted
+  on GitHub stays in the folder. The commit the folder now holds is written to `.gimap_source.json`.
+- When the list of Python packages changed (`requirements.txt`), the dialog shows the `pip install` command
+  and waits. In an environment of your own run it first; `Start_GIMaP.bat` adds the packages at its next
+  start. Then press **Restart**.
+
+In the portable version and in a copy installed with pip, the entry opens the releases page instead.
+
 **Source checkout (a git clone).** Double-click `Update_GIMaP.bat` in the folder (it needs Git 2.16 or
 newer), or run:
 
@@ -379,7 +399,7 @@ you set up yourself (conda, venv), run the command the script prints for each ch
 `python -m pip install -r requirements.txt`.
 
 A folder from **Code ▸ Download ZIP** has no `.git` and is not a checkout: the script says so and
-changes nothing. Download the ZIP again, or clone the repository with Git
+changes nothing. Update it from inside GIMaP (above), download the ZIP again, or clone the repository with Git
 (`git clone https://github.com/zyffcc/gisaxs_gui.git`); the script updates a clone from then on.
 Extract a new ZIP into a new folder; its first `Start_GIMaP.bat` sets up the environment again (moving
 `.gimap` over does not work, section 2.2). Your settings stay in the user data folder.
@@ -568,8 +588,10 @@ the folders GIMaP keeps, and the links to GitHub, the citation, the notices and 
   choose (by default `Documents\GIMaP examples\<example>`) and opens its frame in Analyze (section 1.1).
 - **Help ▸ Report a Problem…** copies the versions of GIMaP, the operating system, Python, Qt, PyQt
   and numpy (no paths, no data) to the clipboard and opens a new issue on GitHub in your browser:
-  paste them there. **Check for Updates…** opens the releases page on GitHub in your browser (newest
-  first, pre-releases included); GIMaP itself makes no network request.
+  paste them there. **Check for Updates…** updates a source folder (a Git clone or a folder from
+  Download ZIP) from GitHub and starts GIMaP again (section 2.4). In the portable version and in a copy
+  installed with pip it opens the releases page on GitHub in your browser (newest first, pre-releases
+  included). GIMaP asks GitHub only when you choose this entry.
 
 ![The offline help reader](manual_images/en/25_help_reader.png)
 *The help reader: expandable chapters and text search stay beside the document while you read.*
@@ -3545,7 +3567,7 @@ measured after their deposition, see *Samples measured after their deposition* b
      replaces it. The tiles keep the values of the solution shown. When the analysis ends, the final result (which
      holds the joint fit) replaces the preliminary one and the dashed lines go.
 
-Analysing the same request again shows the result it has. **Details ▸ Analyze options** has the rest:
+Analysing the same request again shows the result it has. On another computer the same request gives the same numbers when both are 64-bit x86 computers with AVX2 running the same operating system and the same library versions; the number of parallel processes does not change them (*Physics and Methods* 12.1, Reproducibility). **Details ▸ Analyze options** has the rest:
 
 | Field | What it is for |
 |---|---|
@@ -4560,7 +4582,7 @@ Open **Help ▸ Open User Data Folder** to find settings and saved runs (section
 | **Tools ▸ 1D Predict — Fit Many Curves…** | a run folder: `request.json`, `batch_summary.json` …, a subfolder per curve with `solutions.json`, `fitting_curves.csv` … | `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder; never removed automatically | `request.json` |
 | Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from (while it is there), else your home folder | `#` header lines and the JSON |
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
-| Sputter ▸ **Analyze** (section 8.1) | a folder per request: `analysis.json` (status, model family, steps, the files), the package's `REPORT.md`, `report.png`, `report.csv`, `windows.csv`, `summary.json`, `evolution.png`, `patterns.png` and step logs, and `main/` with `main.json` and one `w_<t>.npz` + `w_<t>.png` per time window (the measured image and the model image of every solution) | the scan's folder in the user data folder (or **More options ▸ Save results in**): `sputter/<scan>-<code>/iampred-<code>/`; the same request to the same package shows the result it has. The frames as the package read them are kept in GIMaP's local folder (`%LOCALAPPDATA%\GIMaP\sputter_client\` on Windows, `~/Library/Caches/GIMaP/sputter_client/` on macOS), at most 5 GB by default (**Details ▸ Storage**); the steps' details are in the result's `trace/` | `gimap_request.json` (the request, the label of the imported scan, the package and its version, the Python, the command) |
+| Sputter ▸ **Analyze** (section 8.1) | a folder per request: `analysis.json` (status, model family, steps, the files, the numerical mode), the package's `REPORT.md`, `report.png`, `report.csv`, `windows.csv`, `summary.json`, `evolution.png`, `patterns.png` and step logs, and `main/` with `main.json` and one `w_<t>.npz` + `w_<t>.png` per time window (the measured image and the model image of every solution) | the scan's folder in the user data folder (or **More options ▸ Save results in**): `sputter/<scan>-<code>/iampred-<code>/`; the same request to the same package shows the result it has. The frames as the package read them are kept in GIMaP's local folder (`%LOCALAPPDATA%\GIMaP\sputter_client\` on Windows, `~/Library/Caches/GIMaP/sputter_client/` on macOS), at most 5 GB by default (**Details ▸ Storage**); the steps' details are in the result's `trace/` | `gimap_request.json` (the request, the label of the imported scan, the package and its version, the Python, the command) |
 | Sputter ▸ another **Solution shown** on the main screen | `choices.json`: the solution chosen per time window, where it is not the default | the result's `main/`; when it cannot be written, the user data folder: `sputter_client/choices/` | the file itself (result folder, GIMaP version, time) |
 | Sputter ▸ **Compare…** ▸ **Export…** (section 8.1) | `compare_curves.csv` (every quantity of every ticked result against the nominal deposit or the time), `compare_growth.csv` (the growth table), `compare.png` (300 dpi) and `compare.pdf` | a folder you choose (starts beside the first result) | `#` header lines: every result's folder, scan, metal, substrate, model family and mode, and where the values come from |
 | XRR Series Extractor ▸ **Export CSV…** | `<source>_xrr.csv` + `.json` | next to the source file; for a folder chosen with **Folder…**, inside it, named after it | the JSON (every value that determines qz and its origin; `center_convention`; `source_layout` with every file read) |
@@ -4702,6 +4724,7 @@ Version 0.2.0 is a pre-release. For the assumptions of each method, see [Physics
 | **Sputter can still miss the thickness fringes of a continuous film on a polymer** — the horizontal stripes along the exit angle once the film has formed. Refine and Full start the film windows from a dense film with the film-density fluctuation on and keep only the metal amount and the film thickness from decreasing, which matched them on the tested scans; a window whose joint solution did not take that film, and a result of Quick (no joint fit), can miss them and then has part of its fit deviation from them. | Take the film thickness from the fringes themselves (the report's film thickness is read from them); in the film stage read the model's base layer as its closest description, not as a measurement, and compare the model image with the measured one (**Patterns**, a line drawn on the images). |
 | **Sputter ▸ Analyze away from 12 keV: the any-energy networks were checked on simulated scans, not on measured ones.** Every system has a network trained at one wavelength (0.105 nm for Cu, 12 keV for the others) and αi 0.40°, and an any-energy network trained at 8–15 keV and αi 0.25–0.55°. Within 5 % of the one-wavelength network's wavelength (for Au: at 12 keV only) the package runs that network, the earlier networks of the same kind and, where the optical constants are the same, the any-energy network, and shows the one that fits best. Elsewhere in 8–15 keV it analyses the scan with the any-energy network at its own energy. On simulated scans at 10 and 14 keV the any-energy networks came closer to the true values than the one-wavelength networks; measured scans at other energies or from other beamlines have not been available to check them. On TiO₂ neither network fits every measured scan best: at 12 keV both run and the better one is shown, away from 12 keV only the any-energy network is available. Outside 8–15 keV the package computes the optical constants at the scan's own energy from its table (4–30 keV), the networks give only the starting solutions, and **Auto** picks **Refine**; the result is the joint fit's. A photon energy outside 4–30 keV is refused when the scan is imported, with the reason. A scan analysed by an any-energy network at an αi outside 0.25–0.55° gets a warning in the log of the network step under **Details**. | Away from 12 keV (Cu: 0.105 nm) judge the result by its fit deviation; outside 8–15 keV use **Refine** or **Full**. Keep the photon energy that was measured: changing it to match a network scales every q. |
 | **Sputter ▸ Analyze on porous TiO₂: with Quick the Cap share and the Film share are only roughly known.** **Auto** uses **Quick** for TiO₂ at 12 keV. On the development scans the joint fit of **Refine** kept the island size, the island share and the lateral scale close to the network's values but moved the cap share, and less the film share, far from them — in most windows outside the network's own uncertainty range (16–84 %, in `windows.csv`). Which of the two is closer to the sample was not checked against an independent measurement. | When it matters where the metal sits (on the particles or in the pores), run **Refine** and read the two shares from its joint fit; compare the model image with the measured one. |
+| **Sputter ▸ Analyze: on another operating system or on Apple silicon, a refined result can differ in single time windows.** The package runs in one numerical mode on 64-bit x86 processors, so the same request gives the same numbers on x86-64 computers with AVX2 that run the same operating system and library versions. Another operating system or an ARM processor can still differ in the last bit of a calculation, and the refinement, which stops after a fixed number of steps, can turn that into another solution of a single window (*Physics and Methods* 12.1). | Compare results analysed on the same kind of computer. For a publication, note the computer, the operating system and `numerics` in `analysis.json`. |
 | **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it reads are kept, one copy per request that changes the import (rate, geometry, mask, substrate …), in GIMaP's local folder, at most 5 GB together by default: the ones not used for the longest time are removed first. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. **Details ▸ Storage** lists the imports, removes them and sets the limit. |
 | **Sputter reads folders of CBF frames only** (chapter 8). | For NeXus series, use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.5). |
 | **Sputter keeps every result folder** in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds the Sputter form and references its result folder. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **Open Result…**. |
@@ -4814,15 +4837,15 @@ the analysis package that comes with GIMaP in
 set with **More options ▸ Save results in** (section 8.2; chapter 12); a result of Analyze is in its subfolder
 `iampred-<code>/`. They are kept until you delete them.
 
-**Does anything leave my computer?** Your data leave it only when you use a remote AI assistant (Claude Code, Claude API or another provider's server), which receives the frame status and numerical values of reduced curves. The detector file stays on your computer. Sending a small q-map image requires your permission (section 10.6). With a model on your computer or lab server, the data stay on that network. StarDist, Predict parameters and 2D Prediction run locally without downloads. GIMaP itself does not go online.
+**Does anything leave my computer?** Your data leave it only when you use a remote AI assistant (Claude Code, Claude API or another provider's server), which receives the frame status and numerical values of reduced curves. The detector file stays on your computer. Sending a small q-map image requires your permission (section 10.6). With a model on your computer or lab server, the data stay on that network. StarDist, Predict parameters and 2D Prediction run locally without downloads. GIMaP itself goes online only when you choose **Help ▸ Check for Updates…** in a source folder: it then asks GitHub for the newest version and downloads it (section 2.4). Nothing about you or your data is sent.
 
-**Help ▸ GitHub Repository**, **Check for Updates…**, **Report a Problem…** and the 2D Prediction model library open your browser on request. **Report a Problem…** copies the GIMaP and system versions to the clipboard and opens a new GitHub issue. You choose what to paste and submit. The clipboard summary contains no paths or data.
+**Help ▸ GitHub Repository**, **Report a Problem…**, the 2D Prediction model library and, outside a source folder, **Check for Updates…** open your browser on request. **Report a Problem…** copies the GIMaP and system versions to the clipboard and opens a new GitHub issue. You choose what to paste and submit. The clipboard summary contains no paths or data.
 
 ### 14.12 Version and Contact
 
 This manual describes **GIMaP 0.2.0** (pre-release). Check your installed version in **Help ▸ About GIMaP**. The program folder contains `CHANGELOG.md` with changes since 0.0.2, unreleased changes and known limitations.
 
-- **Help ▸ Check for Updates…** opens GitHub Releases in your browser. Compare the latest version (pre-releases included, newest first) with the version in About. GIMaP itself sends no update request. See section 2.4 to update.
+- **Help ▸ Check for Updates…** in a source folder (a Git clone or Download ZIP) shows what is new on GitHub and offers **Update and Restart** (section 2.4). In the portable version and in a copy installed with pip it opens GitHub Releases in your browser: compare the latest version (pre-releases included, newest first) with the version in About, and update as in section 2.4.
 - **Help ▸ How to Cite GIMaP…** displays the reference from `CITATION.cff`, including a DOI if the file supplies one. Use **Copy** or **Copy BibTeX**. Cite the version recorded in `software_version` (chapter 12). If the field is missing, as in older records, check **Help ▸ About GIMaP** (chapter 13).
 - **Licence.** GIMaP uses the MIT licence (`LICENSE`). For the licences of bundled components (including PyQt5 under GPL-3.0) and example data, open **Help ▸ Third-party Notices**. **Help ▸ About GIMaP** shows the licence and the Python, Qt, PyQt and numpy versions. Use **Copy** to copy them.
 

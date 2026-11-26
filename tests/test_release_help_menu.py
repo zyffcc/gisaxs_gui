@@ -311,13 +311,17 @@ def test_the_help_menu_has_its_entries_with_a_key_of_their_own_in_both_languages
         assert len(letters) == len(set(letters))
 
 
-def test_check_for_updates_names_the_running_version_and_only_opens_the_browser(menu_bar, opened) -> None:
+def test_check_for_updates_names_the_running_version_and_without_an_updater_opens_the_browser(menu_bar,
+                                                                                             opened) -> None:
+    """Without ``MenuCommands.check_updates`` (an installed copy) the entry opens the releases page; the source
+    folder's update is ``tests/test_source_update.py``'s."""
     from src.gimap.app.presentation.i18n import apply_language
     from src.gimap.app.presentation.menu_bar import GITHUB_URL
     from src.gimap.shared.version import __version__
 
     action = menu_bar.actions["check_updates"]
-    assert f"GIMaP {__version__}" in action.toolTip() and "no network request" in action.toolTip()
+    assert f"GIMaP {__version__}" in action.toolTip()
+    assert "GitHub is asked only when you choose this" in action.toolTip()
     action.trigger()
     assert [url.toString() for url in opened] == [GITHUB_URL + "/releases"]  # /releases/latest skips pre-releases
     try:

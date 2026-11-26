@@ -44,9 +44,10 @@ class SingleInstance(QObject):
         self.server: QLocalServer | None = None
         self.owner = False
 
-    def acquire(self) -> bool:
-        """``True`` when this process now owns the folder (it then listens for later starts)."""
-        if not self.lock.tryLock(100):
+    def acquire(self, wait_ms: int = 100) -> bool:
+        """``True`` when this process now owns the folder (it then listens for later starts). A GIMaP restarted
+        after an update waits longer (``wait_ms``) for the one before it to close."""
+        if not self.lock.tryLock(wait_ms):
             return False
         self.owner = True
         QLocalServer.removeServer(self.name)  # a socket left by a process that died
