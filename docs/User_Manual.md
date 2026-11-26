@@ -2841,6 +2841,8 @@ simulated cuts ([README](../tools/benchmarks/README.md)).
    tried, and depends on the computer. Sizes *Gaussian, by intensity* take several times longer than *Gaussian, by
    number*, whose averages come from tables. Predict uses half the computer's logical processors, at most 12 (the
    environment variable `GIMAP_PREDICT_THREADS` sets another number); the results are the same with any number.
+   Other programs that compute at the same time slow it down. When the computer's memory runs out, Predict stops
+   with *The computer ran out of memory*: close other programs and run it again.
 
 Predict has nothing else to set. Step 1 weights the network's samples of each composition against the curve.
 Step 2 refines the most probable values by least squares; when none refines below χ²ᵣ 2, it searches the ranges of

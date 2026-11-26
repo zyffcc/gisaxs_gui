@@ -26,5 +26,7 @@ FIT_CONTROLS_ZH = {
     "Prediction finished: χ²/point {chi2}.": "预测完成：χ²/点 {chi2}。",
     "Resolve default ranges during composition search": "搜索组成时处理默认范围边界",
     "Only automatic composition searches may extend the predictor's default ranges. Model's fixed values and min–max ranges are always kept. See Fit details for boundary diagnostics.": "只有自动搜索组成时，才可扩展预测器的默认范围。模型中的固定值和上下限始终保留。边界诊断见拟合详情。",
+    "The computer ran out of memory. Close other programs and run it again.":
+        "电脑的内存已用完。请关闭其他程序后再运行一次。",
     "Model has fixed values or custom ranges. Choose The particles in Model to keep them.": "模型有固定值或自定义范围。请选择“模型中的粒子”以保留这些约束。",
 }
