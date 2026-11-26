@@ -3,23 +3,25 @@
 Scripts behind the numbers that *Physics and Methods* and the GIMaP paper quote. They use public or synthetic data
 only and write their summaries next to themselves.
 
-## Revision-17 reruns (r17)
+## Revision-18 reruns (r18)
 
-The recovery, sensitivity and timing runs for revision 17 use the shipped network (`flow_v1`, trained as
+The recovery, sensitivity and timing runs for revision 18 use the shipped network (`flow_v1`, trained as
 `flow_v6`: beam tail with exponent 2 and the diffuse term) and one clean fitting tree
-(`d8b9dffd380edb37ee90de8ed4f328fa8e0f80a5`): the first set at commit `69d8d668`, the other runs at `19578769`,
-which has the same fitting code. Freezing Predict lets the comparisons attribute differences to the simulated
-physics, fitting options or curve sets. The runs of revision 15 (commit `65a640b0`, tree `ea44c0cb`) stay in
-`per_cut/` with their summaries.
+(`d8b9dffd380edb37ee90de8ed4f328fa8e0f80a5`) at commit `84151378`. Freezing Predict lets the comparisons
+attribute differences to the simulated physics, fitting options or curve sets. The runs of revisions 15
+(commit `65a640b0`, tree `ea44c0cb`) and 17 (tree `d8b9dffd`, on the draws of the r15 sets) stay in `per_cut/`
+with their summaries.
 The first (`fit1d`), third (`fresh`) and `extended` sets draw independent NumPy `SeedSequence` streams
-by set name and case index, with separate children for particle parameters and Poisson noise. The simulated
+by set name and case index, with separate children for particle parameters and Poisson noise. The r18 runs
+pass root seeds of their own (`--seed0 41261125` for the first and third sets, `--seed0 41261201` for the extended set), drawn after
+the freeze, so no cut of these sets was seen during development. The simulated
 beam tail uses the sharp beam's integrated intensity and a resolution density normalised on the q grid.
 Composition scores use Predict's weights before display filtering. The winning composition specifies
 the particle family and paracrystal status of each population in radius order. For cuts with a winning
 weight of at least 0.99, Table 3 reports correct/total separately for evidence and BIC.
 
 Run the following shell setup from the repository root. Pass the name and options from one row to
-`run_predict`. Each run has its own checkpoint directory.
+`run_predict`. Each run has its own checkpoint directory; a run stopped part-way resumes from it.
 
 ```bash
 export OMP_NUM_THREADS=1
@@ -37,55 +39,54 @@ run_predict() {
 
 | Name | Options | Summary in `tools/benchmarks/` | Per-cut archive in `tools/benchmarks/` |
 |---|---|---|---|
-| `posterior_r17_fresh` | `--workers 5 --set fresh --auto` | `posterior_r17_fresh_summary.json` | `per_cut/posterior_r17_fresh.json.gz` |
-| `posterior_r17_first` | `--workers 5 --set fit1d --n 200 --auto` | `posterior_r17_first_summary.json` | `per_cut/posterior_r17_first.json.gz` |
-| `posterior_r17_dwba4_si` | `--workers 5 --set fit1d --n 200 --scattering dwba --substrate si --cut dwba --auto --auto-level 4` | `posterior_r17_dwba4_si_summary.json` | `per_cut/posterior_r17_dwba4_si.json.gz` |
-| `posterior_r17_dwba4_ps100` | `--workers 5 --set fit1d --n 200 --scattering dwba --substrate ps100 --cut dwba --auto --auto-level 4` | `posterior_r17_dwba4_ps100_summary.json` | `per_cut/posterior_r17_dwba4_ps100.json.gz` |
-| `posterior_r17_own` | `--workers 5 --set fit1d --n 200 --truth own` | `posterior_r17_own_summary.json` | `per_cut/posterior_r17_own.json.gz` |
-| `posterior_r17_dwba_born` | `--workers 4 --set fit1d --n 200 --scattering dwba --substrate si --cut born --auto` | `posterior_r17_dwba_born_summary.json` | `per_cut/posterior_r17_dwba_born.json.gz` |
-| `posterior_r17_dwba_tp` | `--workers 4 --set fit1d --n 200 --scattering dwba --substrate si --cut two_path` | `posterior_r17_dwba_tp_summary.json` | `per_cut/posterior_r17_dwba_tp.json.gz` |
-| `posterior_r17_dwba_eia` | `--workers 4 --set fit1d --n 200 --scattering dwba --substrate si --cut eia` | `posterior_r17_dwba_eia_summary.json` | `per_cut/posterior_r17_dwba_eia.json.gz` |
-| `posterior_r17_extended` | `--workers 4 --set extended --n 600` | `posterior_r17_extended_summary.json` | `per_cut/posterior_r17_extended.json.gz` |
-| `posterior_r17_floor03` | `--workers 5 --set fit1d --n 200 --model-error-floor 0.03` | `posterior_r17_floor03_summary.json` | `per_cut/posterior_r17_floor03.json.gz` |
-| `posterior_r17_floor08` | `--workers 5 --set fit1d --n 200 --model-error-floor 0.08` | `posterior_r17_floor08_summary.json` | `per_cut/posterior_r17_floor08.json.gz` |
-| `posterior_r17_amplitude100` | `--workers 5 --set fit1d --n 200 --constant infer.AMPLITUDE_RANGE=100` | `posterior_r17_amplitude100_summary.json` | `per_cut/posterior_r17_amplitude100.json.gz` |
-| `posterior_r17_timing` | `--workers 1 --set fit1d --n 24` | `posterior_r17_timing_summary.json` | `per_cut/posterior_r17_timing.json.gz` |
+| `posterior_r18_first` | `--workers 5 --set fit1d --n 200 --auto --seed0 41261125` | `posterior_r18_first_summary.json` | `per_cut/posterior_r18_first.json.gz` |
+| `posterior_r18_fresh` | `--workers 5 --set fresh --auto --seed0 41261125` | `posterior_r18_fresh_summary.json` | `per_cut/posterior_r18_fresh.json.gz` |
+| `posterior_r18_extended` | `--workers 5 --set extended --n 600 --seed0 41261201` | `posterior_r18_extended_summary.json` | `per_cut/posterior_r18_extended.json.gz` |
+| `posterior_r18_dwba4_si` | `--workers 5 --set fit1d --n 200 --scattering dwba --substrate si --cut dwba --auto --auto-level 4 --seed0 41261125` | `posterior_r18_dwba4_si_summary.json` | `per_cut/posterior_r18_dwba4_si.json.gz` |
+| `posterior_r18_dwba4_ps100` | `--workers 5 --set fit1d --n 200 --scattering dwba --substrate ps100 --cut dwba --auto --auto-level 4 --seed0 41261125` | `posterior_r18_dwba4_ps100_summary.json` | `per_cut/posterior_r18_dwba4_ps100.json.gz` |
+| `posterior_r18_dwba_born` | `--workers 5 --set fit1d --n 200 --scattering dwba --substrate si --cut born --auto --seed0 41261125` | `posterior_r18_dwba_born_summary.json` | `per_cut/posterior_r18_dwba_born.json.gz` |
+| `posterior_r18_dwba_tp` | `--workers 5 --set fit1d --n 200 --scattering dwba --substrate si --cut two_path --seed0 41261125` | `posterior_r18_dwba_tp_summary.json` | `per_cut/posterior_r18_dwba_tp.json.gz` |
+| `posterior_r18_dwba_eia` | `--workers 5 --set fit1d --n 200 --scattering dwba --substrate si --cut eia --seed0 41261125` | `posterior_r18_dwba_eia_summary.json` | `per_cut/posterior_r18_dwba_eia.json.gz` |
+| `posterior_r18_own` | `--workers 5 --set fit1d --n 200 --truth own --seed0 41261125` | `posterior_r18_own_summary.json` | `per_cut/posterior_r18_own.json.gz` |
+| `posterior_r18_floor03` | `--workers 5 --set fit1d --n 200 --model-error-floor 0.03 --seed0 41261125` | `posterior_r18_floor03_summary.json` | `per_cut/posterior_r18_floor03.json.gz` |
+| `posterior_r18_floor08` | `--workers 5 --set fit1d --n 200 --model-error-floor 0.08 --seed0 41261125` | `posterior_r18_floor08_summary.json` | `per_cut/posterior_r18_floor08.json.gz` |
+| `posterior_r18_amplitude100` | `--workers 5 --set fit1d --n 200 --constant infer.AMPLITUDE_RANGE=100 --seed0 41261125` | `posterior_r18_amplitude100_summary.json` | `per_cut/posterior_r18_amplitude100.json.gz` |
+| `posterior_r18_timing` | `--workers 1 --set fit1d --n 24 --seed0 41261125` | `posterior_r18_timing_summary.json` | `per_cut/posterior_r18_timing.json.gz` |
 
 Run the 24-cut timing row alone on an idle machine. The runs write per-cut records to `results/NAME.json`.
 Gzip those files into `per_cut/NAME.json.gz` for the archive. After the DWBA and first-set runs finish,
 derive the two paired comparisons from the same indexed cuts.
 
 ```bash
-python "$B/posterior_pairs.py" "$B/posterior_r17_dwba_pairs.json" \
-    born="$R/posterior_r17_first.json" si_tp="$R/posterior_r17_dwba_tp.json" \
-    si_born="$R/posterior_r17_dwba_born.json" si_eia="$R/posterior_r17_dwba_eia.json"
-python "$B/posterior_pairs.py" --by-cut "$B/posterior_r17_dwba4_pairs.json" \
-    born="$R/posterior_r17_first.json" si_l1="$R/posterior_r17_dwba_eia.json" \
-    si_l2="$R/posterior_r17_dwba_born.json" si_l3="$R/posterior_r17_dwba_tp.json" \
-    si_auto2="$R/posterior_r17_dwba_born.json" si_l4="$R/posterior_r17_dwba4_si.json" \
-    ps100_l4="$R/posterior_r17_dwba4_ps100.json" si_auto4="$R/posterior_r17_dwba4_si.json" \
-    ps100_auto4="$R/posterior_r17_dwba4_ps100.json"
+python "$B/posterior_pairs.py" "$B/posterior_r18_dwba_pairs.json" \
+    born="$R/posterior_r18_first.json" si_tp="$R/posterior_r18_dwba_tp.json" \
+    si_born="$R/posterior_r18_dwba_born.json" si_eia="$R/posterior_r18_dwba_eia.json"
+python "$B/posterior_pairs.py" --by-cut "$B/posterior_r18_dwba4_pairs.json" \
+    born="$R/posterior_r18_first.json" si_l1="$R/posterior_r18_dwba_eia.json" \
+    si_l2="$R/posterior_r18_dwba_born.json" si_l3="$R/posterior_r18_dwba_tp.json" \
+    si_auto2="$R/posterior_r18_dwba_born.json" si_l4="$R/posterior_r18_dwba4_si.json" \
+    ps100_l4="$R/posterior_r18_dwba4_ps100.json" si_auto4="$R/posterior_r18_dwba4_si.json" \
+    ps100_auto4="$R/posterior_r18_dwba4_ps100.json"
 ```
 
-Search the parameter ranges and refine on the same 200 curves as `posterior_r17_first` with
-`python tools/benchmarks/search_baseline.py --set fit1d --n 200 --workers 4 --out search_baseline_r17`.
-This writes `search_baseline_r17_summary.json` and `results/search_baseline_r17.json`. Search accepts
+Search the parameter ranges and refine on the same 200 curves as `posterior_r18_first` with
+`python tools/benchmarks/search_baseline.py --set fit1d --n 200 --seed0 41261125 --workers 4 --out search_baseline_r18`.
+This writes `search_baseline_r18_summary.json` and `results/search_baseline_r18.json`. Search accepts
 `fit1d` (the default), `fresh`, `legacy-first` and `legacy-third`. The root seed defaults to the
 selected set's seed and can be supplied with `--seed0`.
 
-The r17 runs use the draws of the r15 sets. When the r15 sets were added, the overlap audit compared the
-fresh and first sets with all earlier archived sets and found zero matching identifying tuples,
-populations, first-population numerical draws and noise seeds. Before the r17 freeze, variants of the beam
-and diffuse terms were compared on cuts of the first set; the fresh and extended sets were not used.
-Run this comparison for a new set before adding it to `per_cut/`, or use `--archive-dir` to select the
-earlier `per_cut/` directory with its sibling `history/`.
+Before any r18 fit, the new draws of the three sets were compared with every archived set (`per_cut/` and the
+sets rebuilt in `history/`) and with each other: no identifying tuple, population, first-population numerical
+draw or noise seed repeats. Run this comparison for a new set before adding it to `per_cut/`, or use
+`--archive-dir` to select the earlier `per_cut/` directory with its sibling `history/`.
 
 ```bash
-python "$B/check_case_overlap.py" --new-archive "$R/posterior_r15_fresh.json"
-python "$B/check_case_overlap.py" --new-archive "$R/posterior_r15_first.json"
+python "$B/check_case_overlap.py" --new-archive "$R/posterior_r18_first.json"
+python "$B/check_case_overlap.py" --new-archive "$R/posterior_r18_fresh.json"
+python "$B/check_case_overlap.py" --new-archive "$R/posterior_r18_extended.json"
 ```
 
-The default revision is 17 (`--revision 15` and `--revision 14` check the earlier tables). To verify all 25 rows, pass the paper's Table 3, its `numbers.tex` definitions
+The default revision is 18 (`--revision 17`, `--revision 15` and `--revision 14` check the earlier tables). To verify all 25 rows, pass the paper's Table 3, its `numbers.tex` definitions
 and the four external inputs. Use the merged-commit reruns of `galaxi_posterior.json` and
 `vertical_height_bias.json` in the benchmark directory (`--bench DIR`), and supply the measured Au
 rerun with `--au-fit`. The verifier reads the producing commits from those files. For the frozen Predict

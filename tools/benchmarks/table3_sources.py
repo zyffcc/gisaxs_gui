@@ -167,8 +167,9 @@ ROWS15 = {
 # with the same fitting tree (the beam's Gaussian core was added and reverted in between).
 FROZEN17 = ("69d8d668", "19578769")
 FITTING_TREE17 = "d8b9dffd380edb37ee90de8ed4f328fa8e0f80a5"
-PREDICT_ARCHIVES = ("per_cut/posterior_r15_", "per_cut/posterior_r17_")
-SEARCH_SUMMARIES = ("search_baseline_r15_summary.json", "search_baseline_r17_summary.json")
+PREDICT_ARCHIVES = ("per_cut/posterior_r15_", "per_cut/posterior_r17_", "per_cut/posterior_r18_")
+SEARCH_SUMMARIES = ("search_baseline_r15_summary.json", "search_baseline_r17_summary.json",
+                    "search_baseline_r18_summary.json")
 
 
 def predict_run17(name, options):
@@ -196,7 +197,46 @@ SWAP17 = {FIRST15: FIRST17, FRESH15: FRESH17, EXT15: EXT17, PAIRS15: PAIRS17, BY
           **dict(zip(DWBA15, DWBA17))}
 ROWS17 = {key: ([SEARCH17 if item[0] == SEARCH_SUMMARIES[0] else SWAP17.get(item, item) for item in items],
                 fields, pinned) for key, (items, fields, pinned) in ROWS15.items()}
-REVISIONS = {14: ROWS14, 15: ROWS15, 17: ROWS17}
+# Revision 18: the same rows on the r18 runs, all at the freeze 84151378 (the r17 fitting tree), with root seeds of
+# their own, so that no simulated set took part in development. The command carries the seed of each set.
+FROZEN18 = ("84151378",)
+SEEDS18 = {"fit1d": 41261125, "fresh": 41261125, "extended": 41261201}
+
+
+def predict_run18(name, options):
+    stem = f"posterior_r18_{name}"
+    set_name = options.split("--set ", 1)[1].split()[0]
+    return source(f"per_cut/{stem}.json.gz", "posterior_recovery",
+                  f"--network {NETWORK} --out {stem} --workers 5 --checkpoint <checkpoint-dir>/{stem} {options} "
+                  f"--seed0 {SEEDS18[set_name]}", FROZEN18[0])
+
+
+SI18 = "--set fit1d --n 200 --scattering dwba --substrate si --cut "
+FIRST18 = predict_run18("first", "--set fit1d --n 200 --auto")
+FRESH18 = predict_run18("fresh", "--set fresh --auto")
+EXT18 = predict_run18("extended", "--set extended --n 600")
+DWBA18 = [predict_run18("dwba_tp", SI18 + "two_path"), predict_run18("dwba_born", SI18 + "born --auto"),
+          predict_run18("dwba_eia", SI18 + "eia")]
+PAIRS18 = paired_run("posterior_r18_dwba_pairs.json",
+                     [("born", "first"), ("si_tp", "dwba_tp"), ("si_born", "dwba_born"), ("si_eia", "dwba_eia")],
+                     tag="r18")
+BY_CUT18 = paired_run("posterior_r18_dwba4_pairs.json",
+                      [("born", "first"), ("si_l1", "dwba_eia"), ("si_l2", "dwba_born"), ("si_l3", "dwba_tp"),
+                       ("si_auto2", "dwba_born"), ("si_l4", "dwba4_si"), ("ps100_l4", "dwba4_ps100"),
+                       ("si_auto4", "dwba4_si"), ("ps100_auto4", "dwba4_ps100")], by_cut=True, tag="r18")
+SEARCH18 = source("search_baseline_r18_summary.json", "search_baseline",
+                  f"--set fit1d --n 200 --seed0 {SEEDS18['fit1d']} --workers 4 --out search_baseline_r18")
+SWAP18 = {FIRST15: FIRST18, FRESH15: FRESH18, EXT15: EXT18, PAIRS15: PAIRS18, BY_CUT15: BY_CUT18,
+          **dict(zip(DWBA15, DWBA18))}
+ROWS18 = {key: ([SEARCH18 if item[0] == SEARCH_SUMMARIES[0] else SWAP18.get(item, item) for item in items],
+                fields, pinned) for key, (items, fields, pinned) in ROWS15.items()}
+REVISIONS = {14: ROWS14, 15: ROWS15, 17: ROWS17, 18: ROWS18}
+
+
+def command_seed(command, set_name):
+    """The root seed a producing command used: its --seed0, else the named set's own seed."""
+    args = command.split()
+    return int(args[args.index("--seed0") + 1]) if "--seed0" in args else SETS[set_name][1]
 
 
 @lru_cache(maxsize=12)
@@ -207,15 +247,16 @@ def read_json(path):
 
 def recovery_stamp(summary, command, revision=15):
     code = summary["code"]
-    frozen, tree = (FROZEN17, FITTING_TREE17) if revision == 17 else ((FROZEN,), FITTING_TREE)
+    frozen, tree = {17: (FROZEN17, FITTING_TREE17), 18: (FROZEN18, FITTING_TREE17)}.get(revision,
+                                                                                         ((FROZEN,), FITTING_TREE))
     if not code["commit"].startswith(frozen) or code.get("fitting_code_modified") is not False:
         raise ValueError(f"expected Predict commit {' or '.join(frozen)} with fitting_code_modified: false")
     if "fitting_tree" in code and code["fitting_tree"] != tree:
         raise ValueError("archive fitting tree disagrees with the frozen commit")
     args = command.split()
     set_name = args[args.index("--set") + 1]
-    n, seed = SETS[set_name]
-    if (summary["n"], summary["set"], summary["seed0"]) != (n, set_name, seed):
+    n = int(args[args.index("--n") + 1]) if "--n" in args else SETS[set_name][0]
+    if (summary["n"], summary["set"], summary["seed0"]) != (n, set_name, command_seed(command, set_name)):
         raise ValueError("archive count, set or root seed disagrees with the producing command")
     expected = dict(stream_scheme="seedsequence-v1", truth="independent", auto="--auto" in args)
     for option, default in (("cut", "born"), ("substrate", "si"), ("scattering", "born_qz")):
@@ -243,17 +284,17 @@ def evidence(item, bench, external, revision):
     if name.startswith(PREDICT_ARCHIVES):
         record.update(producing_commit=recovery_stamp(d["summary"], command, revision),
                       commit_source="summary.code.commit")
-    elif name in (BY_CUT15[0], BY_CUT17[0]) and d.get("composition_method") != METHOD:
+    elif name in (BY_CUT15[0], BY_CUT17[0], BY_CUT18[0]) and d.get("composition_method") != METHOD:
         raise ValueError(f"{name}: paired report must use {METHOD}")
     elif name in SEARCH_SUMMARIES:
-        n, seed = SETS["fit1d"]
+        n, seed = SETS["fit1d"][0], command_seed(command, "fit1d")
         if (d["n"], d["set"], d["seed0"], d["stream_scheme"]) != (n, "fit1d", seed, "seedsequence-v1"):
             raise ValueError("search baseline did not use the first set")
         code = d["code"]
         if not code["commit"] or code.get("fitting_code_modified") is not False:
             raise ValueError("search baseline needs a producing commit and unmodified fitting code")
         record.update(producing_commit=code["commit"], commit_source="code.commit")
-    elif revision in (15, 17) and name in ("galaxi_posterior.json", "vertical_height_bias.json"):
+    elif revision >= 15 and name in ("galaxi_posterior.json", "vertical_height_bias.json"):
         code = d.get("code", {})
         if not code.get("commit") or code.get("fitting_code_modified") or code.get("modified"):
             raise ValueError(f"{name}: supply the stamped rerun from the merged commit")
@@ -325,7 +366,7 @@ def manuscript_rows(table, numbers, revision=15):
 def verify(bench, external, expected=None, only=None, strict=False, revision=15):
     read_json.cache_clear()
     report = {}
-    reducer = reduce_r15 if revision in (15, 17) else reduce_row
+    reducer = reduce_r15 if revision >= 15 else reduce_row
     for key, (items, fields, pinned) in REVISIONS[revision].items():
         if only and key not in only:
             continue
@@ -361,7 +402,7 @@ def verify(bench, external, expected=None, only=None, strict=False, revision=15)
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--revision", choices=REVISIONS, type=int, default=17, help="paper revision (default: 17)")
+    parser.add_argument("--revision", choices=REVISIONS, type=int, default=18, help="paper revision (default: 18)")
     parser.add_argument("--bench", type=Path, default=HERE, help="directory containing the shipped benchmark files")
     parser.add_argument("--table", type=Path, help="LaTeX Table 3 for the selected revision, with --numbers")
     parser.add_argument("--numbers", type=Path, help="LaTeX macro definitions used by the table")
