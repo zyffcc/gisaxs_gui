@@ -29,7 +29,7 @@ WORKER_MODULES = (
     "src.gimap.app",
     "src.gimap.app.jobs",
     "src.gimap.integrations.jobs",
-    "src.gimap.integrations.jobs.worker_main",
+    "src.gimap.integrations.worker_main",
     "src.gimap.integrations.bornagain",
     "src.gimap.integrations.bornagain.worker",
     "src.gimap.integrations.tensorflow.worker",

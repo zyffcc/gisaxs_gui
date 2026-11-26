@@ -6,7 +6,8 @@ loading it, and PyQt5's own msvcp140.dll (older than BornAgain's) would then ser
 BornAgain 24.1, built with a newer MSVC, crashes in ``simulate()`` (exit 0xC0000005).
 
 While a worker is started (``Process.start()``, or ``ProcessPoolExecutor.submit()``, which starts
-workers), ``light_main()`` points ``__main__`` at the empty ``worker_main`` module. Spawn reads the
+workers), ``light_main()`` points ``__main__`` at ``integrations/worker_main``, which only caps the
+threads of the worker's OpenBLAS (``shared/blas_threads``) before NumPy loads. Spawn reads the
 main module only then, so the parent is unchanged afterwards. ``__main__`` belongs to the whole
 process: one lock serialises every start that changes it (job runner and batch workers alike).
 A main module with a spec (``python -m …``, pytest) or without a file (an interactive session) is
@@ -21,7 +22,7 @@ import threading
 from contextlib import contextmanager
 from typing import Iterator
 
-WORKER_MAIN = "src.gimap.integrations.jobs.worker_main"
+WORKER_MAIN = "src.gimap.integrations.worker_main"
 _SPAWN_LOCK = threading.RLock()
 
 

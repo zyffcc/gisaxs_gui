@@ -48,11 +48,22 @@ fields, see [Running an independent validation](../README.md#running-an-independ
 | `posterior_r17_floor03.json.gz`, `posterior_r17_floor08.json.gz`, `posterior_r17_amplitude100.json.gz` | 200 each | 19578769 | tree d8b9dffd |
 | `posterior_r17_timing.json.gz` | 24 | 19578769 | tree d8b9dffd |
 | `search_baseline_r17.json.gz` (`search_baseline.py`, not a Predict run) | 200 | 19578769 | tree d8b9dffd |
+| `posterior_r18_first.json.gz` | 200 | 84151378 | tree d8b9dffd |
+| `posterior_r18_fresh.json.gz` | 300 | 84151378 | tree d8b9dffd |
+| `posterior_r18_extended.json.gz` | 600 | 84151378 | tree d8b9dffd |
+| `posterior_r18_dwba_tp.json.gz`, `posterior_r18_dwba_born.json.gz`, `posterior_r18_dwba_eia.json.gz` | 200 each | 84151378 | tree d8b9dffd |
+| `posterior_r18_dwba4_si.json.gz`, `posterior_r18_dwba4_ps100.json.gz` | 200 each | 84151378 | tree d8b9dffd |
+| `posterior_r18_own.json.gz` | 200 | 84151378 | tree d8b9dffd |
+| `posterior_r18_floor03.json.gz`, `posterior_r18_floor08.json.gz`, `posterior_r18_amplitude100.json.gz` | 200 each | 84151378 | tree d8b9dffd |
+| `posterior_r18_timing.json.gz` | 24 | 84151378 | tree d8b9dffd |
+| `search_baseline_r18.json.gz` (`search_baseline.py`, not a Predict run) | 200 | 84151378 | tree d8b9dffd |
 
 The fitting tree identifies `src/gimap/features/fitting/domain` at the recorded commit.
 The two runs written at 2eb0243 predate the `code` field of the summaries, so their commit and tree
 are stated here and not added to the result files. The network is `flow_v1` (its SHA-256 is in every summary);
-the r17 runs use the `flow_v1` trained as `flow_v6` (encoding 6), the others the one before it.
+the r17 and r18 runs use the `flow_v1` trained as `flow_v6` (encoding 6), the others the one before it.
+The r18 runs use root seeds of their own (41261125 for the first and third sets, 41261201 for the extended
+set), recorded as `seed0` in each summary.
 The four level-4 runs used per-cut checkpoints. Each stage's `seconds` measures that fit, including for resumed draws.
 The `code.source_sha256` in each level-4 summary identifies the benchmark scripts and fitting sources used for those draws.
 

@@ -10,6 +10,8 @@ words: ``predict_texts``, the names and sentences of ``shared/fit_names``).
 
 from __future__ import annotations
 
+import logging
+
 from PyQt5.QtCore import QSignalBlocker
 
 from src.gimap.app.presentation.i18n import tr, trf
@@ -19,6 +21,8 @@ from ...application.substrate_level import prediction_model
 from ..predict_substrate import ON_SUBSTRATE, PredictSubstrateDialog
 from .predict_progress import PredictProgressMixin, as_solutions
 from .predict_texts import solution_lines
+
+LOG = logging.getLogger(__name__)
 
 MISSING = "Predict parameters needs GIMaP's proposal network, which is missing in this installation ({name})."
 
@@ -89,7 +93,11 @@ class PredictPageMixin(PredictProgressMixin):
             raise RuntimeError("Fitting cancelled")
         result = self.view_model.context.jobs.run(request, self._predict_progress)
         if not result.succeeded:
-            raise RuntimeError(result.error.message if result.error else "Predict parameters failed")
+            error = result.error
+            if error is not None and error.message != "Fitting cancelled":
+                LOG.warning("Predict parameters failed (%s): %s\n%s", error.exception_type or error.code,
+                            error.message, error.traceback)
+            raise RuntimeError(error.message if error else "Predict parameters failed")
         return result.value
 
     def _predict_progress(self, progress) -> None:

@@ -11,7 +11,7 @@ computer sluggish:
   are in memory (the caller limits this; ``frames_at_once`` sizes the pool to the free memory).
 
 A spawned process imports the program's main module again. ``main.py`` imports the whole GUI (and
-PyQt5); while a job is submitted, ``__main__`` is therefore pointed at the empty ``worker_main``
+PyQt5); while a job is submitted, ``__main__`` is therefore pointed at the light ``worker_main``
 module (``integrations.jobs.light_main``, shared with the job runner), and a worker starts with only
 what a frame needs.
 
