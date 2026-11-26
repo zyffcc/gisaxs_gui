@@ -102,6 +102,12 @@ class FrameNumbers(Mapping):
             for index in range(count):
                 yield path, index
 
+    def agrees_with(self, other) -> bool:
+        """Every frame ``other`` numbers has the same number here: each of its sources has the same place and frames
+        (a list that grew at its end). A live map asks at every redraw instead of looking up each of its rows again
+        (``application.series_angles.numbers_agree``)."""
+        return other is self or (isinstance(other, FrameNumbers) and other.sources.items() <= self.sources.items())
+
 
 class SumGroups(Sequence):
     """Lazy groups of adjacent selected frames; gaps close a group instead of summing across them."""

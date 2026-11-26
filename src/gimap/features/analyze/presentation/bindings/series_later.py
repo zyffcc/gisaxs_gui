@@ -135,6 +135,7 @@ class SeriesLaterMixin:
         """The next live map is stacked whole (a new run, the map cleared, a map that is no live map shown), and no
         rows of the map before are held (``_series_exposures`` keeps them too)."""
         self._series_exposures_kept = None
+        self._series_angles_kept = self._watch_rows_listed = None  # (``_series_split_angles``, the watch's order)
         stacker = getattr(self, "_series_live", None)
         if stacker is not None:
             stacker.forget()

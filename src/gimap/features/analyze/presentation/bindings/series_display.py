@@ -32,6 +32,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.stage_text import axis_symbol
 
 from ...application import GISAXS, build_series_map
+from ..frame_axis import MAJOR_TICKS, MINOR_ROWS, frame_ticks, nice_step
 from ..series_texts import (
     AXIS_LABELS, HOW_TO, HOW_TO_SUMS, MAP_TIME, MAP_WAITING, NO_TIME, STALE_CURVE, STALE_SETTINGS, cut_sentence,
     map_group, map_words, sum_note,
@@ -39,11 +40,6 @@ from ..series_texts import (
 from ..views.series_view import VIEW_TIPS
 from .series_stages import series_name
 
-MAJOR_TICKS = 8
-"""About this many numbered ticks on the frame axis; the other rows are numbered once there is room (zoom)."""
-MINOR_ROWS = 300
-"""Every row in view has a tick while at most this many are in view; more rows get the ticks of a finer round step
-instead. (A tick for each of 20 000 rows is 20 000 lines the axis draws again at every zoom, pan and redraw: 0.6 s.)"""
 RING_CURVE = "azimuthal"
 """The GIWAXS curve the cut of a series is about (I(χ) of the ring); every GISAXS curve is a cut."""
 HALVES_CURVE = "horizontal"
@@ -52,70 +48,6 @@ SUM_MARKS = ("sums", "Incomplete sums")
 """The kind of mark (key, name in the map's Marks menu) on a row that sums fewer frames than the others."""
 SUM_PLATE = (0, 0, 0, 170)
 """RGBA of the plate under such a mark (white text: read over the bright and the dark end of every colour map)."""
-
-
-def nice_step(span: float, most: int = MAJOR_TICKS) -> int:
-    """1, 2, 5, 10, 20, 50 …: the smallest of them that leaves at most ``most`` ticks over ``span``."""
-    step = 1
-    for power in range(0, 9):
-        for base in (1, 2, 5):
-            step = base * 10**power
-            if span / step <= most:
-                return step
-    return step
-
-
-def _tick_names(values: list, whole: bool):
-    """The name of a row on the frame axis: its frame number, or its seconds with the decimals of their usual step
-    — the same for every row (“0.0, 1.5, 3.0”)."""
-    if whole:
-        return lambda row: f"{int(round(values[row]))}"
-    steps = sorted(abs(b - a) for a, b in zip(values, values[1:]) if b != a)
-    usual = steps[len(steps) // 2] if steps else 1.0
-    decimals = int(min(4, max(0, 1 - math.floor(math.log10(usual))))) if usual > 0 else 0
-    names = [f"{value:.{decimals}f}" for value in values]
-    while decimals > 0 and all(name.endswith("0") for name in names):  # (“0.50, 1.00” says no more than “0.5, 1.0”)
-        decimals -= 1
-        names = [f"{value:.{decimals}f}" for value in values]
-    return names.__getitem__
-
-
-def frame_ticks(values, *, whole: bool = True, shown=None) -> list[list[tuple[float, str]]]:
-    """Ticks for the frame axis of a map of ``len(values)`` rows: each in the middle of its row, named by
-    ``values`` (frame numbers, or seconds). Two levels: about ``MAJOR_TICKS`` named rows — round frame numbers
-    where the numbers are whole —, and the rows between them, which are named when the axis has room (of more than
-    ``MINOR_ROWS`` rows, those of a finer round step). ``shown``: the part of the axis in view, ``(low, high)`` in
-    rows; the ticks are those of its rows (all rows when ``None``)."""
-    values = [float(value) for value in values]
-    rows = len(values)
-    if not rows:
-        return [[], []]
-    first, end = 0, rows
-    if shown is not None:
-        low, high = sorted(float(edge) for edge in shown)
-        first = min(rows - 1, max(0, int(math.floor(low))))
-        end = max(first + 1, min(rows, int(math.ceil(high))))
-    count = end - first
-    name = _tick_names(values, whole)
-
-    def on_step(row: int, step: int, by_row: bool) -> bool:
-        return row % step == 0 if by_row else int(round(values[row])) % step == 0
-
-    by_row = not whole
-    span = (values[end - 1] - values[first] + 1) if whole else count
-    step = nice_step(span)
-    major = [row for row in range(first, end) if on_step(row, step, by_row)]
-    if len(major) < min(count, 2):  # numbers that never are round (every 3rd frame from 1): by row
-        by_row, span = True, count
-        step = nice_step(count)
-        major = [row for row in range(first, end) if row % step == 0]
-    taken = set(major)
-    if count <= MINOR_ROWS:
-        minor = [row for row in range(first, end) if row not in taken]
-    else:
-        fine = nice_step(span, 5 * MAJOR_TICKS)
-        minor = [row for row in range(first, end) if row not in taken and on_step(row, fine, by_row)]
-    return [[(row + 0.5, name(row)) for row in major], [(row + 0.5, name(row)) for row in minor]]
 
 
 def row_files(rows) -> list[Path]:
@@ -176,10 +108,10 @@ class SeriesDisplayMixin:
         map. ``live``: grown from the map before when it can be (``series_later.LiveStack``): the same map."""
         built = self._series_built
         rows, key = list(self._series_rows), self._series_key
-        numbers = built.get("numbers")
+        numbers = built.get("numbers")  # (the frame list's cannot change; a dictionary might, while the map is made)
         options = dict(
             view=self._series_view if key == HALVES_CURVE else "both",
-            title=getattr(self, "_series_curve_title", ""), numbers=dict(numbers) if numbers else numbers,
+            title=getattr(self, "_series_curve_title", ""), numbers=dict(numbers) if isinstance(numbers, dict) else numbers,
             group=int(built.get("group") or 1),
         )
         built_with = {
@@ -311,7 +243,9 @@ class SeriesDisplayMixin:
         if not timed and self.series_axis_combo.currentData() == "time":
             with QSignalBlocker(self.series_axis_combo):
                 self.series_axis_combo.setCurrentIndex(max(0, self.series_axis_combo.findData("frame")))
-        self._series_ticks = (self._series_axis_values(series).tolist(), not self._series_in_time(series))
+        values = np.array(self._series_axis_values(series), dtype=float)
+        values.setflags(write=False)  # (kept by the axis for every zoom and pan: ``frame_axis``)
+        self._series_ticks = (values, not self._series_in_time(series))
         self._series_ticks_in_view()
         self.series_map_view.plot.setLabel("left", self._series_axis_label(series))
 

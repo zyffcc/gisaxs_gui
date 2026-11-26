@@ -14,6 +14,7 @@ from PyQt5.QtCore import QSignalBlocker, QTimer
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import trf
 
+from ...application.live_rows import ListedRows, row_identity
 from ..frames_model import with_cut
 from ..texts import message_text
 from ..series_texts import SUM_SWITCHED_OFF
@@ -272,22 +273,16 @@ class WatchSeriesMixin(WatchOnlineMixin, WatchPaceMixin):
         if not self.view_model.watch.active:
             return
         numbers = self.view_model.frame_numbers()
-        unique = {}
         selected = None
         if self._series_rows and 0 <= self._series_row < len(self._series_rows):
-            ref = self._series_rows[self._series_row][4]
-            selected = (str(ref[0]).casefold(), int(ref[1]))
-        for row in self._series_rows:
-            ref = row[4]
-            identity = (str(ref[0]).casefold(), int(ref[1]))
-            if identity in numbers:
-                old = unique.get(identity)
-                if old is None or getattr(row[3], "summed", 1) > getattr(old[3], "summed", 1):
-                    unique[identity] = row
-        identities = sorted(unique, key=numbers.get)
-        self._series_rows = [unique[key] for key in identities]
-        if selected in unique:
-            self._series_row = identities.index(selected)
+            selected = row_identity(self._series_rows[self._series_row])
+        listed = getattr(self, "_watch_rows_listed", None)
+        if listed is None:
+            listed = self._watch_rows_listed = ListedRows()
+        # Every frame once, only the listed ones, by their number (the order before kept: ``application.live_rows``).
+        self._series_rows, places = listed.order(self._series_rows, numbers)
+        if selected in places:
+            self._series_row = places[selected]
         self._series_built["numbers"] = numbers
         self._series_built["listed"] = self.view_model.listed_frames()
 

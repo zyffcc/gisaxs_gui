@@ -20,7 +20,7 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-from .series_map import _seconds
+from .series_times import _seconds
 
 TIME_COLUMNS = ("utc", "time", "timestamp", "datetime", "date")
 LABEL_COLUMNS = ("label", "event", "pulse", "name")

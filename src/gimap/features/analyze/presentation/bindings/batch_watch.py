@@ -331,7 +331,7 @@ class BatchWatchMixin(WatchSeriesMixin):
         if self.view_model.watch.active:  # (stopped meanwhile: what it saw is of no use)
             self._watch_found(self.view_model.take_watch(scan))
         took = time.monotonic() - getattr(self, "_watch_look_began", time.monotonic())
-        self._notice_timer.setInterval(max(NOTICED_MS, int(1000 * took)))  # (the next look as long after: ``NOTICED_MS``)
+        self._notice_timer.setInterval(max(NOTICED_MS, round(1000 * took)))  # (the next look as long after: ``NOTICED_MS``)
         if getattr(self, "_watch_look_again", False):
             self._watch_look_again = False
             if self.view_model.watch.active:

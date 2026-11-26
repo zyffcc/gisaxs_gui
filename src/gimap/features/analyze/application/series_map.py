@@ -8,9 +8,6 @@ from, the cut of the series, and — for the map — a JSON record with the sett
 
 from __future__ import annotations
 
-import re
-from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
@@ -24,6 +21,7 @@ from .incidence_record import nominal_incidence
 from .models import FrameAnalysis
 from .ports import FRAME_OF, CurveWriter, source_name
 from .series_reproduction import series_recipe
+from .series_times import series_times
 from .use_cases import SOFTWARE
 
 SERIES_TITLE = "GIMaP Analyze series map: rows = frames in list order, columns = x; mean intensity per bin, blank = no data"
@@ -47,8 +45,6 @@ TIME_WORDS = {
     "file_times": "seconds since the first row, from the files' modification times (finer than the whole-second time "
                   "stamps of their headers, which they agree with)",
 }
-FILE_TIME_AGREEMENT_S = 1.5
-"""How far the files' modification times may stray from their header time stamps (whole seconds, plus writing)."""
 WIDTH_NOTE = (
     "fwhm is the moment width: 2.355 x the standard deviation of the intensity above the background inside the "
     "window. It is the FWHM of a Gaussian peak well inside the window and grows with the window; a fitted FWHM "
@@ -163,118 +159,33 @@ def share_x(row: tuple, known: list) -> tuple:
     return row
 
 
+_NO_NUMBER = object()
+
+
 def row_facts(rows: Sequence[tuple], *, numbers: Optional[Mapping] = None, group: int = 1,
-              start: int = 0) -> tuple[RowFacts, ...]:
+              start: int = 0, unnumbered: Optional[list] = None) -> tuple[RowFacts, ...]:
     """``RowFacts`` of ``rows`` (``(x, intensity, x_label, label, ref)``): from each label (``RowLabel``) and
     ref. ``numbers``: ``frame_key`` → the frame's number in the list, from 1 (the row when it is not there);
     ``group``: the Sum N in force, so a row summing fewer frames is known as incomplete; ``start``: the row of the
-    map the first of ``rows`` is (the rows that arrive for a live map: ``series_growing``)."""
-    facts = []
+    map the first of ``rows`` is (the rows that arrive for a live map: ``series_growing``); ``unnumbered``: given,
+    the rows whose frame ``numbers`` has not are added to it."""
+    facts, lookup = [], numbers or {}
     for row, (_x, _y, _x_label, label, ref) in enumerate(rows, start):
         path, index = (ref[0], int(ref[1])) if ref else (getattr(label, "source", ""), int(getattr(label, "frame_index", 0)))
         summed = int(getattr(label, "summed", group if not isinstance(label, RowLabel) else 1))
+        number = lookup.get(frame_key(path, index), _NO_NUMBER)
+        if number is _NO_NUMBER:
+            number = row + 1
+            if unnumbered is not None:
+                unnumbered.append(row)
         facts.append(RowFacts(
-            number=int((numbers or {}).get(frame_key(path, index), row + 1)), source=str(path), frame_index=index,
+            number=int(number), source=str(path), frame_index=index,
             frame_count=int(getattr(label, "frame_count", 1)), summed=summed, group=max(1, int(group)),
             timestamp=str(getattr(label, "timestamp", "") or ""), exposure_s=getattr(label, "exposure_s", None),
             frame_time_s=getattr(label, "frame_time_s", None), incidence_deg=getattr(label, "incidence_deg", None),
             file_time=str(getattr(label, "file_time", "") or ""),
         ))
     return tuple(facts)
-
-
-_STAMP = re.compile(
-    r"(?P<moment>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?)(?:[.,](?P<fraction>\d+))?\s*"
-    r"(?P<zone>Z|[+-]\d{2}(?::?\d{2})?)?")
-
-
-def _seconds(stamp: str) -> Optional[float]:
-    """Seconds of an ISO time stamp, also as detectors write it: “+0200” for “+02:00” (the P03 Lambda), “Z”, a
-    space for the “T”, a fraction of any length (Python 3.10 reads only 3 or 6 digits and “+HH:MM”)."""
-    return _text_seconds(str(stamp or "").strip())
-
-
-@lru_cache(maxsize=1 << 16)
-def _text_seconds(text: str) -> Optional[float]:
-    """``_seconds`` of a stripped text, kept (a live map reads the time stamps of all its rows at every drawing)."""
-    found = _STAMP.fullmatch(text)
-    if found is not None:
-        zone = found["zone"] or ""
-        zone = "+00:00" if zone == "Z" else (zone if len(zone) != 5 else f"{zone[:3]}:{zone[3:]}")
-        zone = f"{zone}:00" if len(zone) == 3 else zone
-        fraction = f".{found['fraction'][:6].ljust(6, '0')}" if found["fraction"] else ""
-        text = found["moment"].replace(" ", "T") + fraction + zone
-    try:
-        return datetime.fromisoformat(text).timestamp() if text else None
-    except ValueError:
-        return None
-
-
-def _per_frame(facts: Sequence[RowFacts], values: Sequence[float]) -> bool:
-    """Times that are those of the frames: they differ between the rows of one source (a file's start time,
-    the same for each of its frames, is no time of a frame) and never run backwards."""
-    last: dict[str, float] = {}
-    for fact, value in zip(facts, values):
-        key = fact.source.casefold()
-        if key in last and not value > last[key]:
-            return False
-        last[key] = value
-    return bool(np.all(np.diff(np.asarray(values, dtype=float)) >= 0))
-
-
-def series_times(facts: Sequence[RowFacts]) -> tuple[Optional[np.ndarray], str]:
-    """``(seconds since the first row, where they come from)``, or ``(None, "")`` when the frames carry no
-    time. In this order: a time of each frame (a per-frame dataset, or time stamps that differ between the
-    rows of a source and never run backwards: ``timestamps``), else — for multi-frame sources with one
-    exposure time — frame number × exposure (``exposure``, one source) or the start time of each file + frame
-    number × exposure (``start_exposure``, several); both a lower bound: the read-out between frames is not
-    in the file."""
-    if len(facts) < 2:
-        return None, ""
-    starts = [_seconds(fact.timestamp) for fact in facts]
-    files = _file_times(facts, starts)
-    if files is not None:
-        return files, "file_times"
-    for values in ([fact.frame_time_s for fact in facts], starts):
-        if all(value is not None for value in values) and _per_frame(facts, values):
-            times = np.asarray(values, dtype=float) - float(values[0])
-            if times[-1] > 0:
-                return times, "timestamps"
-    exposures = {fact.exposure_s for fact in facts}
-    if len(exposures) != 1 or exposures == {None} or float(next(iter(exposures))) <= 0:
-        return None, ""
-    if not any(fact.frame_count > 1 for fact in facts):
-        return None, ""
-    exposure = float(next(iter(exposures)))
-    if len({fact.source.casefold() for fact in facts}) == 1:
-        return np.asarray([(fact.frame_index - facts[0].frame_index) * exposure for fact in facts], dtype=float), "exposure"
-    if any(start is None for start in starts):
-        return None, ""
-    times = np.asarray([start + fact.frame_index * exposure for fact, start in zip(facts, starts)], dtype=float)
-    times -= times[0]
-    if np.all(np.diff(times) >= 0) and times[-1] > 0:
-        return times, "start_exposure"
-    return None, ""
-
-
-def _file_times(facts: Sequence[RowFacts], starts: Sequence[Optional[float]]) -> Optional[np.ndarray]:
-    """Seconds since the first row from the files' modification times, when every row is a file of its own with a
-    header time stamp of whole seconds that two rows share somewhere (frames faster than the stamps), and the files'
-    times agree with those stamps (one offset, within ``FILE_TIME_AGREEMENT_S``) and never run backwards. Files
-    copied without their times disagree, and are not used."""
-    if any(fact.frame_time_s is not None or fact.frame_count > 1 for fact in facts):
-        return None
-    files = [_seconds(fact.file_time) for fact in facts]
-    if any(value is None for value in [*files, *starts]):
-        return None
-    stamps, written = np.asarray(starts, dtype=float), np.asarray(files, dtype=float)
-    if not np.any(np.diff(stamps) == 0) or np.any(np.diff(written) < 0):
-        return None
-    offsets = written - stamps
-    if float(offsets.max() - offsets.min()) > FILE_TIME_AGREEMENT_S:
-        return None
-    times = written - written[0]
-    return times if times[-1] > 0 else None
 
 
 def build_series_map(

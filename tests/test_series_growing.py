@@ -147,9 +147,10 @@ def test_the_live_map_of_the_page_is_the_map_stacked_whole(tmp_path) -> None:
             np.testing.assert_array_equal(live[2][0], whole[2][0])
             np.testing.assert_array_equal(live[3][0], whole[3][0])
             np.testing.assert_array_equal(live[3][1][1], whole[3][1][1])
-        assert page._series_live_stack()._map.same_rows(page._series_rows, ("horizontal", "mean", getattr(page, "_series_curve_title", ""), 1), None) == 36
+        options = ("horizontal", "mean", getattr(page, "_series_curve_title", ""), 1)
+        assert page._series_live_stack()._map.same_rows(page._series_rows, options, None) == 36
         page._series_live_forget()
-        assert page._series_live_stack()._map.same_rows(page._series_rows, ("horizontal", "mean", getattr(page, "_series_curve_title", ""), 1), None) == 0
+        assert page._series_live_stack()._map.same_rows(page._series_rows, options, None) == 0
     finally:
         page.dispose()
 
@@ -172,3 +173,51 @@ def test_the_exposure_times_of_the_rows_are_kept_while_they_are_the_same_rows() 
         assert page._series_exposures_kept is None
     finally:
         page.dispose()
+
+
+def _times_cases() -> dict:
+    """Invented frames whose times come from each of the ways ``series_times`` reads them, and from one way at first
+    and another once more rows arrived."""
+    from src.gimap.features.analyze.domain.series_map import RowFacts
+
+    def stamp(seconds: float) -> str:
+        whole, part = divmod(seconds, 1.0)
+        return f"2027-01-20T10:{int(whole) // 60:02d}:{int(whole) % 60:02d}" + (f".{round(part * 1000):03d}" if part else "")
+
+    def files(n, *, back_at=None):  # one file a frame, whole-second stamps, file times 0.1 s apart
+        return [RowFacts(number=i + 1, source=f"C:/runs/spray_{i:04d}.edf", exposure_s=0.1, timestamp=stamp(i // 10),
+                         file_time=stamp(i * 0.1 + 0.03 - (5 if i == back_at else 0))) for i in range(n)]
+
+    def scans(n, sources, *, stamps=True, frame_times=False):  # multi-frame files of 10 frames
+        return [RowFacts(number=i + 1, source=f"C:/runs/scan_{i * sources // n}.nxs", frame_index=i % 10, frame_count=10,
+                         exposure_s=0.5, timestamp=stamp(60 * (i * sources // n)) if stamps else "",
+                         frame_time_s=0.5 * i if frame_times else None) for i in range(n)]
+
+    late_source = scans(30, 1, stamps=False) + [
+        RowFacts(number=31 + i, source="C:/runs/scan_9.nxs", frame_index=i, frame_count=10, exposure_s=0.5,
+                 timestamp="") for i in range(5)]
+    return {"file_times": files(40), "file times running back": files(40, back_at=25),
+            "timestamps": scans(30, 1, frame_times=True), "exposure": scans(30, 1, stamps=False),
+            "start_exposure": scans(30, 3), "a second source later": late_source}
+
+
+@pytest.mark.parametrize("case", list(_times_cases()))
+def test_the_times_of_a_growing_map_are_the_times_of_all_its_rows(case) -> None:
+    """``RowTimes`` reads each row once and keeps what each way found of the rows so far: grown in pieces, its times
+    are those of ``series_times`` of all the rows so far, value for value, whichever way they come from."""
+    from src.gimap.features.analyze.application.series_times import RowTimes, series_times
+
+    facts = _times_cases()[case]
+    grown, at, ways = RowTimes(), 0, set()
+    for more in (1, 2, 5, 3, 1, 8, 13, 40):
+        grown.extend(facts[at:at + more])
+        at = min(len(facts), at + more)
+        (times, way), (expected, expected_way) = grown.times(), series_times(facts[:at])
+        assert way == expected_way
+        assert (times is None) == (expected is None)
+        if times is not None:
+            assert times.dtype == expected.dtype and times.tobytes() == expected.tobytes()
+        ways.add(way)
+    assert {"file_times": {"", "file_times"}, "file times running back": {"", "file_times", "timestamps"},
+            "timestamps": {"", "timestamps"}, "exposure": {"", "exposure"}, "start_exposure": {"", "exposure", "start_exposure"},
+            "a second source later": {"", "exposure"}}[case] == ways

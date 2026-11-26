@@ -39,7 +39,17 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
   - A live Series map grows from the map drawn before: only the rows that arrived are stacked and made into the
     picture, the same map value for value as one stacked whole. A redraw at 20 000 rows takes about 0.1 s instead of
     1 s. The mean of the halves of a cut is worked out about 14 times faster for rows of one geometry (0.08 ms
-    instead of 1.1 ms a row), the same values.
+    instead of 1.1 ms a row), the same values. The time stamps of a row are read once, when it arrives: they had
+    been read again for all the rows at every redraw, and past about 60 000 frames with a file time each (1.7 hours
+    at 10 frames a second) no longer fitted in the cache of the stamps read before, so that a redraw spent
+    0.25 s at 100 000 rows on the times alone, and longer with every row more; now 3 ms. The times are the same.
+  - Before every redraw the window also put the rows in the order of the frame list, split them by incidence
+    angle, copied the frame numbers and picked the ticks of the frame axis, each from all the rows: about 0.8 s of
+    the window at 50 000 rows. It now adds the rows that arrived to the order and the split made before (while they
+    are new frames numbered after the others), and the ticks are picked from all the rows at once and named only
+    where they are drawn (with all 50 000 rows in view, 0.6 ms instead of 56 ms, at every zoom and pan too): the
+    window's own work came to about 0.15 s, most of it drawing. The rows, their order, angle and ticks are the
+    same.
   - The stages of a growing map are looked for one map at a time; the map shown when a search ends is searched next.
     Every redraw had started one more search (10–30 s for a few thousand frames on a busy computer): while a watch
     caught up after the detector stopped, a dozen ran at once, the window waited for them, and the memory grew by

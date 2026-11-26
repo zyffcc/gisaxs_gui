@@ -3,7 +3,8 @@
 A run that switches between incidence angles gives frames whose cut at the same detector rows is another exit
 angle: the map holds one angle (``application/series_angles.py``) and keeps the other rows aside
 (``_series_aside``); the αi list beside the sentence above the map shows another angle, or every row. Every redraw
-sorts the rows again (``_series_split_angles``), so frames written while watching join the map of their angle.
+sorts the rows again (``_series_split_angles``), so frames written while watching join the map of their angle: the
+split before is kept and the rows that arrived are added to it (``application.series_angles.AngleSplit``).
 
 Rows of different exposure times, with the intensity not divided by the exposure, differ by their exposure alone:
 a note under the sentence says so, and its link turns on the exposure from the file header and builds the map again.
@@ -11,13 +12,14 @@ a note under the sentence says so, and its link turns on the exposure from the f
 
 from __future__ import annotations
 
+from operator import is_
+
 from PyQt5.QtCore import QSignalBlocker
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application.series_angles import (
-    ALL, default_incidence, incidence_groups, incidence_line, row_incidence, same_incidence, split_rows,
-)
+from ...application.live_rows import row_identity
+from ...application.series_angles import ALL, AngleSplit, same_incidence
 
 ANGLE_ITEM = "αi {angle}° · {n} frames"
 ALL_ITEM = "All angles · {n} frames"
@@ -26,21 +28,6 @@ ANGLE_WORDS = "αi {angle}° only ({n} frames at other angles: choose them in th
 EXPOSURE_NOTE = "These frames have different exposure times ({times} s) and their intensities are not divided by them."
 EXPOSURE_LINK = "Divide by the exposure time of the file header"
 EXPOSURE_HTML = '{note} <a href="exposure">{link}</a>'
-
-
-def _identity(row) -> tuple[str, int]:
-    return str(row[4][0]).casefold(), int(row[4][1])
-
-
-def _unique(rows) -> list:
-    """Every frame once: of two rows of one frame, the one that sums more frames (a short last sum completed)."""
-    kept: dict = {}
-    for row in rows:
-        key = _identity(row)
-        old = kept.get(key)
-        if old is None or getattr(row[3], "summed", 1) > getattr(old[3], "summed", 1):
-            kept[key] = row
-    return list(kept.values())
 
 
 class SeriesMixedMixin:
@@ -58,6 +45,7 @@ class SeriesMixedMixin:
         self._series_angle_choice = None
         """``None``: the angle of most rows (``default_incidence``); else ``ALL`` or the angle chosen in the list."""
         self._series_angle_shown = ALL
+        self._series_angles_kept = None
         self.series_angle_combo.hide()
         self.series_exposure_label.hide()
 
@@ -66,27 +54,20 @@ class SeriesMixedMixin:
     def _series_split_angles(self) -> None:
         """Before the map is drawn: the rows of its angle in ``_series_rows`` (the row picked stays picked; one at
         another angle gives way to the last row of the map), the others in ``_series_aside``."""
-        rows = list(self._series_rows)
-        picked = _identity(rows[self._series_row]) if 0 <= self._series_row < len(rows) else None
-        everything = _unique(rows + list(getattr(self, "_series_aside", [])))
-        numbers = self._series_built.get("numbers") or {}
-        if numbers:
-            everything.sort(key=lambda row: numbers.get(_identity(row), float("inf")))
-        choice = self._series_angle_choice
-        angle = default_incidence(everything) if choice is None else choice
-        if angle != ALL and not any(same_incidence(row_incidence(row), angle) for row in everything):
-            angle = default_incidence(everything)
-        kept, aside = split_rows(everything, angle)
-        if not kept:
-            kept, aside, angle = everything, [], ALL
-        self._series_rows, self._series_aside, self._series_angle_shown = kept, aside, angle
-        identities = [_identity(row) for row in kept]
-        self._series_row = identities.index(picked) if picked in identities else max(0, len(kept) - 1)
-        self._series_built["incidence"] = incidence_line(angle, aside)
-        self._series_fill_angles(everything)
+        rows = self._series_rows
+        picked = row_identity(rows[self._series_row]) if 0 <= self._series_row < len(rows) else None
+        kept = getattr(self, "_series_angles_kept", None)
+        if kept is None:
+            kept = self._series_angles_kept = AngleSplit()
+        split = kept.split(rows, getattr(self, "_series_aside", []), self._series_built.get("numbers"),
+                           self._series_angle_choice)
+        self._series_rows, self._series_aside, self._series_angle_shown = split.kept, split.aside, split.angle
+        self._series_row = split.places.get(picked, max(0, len(split.kept) - 1))
+        self._series_built["incidence"] = split.line
+        self._series_fill_angles(split.groups, split.rows)
 
-    def _series_fill_angles(self, everything) -> None:
-        groups = incidence_groups(everything)
+    def _series_fill_angles(self, groups, rows: int) -> None:
+        """The αi list: ``groups`` (``incidence_groups`` of every row), ``rows`` of all angles."""
         combo = self.series_angle_combo
         with QSignalBlocker(combo):
             combo.clear()
@@ -94,7 +75,7 @@ class SeriesMixedMixin:
                 text = (trf(NO_ANGLE_ITEM, n=count) if angle is None
                         else trf(ANGLE_ITEM, angle=f"{angle:.3g}", n=count))
                 combo.addItem(text, angle)
-            combo.addItem(trf(ALL_ITEM, n=len(everything)), ALL)
+            combo.addItem(trf(ALL_ITEM, n=rows), ALL)
             shown = self._series_angle_shown
             index = next((i for i in range(combo.count()) if (combo.itemData(i) == ALL) == (shown == ALL)
                           and (shown == ALL or same_incidence(combo.itemData(i), shown))), combo.count() - 1)
@@ -138,7 +119,7 @@ class SeriesMixedMixin:
         map checks at every drawing: 40 ms of the window at 20 000 rows)."""
         rows = self._series_rows
         kept = getattr(self, "_series_exposures_kept", None)
-        if kept is not None and len(rows) >= len(kept[0]) and all(row is before for row, before in zip(rows, kept[0])):
+        if kept is not None and len(rows) >= len(kept[0]) and all(map(is_, rows, kept[0])):
             seen, times = kept[0], set(kept[1])
         else:
             seen, times = [], set()

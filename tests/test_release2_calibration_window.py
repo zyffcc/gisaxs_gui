@@ -90,16 +90,28 @@ def _dispose(dialog) -> None:
 
 
 def _calibrated(context, frame: Path) -> GeometryCalibrationDialog:
+    """The frame loaded and calibrated in a window. A warning the window shows (a failed load or calibration — on
+    a computer out of memory, say) fails the tests of the module with its words: a modal box would stop them."""
     app = _app()
     dialog = GeometryCalibrationDialog(app_context=context)
     dialog.resize(1180, 760)
     dialog.show()
     _settle(app, 0.2)
-    dialog.load_image(str(frame))
-    _wait(app, lambda: dialog._load_thread is None and dialog.image is not None, 60)
-    dialog.energy_spin.setValue(12.0)  # the frame states no energy: it is entered (none is assumed)
-    dialog.start_calibration()
-    _wait(app, lambda: dialog._cal_thread is None and dialog.result is not None, 240)
+    warned: list[str] = []
+    warning = QMessageBox.warning
+    QMessageBox.warning = staticmethod(lambda _parent, title, text, *_args, **_kwargs: warned.append(f"{title}: {text}"))
+    try:
+        dialog.load_image(str(frame))
+        _wait(app, lambda: warned or (dialog._load_thread is None and dialog.image is not None), 60)
+        if not warned:
+            dialog.energy_spin.setValue(12.0)  # the frame states no energy: it is entered (none is assumed)
+            dialog.start_calibration()
+            _wait(app, lambda: warned or (dialog._cal_thread is None and dialog.result is not None), 240)
+    finally:
+        QMessageBox.warning = warning
+    if warned:
+        _dispose(dialog)
+        pytest.fail("The window warned: " + " | ".join(warned))
     _settle(app, 0.3)
     return dialog
 
