@@ -392,7 +392,7 @@ def test_restart_starts_gimap_again_only_when_the_window_closed(monkeypatch) -> 
     assert quits == [1]
     app.aboutToQuit.emit()
     app.aboutToQuit.emit()  # connected once: one new GIMaP
-    assert started == [(sys.executable, ["/x/main.py", "--restarted"], "/x")]
+    assert started == [(sys.executable, ["/x/main.py", "--restarted"], str(Path("/x/main.py").parent))]
 
 
 def test_check_for_updates_opens_the_dialog_for_a_source_folder_and_the_releases_page_otherwise(monkeypatch,
