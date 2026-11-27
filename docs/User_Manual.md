@@ -2840,7 +2840,9 @@ simulated cuts ([README](../tools/benchmarks/README.md)).
    cylinders are slow (20–30 s per least-squares fit). The time grows with the number of points and of compositions
    tried, and depends on the computer. Sizes *Gaussian, by intensity* take several times longer than *Gaussian, by
    number*, whose averages come from tables. Predict uses half the computer's logical processors, at most 12 (the
-   environment variable `GIMAP_PREDICT_THREADS` sets another number); the results are the same with any number.
+   environment variable `GIMAP_PREDICT_THREADS` sets another number), in as many worker processes, fewer when the
+   computer's memory is short; the results are the same with any number. While it runs, the plot shows the
+   network's first guess, then the fit just refined (grey, dashed) and the best so far (green), each with its χ²ᵣ.
    Other programs that compute at the same time slow it down. When the computer's memory runs out, Predict stops
    with *The computer ran out of memory*: close other programs and run it again.
 

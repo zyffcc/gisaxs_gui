@@ -238,7 +238,8 @@ def _t_log(x, mean, covariance) -> np.ndarray:
 
 
 def local_posterior(data: Cut, composition: int, centre, tau: float, rng: np.random.Generator, count: int = 600,
-                    law: str = "number_gauss", coupling: str = "lma", rounds: int = ROUNDS, threads: int = 1) -> Local:
+                    law: str = "number_gauss", coupling: str = "lma", rounds: int = ROUNDS, threads: int = 1,
+                    pool=None) -> Local:
     """The posterior of the mode at the physical values ``centre`` (DIMS,; its model error τ given separately).
 
     Adaptive (population Monte Carlo), at most ``rounds`` rounds of ``count`` samples, until ``ESS_TARGET`` of them
@@ -300,7 +301,7 @@ def local_posterior(data: Cut, composition: int, centre, tau: float, rng: np.ran
                 z[:, chosen] = _t_sample(rng, first_mean, first, count)
         samples = physical(E.from_z(z, np.full(count, data.ratio), composition), data.q_max,
                            disk=likelihood.free_reflection)
-        log_like, amplitudes, chi2 = parallel.evaluate(likelihood, samples, threads)
+        log_like, amplitudes, chi2 = parallel.evaluate(likelihood, samples, threads, pool)
         z_all.append(z)
         log_like_all.append(log_like)
         amplitudes_all.append(amplitudes)

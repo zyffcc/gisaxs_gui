@@ -416,13 +416,14 @@ def modes(result: Composition, points: int, weights: Optional[np.ndarray] = None
 
 
 def sample_composition(network, h, data: Cut, composition: int, count: int, rng, law: str = "number_gauss",
-                       coupling: str = "lma", head_log_prob: float = 0.0, threads: int = 1) -> Composition:
-    """Importance-sampled posterior of one composition (the likelihoods on ``threads`` threads: ``parallel``)."""
+                       coupling: str = "lma", head_log_prob: float = 0.0, threads: int = 1, pool=None) -> Composition:
+    """Importance-sampled posterior of one composition (the likelihoods on ``threads`` threads or in the workers of
+    ``pool``: ``parallel``)."""
     z, log_q = network.sample(network.context(h, composition), composition, count, rng, widths=PROPOSAL_WIDTHS)
     values = E.from_z(z, np.full(count, data.ratio), composition)
     likelihood = Likelihood(data, composition, law, coupling)
     samples = physical(values, data.q_max, disk=likelihood.free_reflection)
-    log_like, amplitudes, chi2 = parallel.evaluate(likelihood, samples, threads)
+    log_like, amplitudes, chi2 = parallel.evaluate(likelihood, samples, threads, pool)
     log_w = log_like + E.log_prior(z, composition) - log_q
     log_w = np.where(np.isfinite(log_w), log_w, -np.inf)
     top = np.max(log_w)
@@ -464,7 +465,7 @@ def candidates(network, h, allowed: Optional[Sequence[int]] = None, count: int =
 
 def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, allowed=None, shortlist: int = 4,
           samples: int = 2000, cylinder_samples: int = 300, seed: int = 0, law: str = "number_gauss",
-          coupling: str = "lma", progress=None, threads: int = 1) -> list[Composition]:
+          coupling: str = "lma", progress=None, threads: int = 1, pool=None) -> list[Composition]:
     """The posterior of each composition (given, or the head's ``shortlist`` among ``allowed``), most probable
     first; ``probability`` from the evidences, ``modes`` of each. ``progress``: given ``(done, total)`` before the
     first composition is sampled and after each (it changes nothing that is computed); ``threads``: of the
@@ -483,7 +484,7 @@ def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, a
     for c, head in chosen:
         has_cylinder = any(f == "cylinder" for f, _s in E.composition_types(c))
         out.append(sample_composition(network, h, data, c, cylinder_samples if has_cylinder else samples, rng, law,
-                                      coupling, head, threads))
+                                      coupling, head, threads, pool))
         if progress is not None:
             progress(len(out), len(chosen))
     evidences = np.array([r.log_evidence for r in out])
