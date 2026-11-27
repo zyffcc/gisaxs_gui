@@ -25,6 +25,7 @@ from src.gimap.app.presentation.task_runner import TaskRunner
 
 from ...application import LoadCurveRequest
 from ...application.series_chain import acquisition_fields
+from ...application.series_incidence import other_angle
 from ...application.series_fit import (
     POOR_CHI2,
     FrameFit,
@@ -243,6 +244,9 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
                 return ("running" if index == self._current and self.tasks.is_busy() else "waiting"), ""
             reason = self._skipped.get(index) or (self._read_errors or {}).get(self.paths[index])
             return ("failed", self._reason_text(reason)) if reason else ("waiting", "")
+        skipped = getattr(frame, "other_angle", "")  # a frame saved before angles were compared has none
+        if skipped:
+            return "other angle", self._reason_text(skipped)
         if not frame.ok:
             return "failed", self._reason_text(frame.error)  # in the interface language; the record keeps it as it came
         result = frame.result
@@ -350,6 +354,9 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
             value = outcome.value
             curve = Curve.from_arrays(value.q, value.intensity, value.error, name=file_name(path), path=path,
                                       unit=value.q_source_unit, unit_from=value.q_unit_from, dq=value.dq)
+            skip = other_angle(start, value.observation)  # a frame of another αi: not fitted, not chained
+            if skip:
+                return FrameFit(index, path, other_angle=skip), curve, stamp, value
             frame = chained(index, path, curve, start) if chained is not None else replace(
                 fit_frame(index, path, curve, start, settings, stop, predict), **marks)
             return replace(frame, acquisition=acquisition_fields(value.observation) or {}), curve, stamp, value
@@ -392,7 +399,10 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
         self._set_item(frame.index)
         self._show_progress()
         self._status(lambda: tr("Frame {frame}: {state}").format(frame=frame.index + 1, state=self._frame_state(frame.index)[1]))
-        if not frame.ok:
+        if frame.other_angle:
+            self._log(trf("Frame {frame} ({name}) not fitted: {reason}", frame=frame.index + 1, name=file_name(frame.path),
+                          reason=self._reason_text(frame.other_angle)))
+        elif not frame.ok:
             self._log(tr("Frame {frame} ({name}) failed: {reason}").format(
                 frame=frame.index + 1, name=file_name(frame.path), reason=self._reason_text(frame.error)))
         if self._selected is None or self._selected == self._last_done:  # following the run

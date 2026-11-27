@@ -183,6 +183,7 @@ def analysis_metadata(analysis: FrameAnalysis, *, curve_keys=None, with_reproduc
             "hot": analysis.bad_pixels.hot_count, "dead": analysis.bad_pixels.dead_count,
             "defective_line_pixels": analysis.bad_pixels.line_count,
         },
+        "module_gaps_left_out": (analysis.metadata or {}).get("module_gaps"),
         "drawn_mask_pixels": None if analysis.drawn_mask is None else int(analysis.drawn_mask.sum()),
         "pixels_filled_from_mirror": None if analysis.filled_pixels is None else int(analysis.filled_pixels.sum()),
         "markers": _plain(reduction.markers) if reduction is not None else {},
@@ -428,6 +429,9 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
             record["aggregation"] = radial.region.get("aggregation")
     if analysis.kind == GISAXS and halves in FIT_HALVES:
         record["halves"] = halves
+    incidence = getattr(getattr(analysis, "geometry", None), "incidence_deg", None)
+    if analysis.kind == GISAXS and incidence is not None and math.isfinite(float(incidence)) and float(incidence) > 0:
+        record["alpha_i_deg"] = float(incidence)  # the αi the q of the cut were computed with (a series fits one)
     count = int(getattr(analysis, "frame_count", 1) or 1)
     if count > 1:
         record["frame_index"], record["frame_count"] = int(getattr(analysis, "frame_index", 0)), count

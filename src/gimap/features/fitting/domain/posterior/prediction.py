@@ -89,6 +89,25 @@ def _comparison(groups, pools, bics, by_bic):
     return probabilities, shares, best
 
 
+def refined_start(start, fit_data, weighed, index: int, floor: bool):
+    """Step 2 of ``predict`` for one start: least squares with the counting errors, then (``floor``) with the
+    model-error floor; ``(counts fit, floor fit, centre, BIC)``. At the top of the module, so that a process pool
+    can run it."""
+    from . import refine
+
+    counts_fit = fit_engine.fit(start, fit_data, method="local")
+    floor_fit = fit_engine.fit(counts_fit.model, weighed, method="local") if floor else counts_fit
+    residual = fit_engine.residuals(floor_fit.model, weighed)
+    return (counts_fit, floor_fit, refine.model_values(floor_fit.model, index),
+            float(residual @ residual + floor_fit.free * math.log(floor_fit.points)))
+
+
+def searched(start, fit_data, seeds, seed: int):
+    """A search of the ranges (step 2): the global fit from ``start`` and the network's heaviest samples ``seeds``.
+    At the top of the module, so that a process pool can run it."""
+    return fit_engine.fit(start, fit_data, method="global", seeds=seeds, seed=seed)
+
+
 @parallel.one_blas_thread
 def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Optional[float] = None,
             compositions: Optional[Sequence[int]] = None,
@@ -96,8 +115,9 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
             law: str = "number_gauss", coupling: str = "lma", min_probability: float = 0.01,
             grazing: Optional[dict] = None, local_samples: int = LOCAL_SAMPLES,
             refine_modes: int = REFINED, explored: int = EXPLORED, model_error_floor: float = MODEL_ERROR_FLOOR,
-            cancelled=None, progress=None, partial=None, reflected_beam=None, known_heights=None, measured_qz=None,
-            substrate=None, upright_heights=None, threads: int = 1) -> list[PosteriorSolution]:
+            cancelled=None, progress=None, partial=None, preview=None, reflected_beam=None, known_heights=None,
+            measured_qz=None, substrate=None, upright_heights=None, threads: int = 1,
+            pool=None) -> list[PosteriorSolution]:
     """Solutions of a cut (q in nm⁻¹, qz the vacuum q₊ = k_i + k_f of the Born term in nm⁻¹, 0: the effective
     interface; ``qz_minus`` k_i − k_f when both angles are known: spheres get the exit-reflected path with a free
     effective reflection coefficient, ``Cut.reflected``), most probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
@@ -120,8 +140,14 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
     network), ``refinement`` (compositions whose modes were refined), ``starts`` (compositions given moved starts),
     ``search`` (a search of the ranges), ``sampling`` (solutions whose posterior was sampled). ``partial``: given,
     after each sampling but the last, the solutions of those sampled so far, their probabilities over them alone
-    (step 4 on what is done). Neither changes what is computed nor the solutions returned, nor does ``threads``, the
-    threads of the batch likelihoods of steps 1 and 3 and of the least-squares fits of step 2 (``parallel``)."""
+    (step 4 on what is done). ``preview``: given ``(latest, best)``, each ``(model, χ²ᵣ)``, whenever a least-squares
+    fit of step 2 is placed: that fit and the best so far (lowest BIC); before the first fit, the start of the first
+    mode of the most probable composition, ``(model, None)``, and None. None of them changes what is computed nor the
+    solutions returned, nor does ``threads``, the threads of the batch likelihoods of steps 1 and 3 and of the
+    least-squares fits of step 2 (``parallel``), nor
+    ``pool``: worker processes (``ordered(function, items)``, as ``parallel.ordered``, and ``workers``;
+    ``infrastructure/adapters/posterior_pool``) for the fits and searches of step 2 and the batch likelihoods of
+    steps 1 and 3, which then run at the same time."""
     from . import refine
 
     tick = time.perf_counter()
@@ -133,6 +159,14 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
     def tell(stage: str, done: int, total: int) -> None:
         if progress is not None:
             progress(stage, done, total)
+
+    def shown(candidate) -> None:
+        """The fit just placed and the best so far, for a display while Predict runs (``preview``)."""
+        if preview is None:
+            return
+        best = min((e for modes in found.values() for e in modes), key=lambda e: e.bic)
+        preview((candidate.counts_fit.model, candidate.counts_fit.chi2_reduced),
+                (best.counts_fit.model, best.counts_fit.chi2_reduced))
 
     rng = np.random.default_rng(seed + 7919)
     # The network's samples, their modes and the least-squares fits use the counts' σ (``counts``, ``fit_data``); the
@@ -151,7 +185,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
         return float(residual @ residual + floor_fit.free * math.log(floor_fit.points))
 
     results = infer(network, counts, compositions, allowed=allowed, shortlist=shortlist, samples=samples, seed=seed,
-                    law=law, coupling=coupling, threads=threads,
+                    law=law, coupling=coupling, threads=threads, pool=pool,
                     progress=None if progress is None else (lambda done, total: tell("proposals", done, total)))
     lo, hi = E.bounds([data.ratio])
     tau_dim = E.ERROR_DIM
@@ -165,23 +199,35 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
     def fitted(job) -> Candidate:
         """A start ``(result, mode, model)`` refined by least squares, then with the model-error floor."""
         result, mode, start = job
-        return measured(result, mode, fit_engine.fit(start, fit_data, method="local"))
+        return Candidate(result, mode, *refined_start(start, fit_data, weighed, result.index, model_error_floor > 0))
 
     def add(result, mode, refined) -> None:
-        place(measured(result, mode, refined))
+        candidate = measured(result, mode, refined)
+        place(candidate)
+        shown(candidate)
 
     def place_all(jobs, numbers, stage: str, total: int) -> None:
         """The starts ``jobs`` ((composition's number, (result, mode, start)), in order) refined on ``threads``
         threads and placed in that order, the compositions ``numbers`` reported as ``stage``."""
-        refined = parallel.ordered(fitted, [job for _number, job in jobs], threads)
+        fits = None
+        if pool is not None and jobs:
+            fits = pool.ordered(refined_start, [(start, fit_data, weighed, result.index, model_error_floor > 0)
+                                                for _number, (result, _mode, start) in jobs])
+            refined = (Candidate(result, mode, *fit) for (_number, (result, mode, _start)), fit in zip(jobs, fits))
+        else:
+            refined = parallel.ordered(fitted, [job for _number, job in jobs], threads)
         try:
             for number in numbers:
                 check()
                 tell(stage, number, total)
                 for _ in range(sum(n == number for n, _job in jobs)):
-                    place(next(refined))
+                    candidate = next(refined)
+                    place(candidate)
+                    shown(candidate)
         finally:
             refined.close()
+            if fits is not None:
+                fits.close()
 
     def place(candidate) -> None:
         """Keep a candidate, or the better of it and an earlier one at the same values (so the order matters)."""
@@ -208,6 +254,8 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
                 continue
             started.append(mode.best)
             jobs.append((number, (result, mode, fit_model(mode.best, result.index, counts, law, coupling, grazing))))
+    if preview is not None and jobs:
+        preview((jobs[0][1][2], None), None)  # the network's first guess, before the first fit is done
     place_all(jobs, range(len(results)), "refinement", len(results))
     tell("refinement", len(results), len(results))
     def ranked_compositions():
@@ -228,13 +276,23 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
             moved += [(number, (result, candidate.mode, start)) for _chi2, _i, start in sorted(tried)[:refine.MOVES]]
     place_all(moved, sorted({n for n, _job in moved}), "starts", len(by_score[:refine.RETRY_COMPOSITIONS]))
     by_score = ranked_compositions()
+    searches = []  # (result, start, seeds): each search depends on its own composition's fits alone
     for result in by_score[:refine.RETRY_COMPOSITIONS]:
         if result.modes and min(e.counts_fit.chi2_reduced for e in found[result.index]) > refine.CHI2_RETRY:
             heaviest = np.argsort(-result.weights)[:refine.SEEDS]
             seeds = tuple(fit_model(result.samples[i], result.index, counts, law, coupling, grazing) for i in heaviest)
-            start = fit_model(result.modes[0].best, result.index, counts, law, coupling, grazing)
-            tell("search", 0, 1)
-            add(result, result.modes[0], fit_engine.fit(start, fit_data, method="global", seeds=seeds, seed=seed))
+            searches.append((result, fit_model(result.modes[0].best, result.index, counts, law, coupling, grazing),
+                             seeds))
+    if searches:
+        tell("search", 0, 1)
+        items = [(start, fit_data, seeds, seed) for _result, start, seeds in searches]
+        globals_ = pool.ordered(searched, items) if pool is not None and len(items) > 1 else \
+            (searched(*item) for item in items)
+        try:
+            for (result, _start, _seeds), found_fit in zip(searches, globals_):
+                add(result, result.modes[0], found_fit)
+        finally:
+            globals_.close()
     ranked = sorted((e for modes in found.values() for e in modes), key=lambda e: e.bic)
     if not ranked:
         return []
@@ -312,7 +370,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
             entry.local = local_posterior(data, entry.result.index, entry.centre, float(tau) if np.isfinite(tau) else 0.02,
                                           rng, local_samples, law, coupling,
                                           rounds=refine.SLOW_ROUNDS if slow(entry.result.index) else refine.LOCAL_ROUNDS,
-                                          threads=threads)
+                                          threads=threads, pool=pool)
         if partial is not None and number + 1 < len(kept):
             partial(finish(kept[:number + 1]))
     tell("sampling", len(kept), len(kept))

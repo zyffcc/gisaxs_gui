@@ -19,13 +19,22 @@ else:
 
 HERE = Path(__file__).resolve().parent
 FIELDS = ("full_tuple", "populations", "first_population_draw", "noise_seed")
+DIGITS = 9
+"""Significant digits of the drawn numbers that are compared. The same draw on another computer can differ in the
+last bits (R and D come from exp: up to 3 units in the last place between Windows and Linux); two different draws
+do not agree to 9 digits."""
+
+
+def _digits(value):
+    return float(f"{value:.{DIGITS}g}") if isinstance(value, float) else value
 
 
 def fingerprints(case):
-    """The exact identifying tuple, plus its parts to detect partially repeated draws."""
-    populations = tuple(tuple(sorted(population.items())) for population in case["populations"])
+    """The identifying tuple, plus its parts to detect partially repeated draws (numbers to ``DIGITS`` digits)."""
+    populations = tuple(tuple(sorted((key, _digits(value)) for key, value in population.items()))
+                        for population in case["populations"])
     first = case["populations"][0]
-    first_draw = tuple(first[key] for key in ("R", "sR", "D", "s_nn"))
+    first_draw = tuple(_digits(first[key]) for key in ("R", "sR", "D", "s_nn"))
     noise = case["seed"]
     return ((case["composition"], populations, noise), populations, first_draw, noise)
 

@@ -91,3 +91,17 @@ def test_audit_fails_for_reused_cut_even_with_new_composition(tmp_path, capsys):
     report = capsys.readouterr().out
     assert "first_population_draw: [(0, 0)]" in report
     assert "noise_seed: [(0, 0)]" in report
+
+
+def test_a_draw_repeated_on_another_computer_is_the_same_draw():
+    """exp of another libm moves R and D by a few units in the last place (Linux CI); a draw differing in the eighth
+    digit is another draw."""
+    original = recovery_cases.draw(0, set_name="fresh")
+    first = original["populations"][0]
+    repeated = dict(original, seed=original["seed"] + 1, populations=[dict(
+        first, R=float(np.nextafter(np.nextafter(first["R"], 99.0), 99.0)), D=float(np.nextafter(first["D"], 0.0)))])
+    other = dict(original, seed=original["seed"] + 2, populations=[dict(first, R=first["R"] * (1 + 1e-7))])
+    for incoming, matched in ((repeated, True), (other, False)):
+        _, pairs = audit.compare({"archive": [original]}, [incoming])
+        assert bool(pairs["archive", "new"]["first_population_draw"]) is matched
+        assert not pairs["archive", "new"]["noise_seed"]

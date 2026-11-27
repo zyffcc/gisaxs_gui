@@ -21,6 +21,8 @@ class IndexedPredictionFile:
 class LoadedPredictionImage:
     image: np.ndarray
     source_paths: tuple[Path, ...]
+    facts: Mapping[str, Any] = field(default_factory=dict)
+    """What the reader found in the first frame (αi and its source, times, header values): plain values."""
 
     def __post_init__(self) -> None:
         image = np.asarray(self.image, dtype=np.float32)
@@ -48,6 +50,8 @@ class PredictImageRequest:
     allow_unsafe_lambda: bool = False
     precision_policy: str | None = None
     timeout_seconds: float | None = None
+    source: "LoadedPredictionImage | None" = None
+    """The frames ``image`` was loaded from: their format is checked and a module may be told about them."""
 
 
 @dataclass(frozen=True)

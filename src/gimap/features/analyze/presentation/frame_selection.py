@@ -8,6 +8,7 @@ from __future__ import annotations
 from bisect import bisect_right
 from collections.abc import Sequence
 from dataclasses import dataclass
+from operator import is_
 from pathlib import Path
 
 
@@ -198,7 +199,29 @@ class ImportSelectionMixin:
         return int(index) in self.selected_frame_indices(path)
 
     def imported_frame_count(self) -> int:
+        if not self._import_selections:  # (every frame of every source: the counts, without a Path per file)
+            total = self._counted_frames()
+            if total is not None:
+                return total
         return sum(len(self.selected_frame_indices(path)) for path in self.state.files)
+
+    def _counted_frames(self):
+        """The frames of the listed sources by their counts (``None``: one not counted yet), kept while the list only
+        grew at its end and the counts before stay: a watch asks at every look and redraw (27 ms at 21 000 files)."""
+        files, counts = self.state.files, self._frame_counts
+        kept = getattr(self, "_counted_kept", None)
+        grown = (kept is not None and len(kept[0]) <= len(files) and all(map(is_, files, kept[0]))
+                 and kept[1].items() <= counts.items())
+        if grown and len(kept[0]) == len(files) and len(kept[1]) == len(counts):
+            return kept[2]  # (nothing changed)
+        start, total = (len(kept[0]), kept[2]) if grown else (0, 0)
+        known = [counts.get(str(path).casefold()) for path in files[start:]]
+        if None in known:
+            self._counted_kept = None
+            return None
+        total += sum(known)
+        self._counted_kept = (list(files), dict(counts), total)
+        return total
 
     def total_frame_count(self) -> int:
         """All physical frames, including those outside an import selection; no disk access."""

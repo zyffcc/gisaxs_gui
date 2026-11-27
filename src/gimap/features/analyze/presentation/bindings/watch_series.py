@@ -14,19 +14,23 @@ from PyQt5.QtCore import QSignalBlocker, QTimer
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import trf
 
+from ...application.live_rows import ListedRows, row_identity
 from ..frames_model import with_cut
 from ..texts import message_text
 from ..series_texts import SUM_SWITCHED_OFF
+from .batch_live import redraw_wait_s
 from .watch_online import WHAT_FAILED, WHAT_NO_CURVE, WatchOnlineMixin
+from .watch_pace import WatchPaceMixin
 
 CORRECTED_MAP = ("This map uses batch series corrections. Watching cannot append uncorrected frames: "
                  "Build Map again or rerun Batch Export with the same corrections.")
 
 
-class WatchSeriesMixin(WatchOnlineMixin):
+class WatchSeriesMixin(WatchOnlineMixin, WatchPaceMixin):
     def _stop_watch_series(self) -> None:
         self._watch_series_epoch = object()
         self._watch_series_waiting = []
+        self._watch_pace_reset()  # (the frames waiting in line are not started)
         self._watch_series_built = None
         for job in getattr(self, "_watch_series_jobs", ()):
             self.tasks.cancel(job)
@@ -172,19 +176,41 @@ class WatchSeriesMixin(WatchOnlineMixin):
         self._watch_series_built = built
         token = self._watch_series_epoch
         prepared = []
-        groups = None
-        if built is not None and requests:  # the groups of the run once per look (not per frame: thousands of files)
-            with model.only_frames(built.get("first", 1), built.get("last") or None):
-                groups = model._lazy_groups()
+        groups = in_run = None
+        if built is not None and requests:
+            if int(model.sum_count) <= 1 and max(1, built.get("every", 1)) == 1:
+                in_run = self._watch_series_in_run(built)
+            else:  # the groups of the run once per look (not per frame: thousands of files)
+                with model.only_frames(built.get("first", 1), built.get("last") or None):
+                    groups = model._lazy_groups()
         for request in requests:
             row_key = key if live else None
             if built is not None:
                 request = with_cut(request, built.get("cut"))
-                group = groups.index_for(request.path, request.frame_index)
-                if group is None or group % max(1, built.get("every", 1)):
-                    row_key = None
+                if in_run is not None:
+                    if not in_run(request):
+                        row_key = None
+                else:
+                    group = groups.index_for(request.path, request.frame_index)
+                    if group is None or group % max(1, built.get("every", 1)):
+                        row_key = None
             prepared.append((request, row_key, token, built))
         return prepared
+
+    def _watch_series_in_run(self, built):
+        """Whether a frame belongs to the run of a map of single frames, every one (no Sum, no step): its group is
+        the frame itself, so it is in the run when it is listed, imported and handed out by the watch, and its number
+        lies within the map's first … last frames (what ``_lazy_groups().index_for`` finds, without grouping every
+        listed frame at each look: with thousands of files listed that took most of a look)."""
+        model = self.view_model
+        numbers = model.frame_numbers()
+        first, last = max(1, int(built.get("first", 1))), int(built.get("last") or 0) or None
+
+        def in_run(request) -> bool:
+            number = numbers.get((str(request.path).casefold(), int(request.frame_index)))
+            return (number is not None and first <= number and (last is None or number <= last)
+                    and int(request.frame_index) in model.selected_frame_indices(request.path, usable=True))
+        return in_run
 
     def _watch_series_done(self, value, key, token, built, job: str = "") -> None:
         self._watch_series_jobs.discard(job)
@@ -201,12 +227,12 @@ class WatchSeriesMixin(WatchOnlineMixin):
             self._log_skipped(job.split(":", 1)[-1].rsplit(":", 1)[0] or job, WHAT_NO_CURVE, message_text(value.live_error))
         if row is None or len(row) != 5:
             return
+        row = self._series_live_row(row)
         numbers = model.frame_numbers()
         identity = (str(row[4][0]).casefold(), int(row[4][1]))
         if identity not in numbers:
             return
-        existing = next((i for i, old in enumerate(self._series_rows)
-                         if (str(old[4][0]).casefold(), int(old[4][1])) == identity), None)
+        existing = self._series_row_of(identity)
         if existing is not None:
             old = self._series_rows[existing]
             old_sum, new_sum = getattr(old[3], "summed", 1), getattr(row[3], "summed", 1)
@@ -218,6 +244,21 @@ class WatchSeriesMixin(WatchOnlineMixin):
         # (put in order at the redraw, once a second: per frame it would read every listed source each time)
         if not self._watch_series_timer.isActive():
             self._watch_series_timer.start()
+
+    def _series_row_of(self, identity) -> "int | None":
+        """The row of the frame ``identity`` (source key, frame index) in ``_series_rows``, or ``None``: from an index
+        kept while the rows are only appended to, or replaced by rows of the same frames (a scan of the rows for
+        every frame that arrived cost milliseconds per thousand rows)."""
+        rows = self._series_rows
+        kept = getattr(self, "_series_row_index", None)
+        if kept is None or kept[0] is not rows or kept[1] > len(rows):
+            kept = self._series_row_index = [rows, 0, {}]
+        index = kept[2]
+        for at in range(kept[1], len(rows)):
+            ref = rows[at][4]
+            index.setdefault((str(ref[0]).casefold(), int(ref[1])), at)
+        kept[1] = len(rows)
+        return index.get(identity)
 
     def _watch_series_failed(self, message, name, token, job, *, exporting: bool) -> None:
         self._watch_series_jobs.discard(job)
@@ -232,22 +273,16 @@ class WatchSeriesMixin(WatchOnlineMixin):
         if not self.view_model.watch.active:
             return
         numbers = self.view_model.frame_numbers()
-        unique = {}
         selected = None
         if self._series_rows and 0 <= self._series_row < len(self._series_rows):
-            ref = self._series_rows[self._series_row][4]
-            selected = (str(ref[0]).casefold(), int(ref[1]))
-        for row in self._series_rows:
-            ref = row[4]
-            identity = (str(ref[0]).casefold(), int(ref[1]))
-            if identity in numbers:
-                old = unique.get(identity)
-                if old is None or getattr(row[3], "summed", 1) > getattr(old[3], "summed", 1):
-                    unique[identity] = row
-        identities = sorted(unique, key=numbers.get)
-        self._series_rows = [unique[key] for key in identities]
-        if selected in unique:
-            self._series_row = identities.index(selected)
+            selected = row_identity(self._series_rows[self._series_row])
+        listed = getattr(self, "_watch_rows_listed", None)
+        if listed is None:
+            listed = self._watch_rows_listed = ListedRows()
+        # Every frame once, only the listed ones, by their number (the order before kept: ``application.live_rows``).
+        self._series_rows, places = listed.order(self._series_rows, numbers)
+        if selected in places:
+            self._series_row = places[selected]
         self._series_built["numbers"] = numbers
         self._series_built["listed"] = self.view_model.listed_frames()
 
@@ -255,6 +290,9 @@ class WatchSeriesMixin(WatchOnlineMixin):
         if not self.view_model.watch.active or not self._series_rows:
             return
         if self._watch_series_corrected() or self.view_model.series_settings_changed(self._series_built):
+            return
+        if self._series_later_busy():  # the map of the rows before is being stacked: these rows after it
+            self._watch_series_timer.start()
             return
         self._watch_series_normalize()
         if self.batch_running():
@@ -266,7 +304,12 @@ class WatchSeriesMixin(WatchOnlineMixin):
         if follow:
             self._series_row = len(self._series_rows) - 1
         self._watch_series_followed = self._series_row
-        self._clear_stages()
-        self._show_series_map(keep_view=had_map and not follow, keep_q=had_map)
-        self._find_stages()
         self._record_rows()  # (Record Every Frame in the Results Database: the rows not written yet)
+        self._series_redraw_live(keep_view=had_map and not follow, keep_q=had_map, before=self._clear_stages,
+                                 then=self._watch_series_drawn)
+
+    def _watch_series_drawn(self) -> None:
+        self._find_stages()
+        # A map of many rows takes long to stack and draw: the next drawing waits accordingly (``redraw_wait_s``).
+        wait = redraw_wait_s(getattr(self, "_series_draw_s", 0.0), getattr(self, "_series_build_s", 0.0))
+        self._watch_series_timer.setInterval(int(1000 * wait))

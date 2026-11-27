@@ -244,6 +244,8 @@ class FitRunMixin:
     def _finish(self) -> None:
         self._running = None
         self._busy(False)
+        if hasattr(self, "clear_predict_preview"):
+            self.clear_predict_preview()  # the fits drawn while Predict ran
 
     def _of_another_curve(self, curve) -> bool:
         """The fit ended after another curve was opened: it ends here, and nothing of it is kept (its

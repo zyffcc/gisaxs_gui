@@ -548,3 +548,25 @@ def test_the_shared_module_needs_numpy_only() -> None:
         elif isinstance(node, ast.ImportFrom):
             imported.add((node.module or "").split(".")[0])
     assert imported <= {"__future__", "dataclasses", "math", "typing", "numpy"}
+
+
+def test_the_coverage_of_halves_of_the_same_points_is_kept_and_gives_the_same_mean() -> None:
+    """``_around`` keeps ``_measured_around`` for halves of the same |q| (the rows of a Series map of one geometry):
+    the same mean, value for value, as worked out each time; halves of other points are not taken for them."""
+    from src.gimap.shared import signed_cut
+
+    rng = np.random.default_rng(5)
+    q = np.linspace(0.002, 0.2, 300)
+    other = np.linspace(0.001, 0.19, 280)
+    for _ in range(3):
+        positive, negative = (q, rng.random(q.size), None), (other, rng.random(other.size), None)
+        kept = signed_cut.mean_of_halves(positive, negative)
+        signed_cut._AROUND.clear()
+        fresh = signed_cut.mean_of_halves(positive, negative)
+        np.testing.assert_array_equal(kept.q, fresh.q)
+        np.testing.assert_array_equal(kept.intensity, fresh.intensity)
+        np.testing.assert_array_equal(kept.halves, fresh.halves)
+    answer = signed_cut._around(q, other)
+    assert answer is signed_cut._around(q.copy(), other.copy()) and not answer.flags.writeable
+    holed = np.delete(other, np.arange(100, 140))  # (a hole: other points, worked out anew)
+    np.testing.assert_array_equal(signed_cut._around(q, holed), signed_cut._measured_around(q, holed))

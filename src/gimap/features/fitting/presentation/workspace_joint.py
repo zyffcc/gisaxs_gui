@@ -37,6 +37,19 @@ class JointFitMixin:
         dialog.show()
         return added
 
+    _angles = None
+
+    def open_angle_rank(self):
+        """Fitting ▸ Rank Incidence Angles…: the window, with the fit in Single analysis (``single/angle_rank_dialog.py``)."""
+        self.show_context("single")
+        if self._angles is None:
+            from .single.angle_rank_dialog import AngleRankDialog
+
+            self._angles = AngleRankDialog(self.fit_page, self.fit_page)
+            self.fit_page.add_disposer(self._angles.dispose)
+        self._angles.show()
+        return self._angles
+
     def dispose_joint(self) -> None:
         if self._joint is not None:
             self._joint.dispose()

@@ -2,12 +2,39 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
 
-from ...application import IndexedPredictionFile, LoadedPredictionImage
-from ...domain import extract_cbf_index
+from src.gimap.shared.detector_io.completeness import edf_written
+
+from ...application import FolderEntry, IndexedPredictionFile, LoadedPredictionImage
+from ...domain import extract_frame_index
+
+
+def _frame_files(folder: Path, allowed) -> list[Path]:
+    """The files of ``folder`` whose suffix (case-folded) is in ``allowed``, by name, as resolving each would name
+    them: one listing (``os.scandir``) and the folder resolved once, not two or three calls to the file system per
+    file — a folder of a long run holds tens of thousands of frames."""
+    root = Path(folder)
+    if not root.is_dir():
+        raise NotADirectoryError(root)
+    resolved = root.resolve()
+    found = []
+    with os.scandir(root) as listing:
+        for item in listing:
+            if os.path.splitext(item.name)[1].casefold() not in allowed:
+                continue
+            try:
+                if not item.is_file():
+                    continue
+                link = item.is_symlink()
+            except OSError:
+                continue
+            found.append(Path(item.path).resolve() if link else resolved / item.name)
+    found.sort(key=lambda path: path.name.casefold())
+    return found
 
 
 class LocalPredictionFileCatalog:
@@ -16,11 +43,12 @@ class LocalPredictionFileCatalog:
         requested = max(1, int(count))
         if requested == 1:
             return (start,)
+        suffix = start.suffix.casefold()  # a stack is frames of one format: that of its first frame
         files = sorted(
             (
                 path
                 for path in start.parent.iterdir()
-                if path.is_file() and path.suffix.casefold() == ".cbf"
+                if path.is_file() and path.suffix.casefold() == suffix
             ),
             key=lambda path: path.name,
         )
@@ -36,36 +64,59 @@ class LocalPredictionFileCatalog:
         return selected
 
     def numbered_files(
-        self, folder: Path, suffix: str = ".cbf"
+        self, folder: Path, suffix: str | tuple[str, ...] = ".cbf"
     ) -> tuple[IndexedPredictionFile, ...]:
-        root = Path(folder)
-        normalized_suffix = suffix.casefold()
-        if not root.is_dir():
-            raise NotADirectoryError(root)
+        suffixes = tuple(item.casefold() for item in ((suffix,) if isinstance(suffix, str) else suffix))
         indexed = []
-        for path in sorted(root.iterdir(), key=lambda item: item.name.casefold()):
-            if not path.is_file() or path.suffix.casefold() != normalized_suffix:
-                continue
-            index = extract_cbf_index(path.name)
+        for path in _frame_files(Path(folder), set(suffixes)):
+            index = extract_frame_index(path.name, suffixes)
             if index is not None:
-                indexed.append(IndexedPredictionFile(path.resolve(), index))
+                indexed.append(IndexedPredictionFile(path, index))
         return tuple(indexed)
 
     def compatible_files(
         self, folder: Path, suffixes: tuple[str, ...]
     ) -> tuple[Path, ...]:
-        root = Path(folder)
-        if not root.is_dir():
-            raise NotADirectoryError(root)
         allowed = {
             suffix.casefold() if suffix.startswith(".") else f".{suffix.casefold()}"
             for suffix in suffixes
         }
-        return tuple(
-            path.resolve()
-            for path in sorted(root.iterdir(), key=lambda item: item.name.casefold())
-            if path.is_file() and path.suffix.casefold() in allowed
-        )
+        return tuple(_frame_files(Path(folder), allowed))
+
+    def look(self, folder: Path, suffixes: tuple[str, ...], skip: frozenset = frozenset()) -> tuple[FolderEntry, ...]:
+        """Every frame file of ``folder`` but those in ``skip`` (frames the watch has taken), with its size and
+        time, and whether an EDF says it is whole (Watch for new frames). One directory listing (``os.scandir`` gives
+        the sizes with it), and only the files not skipped are opened (an EDF's header): a folder of a long run holds
+        tens of thousands of frames. Paths as ``compatible_files`` gives them. ``OSError`` when the folder cannot be
+        listed (a share that dropped, a folder moved away)."""
+        root = Path(folder).resolve()
+        allowed = {suffix.casefold() if suffix.startswith(".") else f".{suffix.casefold()}" for suffix in suffixes}
+        entries = []
+        prefix = os.path.join(str(root), "")  # (``os.path.join(root, name)`` without its cost for every name)
+        with os.scandir(root) as listing:
+            for item in listing:
+                suffix = _suffix(item.name).casefold()
+                if suffix not in allowed:
+                    continue
+                path = prefix + item.name
+                if path in skip:
+                    continue
+                try:
+                    if not item.is_file():
+                        continue
+                    state = item.stat()
+                except OSError:  # its writer holds it: seen at the next look
+                    continue
+                complete = edf_written(Path(path)) if suffix == ".edf" and state.st_size else None
+                entries.append(FolderEntry(path, (state.st_size, state.st_mtime_ns), complete))
+        return tuple(entries)
+
+
+def _suffix(name: str) -> str:
+    """``os.path.splitext(name)[1]`` of a file name (no folder): the last dot on, when something else than dots comes
+    before it. A watch asks for every file of the folder at every look: 52 000 names took 0.13 s, now 0.05 s."""
+    dot = name.rfind(".")
+    return "" if dot < 0 or not name[:dot].strip(".") else name[dot:]
 
 
 class FabioPredictionImageRepository:

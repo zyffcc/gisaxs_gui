@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 import warnings
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Optional, Sequence
 
 import numpy as np
@@ -54,6 +55,10 @@ class RowFacts:
     timestamp: str = ""
     exposure_s: Optional[float] = None
     frame_time_s: Optional[float] = None
+    incidence_deg: Optional[float] = None
+    """The nominal αi of the frame (grazing incidence), or ``None``."""
+    file_time: str = ""
+    """When the frame's file was last written (ISO, local time), or empty."""
 
     @property
     def incomplete(self) -> bool:
@@ -91,12 +96,22 @@ class SeriesMap:
     def rows(self) -> int:
         return int(self.image.shape[0])
 
-    @property
+    @cached_property
     def numbers(self) -> tuple[int, ...]:
-        """The frame number of every row (``RowFacts.number``; the row counted from 1 when nothing is known)."""
+        """The frame number of every row (``RowFacts.number``; the row counted from 1 when nothing is known). Made
+        once per map (the frame axis, the picked row and the trace each ask for it at every drawing)."""
         if len(self.facts) == self.rows:
             return tuple(int(fact.number) for fact in self.facts)
         return tuple(range(1, self.rows + 1))
+
+    @cached_property
+    def short_rows(self) -> np.ndarray:
+        """Per row: it sums fewer frames than the others (``RowFacts.incomplete``); all ``False`` when nothing is
+        known. Made once per map (its marks and the trace ask at every drawing)."""
+        short = (np.fromiter((fact.incomplete for fact in self.facts), dtype=bool, count=self.rows)
+                 if len(self.facts) == self.rows else np.zeros(self.rows, dtype=bool))
+        short.setflags(write=False)  # (shared by whoever asks)
+        return short
 
     def number(self, row: int) -> int:
         return self.numbers[int(np.clip(row, 0, self.rows - 1))]
@@ -274,14 +289,41 @@ def _one_grid(curves: Sequence[tuple[np.ndarray, np.ndarray]]) -> Optional[tuple
 
 def stack_curves(curves: Sequence[tuple[np.ndarray, np.ndarray]]) -> tuple[np.ndarray, np.ndarray]:
     """``(x, image)``: the curves on one grid, one row each (see the module docstring)."""
+    x, image, _grid = stack_growing(curves)
+    return x, image
+
+
+def same_points(x, first_x: np.ndarray) -> bool:
+    """``x`` has the points of ``first_x`` (float): the same array or equal values (frames of one geometry), checked
+    in that order — a live map compares tens of thousands of rows."""
+    x = np.asarray(x, dtype=float)
+    return x.shape == first_x.shape and (x is first_x or np.array_equal(x, first_x)
+                                         or np.allclose(x, first_x, equal_nan=True))
+
+
+def stack_rows(curves: Sequence[tuple[np.ndarray, np.ndarray]], order: Optional[np.ndarray]) -> np.ndarray:
+    """The rows of curves that have the points of the first row of their map (``same_points``): their intensities,
+    float32, in the ``order`` of x of that map (``None``: as they are)."""
+    image = np.vstack([np.asarray(y, dtype=np.float32) for _x, y in curves])
+    return image if order is None else image[:, order]
+
+
+def stack_growing(curves: Sequence[tuple[np.ndarray, np.ndarray]]) -> tuple[np.ndarray, np.ndarray, Optional[tuple]]:
+    """``stack_curves``, and — when every curve has the points of the first — ``(first_x, order)``, with which
+    further curves are stacked as rows of the same map (``same_points``, ``stack_rows``); else ``None``."""
     if not curves:
         raise ValueError("No curves to stack.")
     first_x = np.asarray(curves[0][0], dtype=float)
-    if all(np.asarray(x).shape == first_x.shape and np.allclose(np.asarray(x, dtype=float), first_x, equal_nan=True)
-           for x, _y in curves):
-        image = np.vstack([np.asarray(y, dtype=np.float32) for _x, y in curves])
+    if all(same_points(x, first_x) for x, _y in curves):
         order = np.argsort(first_x, kind="stable")
-        return first_x[order], image[:, order]
+        if np.array_equal(order, np.arange(order.size)):  # (in order already: no copy of the whole map)
+            return first_x.copy(), stack_rows(curves, None), (first_x, None)
+        return first_x[order], stack_rows(curves, order), (first_x, order)
+    return (*_stack_other(curves), None)
+
+
+def _stack_other(curves: Sequence[tuple[np.ndarray, np.ndarray]]) -> tuple[np.ndarray, np.ndarray]:
+    """``stack_curves`` of curves that do not all have the points of the first."""
     sorted_curves = [_sorted(x, y) for x, y in curves]
     if not any(x.size for x, _y in sorted_curves):
         raise ValueError("The curves have no points.")
@@ -320,11 +362,28 @@ def display_grid(x: np.ndarray, image: np.ndarray, *, max_columns: int = DISPLAY
     each of its columns shows the nearest point of ``x``, and the columns inside a hole of ``x`` — further
     from a point than that point stands for — stay NaN, so a detector gap is as wide as it is.
     ``left`` is the x of the picture's left edge and ``width`` the x it spans."""
+    columns = display_columns(x, max_columns=max_columns)
+    return display_rows(image, columns), columns.left, columns.width
+
+
+@dataclass(frozen=True)
+class DisplayColumns:
+    """The columns of the picture of a map (``display_grid``), the same for every row of it."""
+
+    nearest: Optional[np.ndarray]
+    """The point of x each column shows; ``None``: x of fewer than two points or no step, the picture is the image."""
+    blank: Optional[np.ndarray]
+    """The columns inside a hole of x (NaN)."""
+    left: float
+    width: float
+
+
+def display_columns(x: np.ndarray, *, max_columns: int = DISPLAY_COLUMNS) -> DisplayColumns:
+    """The columns of the picture of a map of this x (``display_grid``)."""
     x = np.asarray(x, dtype=float)
-    image = np.asarray(image)
     step = _usual_step(x)
     if x.size < 2 or step <= 0:
-        return image, (float(x[0]) if x.size else 0.0) - 0.5, 1.0
+        return DisplayColumns(None, None, (float(x[0]) if x.size else 0.0) - 0.5, 1.0)
     span = float(x[-1] - x[0])
     columns = int(round(span / step)) + 1
     if columns > max_columns:
@@ -333,10 +392,19 @@ def display_grid(x: np.ndarray, image: np.ndarray, *, max_columns: int = DISPLAY
     after = np.clip(np.searchsorted(x, centres), 1, x.size - 1)
     before = after - 1
     nearest = np.where(centres - x[before] <= x[after] - centres, before, after)
-    picture = np.array(image[:, nearest], dtype=np.float32)
     reach = 0.5 * np.maximum(step, local_steps(x)[before])  # how far a point stands for the x around it
-    picture[:, _holes(x)[before] & (np.abs(centres - x[nearest]) > reach)] = np.nan
-    return picture, float(x[0] - 0.5 * step), float(columns * step)
+    blank = _holes(x)[before] & (np.abs(centres - x[nearest]) > reach)
+    return DisplayColumns(nearest, blank, float(x[0] - 0.5 * step), float(columns * step))
+
+
+def display_rows(image: np.ndarray, columns: DisplayColumns) -> np.ndarray:
+    """Rows of a map as rows of its picture (``display_columns``): row by row, so a live map adds only its new rows."""
+    image = np.asarray(image)
+    if columns.nearest is None:
+        return image
+    picture = np.array(image[:, columns.nearest], dtype=np.float32)
+    picture[:, columns.blank] = np.nan
+    return picture
 
 
 def has_both_signs(x: np.ndarray) -> bool:
@@ -388,17 +456,22 @@ def series_map(
     """The curves stacked. A signed cut (``has_both_signs`` in any curve) is folded to ``view`` first, and
     its axis is then |x|; curves of one sign have no halves, their ``view`` stays ``both``. ``more``: the
     further fields of ``SeriesMap`` (``title``, ``facts``, ``times``, ``time_from``, ``built_with``)."""
-    if view != VIEW_BOTH and any(has_both_signs(x) for x, _y in curves):
-        curves = [fold_signed(x, y, view) for x, y in curves]
-        x_label = folded_label(x_label)
-    else:
-        view = VIEW_BOTH
+    curves, x_label, view = halves_of(curves, view, x_label)
     x, image = stack_curves(curves)
     return SeriesMap(x, image, tuple(labels), x_label, curve, tuple(refs), view=view, **more)
 
 
+def halves_of(curves: Sequence[tuple[np.ndarray, np.ndarray]], view: str, x_label: str) -> tuple[list, str, str]:
+    """``(curves, x_label, view)`` as a map stacks them (``series_map``): folded to ``view`` on |x| when any curve is a
+    signed cut (``has_both_signs``), else as they are and ``view`` is ``both``."""
+    if view != VIEW_BOTH and any(has_both_signs(x) for x, _y in curves):
+        return [fold_signed(x, y, view) for x, y in curves], folded_label(x_label), view
+    return list(curves), x_label, VIEW_BOTH
+
+
 __all__ = [
-    "DISPLAY_COLUMNS", "MOMENT_WIDTH", "PeakTrack", "RowFacts", "SeriesMap", "VIEWS", "VIEW_BOTH", "VIEW_FOLDED",
-    "VIEW_MEAN", "VIEW_NEGATIVE", "VIEW_POSITIVE", "display_grid", "fold_signed", "folded_label", "has_both_signs",
-    "series_map", "stack_curves", "track_peak",
+    "DISPLAY_COLUMNS", "DisplayColumns", "MOMENT_WIDTH", "PeakTrack", "RowFacts", "SeriesMap", "VIEWS", "VIEW_BOTH",
+    "VIEW_FOLDED", "VIEW_MEAN", "VIEW_NEGATIVE", "VIEW_POSITIVE", "display_columns", "display_grid", "display_rows",
+    "fold_signed", "folded_label", "halves_of", "has_both_signs", "same_points", "series_map", "stack_curves",
+    "stack_growing", "stack_rows", "track_peak",
 ]

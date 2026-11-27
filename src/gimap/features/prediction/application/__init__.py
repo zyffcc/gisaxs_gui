@@ -1,8 +1,9 @@
 """Prediction application public API。"""
 
-from ..domain import ModelRuntimeInfo, PredictionModule
+from ..domain import FRAME_SUFFIXES, ModelRuntimeInfo, PredictionModule
 
 from .export_record import ExportPredictionRecord, PredictionRecordRequest
+from .frame_watch import FolderEntry, FrameWatch, KeepUp
 from .module_descriptions import describe_prediction_module
 from .sequence_rules import PredictionSequenceRules
 from .models import (
@@ -51,6 +52,10 @@ from .use_cases import (
 )
 
 __all__ = [
+    "FRAME_SUFFIXES",
+    "FolderEntry",
+    "FrameWatch",
+    "KeepUp",
     "DiscoverNumberedPredictionFiles",
     "DiscoverPredictionFiles",
     "DiscoverPredictionModules",

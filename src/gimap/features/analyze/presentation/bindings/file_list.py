@@ -198,6 +198,7 @@ class FileListMixin:
     # -- the rows ------------------------------------------------------------------------
 
     def _append_list_items(self, paths) -> None:
+        paths = list(paths)
         previous = self._import_applying
         self._import_applying = True
         try:
@@ -207,7 +208,7 @@ class FileListMixin:
         finally:
             self._import_applying = previous
         if not previous and hasattr(self, "frame_listing_model"):
-            self.refresh_frame_list()
+            self.refresh_frame_list(appended=paths)
 
     def _write_row(self, row: int, path) -> None:
         """The text and the tooltip of a row: what the source is called, how many frames it holds, and (the

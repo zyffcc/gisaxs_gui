@@ -46,12 +46,16 @@ NO_FRAMES_IN_RANGE = "Frames {first} to {last} hold fewer than two frames: a ser
 MAP_FRAMES = "{n} frames of {name}"
 MAP_FRAMES_OF = "{n} of {listed} frames of {name}"
 MAP_ROWS = "{n} rows of {name}"
+MAP_WAITING = "{n} new frames still to be added"
+"""… of a watched folder: frames written that are being reduced or wait in line (``watch_pace.py``); the map
+falls behind when frames arrive faster than they are reduced."""
 """… of a map whose rows are sums of frames."""
 MAP_SUMS = "each row the sum of {n} frames"
 MAP_SUMS_SHORT = "each row the sum of {n} frames; the last row sums only {last} of {n} frames"
 MAP_TIME = {
     "timestamps": "time from the frames' time stamps", "exposure": "time = frame × exposure",
     "start_exposure": "time = start of the file + frame × exposure",
+    "file_times": "time from the files' modification times (they agree with the header time stamps)",
 }
 VIEW_WORDS = {
     "positive": "{axis} > 0 half", "negative": "{axis} < 0 half", "folded": "both halves on |{axis}|",
@@ -192,6 +196,7 @@ __all__ = [
     "AXIS_LABELS", "CUT_OF_SERIES", "FRAME_NAME", "FRAME_OF_TITLE", "FRAME_TITLE", "HOW_TO", "HOW_TO_SUMS",
     "LISTED_FILES", "LISTED_FRAMES", "LISTED_SUMS", "LISTED_SUMS_SHORT", "MAP_DONE_SUMS", "MAP_DONE_SUMS_FAILED",
     "MAP_FRAMES", "MAP_FRAMES_OF", "MAP_ROWS", "MAP_SUMS", "MAP_SUMS_SHORT", "MAP_TIME", "MAP_TITLE", "MAP_TITLE_SUMS",
+    "MAP_WAITING",
     "NEEDS_GEOMETRY", "NO_FRAMES_IN_RANGE", "NO_STAGES", "NO_TIME", "OPTIONS_FROM", "OPTIONS_RANGE", "OPTIONS_TITLE",
     "PEAK_LABELS", "PEAK_NAMES", "RANGE_FROM", "RANGE_ONLY", "READOUT", "STAGES_NEED",
     "STAGES_NEED_EXPORT", "STALE_CURVE", "STALE_SETTINGS", "SUM_OF", "SUM_SHORT", "SUM_SWITCHED_OFF", "TEMPLATES",

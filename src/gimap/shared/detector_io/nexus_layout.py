@@ -420,6 +420,18 @@ def group_sources(paths: Iterable[str | Path], *, keep_without_image: bool = Fal
     HDF5 pass through as they are; HDF5 paths come back absolute.  Each file is opened at most once
     and each folder listed once.
     """
+    paths = list(paths)
+    if not any(os.fspath(item).lower().endswith(HDF5_SUFFIXES) for item in paths):
+        # Nothing to group (a folder of CBF / EDF / TIFF frames, tens of thousands at each look of a watch):
+        # every file stands for itself, as below.
+        seen: set[str] = set()
+        plain: list[Path] = []
+        for item in paths:
+            key = os.path.normcase(os.fspath(item))
+            if key not in seen:
+                seen.add(key)
+                plain.append(item if isinstance(item, Path) else Path(item))
+        return plain
     rows: list[Path] = []
     listed: set[str] = set()
     stands_for: dict[str, Path] = {}

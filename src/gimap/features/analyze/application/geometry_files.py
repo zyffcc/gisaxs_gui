@@ -10,12 +10,17 @@
 * **The .poni beside a frame**: in the frame's own folder, the ``.poni`` whose name begins like the frame's (or the
   frame's like its), else the only ``.poni`` there. Several unrelated ones are no answer (none is taken). Its
   geometry is used for the frame when the file fits it (as above), ahead of an instrument profile matched only by
-  detector name and frame size; the source says which file it was.
+  detector name and frame size; the source says which file it was. The ``.poni`` files of a folder of few entries are
+  listed at every call; those of a folder of more than ``SLOW_LISTING_ENTRIES`` once ``SIBLING_PACE`` times what its
+  listing before took (at least ``SLOW_LISTING_S``) has passed (a folder written ten frames a second changes all the
+  time, and listing its 36 000 entries for every frame took a fifth of a second of each: such a folder is now listed at
+  most about every 1.5 s). Not by the folder's modification time: Windows does not always change it at once.
 """
 
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -32,6 +37,19 @@ NO_WAVELENGTH = "The .poni file states no wavelength: enter the wavelength or th
 SIBLING_SOURCE = ".poni beside the frame: {path}"
 LOADED_SOURCE = ".poni loaded: {path}"
 POSSIBLE_ENCODINGS = ("utf-8", "latin-1")
+SIBLING_PACE = 10.0
+"""A folder of slow listing that changed is listed again for its ``.poni`` files once this many times the listing
+before took has passed since it."""
+SLOW_LISTING_S = 0.02
+"""A listing that took longer than this is of a folder of many entries (``SIBLING_PACE``); others are redone at once."""
+SLOW_LISTING_ENTRIES = 1000
+"""Folders of no more entries are listed at every call (well under a millisecond): Windows does not always change a
+folder's modification time at once when a file is added to it (in a test, half the time), so a ``.poni`` put beside
+the frames was not always seen; and a few files listed slowly on a busy computer are no folder of a long run."""
+_PONI_ENTRIES: dict[str, int] = {}
+"""Folder → how many entries its last listing held."""
+_PONI_LISTINGS: dict[str, tuple[float, int, list, float]] = {}
+"""Folder → (when listed, its modification time then, its ``.poni`` files sorted, how long the listing took)."""
 
 
 def geometry_references(resolution):
@@ -98,12 +116,38 @@ def write_poni_file(geometry: DetectorGeometry, path, *, shape=None, source: str
     return target
 
 
+def _poni_files(folder: Path) -> list:
+    """The ``.poni`` files in ``folder``, sorted; listed again when the folder changed (``SIBLING_PACE``;
+    ``OSError``: the folder cannot be listed)."""
+    key = str(folder).casefold()
+    changed = os.stat(folder).st_mtime_ns  # (kept with the listing, and ``OSError`` for a folder that is not there)
+    now = time.monotonic()
+    kept = _PONI_LISTINGS.get(key)
+    many = _PONI_ENTRIES.get(key, 0) > SLOW_LISTING_ENTRIES
+    if kept is not None and many and now - kept[0] < SIBLING_PACE * max(kept[3], SLOW_LISTING_S):
+        return kept[2]
+    found, listed = [], 0
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            listed += 1
+            name = entry.name.lower()  # (``os.path.splitext(name)[1] == ".poni"``, without its cost per entry)
+            if name.endswith(".poni") and name[:-5].strip(".") and entry.is_file():
+                found.append(Path(entry.path))
+    found.sort()
+    if len(_PONI_LISTINGS) > 1000:
+        _PONI_LISTINGS.clear()
+        _PONI_ENTRIES.clear()
+    _PONI_LISTINGS[key] = (now, changed, found, time.monotonic() - now)
+    _PONI_ENTRIES[key] = listed
+    return found
+
+
 def sibling_poni(frame_path) -> Optional[Path]:
     """The ``.poni`` beside a frame (see the module docstring), or ``None``."""
     frame = Path(frame_path)
     folder = frame.parent
     try:
-        found = sorted(entry for entry in folder.iterdir() if entry.suffix.lower() == ".poni" and entry.is_file())
+        found = _poni_files(folder)
     except OSError:
         return None
     if not found:

@@ -17,6 +17,7 @@ from src.gimap.app.presentation.i18n import tr
 
 from ...application.single_fit import evaluate, left_out_points, residuals
 from .points import DATA_COLOR, measured_series
+from .predict_progress import preview_series
 
 MODEL_POINTS = 600
 OUTSIDE_COLOR, MODEL_COLOR, LEFT_OUT_COLOR = "#94a3b8", "#f97316", "#dc2626"
@@ -163,6 +164,16 @@ class FitPlotMixin:
                         markers.append(False)
                         styles.append(style)
                         bounds.append(self.component_range_action.isChecked())
+        preview = getattr(self, "_predict_preview", None) if self.fit_running() else None
+        if preview and full is not None and full.q.size:  # Predict's fits while it runs (predict_progress)
+            styles = styles + [LineStyle(z=2)] * (len(curves) - len(styles))
+            bounds = bounds + [True] * (len(curves) - len(bounds))
+            for name, q, values, colour, style in preview_series(preview, self._predict_grid):
+                curves.append((name, q, values))
+                colors.append(colour)
+                markers.append(False)
+                styles.append(style)
+                bounds.append(False)
         self._sync_component_menu(parts)
         self.plot.set_curves(curves, colors, markers=markers, line_styles=styles, auto_range=bounds,
                              preserve_view=preserve_view)

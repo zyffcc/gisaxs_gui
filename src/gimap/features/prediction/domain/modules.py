@@ -53,6 +53,9 @@ class PredictionModule:
     model: ModelSpec = field(default_factory=ModelSpec)
     preprocess: PreprocessSpec = field(default_factory=PreprocessSpec)
     input_type: str = "cbf"
+    """The frame format of the module's training data, as module.yaml states it (not checked)."""
+    needs_geometry: bool = False
+    """``io.geometry: required``: predict only with the geometry of a saved instrument profile."""
     stack_axis: int = 0
     input_shape: tuple[int, ...] | None = None
     outputs: OutputSpec = field(default_factory=OutputSpec)

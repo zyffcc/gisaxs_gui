@@ -1,6 +1,7 @@
 """Prediction infrastructure public API。"""
 
 from .adapters import (
+    DetectorPredictionImageRepository,
     FabioPredictionImageRepository,
     InMemoryModelPathStore,
     LocalPredictionFileCatalog,
@@ -8,11 +9,13 @@ from .adapters import (
     ModuleEntryPreprocessor,
     NumpyPredictionMaskRepository,
     PreferencesModelPathStore,
+    ProfileFrameContexts,
     YamlModuleRepository,
     module_to_legacy_dict,
 )
 
 __all__ = [
+    "DetectorPredictionImageRepository",
     "FabioPredictionImageRepository",
     "InMemoryModelPathStore",
     "LocalPredictionFileCatalog",
@@ -20,6 +23,7 @@ __all__ = [
     "ModuleEntryPreprocessor",
     "NumpyPredictionMaskRepository",
     "PreferencesModelPathStore",
+    "ProfileFrameContexts",
     "YamlModuleRepository",
     "module_to_legacy_dict",
 ]

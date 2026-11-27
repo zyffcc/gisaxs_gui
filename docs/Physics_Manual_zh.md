@@ -805,11 +805,22 @@ valid(p) = finite(I_p) ∧ ¬mask_reader(p) ∧ (I_p ≥ 0, 除非存储类型�
 
 - 在整数计数探测器上，负值是缝隙或缺陷代码（Pilatus 写 −1 和 −2），被排除。
 - 在浮点帧上（已扣除暗场或背景），负值是数据，被保留。
+- **存为 0 的模块缝隙。** 有些文件（ALS 7.3.3 的 EDF 帧、一些转换过的 TIFF）把 Pilatus 模块之间的缝隙存成 0，看起来像测到的
+  零计数。对 Pilatus 尺寸（300K 619 × 487，300K-W 195 × 1475，1M 1043 × 981，2M 1679 × 1475，6M 2527 × 2463 像素，行 × 列，
+  也包括旋转 90° 存储的）的整数 CBF、EDF 或 TIFF 帧，缝隙由模块布局确定：每个模块 195 × 487 像素，上下两排模块之间隔 17 行，
+  同一排两个模块之间隔 7 列。一条缝隙带（整行或整列）中没有任何大于 0 的值时，它就是文件里的缝隙；其中的 0 加入读取器的掩膜，
+  记录写明个数（`module_gaps_left_out`，14.4 节）。含有计数的缝隙带（文件填补过缝隙，或模块排得更紧的探测器）保持原样，
+  模块内部的 0 也保留。缝隙可能在哪里由布局决定，而不是由计数决定：短曝光时探测器的整行都可能为 0，仍是测量值。
 - 这条规则依据存储类型，而不是数值的物理含义（6.4 节）。浮点类型不论字节序都算浮点（`float32`，或 h5py 和 fabio 对大端序浮点报告的 `>f4`）。
 
 示例：GALAXI 帧以 int32 存储，有 5 000 到 10 000 个值为 −1 的缝隙像素。P08 帧以 float32 存储（已扣除暗场）；其中约 9.8 × 10⁵ 个像素（23 %）为负，作为数据保留。
 
-实现：`src/gimap/features/analyze/domain/validity.py`, `src/gimap/shared/detector_io/loading.py`, `src/gimap/shared/detector_io/nexus_reading.py`
+**旁文件。** ALS 7.3.3 在每个 EDF 旁写一个文本文件 `<stem>.txt`，记录这次曝光的电机和计数器。它有 `Motors: n` 一行并含有下面
+任一名称时才被读取：`Sample Alpha Stage` 逐帧给出该帧的参考入射角 αi，除非图像文件头已给出（来源记为
+`side file <name>: Sample Alpha Stage`）；`Izero`、`I1`、`GiSAXS Beamstop Counter` 和 `Beam Current` 作为监视器供选择（4.12 节）。
+旁文件和它的 SHA-256 与这一帧的文件一起记录。电机读数按原样作为 αi；2.3 节的帧测量会把它与帧本身比较。
+
+实现：`src/gimap/features/analyze/domain/validity.py`, `src/gimap/shared/detector_io/loading.py`, `src/gimap/shared/detector_io/nexus_reading.py`, `src/gimap/shared/detector_io/module_gaps.py`, `src/gimap/shared/detector_io/side_files.py`
 
 ### 4.2 NeXus 和 HDF5 源
 
@@ -859,7 +870,7 @@ dead:  I ≤ 0    and    每个有效邻居 ≥ 20 counts         (仅整数帧)
 
 - 一个像素至少要有一个有效邻居才能判断。(4.4) 中，`S_8` 是有效邻居之和（无效邻居按 0 计），稳健噪声在整帧上求得（在约 2 × 10⁵ 个像素的抽样上）。在有效像素少于 16 个、或分布宽度为零的浮点帧上，不标记热像素。
 - 对死像素检验，一个真正的零值旁边是至少 20 计数的邻居，其泊松概率至多为 e⁻²⁰。
-- 先用可分离的 3 × 3 求和挑出候选像素；只有这些候选才与其八个邻居比较。
+- 先挑出候选像素；只有这些候选才与其八个邻居比较。在没有低于 0 的有效像素、且高于 10 计数的像素不超过 2 % 的整数帧上（短曝光），候选像素是高于 10 计数的像素，以及与至少 20 计数的像素相邻的像素：由 (4.3) 和 (4.5)，每个热像素、缺陷线上的像素和死像素都在其中。在其他帧上，用可分离的 3 × 3 求和挑选。两种做法标出的像素相同；前者快几倍（0.1 s 的 Pilatus 2M 帧：约 30 ms，而不是 230 ms）。
 - **缺陷的行和列。** 一个像素若相对于线两侧的两个像素（对行是上下两个像素，对列是左右两个像素）通过 (4.3)，`b` 取两者中较大的，则它是线候选像素。一行或一列至少有 10 个候选像素、分布在至少 50 px 上、且没有长于 10 个连续像素的游程时，判为有缺陷。只排除候选像素，从不排除整条线。已经标为热像素的像素不再重复计数。
 
 任何宽于一个像素的东西，如布拉格斑点、条纹、杆、挡束器边缘或 Yoneda 带，都被保留。数量写进记录的 `bad_pixels_left_out`（`hot`、`dead`、`defective_line_pixels`）。不搜索坏像素簇，也不搜索背景帧的坏像素。
@@ -986,7 +997,7 @@ I_norm,p = c · I′_p,      c = A_abs / (t_exp · M · T · d)                 
 | 项 | 含义 | 来源 |
 | --- | --- | --- |
 | `t_exp` | 曝光时间（s） | 文件头（读取器的 `exposure_time_s`：CBF 的 `Exposure_time`，EDF 的 `ExposureTime` / `count_time`，NeXus 的 `count_time` / `frame_time`）或手动输入 |
-| `M` | 监视器读数（电离室、二极管、Pilatus CBF 的 `Flux`、储存环流强） | 按名称选择的文件头值（EDF 关键字如 `Monitor`、`I0`、`Intensity0`；NeXus 中该帧的 `NXmonitor` `data` / `integral` 或 `control/integral`）或手动输入 |
+| `M` | 监视器读数（电离室、二极管、Pilatus CBF 的 `Flux`、储存环流强） | 按名称选择的文件头值（EDF 关键字如 `Monitor`、`I0`、`Intensity0`；NeXus 中该帧的 `NXmonitor` `data` / `integral` 或 `control/integral`；7.3.3 旁文件中的计数器 `Izero`、`I1`、`GiSAXS Beamstop Counter`、`Beam Current`，4.1 节）或手动输入 |
 | `T` | 样品透射率，`0 < T ≤ 1` | 手动输入 |
 | `d` | 以 mm 输入的厚度，用标准样品标定的因子时换算为 cm | 手动输入 |
 | `A_abs` | 绝对强度因子 | 手动输入，或由同一装置下测量的标准样品拟合得到 |
@@ -1697,7 +1708,7 @@ FWHM ≤ FWHM_instr 或 FWHM > 0.15 q_0 时不给尺寸。对这种晕，报告�
 - *peak search* 记录候选峰上限，*texture rule* 说明与各向同性参考的比较，*ring orientation* 给出出射角阈值和偏振。
 - 给出物相时的 *phase assignment*，分析了环时的 *pole figure*（7.10、7.11 节）。
 
-*Incidence angle* 记录参考值，其来源依次为运行选项、笔记、分析命令栏、所选帧文件头中注明单位的样品入射角、仪器配置。求和帧仅在各帧数值相符时采用文件头的角度。缺少参考值，或参考值与第 2.3 节的帧测量值相差超过测量值三倍标准误差时，采用测量值。勾选**保留输入的 αi** 或加 `--keep-incidence` 可保留参考值，报告仍列出比较结果。两种来源均无可用数值时，用 0° 并提问。JSON 记录中的几何和峰拟合数值保留 15 位有效数字。工具响应快照的精度见第 14.10 节。
+*Incidence angle* 记录参考值，其来源依次为运行选项、笔记、分析命令栏、所选帧文件头中注明单位的样品入射角（或其旁文件的 `Sample Alpha Stage`，4.1 节）、仪器配置。求和帧仅在各帧数值相符时采用文件头的角度。缺少参考值，或参考值与第 2.3 节的帧测量值相差超过测量值三倍标准误差时，采用测量值。勾选**保留输入的 αi** 或加 `--keep-incidence` 可保留参考值，报告仍列出比较结果。两种来源均无可用数值时，用 0° 并提问。JSON 记录中的几何和峰拟合数值保留 15 位有效数字。工具响应快照的精度见第 14.10 节。
 
 实现：`src/gimap/features/assistant/application/pipeline_rows.py`
 
@@ -3083,6 +3094,43 @@ logit 坐标中第一主成分上的投影分成两半，每个系综从其中�
 实现：`src/gimap/features/fitting/domain/mcmc.py`、`domain/posterior_check.py`、`application/posterior_check.py`、
 `presentation/single/posterior_check.py`
 
+### 9.20 哪个入射角提供的信息最多：拟合切线的 Fisher 信息
+
+在两次测量之间改变入射角的运行中，拟合好的水平切线可以预测在另一个角度再曝光一次能增加多少信息。在入射角 `α_i`、曝光时间 `t`、
+切线的出射角（9.17 节 DWBA 中基底的 Yoneda 行）处，第 `j` 点的期望计数为
+
+```text
+μ_j(θ; α_i) = n_j (t / t_0) A(α_i) [ (1 − b) I_j^top(θ; α_i) + b B(α_i) I_j^in(θ; α_i) ]          (9.20.1)
+B = |t(α_i)|² |t(α_f)|² / (1 + ζ (1/Λ(α_i) + 1/Λ(α_f)))                                             (9.20.2)
+Λ(α) = 1 / (2k Im √(sin²α − 2δ_f + 2iβ_f))                                                            (9.20.3)
+```
+
+- `I^top`：表面上的颗粒，四条 DWBA 路径（9.17 节）；`n_j` 是第 `j` 点合并的像素数；`t_0` 是拟合所用的曝光时间；`A` 是相对于拟合角度
+  的光斑长度，`min(L, h / sin α_i) / min(L, h / sin α_0)`，光束高 `h`、样品沿光束长 `L`（默认 0.03 mm 和 20 mm）。
+- **埋入的颗粒**（可选）：比例为 `b` 的颗粒位于折射率为 `1 − δ_f + iβ_f` 的膜中，数密度按 `exp(−z/ζ)` 随深度减小。它们感受到的是透射波
+  `|t|²`，并在强度穿透深度 `Λ`（9.20.3）上衰减；形状因子取真空中的 `q_z`（Born 近似；忽略 `q_z` 在膜内的折射和膜下界面的反射）。
+  在膜的临界角以下 `Λ` 只有几 nm（10 keV 时纤维素膜中 0.10° 为 5.7 nm，`α_c` = 0.140°），埋入的颗粒几乎不散射；在临界角以上 `Λ` 达到微米。
+- **信息。** 每个点的方差取泊松计数加上模型误差下限 `f`（默认 5 %）：
+
+```text
+F_ab = Σ_j (∂μ_j/∂ln θ_a)(∂μ_j/∂ln θ_b) / (μ_j + f² μ_j²)                                         (9.20.4)
+```
+
+  每个点的计数超过约 `1/f²` 后，限制误差的是模型而不是光子，再加曝光收益很小。信息在多次测量之间相加。候选角度的得分是它带来的增益
+  `log det(F_made + F_α) − log det(F_made)`（nat），以及相对的 Cramér–Rao 下限 `√diag(F_made + F_α)⁻¹`：对全部测量做联合拟合时，在其他
+  参数都自由的条件下所能达到的最小误差。导数用相对步长 10⁻³ 的中心差分计算。
+- **候选解**同样好地描述一帧时，用它们计数之间的期望 χ²，`Σ_j (μ_j^a − μ_j^b)² / (μ_j + f² μ_j²)`（取两者平均值）来区分；这个值大的角度
+  能判定哪个解是对的。
+
+**示例。** 半径 5 nm（σ_R/R = 0.1）、间距 40 nm 的球形颗粒位于 10 keV 下的 Si 上，其中 30 % 以 `ζ` = 50 nm 埋在纤维素膜中，已在 0.4° 测了
+10 s：`ζ` 的下限约为 700 %——参考角对各深度一视同仁——而在膜临界角之下的 0.12° 再测 1 s，可降到约 45 %；刚过临界角的 0.15° 之后仍高于 400 %。
+半径和间距已确定到 1 % 以内，变化不大。这正是在喷涂脉冲之间于膜临界角上下各短测一下的理由。
+
+**不包括的内容。** 目前只评估一个出射角处的水平切线；竖直切线、Yoneda 带以下的出射角（纵向信息所在之处，2.3 节）和折射后的 `q_z`
+尚未纳入。评分的好坏取决于模型：模型错了，给出的建议也会自信而错误。不考虑样品位置、辐照损伤和电机移动所需的时间。
+
+实现：`src/gimap/features/fitting/domain/angle_information.py`
+
 ## 10. 一维预测（多条曲线）
 
 一维预测窗口（**工具 ▸ 一维预测——拟合多条曲线…**，Tools ▸ 1D Predict — Fit Many Curves…）拟合一组曲线文件，或拟合工作区里
@@ -3140,7 +3188,25 @@ t_r = (T_file(r) + j_r · t_exp) − (T_file(1) + j_1 · t_exp)   (多个多帧�
 
 这里 `T` 是时间戳，`T_file(r)` 是第 `r` 行所在文件的开始时间，`j_r` 是该帧在其文件中的索引，t_exp 是所有帧共同的单次曝光时间。(11.2) 和 (11.3) 给出的时间是下限：帧之间的读出时间不在文件中。时间轴只改变绘图和导出。阶段（11.7 节）总是按行的顺序划分。
 
-实现：`src/gimap/features/analyze/domain/series_map.py`, `src/gimap/features/analyze/application/series_map.py`
+**比时间戳更快的帧。** EDF 文件头的时间戳只到整秒（`Date`），每秒 10 帧时十行共用一个时间戳。当每一行都是单独的文件、某处有两行
+共用一个时间戳、各文件的修改时间 `M_r` 不倒退并与时间戳相符，即 `max_r(M_r − T_r) − min_r(M_r − T_r) ≤ 1.5 s` 时，时间取自修改
+时间，`t_r = M_r − M_1`（`time_from`：`file_times`）。这一相符检验会排除复制时没有保留时间的文件。否则仍用 (11.1) 和整秒的时间戳。
+
+**事件。** 事件文件（分析 ▸ 序列 ▸ 选项）给出绝对时间 `E_k`。设第一行的绝对时间为 `A_1`（热图时间取自文件时用它的文件时间，否则用
+它的文件头时间戳），事件 `k` 落在满足 `t_r ≥ E_k − A_1` 的第一行 `r` 上；`E_k − A_1` 早于 `t_1` 或晚于最后一行的时间时，事件在
+热图之外。不带时区的时间按本地时间处理，文件头时间戳和文件时间也是如此；写帧的计算机与写事件的计算机之间的时钟偏差会让每个事件
+移动同样的偏差。
+
+**在几个入射角测得的帧。** 序列的切线在每一帧都位于相同的探测器行。换一个 αi，这些行就是另一个出射角 αf、另一个 q_z，所以
+不同 αi 的行不该放在同一张热图里。一行的入射角取它的参考 αi（手动输入的、文件头或旁文件给出的，或配置里的；4.1 节）。相差不超过
+0.005° 的角度算同一个角度。各行有不止一个入射角、且帧数最多的那个角度至少有两行时，热图只放这个角度的行（数目相同时取第一行的
+角度），其余的行另外保留；αi 列表可切换到另一个角度的热图或全部行。每帧角度都不同的扫描仍是一张热图。导出写明热图的入射角，
+以及其他每个角度被排除了多少帧（`incidence`）。另一个角度的热图沿用切线的同一组探测器行，所以它的各行同样是同一个出射角。
+
+**曝光时间。** 热图各行的曝光时间不同、而归一化的曝光项（4.12 节）关闭时，它们的强度只因曝光时间而不同；分析工作区会提示这一点，
+并提供除以文件头曝光时间的选项。
+
+实现：`src/gimap/features/analyze/domain/series_map.py`, `src/gimap/features/analyze/application/series_map.py`, `src/gimap/features/analyze/application/series_angles.py`
 
 ### 11.2 轨迹与窗口中的峰
 
@@ -3941,15 +4007,15 @@ HDF5 输出，以及所有帧大小相同时的单文件容器，还在 `/entry/
 
 ### 13.4 二维预测（实验室）
 
-**目的。** 二维预测在 GISAXS 探测器帧上运行一个训练好的神经网络（“预测模块”），并显示它的预测：一个联合尺寸分布，或一组样品参数（实验室 ▸ 二维预测，Labs ▸ 2D Prediction）。它不应用几何：计算中不涉及光束中心、q 图或物理模型。结果就是模块的网络被训练输出的东西，在模块声明的轴上。
+**目的。** 二维预测在 GISAXS 探测器帧上运行一个训练好的神经网络（“预测模块”），并显示它的预测：一个联合尺寸分布，或一组样品参数（实验室 ▸ 二维预测，Labs ▸ 2D Prediction）。GIMaP 本身不应用几何：除非模块请求几何并使用它（见下文），计算中不涉及光束中心、q 图或物理模型。结果就是模块的网络被训练输出的东西，在模块声明的轴上。
 
-**输入。** 只读取 CBF 帧，直接用 fabio（Knudsen et al., 2013）读取，存储值转为 float32。不经过分析工作区的共享读取器：不做 P03 变换，不加掩膜，负的缝隙代码留在图像中。N 个连续文件的堆叠（按名称排序；在文件夹批处理中为每组 *每次预测的文件数*（Files per prediction））被求和：
+**输入。** 用分析工作区的共享读取器（fabio，Knudsen et al., 2013）读取 CBF、EDF 和 TIFF 帧，存储值转为 float32：不做变换，不加掩膜，负的缝隙代码留在图像中。只有一处改变数值：读取器标为没有数据、而存储值为 0 或更大的像素（存为 0 的 Pilatus 模块缝隙，见 4.1 节；EDF 的 `Dummy` 值）变为 −1，即 Pilatus CBF 在缝隙中存储的代码，模块的 `set_invalid`、`mask` 和 `experiment_mask` 步骤把它当作无效。P03 的 CBF 在缝隙中已存为 −1，所以它的输入不变。同一格式的 N 个连续文件的堆叠（按名称排序；在文件夹批处理中为每组 *每次预测的文件数*（Files per prediction））被求和：
 
 ```text
 I = Σ_{f=1…N} I_f                                                                (13.33)
 ```
 
-**模块。** 模块是 `modules/` 下带有 `module.yaml` 和自己的 `preprocess.py` 的文件夹。GIMaP 用图像、配置的步骤和参数以及模块文件夹调用 `preprocess.entry` 中指定的入口。这些步骤是模块自己的代码。随附的模块使用以下步骤：
+**模块。** 模块是 `modules/` 下带有 `module.yaml` 和自己的 `preprocess.py` 的文件夹。GIMaP 用图像、配置的步骤和参数以及模块文件夹调用 `preprocess.entry` 中指定的入口。这些步骤是模块自己的代码。带 `context` 参数的入口还会得到这些帧的事实，以及在有仪器配置与探测器和图像尺寸匹配时的几何和一个给出每个像素 q 的函数（第 2 章的 `grazing_q_map`，单位 Å⁻¹，精确出射角模型；帧的头文件或旁文件写有 αi 时用它，否则用配置里的）。其中的普通值记录在第一个步骤里（`frame_context`）。随附的模块都不接收它：它们的输入是存储的像素。随附的模块使用以下步骤：
 
 | 模块文件夹 | 步骤（按顺序） | 模型输入 | 输出 |
 |---|---|---|---|
@@ -4070,7 +4136,7 @@ NXcanSAS：`src/gimap/shared/nxcansas.py`、`src/gimap/features/analyze/applicat
 文本表格以 `#` 行开头，使 `numpy.loadtxt`、Origin 和电子表格程序跳过它们。文件为不带字节顺序标记（BOM）的 UTF-8；GIMaP 自己的符号用 ASCII 写出（`1/A`、`deg`）。
 
 - 曲线 CSV `<stem>_<curve>.csv`：标题行 `# GIMaP Analyze export (q in 1/A, angles in deg)`，然后是 `# source:`（原样的路径）、`# frame:`、帧被求和时的 `# sum of …`、从多个文件读取该帧时的 `# files:`、14.10 节的记录行（`# GIMaP v… (Analyze); settings and decisions in <stem>_analysis.json`，每个输入文件一行 `# input: <文件> sha256 <摘要>`，`# geometry:`）、`# curve:` 和 `# region:`（JSON）。拟合输入、q 图和展开图带同样的记录行。
-- 拟合输入 `<stem>_fit_input.dat`（q 以 Å⁻¹ 计，拟合工作区读取的曲线）：标题 `# GIMaP Analyze fit input (q in 1/A)`，来源、帧和曲线行，`# observation:`（JSON）和 `# columns:`。observation 说明这些点是怎样测量的：`source`（GISAXS 为 `native_detector_columns`，GIWAXS 为 `radial_bins`）、`file_format`、`intensity_unit`（默认为 `counts_per_pixel`，绝对强度用 cm⁻¹）、`counting_model_valid`（σ 能否取自泊松统计：6.4 节意义下的光子计数、没有 GIWAXS 强度校正也没有参考峰归一化时为 true）、`threshold_enabled`（设置了数值范围）、`gap_guard_px`、`summed_frames`，对 GISAXS 还有选定时拟合应取的那一半或两半，对多帧源中的一帧还有 `frame_index`（从 0 计数）和 `frame_count`。文件先以临时名称写出，完成后再改名。
+- 拟合输入 `<stem>_fit_input.dat`（q 以 Å⁻¹ 计，拟合工作区读取的曲线）：标题 `# GIMaP Analyze fit input (q in 1/A)`，来源、帧和曲线行，`# observation:`（JSON）和 `# columns:`。observation 说明这些点是怎样测量的：`source`（GISAXS 为 `native_detector_columns`，GIWAXS 为 `radial_bins`）、`file_format`、`intensity_unit`（默认为 `counts_per_pixel`，绝对强度用 cm⁻¹）、`counting_model_valid`（σ 能否取自泊松统计：6.4 节意义下的光子计数、没有 GIWAXS 强度校正也没有参考峰归一化时为 true）、`threshold_enabled`（设置了数值范围）、`gap_guard_px`、`summed_frames`，对 GISAXS 还有选定时拟合应取的那一半或两半，以及 `alpha_i_deg`（计算这条切线的 q 所用的 αi；拟合的原位序列只拟合与模型 αi 相同的帧），对多帧源中的一帧还有 `frame_index`（从 0 计数）和 `frame_count`。文件先以临时名称写出，完成后再改名。
 - q 图和展开图 CSV：一行标题说明格子里是什么（每个格子的平均强度，空白 = 没有像素），来源和帧行，以及一行写明行轴和列轴。
 
 一个用编造文件名的示例：
@@ -4090,7 +4156,7 @@ NXcanSAS：`src/gimap/shared/nxcansas.py`、`src/gimap/features/analyze/applicat
 
 ### 14.4 被排除的像素
 
-`bad_pixels_left_out` 对每一帧给出被自动排除的热像素、死像素（仅计数探测器）和缺陷探测器线上像素的个数（规则见 4.4 节）。`drawn_mask_pixels` 是用户掩膜的像素数，`pixels_filled_from_mirror` 是由镜像补齐的像素数。值为 `null` 表示该步骤关闭。复现记录保存用户掩膜（`mask`）和最终排除的像素（`excluded_pixels`）。每幅位图记下形状，按行依次记录连续的 0 和 1 的长度，第一段为 0 值段。各段长度用小端无符号 64 位整数表示，经 zlib 压缩后用 Base64 编码。计算 SHA-256 时每个像素占一个字节，取值为 0 或 1。复现时还原用户掩膜，并在预处理完成后核对最终排除的像素。
+`bad_pixels_left_out` 对每一帧给出被自动排除的热像素、死像素（仅计数探测器）和缺陷探测器线上像素的个数（规则见 4.4 节）。`module_gaps_left_out` 给出探测器名称，以及读取器排除的、存为 0 的模块缝隙像素数（4.1 节）。`drawn_mask_pixels` 是用户掩膜的像素数，`pixels_filled_from_mirror` 是由镜像补齐的像素数。值为 `null` 表示该步骤关闭。复现记录保存用户掩膜（`mask`）和最终排除的像素（`excluded_pixels`）。每幅位图记下形状，按行依次记录连续的 0 和 1 的长度，第一段为 0 值段。各段长度用小端无符号 64 位整数表示，经 zlib 压缩后用 Base64 编码。计算 SHA-256 时每个像素占一个字节，取值为 0 或 1。复现时还原用户掩膜，并在预处理完成后核对最终排除的像素。
 
 ### 14.5 软件版本
 

@@ -40,6 +40,8 @@ from src.gimap.features.prediction.presentation.multifile_results import (
 
 from .bindings.setup_status import SetupStatusMixin
 from .bindings.multifile_setup import MultifileSetupMixin
+from .bindings.frame_watch import FrameWatchMixin
+from .bindings.live_canvas import LiveCanvasMixin
 from .bindings.input_parameters import InputParametersMixin
 from .bindings.image_loading import ImageLoadingMixin
 from .bindings.rendering_setup import RenderingSetupMixin
@@ -62,6 +64,8 @@ class PredictionViewBinding(
     ExportFilesMixin,
     SetupStatusMixin,
     MultifileSetupMixin,
+    FrameWatchMixin,
+    LiveCanvasMixin,
     InputParametersMixin,
     ImageLoadingMixin,
     RenderingSetupMixin,

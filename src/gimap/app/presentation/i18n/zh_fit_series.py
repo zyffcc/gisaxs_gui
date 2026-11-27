@@ -94,6 +94,11 @@ FIT_SERIES_ZH = {
     "{count} failed": "失败 {count} 帧",
     "{count} not converged": "未收敛 {count} 帧",
     "{count} stopped": "已停止 {count} 帧",
+    "{count} at another αi": "另一入射角 {count} 帧",
+    "measured at αi {frame}°, the model's αi is {model}°: frames of another angle are not fitted in this series "
+    "(set the model up on a frame of that angle for a series of its own)":
+        "在 αi {frame}° 下测量，模型的 αi 是 {model}°：本序列不拟合另一入射角的帧（要拟合它们，请在该角度的一帧上设置模型，另建一个序列）",
+    "Frame {frame} ({name}) not fitted: {reason}": "第 {frame} 帧（{name}）未拟合：{reason}",
     "{count} poor fits": "拟合差 {count} 帧",
     "Poor fit (χ²ᵣ above {limit}): frames {frames}": "拟合差（χ²ᵣ 大于 {limit}）：帧 {frames}",
     "{points} points per frame": "每帧 {points} 个点",

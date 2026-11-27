@@ -87,6 +87,9 @@ def _latest_model(rows) -> str:
             + f", χ²ᵣ {float(best.get('best_chi2_weighted', float('nan'))):.3g}")
 
 
+ROW_ONLY = BatchChoices(tables=False)
+"""What a watched frame given to a worker process asks for: nothing written, only the row of the live map."""
+
 class BatchModelMixin:
     """Needs ``state``, ``settings``, ``_analyze_frame``, ``_export``, ``_profiles`` and ``_save_frame_images``."""
 
@@ -169,6 +172,12 @@ class BatchModelMixin:
             series=run.series, series_factor=run.series_state.get("factor"), live_key=run.live_key,
             display=run.display, number=number, series_spool=self.series_spool if run.live_key else None,
         )
+
+    def watch_frame_job(self, request: AnalysisRequest, key: str) -> FrameJob:
+        """A new frame of a folder watch as a job for a worker process (``open_workers``): only its row of the live
+        map, as ``series_row`` gives it here; nothing is written."""
+        return FrameJob(index=0, request=request, choices=ROW_ONLY, destination=Path("."), live_key=key,
+                        series_spool=self.series_spool)
 
     def needs_first_frame_alone(self, run: "BatchRun") -> bool:
         """A series normalised to its first frame: that frame gives the factor of all the others."""

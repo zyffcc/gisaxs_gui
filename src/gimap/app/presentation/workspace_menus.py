@@ -132,6 +132,9 @@ FITTING_MENU = (
     Entry("fitting_joint", "Fit Several Curves To&gether…",
           "One χ² over several curves — a horizontal and a vertical cut of one frame (Analyze ▸ Send Both Cuts to "
           "Fitting) or curve files — with values shared or each curve's own"),
+    Entry("fitting_angles", "Ran&k Incidence Angles…",
+          "Which incidence angle to measure next: what an exposure at each angle would add to the fit of this page, "
+          "and a record of the angle chosen"),
     SEPARATOR,
     Entry("fitting_load_model", "&Load Model…", "A model saved from Fitting (JSON), for this curve"),
     Entry("fitting_save_model", "Save &Model…", "The model (values, fit/fixed, ranges) as JSON, to load for another curve"),

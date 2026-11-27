@@ -1,7 +1,13 @@
-"""仅在 Job worker process 内调用的 TensorFlow handlers。"""
+"""仅在 Job worker process 内调用的 TensorFlow handlers。
+
+A worker kept between jobs (``integrations/jobs/kept_process.py``) keeps the last ``KEEP_MODELS`` models it
+loaded: the next prediction with one of them skips importing TensorFlow and loading the model. A model file
+changed on disk (its time or size) is loaded again. A worker started for one job loses them with the process.
+"""
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +111,34 @@ def _load_model(path: Path, allow_unsafe_lambda: bool, precision_policy: str | N
                     f"SavedModel loading failed for {path}: {keras_error}; fallback failed: {exc}"
                 ) from exc
     raise TensorFlowModelError(f"Unsupported TensorFlow model artifact: {path}")
+
+
+KEEP_MODELS = 2
+_KEPT_MODELS: "OrderedDict[tuple, tuple]" = OrderedDict()
+
+
+def _model_stamp(path: Path) -> tuple[int, int] | None:
+    target = path / "saved_model.pb" if path.is_dir() else path
+    try:
+        stat = target.stat()
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
+
+
+def _kept_model(path: Path, allow_unsafe_lambda: bool, precision_policy: str | None):
+    """``(tf, model, loader, kept)``: the model loaded before in this process when its file is unchanged."""
+    key = (str(path.resolve()), _model_stamp(path), bool(allow_unsafe_lambda), precision_policy)
+    loaded = _KEPT_MODELS.get(key)
+    if loaded is not None:
+        _KEPT_MODELS.move_to_end(key)
+        _configure_precision(loaded[0], precision_policy)
+        return (*loaded, True)
+    loaded = _load_model(path, allow_unsafe_lambda, precision_policy)
+    _KEPT_MODELS[key] = loaded
+    while len(_KEPT_MODELS) > KEEP_MODELS:
+        _KEPT_MODELS.popitem(last=False)
+    return (*loaded, False)
 
 
 def _shape_tuple(value: Any) -> tuple[Any, ...] | None:
@@ -212,7 +246,7 @@ def inspect_tensorflow_model(payload, report, is_cancelled):
         raise RuntimeError("TensorFlow inspection cancelled before start.")
     path = Path(payload["artifact_path"])
     report(0, 1, "Loading TensorFlow model in isolated worker")
-    tf, model, loader = _load_model(
+    tf, model, loader, _kept = _kept_model(
         path,
         bool(payload.get("allow_unsafe_lambda", False)),
         payload.get("precision_policy"),
@@ -227,7 +261,7 @@ def predict_tensorflow_model(payload, report, is_cancelled):
         raise RuntimeError("TensorFlow prediction cancelled before start.")
     path = Path(payload["artifact_path"])
     report(0, 2, "Loading TensorFlow model in isolated worker")
-    tf, model, loader = _load_model(
+    tf, model, loader, kept = _kept_model(
         path,
         bool(payload.get("allow_unsafe_lambda", False)),
         payload.get("precision_policy"),
@@ -240,4 +274,5 @@ def predict_tensorflow_model(payload, report, is_cancelled):
     return {
         "runtime": _runtime_info(tf, model, path, loader),
         "outputs": encode_numpy_tree(_to_numpy(outputs)),
+        "model_kept": bool(kept),
     }

@@ -175,7 +175,9 @@ class FitSeriesResultsMixin:
                 table.setSpan(row, col, 1, 1)
         span = None
         if not frame.ok:  # no values: why, across the row
-            reason = f"{STATE_MARK['failed']} {self._reason_text(frame.error)}"
+            skipped = getattr(frame, "other_angle", "")
+            mark = STATE_MARK["other angle" if skipped else "failed"]
+            reason = f"{mark} {self._reason_text(skipped or frame.error)}"
             cells = [str(frame.index + 1), "", *choices, reason] if has_attempt else [str(frame.index + 1), reason]
             span = first_parameter if has_attempt else 1
         else:
@@ -315,7 +317,7 @@ class FitSeriesResultsMixin:
         counts = series_counts(list(self.fits.values()))
         parts = [trf("{count} fitted", count=counts["ok"] + counts["not_converged"])]
         for key, template in (("failed", "{count} failed"), ("not_converged", "{count} not converged"),
-                              ("stopped", "{count} stopped")):
+                              ("stopped", "{count} stopped"), ("other_angle", "{count} at another αi")):
             if counts[key]:
                 parts.append(trf(template, count=counts[key]))
         poor = self._poor_frames()

@@ -2,6 +2,7 @@
 
 ``show_summed``: frames of another workspace (Sputter ▸ Show in Analyze: the raw frames of one time window) replace
 the frames listed and are shown as one sum, Sum = their number."""
+from operator import is_
 from pathlib import Path
 from threading import Event
 from typing import Optional
@@ -9,7 +10,7 @@ from PyQt5.QtCore import QObject, QSignalBlocker, Qt, pyqtSignal
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QDialog, QShortcut
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.app.presentation.question_box import ACCEPT, ACTION, REJECT, ask_choice
 from src.gimap.shared.numbers import applied_angle
 from ...application.frame_import import ImportSource, other_detector, prepare_frame_import
@@ -67,18 +68,46 @@ class FrameImportMixin:
             signal.connect(self._frame_list_model_changed)
         self.refresh_frame_list()
 
-    def refresh_frame_list(self):
+    def refresh_frame_list(self, appended=None):
+        """The Data list of the sources listed. ``appended``: the sources just added at the end of the list; when
+        the list was as it is before them at the refresh before, only their rows are added (a folder watch adds a
+        few at every look: listing every source again took the window 0.8 s at 50 000 frames). Any other change of
+        a listed source rewrites its row in the file list, which lists every source again."""
         if self._frame_import_disposed or self._import_applying:
             return
         model = self.view_model
-        spans = [(path, model.selected_frame_indices(path), source_name(path, model.describe(path)),
-                  model.known_frame_count(path), row_tooltip(path, model.describe(path))) for path in model.state.files]
+        files = model.state.files
+        appended = list(appended or ())
+        before = len(files) - len(appended)
+        listed = getattr(self, "_frame_list_listed", None)
+        grown = (bool(appended) and listed is not None and before >= 1 and listed[0] == before
+                 and listed[1] is files[before - 1] and all(map(is_, files[before:], appended)))
+        spans = [self._frame_list_span(path) for path in (appended if grown else files)]
         with QSignalBlocker(self.frame_list.selectionModel()):
-            self.frame_listing_model.reset_sources(spans)
+            if grown:
+                self.frame_listing_model.append_sources(spans)
+            else:
+                self.frame_listing_model.reset_sources(spans)
             self._sync_frame_list()
+        self._frame_list_listed = (len(files), files[-1]) if files else None
         self._show_imported()
         self.choose_frames_button.setEnabled(bool(model.state.files) and not self._importing)
         self._show_file_position()
+
+    def _frame_list_span(self, path):
+        """``(path, frames, name, count, tooltip)`` of a source in the Data list, kept while its layout, count, frame
+        selection and the interface language stay the same (a folder watch lists the sources again at every look:
+        with thousands of files, naming every one again took most of it)."""
+        model = self.view_model
+        layout, count, selection = model.describe(path), model.known_frame_count(path), model.import_selection(path)
+        key = (str(path), current_language())
+        kept = self._frame_list_names.get(key) if hasattr(self, "_frame_list_names") else None
+        if kept is None or kept[0] is not layout or kept[1] != count or kept[2] is not selection:
+            if not hasattr(self, "_frame_list_names"):
+                self._frame_list_names = {}
+            kept = self._frame_list_names[key] = (layout, count, selection, model.selected_frame_indices(path),
+                                                  source_name(path, layout), row_tooltip(path, layout))
+        return path, kept[3], kept[4], count, kept[5]
 
     def _show_imported(self):
         text = imported_text(self.frame_listing_model.rowCount())

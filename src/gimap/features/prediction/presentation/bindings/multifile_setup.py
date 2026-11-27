@@ -63,6 +63,8 @@ class MultifileSetupMixin:
                 self._multifile_manager.progress_updated.connect(
                     self._on_multifile_progress_updated
                 )
+                self._setup_frame_watch()
+                self._setup_live_canvas()
 
             # Nothing is said here: this only builds the (empty) result table. A message such as "Batch
             # results are ready" on a page with no input and no model reads as a finished prediction.
@@ -70,6 +72,22 @@ class MultifileSetupMixin:
 
         except Exception as e:
             self._append_status_message(trf("Failed to setup multi-file UI: {error}", error=e), level="ERROR")
+
+    def _add_batch_row(self, batch) -> int | None:
+        """A row in the batch results for one prediction: a frame, or a stack of frames (named first - last)."""
+        widget = self._multifile_results_widget
+        if widget is None or not batch:
+            return None
+        self._multifile_batch_map[batch[0]] = list(batch)
+        row = widget.addPredictResult(batch[0])
+        result = widget.table_model.getResult(row)
+        if result is not None:
+            result.stack_count = len(batch)
+            if len(batch) > 1:
+                result.file_name = f"{os.path.basename(batch[0])} - {os.path.basename(batch[-1])}"
+                result.file_path = "\n".join(batch)
+            widget.table_model.updateResult(row, result)
+        return row
 
     def _show_multifile_results_window(self) -> None:
         if self._multifile_results_widget is None:

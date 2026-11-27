@@ -33,7 +33,14 @@ class JobRequest:
         ensure_serializable(self.payload, "JobRequest.payload")
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        # Not ``asdict``: it copies the payload value by value (an image is 65 536 numbers, about 0.25 s);
+        # the payload is plain JSON data, and handing it to a process copies it anyway.
+        return {
+            "handler": self.handler,
+            "payload": self.payload,
+            "timeout_seconds": self.timeout_seconds,
+            "job_id": self.job_id,
+        }
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "JobRequest":
@@ -104,8 +111,14 @@ class JobResult:
         return self.status == "succeeded"
 
     def to_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
-        return payload
+        # As JobRequest.to_dict: the value (model outputs) is plain JSON data, not copied number by number.
+        return {
+            "job_id": self.job_id,
+            "status": self.status,
+            "value": self.value,
+            "error": None if self.error is None else self.error.to_dict(),
+            "elapsed_seconds": self.elapsed_seconds,
+        }
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "JobResult":

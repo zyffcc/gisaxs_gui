@@ -207,9 +207,17 @@ class SeriesView(SeriesFitView):
             "The halves of the signed cut this map stacks: ± both as measured, + or − one half, |x| both on |x|, or "
             "their mean. The stages, the traces and the exports follow it.")
         self.series_view_combo.hide()
-        info = QHBoxLayout()  # the sentence, and — beside its one line while a map is shown — the halves and “Wide”
+        # The incidence angle the map holds, when its frames were measured at several (``bindings/series_mixed.py``).
+        self.series_angle_combo = QComboBox(parent)
+        self.series_angle_combo.setObjectName("analyzeSeriesIncidence")
+        self.series_angle_combo.setToolTip(
+            "The incidence angle αi this map holds. Frames measured at other angles are cut at the same detector "
+            "rows, which is another exit angle there: each angle has its own map, or choose all angles.")
+        self.series_angle_combo.hide()
+        info = QHBoxLayout()  # the sentence, and — beside its one line while a map is shown — αi, halves and “Wide”
         info.setSpacing(6)
         info.addWidget(self.series_info_label, 1)
+        info.addWidget(self.series_angle_combo, 0, Qt.AlignTop)
         info.addWidget(self.series_view_combo, 0, Qt.AlignTop)
         info.addWidget(self.series_wide_button, 0, Qt.AlignTop)
         host.addLayout(info)
@@ -226,6 +234,14 @@ class SeriesView(SeriesFitView):
         self.series_stale_label.setWordWrap(True)
         self.series_stale_label.hide()
         host.addWidget(self.series_stale_label)
+        self.series_exposure_label = QLabel("", parent)  # rows of different exposure times, not divided by them
+        self.series_exposure_label.setObjectName("analyzeSeriesExposure")
+        self.series_exposure_label.setProperty("gimapRole", "warning")
+        self.series_exposure_label.setWordWrap(True)
+        self.series_exposure_label.setTextFormat(Qt.RichText)
+        self.series_exposure_label.setTextInteractionFlags(Qt.LinksAccessibleByMouse | Qt.LinksAccessibleByKeyboard)
+        self.series_exposure_label.hide()
+        host.addWidget(self.series_exposure_label)
         self._setup_stages(parent, host)
         self.series_empty = EmptyState(SERIES_EMPTY_TITLE, SERIES_EMPTY_TEXT, parent, action_text=SERIES_EMPTY_ACTION)
         host.addWidget(self.series_empty)
@@ -335,6 +351,27 @@ class SeriesView(SeriesFitView):
             row.addWidget(QLabel(caption, section))
             row.addWidget(combo, 1)
             section.add_layout(row)
+        events = QHBoxLayout()  # events of the run (spray pulses …) marked on the map (``bindings/series_events.py``)
+        events.setSpacing(6)
+        self.series_events_label = QLabel("", section)
+        self.series_events_label.setObjectName("analyzeSeriesEvents")
+        self.series_events_label.setProperty("gimapRole", "muted")
+        self.series_events_label.setWordWrap(True)
+        self.series_events_button = QPushButton("Events File…", section)
+        self.series_events_button.setObjectName("analyzeSeriesEventsFile")
+        self.series_events_button.setToolTip(
+            "Mark the events of the run (spray pulses, shutter openings) on the map: a CSV table with a time column "
+            "(utc, time or timestamp; ISO times) and optionally a label column. A file that grows during the run is "
+            "read again as the map is drawn.")
+        self.series_events_clear_button = QPushButton("Clear", section)
+        self.series_events_clear_button.setObjectName("analyzeSeriesEventsClear")
+        self.series_events_clear_button.setToolTip("No events on the map")
+        self.series_events_clear_button.hide()
+        events.addWidget(QLabel("Events", section))
+        events.addWidget(self.series_events_label, 1)
+        events.addWidget(self.series_events_button)
+        events.addWidget(self.series_events_clear_button)
+        section.add_layout(events)
         self.series_follow_check = QCheckBox("Show the picked frame's image", section)
         self.series_follow_check.setObjectName("analyzeSeriesFollow")
         self.series_follow_check.setToolTip(

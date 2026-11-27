@@ -17,6 +17,10 @@ GISAXS_CUT = "native_detector_columns"
 """``observation["source"]`` of a GISAXS horizontal cut sent from Analyze."""
 RECOMMENDED = "Recommended for this curve: a GISAXS cut not fitted yet."
 STATE_WORDS = ("upper", "lower")
+OUT_OF_MEMORY = "The computer ran out of memory. Close other programs and run it again."
+_NO_MEMORY = re.compile(r"(Unable to allocate .* for an array with shape .*|\w*MemoryError)")
+"""NumPy's message when an array cannot be had, or a bare MemoryError: the memory of the computer is used up
+(a small array is often the one that fails)."""
 
 
 def number(value: float) -> str:
@@ -30,6 +34,8 @@ _TOO_FEW = re.compile(re.escape(TOO_FEW_FOR_FREE).replace(r"\{points\}", r"(?P<p
 
 def fit_error_text(message: str) -> str:
     """A fit's error in the interface language (the application's sentences; one carries numbers)."""
+    if _NO_MEMORY.fullmatch(str(message)):
+        return tr(OUT_OF_MEMORY)
     found = _TOO_FEW.fullmatch(str(message))
     if found:
         return trf(TOO_FEW_FOR_FREE, **found.groupdict())

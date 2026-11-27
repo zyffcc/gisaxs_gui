@@ -51,9 +51,12 @@ class PredictionResultsMixin:
             return None, None
         return prepared.values, list(prepared.steps)
 
-    def _display_prediction(self, outputs: Dict[str, np.ndarray]) -> None:
+    def _display_prediction(self, outputs: Dict[str, np.ndarray], *, live: bool = False) -> None:
+        """Draw ``outputs`` in the canvas. ``live`` (the newest result of a running batch, drawn again and again):
+        nothing in the log, the tab in view stays, and the Prediction result tab is not brought forward."""
         if not outputs:
             return
+        shown_titles = [spec.get("title") for spec in getattr(self, "_predict_tab_specs", None) or []]
         self.prediction_results = outputs
         capture = getattr(self, "_capture_sem_prediction", None)
         if capture is not None:
@@ -62,8 +65,9 @@ class PredictionResultsMixin:
         # 1) If only scalar outputs, print to status and return
         scal = outputs.get("scalars") if isinstance(outputs, dict) else None
         if isinstance(scal, np.ndarray):
-            vals = ", ".join(format_number(x) for x in scal.reshape(-1))
-            self._append_status_message(trf("Predicted scalars: [{values}]", values=vals), level="INFO")
+            if not live:
+                vals = ", ".join(format_number(x) for x in scal.reshape(-1))
+                self._append_status_message(trf("Predicted scalars: [{values}]", values=vals), level="INFO")
             return
         panels: List[Dict[str, object]] = []
         params = outputs.get("parameters") if isinstance(outputs, dict) else None
@@ -78,7 +82,8 @@ class PredictionResultsMixin:
                 f"{name}={format_number(value)}"
                 for name, value in zip(names, np.asarray(params).reshape(-1))
             )
-            self._append_status_message(trf("Predicted parameters: {values}", values=text), level="INFO")
+            if not live:
+                self._append_status_message(trf("Predicted parameters: {values}", values=text), level="INFO")
             panels.append(
                 {
                     "kind": "parameters",
@@ -212,15 +217,19 @@ class PredictionResultsMixin:
                 )
 
         if not panels:
-            self._append_status_message("No plottable prediction outputs", level="WARN")
+            if not live:
+                self._append_status_message("No plottable prediction outputs", level="WARN")
             return
 
         self._predict_tab_specs = panels
         tabs = self._get_or_create_predict2d_tabs()
         if tabs is not None:
+            in_view = tabs.currentIndex()
             self._rebuild_predict_tabs(tabs)
             if hasattr(tabs, "setTabBarAutoHide"):
                 tabs.setTabBarAutoHide(len(panels) <= 1)
+            # One panel needs no selector: an empty box above the plot otherwise (a steps panel holds its gallery).
+            tabs.setVisible(len(panels) > 1 or panels[0].get("kind") == "steps")
             hr_index = next(
                 (
                     idx
@@ -230,7 +239,9 @@ class PredictionResultsMixin:
                 None,
             )
             target_index = (
-                hr_index
+                in_view  # the same panels as before: the one in view stays
+                if live and in_view >= 0 and [spec.get("title") for spec in panels] == shown_titles
+                else hr_index
                 if hr_index is not None
                 else (tabs.currentIndex() if tabs.currentIndex() >= 0 else 0)
             )
@@ -239,8 +250,8 @@ class PredictionResultsMixin:
                 tabs.setCurrentIndex(target_index)
                 del blocker
             self._render_predict_tab_by_index(target_index if target_index is not None else 0)
-            # Ensure the outer tab switches to Predict-2D when results are ready
-            self._set_predict_main_tab("result")
+            if not live:  # (a live result does not turn the canvas away from what the user looks at)
+                self._set_predict_main_tab("result")
             self._refresh_predict_readiness()
         else:
             self._render_predict_tab_by_index(0)

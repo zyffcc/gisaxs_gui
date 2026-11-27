@@ -9,9 +9,10 @@
 - **Related tests**:
   [`tests/test_prediction_presentation.py`](../../../tests/test_prediction_presentation.py)、
   [`tests/test_prediction_multifile_presentation.py`](../../../tests/test_prediction_multifile_presentation.py)、
+  [`tests/test_prediction_watch.py`](../../../tests/test_prediction_watch.py)、
   [`tests/test_prediction_view_model.py`](../../../tests/test_prediction_view_model.py)、
   [`tests/test_ui_workspace_layouts.py`](../../../tests/test_ui_workspace_layouts.py)
-- **Last verified**: 2026-09-04
+- **Last verified**: 2026-11-26
 
 ## 当前状态
 
@@ -77,8 +78,15 @@ preprocessing 配置无效时，workflow 显示错误并停止，不再用隐式
 0.05–15 nm），顶部/侧边 marginal 以及单独的 `p(H)`、`p(R)` 曲线共享同一组 bin centers；导出曲线
 时也写出这些物理坐标，不再导出 0–29 的数组下标。
 
-单文件模式只显示 detector file 和 Stack；Folder batch 只显示 folder、Range 和
-Files per prediction，并实时显示文件数、job 数和无法组成完整 stack 的尾部文件数。
+单文件模式只显示 detector file 和 Stack；Folder batch 只显示 folder、Range、
+Files per prediction 和 Watch for new frames / Keep up with the detector，并实时显示文件数、job 数和无法组成完整 stack 的尾部文件数。
+Watch：`bindings/frame_watch.py` 在批量跑完已有帧后继续看文件夹（`QFileSystemWatcher` 加每秒一次，列目录在 `TaskRunner` 里），
+新帧写完整后（`application/frame_watch.FrameWatch`：EDF 看文件头的 Size，其他文件看两次相同）追加一行并交给
+`batch_manager.MultiFilePredictManager`（队列，`follow` 时等待新帧）；Keep up（`KeepUp`）最多让两叠等待模型（`can_take` 时一次给一叠），更早的计数跳过。
+文件夹变化后的下一次查看至少隔上一次查看所用的时间（`_watch_soon` 的间隔，至少 `SOON_MS`）：几万帧的文件夹列一次要零点几秒，一次接一次地看会让一个线程一直忙、与窗口争解释器；`adapters/fabio_images.look` 用 `_suffix` 和先拼好的文件夹前缀代替 `os.path.splitext` / `os.path.join`（52 000 个文件 0.13 s → 0.05 s）。批量结果按状态计数（`result_models.counts`，加行和改状态时增量维护），打开的趋势和分布窗口至多每 `WINDOWS_MS` 重画一次（`results_widget`）：5 万行时加一行 14.6 → 0.2 ms，改一次状态 17.6 → 约 2 ms，`tests/test_prediction_multifile_presentation.py`。
+Show the newest result（Batch results 里、当前结果名称旁，默认勾选）：`bindings/live_canvas.py` 在任何文件夹批量运行时把最新完成的结果
+画到画布（`_display_prediction(live=True)`：不写日志、保留正在看的子面板、不抢主 tab，只有一轮的第一个结果切到 Prediction result），
+至多每 `SHOW_MS` 一次；页面不可见时不画；运行中用户点了某行就取消勾选。只有结果、没有 Input preview 时画布也离开空状态。
 两种模式共用原有 prediction command 和数据结构，不是两套预测实现。
 
 右侧复用 app presentation design system 的 `PlotPanel`。无输入时只显示下一步；输入加载
@@ -97,8 +105,16 @@ Stop 后 Predict 显示 “Stopping…” 并保持禁用，直到模型进程�
 仍是原来的浅色出版样式。关闭 GIMaP 时若预测在运行，退出确认会列出 “2D Prediction”。1280 px 宽
 的窗口下视图与面板上下排列。
 
-输入只接受 CBF：按钮为 “Choose CBF frame…”，对话框标题 “Select CBF Frame”，旁边一行提示只支持 CBF；空状态的按钮直接
-打开选择框；也可以把 CBF 拖到图区。导出结果：保存对话框建议 `<输入文件名>_prediction.png`（PNG），数据以同名写在旁边，
+输入接受 CBF、EDF、TIFF（`domain/sequences.FRAME_SUFFIXES`）：按钮为 “Choose frame…”，对话框标题 “Select Detector Frame”，
+提示写明三种格式；空状态的按钮直接打开选择框；也可以把帧拖到图区，别的文件给出 “Unsupported Format”。帧由
+`infrastructure/adapters/detector_images.py` 经 `shared/detector_io.load_detector_image` 读取：存储值不变，读取器标为无数据且
+值 ≥ 0 的像素（存为 0 的 Pilatus 缝隙、EDF Dummy）给 −1；P03 CBF 与原 fabio 读取逐像素相同
+（`tests/test_prediction_frames.py`）。文件夹扫描取多数编号帧的格式；叠加只取与第一帧同格式的文件。
+
+预处理入口带 `context` 参数时，`ProfileFrameContexts`（bootstrap 注入 `AppContext.instrument_profiles`）给出帧的事实、
+匹配仪器配置的几何与 `q_map()`；普通值写进第一步的 `frame_context`，从而进入导出记录。`io.geometry: required` 缺几何时
+拒绝预测（`application/use_cases.PreparePredictionInput`）。模型在 `AppContext.model_jobs`（`integrations/jobs/kept_process.py`）
+的常驻进程中运行，`integrations/tensorflow/worker.py` 保留最近两个模型；退出时 `window.py` 与 `_cancel_model_jobs` 关掉它。导出结果：保存对话框建议 `<输入文件名>_prediction.png`（PNG），数据以同名写在旁边，
 另写 `<同名>.json` 记录（模块、模型路径、框架、运行时版本、预处理步骤、输入文件与叠加数），完成后 toast 可打开文件夹，
 失败时显示错误。状态栏只显示当前打开的 Labs 页面自己的消息，切换语言后随之翻译。
 
@@ -109,6 +125,8 @@ Stop 后 Predict 显示 “Stopping…” 并保持禁用，直到模型进程�
 | single/multi mode | `1. Import data / segmented selector` | 文案改为 Single file / Folder batch；原 mode signal 不变 |
 | file picker + Stack | `Single file page` | 只在单文件模式显示；路径和 stacking 语义不变 |
 | folder picker + Range + Every | `Folder batch page` | 显示为 Files per prediction；inclusive range 与 stacking 语义不变，新增 job summary |
+| Watch for new frames + Keep up with the detector | `Folder batch page`，Every 下面一行 | 只在 Folder batch 显示；Keep up 默认勾选，只在 Watch 勾选时可用；运行中可勾选或取消 |
+| Show the newest result | `Batch results`，当前结果名称同一行右侧 | 默认勾选；批量运行时画布跟随最新结果（≤ 1 次/s）；运行中点选一行即取消勾选 |
 | module selector + model import/status | `2. Import model / Basic` | 主任务前置；`module.yaml`、manifest validation、model discovery 和 lazy loading 不变 |
 | framework、reload、edit config | `Advanced model configuration` | 默认折叠；原 framework 检查和 config actions 不变 |
 | DESY Model Library | `Advanced model sources` | 默认折叠；URL 和 Browse Models action 不变 |
@@ -132,6 +150,9 @@ tab 顺序及 `gisaxsPredictImageShowTabWidget` 均未拆开或替换。
 - [ ] 文件选择或路径回车成功后自动显示 Input preview，失败时 workflow 不前进；
 - [ ] Folder batch 只显示 folder、Range 和 Files per prediction；
 - [ ] Folder batch summary 的 file/job/skipped 数量与实际 grouping 一致；
+- [ ] Watch for new frames：空文件夹也能开始；写入的新帧写完后出现新行并被预测；取消勾选后跑完已取用的帧即结束，Stop 立即结束；
+- [ ] Keep up：帧比模型快时最多两帧等待、更早的跳过，状态栏给出跳过的帧数；模型够快时不跳过；不勾选时依次预测每一帧；
+- [ ] Show the newest result：批量运行时画布每秒至多更新一次为最新结果，正在看的子面板不跳走；运行中点选一行后取消勾选并停在该行；
 - [ ] Open batch results 能滚动到嵌入式结果表；
 - [ ] module.yaml reload、module selector、framework 状态和 Edit Config 正常；
 - [ ] Import Model、model manifest error 和 compatibility message 正常；

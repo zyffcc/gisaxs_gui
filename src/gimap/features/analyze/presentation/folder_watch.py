@@ -8,6 +8,7 @@ then has been in its files for a whole look and can be read, while its newest pa
 from __future__ import annotations
 
 import itertools
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +27,14 @@ class WatchScan:
     """``(path, why)`` of the sources that could not be measured (their writer still holds them)."""
     moment: float = field(default_factory=time.monotonic)
     """When the look was made (``time.monotonic``): how long a new source has rested (``FolderWatch.settle_s``)."""
+    complete: frozenset = frozenset()
+    """Keys of the new or changed sources that say themselves they are completely written (``complete_of``)."""
+    revision: int = -1
+    """How many states the watch had set (``FolderWatch._noted``) when the look began."""
+    look: Optional[tuple[int, ...]] = None
+    """Places in ``sources`` of those to look at (``None``: every one): those not as they were reported, or seen
+    changed and not rested yet, when the look began, and a name met again. Every other source was reported as it
+    is now, and is so still unless its state was set since (``_noted``): ``take`` has nothing to do for it."""
 
 
 class FolderWatch:
@@ -48,6 +57,10 @@ class FolderWatch:
     (0, the default: two looks the same are enough) — for a detector that pauses while it writes a file, so that
     a half-written frame is never read.
 
+    ``complete_of`` (optional): ``True`` for a source that is completely written by what it says itself (an EDF as
+    long as its header announces, with its side file). With ``settle_s`` 0 such a new source is reported at the first
+    look that sees it, without waiting for a second.
+
     ``poll`` is ``take(scan())``.  ``scan`` only reads the folder and changes nothing here, so it may
     run on another thread while the window stays free; ``take`` applies it on the caller's thread.
     """
@@ -57,10 +70,15 @@ class FolderWatch:
         expand: Callable[[Sequence[Path]], list[Path]],
         size_of: Optional[Callable[[Path], int]] = None,
         stamp_of: Optional[Callable[[Path], object]] = None,
+        complete_of: Optional[Callable[[Path], bool]] = None,
     ):
         self._expand = expand
+        self._complete_of = complete_of
         self._keys: dict[str, str] = {}
         """A path as given → its key (resolving a path asks the file system: thousands of times per look otherwise)."""
+        self._folders: dict[str, str] = {}
+        """A folder as given → resolved: a key is the resolved folder and the name (one call per folder, not per
+        file: resolving 20 000 frames one by one took 14 s)."""
         self._size_of = size_of or (lambda path: Path(path).stat().st_size)
         self._stamp_of = stamp_of
         self.folder: Optional[Path] = None
@@ -73,6 +91,12 @@ class FolderWatch:
         self.settle_s = 0.0
         self._numbers = itertools.count(1)
         self._taken = 0
+        self._noted: list[str] = []
+        """Keys of the sources whose reported state, or state seen changed, was set (``take``, ``follow``), from
+        the ``_noted_from``-th state set on: a look begun before compares only the others with what it copied.
+        (A source unknown then, as one taken up by ``follow``, is marked by the look anyway, and one is reported
+        only once seen changed: noting the changes seen would do. Every state set is noted all the same.)"""
+        self._noted_from = 0
         self.changed: list[Path] = []
         """After a poll: the known sources whose files changed and have rested since."""
         self.waiting: list[tuple[Path, str]] = []
@@ -94,6 +118,7 @@ class FolderWatch:
         self._known = {self._key(path): None for path in already_listed}
         for path in self._expand([self.folder]):
             self._known[self._key(path)] = self._measure(path)[0]
+        self._noted, self._noted_from = [], 0
         self._taken = next(self._numbers)  # a look begun before this is of the watch before
 
     def stop(self) -> None:
@@ -116,14 +141,27 @@ class FolderWatch:
         folder, number = self.folder, next(self._numbers)
         if folder is None or not folder.is_dir():
             return None
-        sources, waiting = [], []
+        sources, waiting, complete, look, seen = [], [], set(), [], set()
+        revision = self._noted_from + len(self._noted)  # (before the copies: a state set meanwhile is looked at)
+        known, moved = dict(self._known), set(self._sizes)  # (taken on the caller's thread meanwhile: copies to read)
         for path in self._expand([folder]):
             state, why = self._measure(path)
             if state is None:
                 waiting.append((path, why))
-            else:
-                sources.append((path, self._key(path), state))
-        return WatchScan(number, folder, tuple(sources), tuple(waiting))
+                continue
+            key = self._key(path)
+            if not known.get(key, _UNKNOWN) == state or key in moved or key in seen:
+                look.append(len(sources))
+            seen.add(key)
+            sources.append((path, key, state))
+            if self._complete_of is not None and key not in known:
+                try:
+                    if self._complete_of(path):
+                        complete.add(key)
+                except OSError:
+                    pass
+        return WatchScan(number, folder, tuple(sources), tuple(waiting), complete=frozenset(complete),
+                         revision=revision, look=tuple(look))
 
     def take(self, scan: Optional[WatchScan]) -> list[Path]:
         """Apply a look at the folder: the new, completely written frames since the last one (oldest name
@@ -135,7 +173,7 @@ class FolderWatch:
         self._taken = scan.number
         self.waiting = list(scan.waiting)
         ready: list[Path] = []
-        for path, key, state in scan.sources:
+        for path, key, state in map(scan.sources.__getitem__, self._to_look_at(scan)):
             known = key in self._known
             if known and self._known[key] == state:
                 self._sizes.pop(key, None)
@@ -144,10 +182,12 @@ class FolderWatch:
             if before != state:
                 self._since[key] = scan.moment
             rested = scan.moment - self._since.get(key, scan.moment) >= float(self.settle_s or 0.0)
-            if (known or state[0] > 0) and before == state and (known or rested):  # the same at two looks: it rests
+            whole = not known and state[0] > 0 and key in scan.complete and not float(self.settle_s or 0.0)
+            if whole or (known or state[0] > 0) and before == state and (known or rested):  # the same at two looks: it rests
                 self._sizes.pop(key, None)
                 self._since.pop(key, None)
                 self._known[key] = state
+                self._noted.append(key)
                 (self.changed if known else ready).append(path)
             elif before == state:  # the same, but not long enough yet (``settle_s``)
                 continue
@@ -155,7 +195,29 @@ class FolderWatch:
                 if before is not None:  # changed at the look before, and again: what it was then
                     self.moving.append((path, before))
                 self._sizes[key] = state
+                self._noted.append(key)
+        self._forget_noted(scan.revision)
         return ready
+
+    def _to_look_at(self, scan: WatchScan):
+        """Places in ``scan.sources`` that ``take`` looks at, in order: every one, or those the look marked and
+        those whose state was set since it began (few: a look applied meanwhile, ``follow``). Each other one is
+        known with the state it has now and not seen changed: the loop would pass it by."""
+        if scan.look is None or scan.revision < self._noted_from:
+            return range(len(scan.sources))
+        noted = set(self._noted[scan.revision - self._noted_from:])
+        if noted:
+            noted.difference_update(scan.sources[place][1] for place in scan.look)
+        if not noted:
+            return scan.look
+        return sorted({*scan.look, *(place for place, source in enumerate(scan.sources) if source[1] in noted)})
+
+    def _forget_noted(self, revision: int) -> None:
+        """The states set before a look that was applied: a look begun before it is dropped from now on, and one
+        begun meanwhile but before ``revision`` looks at every source."""
+        if revision > self._noted_from:
+            del self._noted[:revision - self._noted_from]
+            self._noted_from = revision
 
     def poll(self) -> list[Path]:
         """New, completely written frames since the last poll (oldest name first)."""
@@ -164,7 +226,9 @@ class FolderWatch:
     def follow(self, path: Path) -> None:
         """The caller lists a new source although it has not rested (it is ``moving``): from now on it is a
         known source, which has ``changed`` when it rests at last."""
-        self._known.setdefault(self._key(path), None)
+        key = self._key(path)
+        self._known.setdefault(key, None)
+        self._noted.append(key)
 
     def rests(self, path: Path) -> bool:
         """At the last look applied the source was as at the look before (``False``: it was seen changed, or
@@ -177,8 +241,16 @@ class FolderWatch:
         if key is None:
             if len(self._keys) > 200_000:  # (a watch of very many files: start the cache again)
                 self._keys.clear()
-            key = self._keys[text] = str(Path(path).resolve()).casefold()
+                self._folders.clear()
+            folder, name = os.path.split(text)
+            resolved = self._folders.get(folder)
+            if resolved is None:
+                resolved = self._folders[folder] = str(Path(folder or ".").resolve())
+            key = self._keys[text] = os.path.join(resolved, name).casefold()
         return key
 
+
+_UNKNOWN = object()
+"""The reported state of a source never reported (equal to no state)."""
 
 __all__ = ["FolderWatch", "WatchScan"]

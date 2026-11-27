@@ -28,6 +28,7 @@ what is on disk changes:
 
 from __future__ import annotations
 
+from operator import is_
 from pathlib import Path
 from typing import Callable, NamedTuple, Optional, Sequence
 
@@ -140,12 +141,12 @@ class SourcesModelMixin:
         a part of one of them is that source: the first such row takes the source's name (``replaced``), and
         any further rows of its parts leave the list (``dropped``)."""
         files = self.state.files
-        rows = {source_key(path): index for index, path in enumerate(files)}
+        rows = dict(self._listed_rows())
         added: list[Path] = []
         listed: list[int] = []
         taken: dict[int, int] = {}  # the row of a part → the row of the source it belongs to
         self.replaced, self.dropped = [], []
-        for path in map(Path, sources):
+        for path in (item if isinstance(item, Path) else Path(item) for item in sources):  # (the same paths)
             key = source_key(path)
             row = rows.get(key)
             parts = sorted({rows[part] for part in map(source_key, self._parts(path)) if part in rows} - {row, *taken})
@@ -316,7 +317,7 @@ class SourcesModelMixin:
         # One that is not listed is taken up only when it gained a frame since: it grows by appending. (A file
         # that is written again in place at every look holds other frames now than then: it waits until it rests.)
         self._had = self._held_before()
-        listed = {source_key(path) for path in self.state.files}
+        listed = self._listed_rows() if self._had else {}
         following = [path for key, (path, _files, frames) in self._had.items()
                      if frames > 0 and (key in listed or self._frames_now(path) > frames)]
         # A known source that changed is listed like a new one when it is not listed (any more): the list was
@@ -327,19 +328,32 @@ class SourcesModelMixin:
             self.watch.follow(path)
         self.watch_waiting = list(self.watch.waiting)
         self.watch_grown, self.watch_held = [], []
-        rows = {source_key(path): path for path in self.state.files}
+        files, rows = self.state.files, self._listed_rows()  # (key → row: the path of the last source of a key)
         new = {source_key(path) for path in added}
-        self.watch_changed = [rows[key] for key in dict.fromkeys(map(source_key, changed)) if key in rows and key not in new]
+        self.watch_changed = [files[rows[key]] for key in dict.fromkeys(map(source_key, changed))
+                              if key in rows and key not in new]
         again = [*self.watch_changed, *(now for _row, _before, now in self.replaced),
                  *(path for path, _files, _look in self._arriving.values()), *following]
         for key in dict.fromkeys(map(source_key, again)):
             if key not in rows or key in new:  # (the new ones are asked for by ``watch_requests(added)``)
                 continue
-            frames = self._new_frames(rows[key])
+            frames = self._new_frames(files[rows[key]])
             if frames:
                 self._watch_fresh.extend(frames)
-                self.watch_grown.append((rows[key], len(frames)))
+                self.watch_grown.append((files[rows[key]], len(frames)))
         return added
+
+    def _listed_rows(self) -> dict[str, int]:
+        """``source_key`` → row of every listed source (the last of two of one key), kept while the list only grew
+        at its end: a folder watch asks at every look, and making it took 0.15 s of the window at 50 000 files."""
+        files = self.state.files
+        kept = getattr(self, "_rows_kept", None)
+        grown = kept is not None and len(kept[0]) <= len(files) and all(map(is_, files, kept[0]))
+        rows, start = (kept[1], len(kept[0])) if grown else ({}, 0)
+        for index in range(start, len(files)):
+            rows[source_key(files[index])] = index
+        self._rows_kept = (list(files), rows)
+        return rows
 
     def _held_before(self) -> dict[str, tuple[Path, tuple, int]]:
         """What the sources that changed again at this look (``watch.moving``) were at the look before: their

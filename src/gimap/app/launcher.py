@@ -53,6 +53,10 @@ def saved_appearance(data_dir: Path) -> tuple[str, str]:
 def launch(argv: Optional[Sequence[str]] = None) -> int:
     """Run GIMaP; returns the exit code."""
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] in (["--automatic-replay-worker"], ["reproduce"]):
+        from src.gimap.shared.blas_threads import load_numerics
+
+        load_numerics()  # NumPy and SciPy with few BLAS threads: 1.5 GB less committed memory
     if arguments[:1] == ["--automatic-replay-worker"]:
         from src.gimap.app.reproduce_automatic import worker_main
         return worker_main(arguments[1:])
@@ -119,6 +123,9 @@ def launch(argv: Optional[Sequence[str]] = None) -> int:
     logging_setup.configure_logging(data_dir, version=__version__, second=read_only)
     startup_progress.listen(splash.step)
     splash.step("Loading the analysis modules…")
+    from src.gimap.shared.blas_threads import load_numerics
+
+    load_numerics()  # before anything else imports NumPy: few BLAS threads, 1.5 GB less committed memory
     try:
         from src.gimap.app.window import run_window
 

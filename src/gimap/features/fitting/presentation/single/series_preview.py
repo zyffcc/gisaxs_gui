@@ -23,6 +23,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
 
 from ...application.models import CURVE_NOT_FOUND
+from ...application.series_incidence import OTHER_ANGLE, other_angle_values
 from ...application.series_fit import TOO_FEW_POINTS, UNREADABLE, file_name, parameter_columns, prepare_frame
 from ...application.single_fit import SERIES_SIDES, Curve, evaluate, left_out_points, prepare_points
 from ..views.fit_series_view import FRAME_EMPTY
@@ -172,6 +173,9 @@ class FitSeriesPreviewMixin:
         """Why a frame has no fit, in the interface language: the reason as the application gave it (English,
         kept in the record); of a file that is no longer there, the sentence with its path as it is."""
         head = CURVE_NOT_FOUND.partition("{")[0]
+        angles = other_angle_values(reason)
+        if angles is not None:
+            return trf(OTHER_ANGLE, **angles)
         return trf(CURVE_NOT_FOUND, path=reason[len(head):]) if reason.startswith(head) else tr(reason)
 
     def _frame_not_drawn(self, index: int, reason: str) -> None:

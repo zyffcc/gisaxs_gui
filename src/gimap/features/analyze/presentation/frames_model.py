@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import math
 import weakref
+from operator import is_
 from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
@@ -363,7 +364,10 @@ class FramesModelMixin(ImportSelectionMixin):
         return self._lazy_groups().summary()
 
     def batch_tail(self) -> tuple[FrameRef, ...]:
-        """Only the final physically consecutive unfinished sum, for watching its completion."""
+        """Only the final physically consecutive unfinished sum, for watching its completion. Without a Sum there
+        is none (grouping every listed frame to find so took a watch of 50 000 frames 5 s at its first look)."""
+        if int(self.state.sum_count) <= 1:
+            return ()
         return self._lazy_groups().tail(self.state.sum_count)
 
     def batch_group_index(self, path, frame_index):
@@ -372,8 +376,24 @@ class FramesModelMixin(ImportSelectionMixin):
 
     def frame_numbers(self) -> FrameNumbers:
         """``(source key, frame index)`` → the number of the frame in the listed series, from 1 (for one
-        multi-frame source: the frame in the file) — what the frame axis of a Series map counts in."""
-        return FrameNumbers((path, self.known_frame_count(path)) for path in self.state.files)
+        multi-frame source: the frame in the file) — what the frame axis of a Series map counts in.
+
+        Kept while the list and the frame counts stay as they were (a folder watch asks for every frame that
+        arrives; with 18 000 files listed, making the numbers took a tenth of a second, comparing the list a
+        millisecond: the same path objects). Not kept while a count could not be read (it is asked again)."""
+        files, counts = self.state.files, self._frame_counts
+        kept = getattr(self, "_numbers_kept", None)
+        same = (kept is not None and len(kept[0]) <= len(files) and all(map(is_, files, kept[0]))
+                and kept[1].items() <= counts.items())  # (the files before, in their places, with their counts)
+        if same and len(kept[0]) == len(files):
+            return kept[2]
+        new = files[len(kept[0]):] if same else files
+        made = ((path, self.known_frame_count(path)) for path in new)
+        # A list that grew at its end: the numbers before, then the new sources (50 000 files: 0.2 s of every look).
+        numbers = FrameNumbers.extended(kept[2], made) if same else FrameNumbers(made)
+        read = all(source_key(path) in self._frame_counts for path in new)
+        self._numbers_kept = (list(files), dict(self._frame_counts), numbers) if read else None
+        return numbers
 
     def _watch_groups(self, frames: Sequence[FrameRef]) -> list[AnalysisRequest]:
         """Requests for frames the folder watch found (``sources_model.watch_requests``); with summing, only

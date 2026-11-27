@@ -6,6 +6,149 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 - **Sputter ▸ Analyze: a retrained Cu network, and one network fewer for Ag on polymer films.** The Cu network of one wavelength (`cu_p5`) was trained again with a fixed number of fine-tuning passes on measured data: the last pass is kept, instead of the pass that scored best on a second measured scan that was also used to judge the network. Its GPU training now runs in a deterministic mode, so the network retrains bit for bit from its seed on the same GPU type. On the measured Cu scans it fits about as well as the network it replaces, and the network comparison still shows the best of `cu_p5`, `cu_v4` and `cu_u1` for each scan. `polyag_v5` is no longer shipped: it fitted best on none of the polymer scans it was compared on, so Ag on a polymer film now compares `polyag_p3` and `polyag_u1` (one network step less).
 
+- **Predict parameters on another computer** (User Manual, Known limitations): on a cut with several solutions of nearly the same probability, another processor, operating system or NumPy/SciPy build can change which solution comes first and whether the compositions are compared by evidence or by BIC; on Apple silicon the last digits can also change from one run to the next. The benchmark audit of drawn cuts (`tools/benchmarks/check_case_overlap.py`) compares the drawn numbers to 9 significant digits, so a draw repeated on Linux, whose exp differs in the last bits, counts as the same draw.
+
+- **Predict parameters is about five times faster and shows what it does.** Its least-squares fits, its searches of the ranges and the likelihoods of the network's samples now run in worker processes, as many as it has threads (fewer when the computer's memory is short). On threads they had mostly waited for each other: an evaluation of the model is many small steps that only one thread at a time can take. The model also keeps each population's smeared term while only other values change. The numbers are the same as before: on a 794-point GISAXS cut Predict took 48 s instead of 262 s and gave the same solution to the last digit. While it runs, the plot shows the network's first guess, then the fit just refined (grey, dashed) and the best so far (green), each with its χ²ᵣ (User Manual 6.4).
+
+- **Folder watches keep up with long runs.** Analyze's folder watch measures the frames already in its folder from
+  one listing of the folder (with their 7.3.3 side files) instead of asking the file system three times for each
+  frame, and names them in the folder resolved once: on a test computer a look at a folder of 20 000 EDF frames went
+  from 23 s to under 1 s, and starting the watch from 51 s to about 3 s. 2D Prediction lists a folder batch in one
+  listing (20 000 frames: 14 s → 0.2 s), and Watch for new frames no longer opens the frames it has taken at every
+  look. A growing Series map of more than 1 000 rows is put together in the background and then shown (at most once
+  a second, as before, and less often the longer putting it together takes): with 20 000 rows the window is busy for
+  about 0.15 s per redraw instead of 2.7 s. The frame axis ticks the rows in view: a tick for every one of 20 000 rows
+  cost 0.6 s at every redraw, zoom and pan. Rows reduced alike now hold their x once: a map of 50 000 rows of
+  1 000 points takes about 1.3 GB instead of 1.8 GB. What is found, read and drawn is unchanged.
+
+- **A watch keeps up with ten frames a second for a whole run.** Tested with Analyze's watch, its live Series map and
+  2D Prediction's watch side by side on synthetic ALS 7.3.3 frames (Pilatus 2M, EDF) written at 10 Hz for 30 minutes:
+  - A watch reduces a few new frames at a time (2 to 4 by the processor cores, fewer when free memory is short); the
+    others wait in line, in order. Starting every frame at once used all the memory left within half a minute (frames
+    failed: "Unable to allocate …"), after which the map stopped growing until the detector paused, and the window
+    stopped answering for seconds.
+  - Frames of a million pixels and more are reduced in worker processes at below-normal priority, as Batch Export's
+    are. Reduced in GIMaP's own threads, they took turns at the interpreter with the window, the looks at the folder
+    and the map, and a run slowed down as these grew: from about 5 frames a second at the start to under 2 after
+    15 minutes on a busy computer.
+  - Hot and dead pixels of a sparse counting frame (a short exposure) are searched from its bright pixels: a 0.1 s
+    Pilatus 2M frame in about 30 ms instead of 230 ms, the same pixels found. A frame now takes about 0.13 s instead
+    of 0.42 s.
+  - With thousands of frames listed, the .poni beside a frame is no longer looked for by listing the whole folder for
+    every frame (0.22 s of each frame at 18 000 frames), and what a look at the folder works out is kept, or worked
+    out for the new frames alone: a look at 18 000 frames takes the window about 0.3 s instead of several seconds.
+    A folder that keeps changing is looked at again only after as long as the look before took.
+  - While a watch is on, the frame on screen is analysed one at a time: a new analysis waits for the one under way,
+    and the newest frame that arrived meanwhile is analysed next. Each look that found new frames had started an
+    analysis of the newest (1.5–3 s for a 2-megapixel frame on a busy computer) while the ones before went on unseen;
+    with a look every second, several ran at once and the frame shown was put off again and again.
+  - A live Series map grows from the map drawn before: only the rows that arrived are stacked and made into the
+    picture, the same map value for value as one stacked whole. A redraw at 20 000 rows takes about 0.1 s instead of
+    1 s. The mean of the halves of a cut is worked out about 14 times faster for rows of one geometry (0.08 ms
+    instead of 1.1 ms a row), the same values. The time stamps of a row are read once, when it arrives: they had
+    been read again for all the rows at every redraw, and past about 60 000 frames with a file time each (1.7 hours
+    at 10 frames a second) no longer fitted in the cache of the stamps read before, so that a redraw spent
+    0.25 s at 100 000 rows on the times alone, and longer with every row more; now 3 ms. The times are the same.
+  - Before every redraw the window also put the rows in the order of the frame list, split them by incidence
+    angle, copied the frame numbers and picked the ticks of the frame axis, each from all the rows: about 0.8 s of
+    the window at 50 000 rows. It now adds the rows that arrived to the order and the split made before (while they
+    are new frames numbered after the others), and the ticks are picked from all the rows at once and named only
+    where they are drawn (with all 50 000 rows in view, 0.6 ms instead of 56 ms, at every zoom and pan too): the
+    window's own work came to about 0.15 s, most of it drawing. The rows, their order, angle and ticks are the
+    same.
+  - A picture of more than 4 million cells (a long Series map; a detector frame of more than 4 megapixels) is given
+    to the image a part at a time: the part in view and as much again around it. pyqtgraph coloured the whole
+    picture at every new picture and every zoom step, however little was in view: zoomed in on 1 000 rows of a map
+    of 50 000 rows of 1 000 points, 0.45 s each time (a live map: every redraw), now about 15 ms. What is drawn is
+    the same, pixel for pixel; the limits, the colour bar's histogram and Fit view still take the whole picture.
+  - A look of Analyze's folder watch adds to what it made before instead of making it again for every frame listed:
+    the Data rows of the new sources are added (not every row listed again), the frame numbers of a list that grew
+    at its end are those before and the new ones, the frames listed are counted for the new sources alone, and the
+    rows of the listed sources are kept. With 50 000 frames in the folder a look took the window about 1.2 s, now
+    about 0.02 s (`tools/benchmarks/live_scale.py`); the rows, numbers and frames found are the same. Starting the watch on such a folder took 4.5 s, now 2.9 s, and its first look no longer groups every
+    listed frame to find an unfinished sum when there is no Sum (3.2 s → 0.25 s). The Data list counts its rows in
+    Qt: the list lays out all its rows whenever rows are added and asks for the row count twice per row, which
+    from Python took 49 ms at 50 000 rows at every look (now about 2 ms; what a row shows, and that no row can be
+    edited, are as before). The look itself, on the watch's own thread, marks the files not as they were reported;
+    the window passes by the others (one loop over all of them: 18 ms at 50 000 files, 0.23 s at 500 000; now
+    under 0.1 ms), and finds, reports and remembers what looking at each one gives (also for looks applied out of
+    order or begun before another was applied).
+  - A `.poni` put beside the frames is used from the next frame read. The `.poni` files of a folder were listed
+    again only when the folder's modification time changed, which Windows does not always do at once when a file
+    is added (in a test, half the time): a `.poni` dropped into a quiet folder could go unseen. A folder of few
+    entries is now listed at every frame (well under a millisecond), one of thousands at most every ten times its
+    listing took.
+  - 2D Prediction's watch looks at its folder again no sooner than its look before took (back to back, listing a
+    folder of 26 000 frames kept a thread busy all the time, and the window waited for it), and each look takes
+    half as long (0.13 s → 0.05 s for 52 000 files).
+  - 2D Prediction's batch results count their rows by state as rows are added and change state, instead of
+    counting all of them at each change: adding 50 000 rows took 6 minutes of the window (each one 15 ms at the
+    end), now 4 s; a change of state 18 ms at 50 000 rows, now about 3 ms whatever the number of rows. An open
+    Distribution Heatmap or Parameter Trend is drawn again at most once a second, not at every change of a row.
+  - The stages of a growing map are looked for one map at a time; the map shown when a search ends is searched next.
+    Every redraw had started one more search (10–30 s for a few thousand frames on a busy computer): while a watch
+    caught up after the detector stopped, a dozen ran at once, the window waited for them, and the memory grew by
+    gigabytes.
+
+- **ALS 7.3.3 frames.** The module gaps of a Pilatus that a file stores as 0 (7.3.3 EDF frames) are left out like
+  gap codes; before, they counted as measured zeros (about 8 % of a Pilatus 2M). The record gives their number
+  (`module_gaps_left_out`). The `.txt` side file beside each 7.3.3 image is read: `Sample Alpha Stage` gives αi frame
+  by frame, and `Izero`, `I1`, `GiSAXS Beamstop Counter` and `Beam Current` are offered as monitors; the side file is
+  recorded with the frame's files. *Physics and Methods* 4.1.
+
+- **Fitting ▸ Rank Incidence Angles…** scores candidate incidence angles with the fit in Single analysis: the
+  information an exposure at each angle adds (Fisher information with a model-error floor, the footprint and, optionally,
+  particles buried in a film), the relative error each parameter could reach, and a record of the angle chosen in
+  `angle_decisions.jsonl`. *Physics and Methods* 9.20.
+
+- **2D Prediction keeps its model loaded.** The model runs in a process that stays open between predictions:
+  TensorFlow and the model are loaded once (about 10 s, at **Import model...**), and each prediction after that
+  takes a fraction of a second (0.15 s for a small 256 × 256 model on a test computer, against about 10 s before).
+  The process ends after 15 minutes without a prediction, after a prediction past its time limit and when GIMaP
+  quits.
+
+- **2D Prediction reads EDF and TIFF frames** as well as CBF, with the readers of Analyze. Module gaps stored as 0
+  (ALS 7.3.3 EDF) are given to the module as −1, as a Pilatus CBF stores them; a P03 CBF gives the same input as
+  before. A module whose preprocessing takes a `context` parameter is told what is known about the frames (αi,
+  times, monitors and, with a matching instrument profile, the geometry and q of every pixel), and the export
+  record says what it was told; `io.geometry: required` in `module.yaml` refuses to predict without the geometry.
+  User Manual 11.1 and 11.3, *Physics and Methods* 13.4.
+
+- **2D Prediction can follow a measurement.** A folder batch with **Watch for new frames** goes on with every frame
+  written into its folder while it runs (an EDF as soon as it holds the size its header announces, other files once
+  they rest), each in a row of its own; open trend and heatmap windows are drawn again every second. **Keep up with the
+  detector** (on by default) lets at most two frames wait for the model and leaves out older ones (counted), so the
+  estimate stays a few frames behind the newest when frames come faster than the model; a model as fast as the
+  detector leaves nothing out. Unticked, every frame is predicted in turn. A module's Python file is now imported
+  once (again only when it changes), and the q maps of a geometry are computed once: preprocessing a Pilatus 2M frame
+  onto a q grid went from about 0.35 s to a few tens of ms. While any folder batch runs, **Show the newest result**
+  (Batch results, on by default) makes the canvas follow the newest completed prediction, at most once a second;
+  clicking a row unticks it. The canvas now also shows a batch result when no input preview was loaded (a watched
+  folder that was empty), where it used to stay on its empty state.
+  User Manual 11.1.
+
+- **An In-situ series fits the frames of one incidence angle.** Analyze names the αi of a GISAXS cut in its fit
+  input (`alpha_i_deg` in the `# observation:` line). Fitting's In-situ series fits the frames at the αi of Single
+  analysis' model; a frame at another angle is listed as *at another αi* with the reason, not fitted, and neither
+  breaks nor feeds the chain (before, a run that switched angles was fitted with one αi and chained across them).
+  Curves without an αi and models with αi 0 are fitted as before. User Manual 6.5.
+
+- **Watching a folder reacts at once.** The folder is looked at as soon as the system reports a change (and still
+  every 2 s), and an EDF frame as long as its header announces, with its side file, is read at the first look
+  instead of after two looks of the same size.
+
+- **Time of fast frames, and events of the run.** The `Date` of an EDF header is read as the frame's time stamp. For
+  frames faster than its whole seconds, the Series map takes the files' modification times when they agree with the
+  stamps. **Events File…** in the Series options marks spray pulses or other events from a CSV log on the map, also
+  while the log grows; the exports list them. *Physics and Methods* 11.1.
+
+- **Series map of a run at several incidence angles.** A map holds one αi, by default that of most frames; the
+  **αi** list shows another angle's map or all frames, and the exports say which angle the map holds. A map whose
+  frames have different exposure times without the exposure in the normalisation says so and offers to divide by
+  the exposure time of the file header. *Physics and Methods* 11.1.
+
+- **Less memory per GIMaP process.** NumPy's and SciPy's OpenBLAS reserved buffers for one thread per processor core when they loaded: on a computer with 24 cores, about 1.5 GB of committed memory in the program and in each Predict or batch worker before any computation. Together with other programs this filled the commit limit of Windows, and Predict stopped with *Unable to allocate 7.19 MiB for an array*. GIMaP now starts OpenBLAS with four threads (about 0.23 GB); a value of `OPENBLAS_NUM_THREADS` that you set is kept, and the programs that GIMaP starts keep their own settings. When the memory still runs out, the fit says so in a plain sentence, and a failed Predict is written to the log with its traceback (User Manual 6.4).
+
 - **Sputter ▸ Analyze gives the same numbers on different computers.** The refinement turned last-bit differences of NumPy's and OpenBLAS's processor-specific code into other solutions: the same scan analysed on two processors differed by 13 % in one window's fit deviation. The analysis package now runs in one numerical mode on 64-bit x86 processors (NumPy's AVX-512 paths off, one OpenBLAS kernel), so the same request gives the same numbers on x86-64 computers with AVX2 that run the same operating system and libraries, with any number of processes. Results on processors with AVX-512 change once; they now equal those of other processors. `analysis.json` records the mode. Known limitation: on another operating system or on Apple silicon single windows can still differ (User Manual 13; *Physics and Methods* 12.1).
 
 - **Help ▸ Check for Updates…** updates a source folder from GitHub and starts GIMaP again. A Git clone moves forward to its branch (it stops before changing anything when you edited a file the update changes, or when the branch has commits of its own); a folder from Code ▸ Download ZIP gets only the files that differ, each checked against GitHub's hash, and keeps the files it replaces in `updates/` of the user data folder. The dialog lists what is new first, and waits when the list of Python packages changed. The portable version and a copy installed with pip still open the releases page. GIMaP goes online only when you choose this entry (User Manual 2.4).
@@ -1388,8 +1531,9 @@ hold.
   value.
 - **SEM sizes depend on the segmentation**, and the default StarDist weights are trained on cell nuclei, not
   SEM. The scale is never read from the image.
-- **2D Prediction reads CBF frames only and applies no geometry and no correction** to a frame: the module's
-  own preprocessing is all that runs. **The Ag and Cu distribution modules declare no axes**: their maps and
+- **2D Prediction reads CBF, EDF and TIFF frames, not NeXus/HDF5 series, and applies no geometry and no
+  correction** to a frame itself: the module's own preprocessing is all that runs (a module can ask for the
+  geometry). **The Ag and Cu distribution modules declare no axes**: their maps and
   curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale.
 
 - **Predict parameters knows Fitting's model only** (for example, a known substrate with four-term DWBA or

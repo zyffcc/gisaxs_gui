@@ -5,17 +5,28 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
+FRAME_SUFFIXES = (".cbf", ".edf", ".tif", ".tiff")
+"""The detector frames 2D Prediction reads (a NeXus/HDF5 series: Tools ▸ Format Converter first)."""
 
-def extract_cbf_index(file_name: str) -> int | None:
-    match = re.search(r"_(\d+)(?=\.cbf$)", file_name, re.IGNORECASE)
-    if not match:
-        match = re.search(r"(\d+)(?=\.cbf$)", file_name, re.IGNORECASE)
+
+def extract_frame_index(file_name: str, suffixes: Sequence[str] = FRAME_SUFFIXES) -> int | None:
+    """The frame number at the end of a file name (``run_00042.edf`` → 42); 1 for a frame without one."""
+    name = str(file_name)
+    suffix = next((s for s in suffixes if name.lower().endswith(s.lower())), None)
+    if suffix is None:
+        return None
+    stem = name[: len(name) - len(suffix)]
+    match = re.search(r"_(\d+)$", stem) or re.search(r"(\d+)$", stem)
     if match:
         try:
             return int(match.group(1))
         except ValueError:
             return None
-    return 1 if file_name.lower().endswith(".cbf") else None
+    return 1
+
+
+def extract_cbf_index(file_name: str) -> int | None:
+    return extract_frame_index(file_name, (".cbf",))
 
 
 def parse_index_range(text: str) -> list[int]:

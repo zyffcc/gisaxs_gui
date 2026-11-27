@@ -358,7 +358,7 @@ class AnalyzePage(
     # -- analysis ------------------------------------------------------------------------
 
     def run_analysis(self) -> None:
-        if self._import_applying:
+        if self._import_applying or self._analysis_waits():  # (one at a time while watching: ``watch_pace.py``)
             return
         self._cancel_roll_measurement()
         self._mask_inputs_changed()
@@ -373,11 +373,11 @@ class AnalyzePage(
         self._started_at = time.perf_counter()
         self._failed = None  # what failed before is no longer what is asked for
         self._status(trf("Analysing {name} …", name=self.source_name(request.path)))
-        self.tasks.submit(
+        self._analysis_ticket = self.tasks.submit(
             "analyze",
             lambda: self.view_model.analyze(request),
-            on_done=self.show_analysis,
-            on_error=self._analysis_failed,
+            on_done=self._analysis_done,
+            on_error=self._analysis_error,
         )
 
     def show_analysis(self, analysis: FrameAnalysis) -> None:
@@ -548,7 +548,11 @@ class AnalyzePage(
         self._cancel_center_refinement()
         self.save_last_setup()
         self._watch_timer.stop()
+        if getattr(self, "_folder_notices", None) is not None:
+            self._notice_timer.stop()
+            self._notice_folder(None)
         self.view_model.stop_watch()
+        self._watch_pace_close()
         for task in ("analyze", "batch", "series", "cake", "mask_preview", "sample-roll"):
             self.tasks.cancel(task)
         self.shape_layer.cancel_drawing()

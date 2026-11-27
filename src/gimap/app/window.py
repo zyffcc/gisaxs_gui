@@ -211,8 +211,9 @@ class MainWindow(QMainWindow, ApplicationWindowView):
                 self.components.shutdown()
             except Exception as exc:
                 logger.exception("Failed to stop the running work on close: %s", exc)
-            if self.app_context.jobs is not None:
-                self.app_context.jobs.shutdown()
+            for runner in (self.app_context.jobs, self.app_context.model_jobs):
+                if runner is not None:
+                    runner.shutdown()
             if document is not None:  # closed properly: nothing to recover at the next start
                 document.closed_cleanly()
             event.accept()

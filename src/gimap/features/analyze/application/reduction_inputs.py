@@ -9,13 +9,15 @@ from ..domain.mask_edits import MaskImage
 
 
 def source_files(path: str | Path, metadata: Optional[Mapping[str, Any]]) -> list[str]:
-    """Additional paths for a module set or a master with its data files."""
+    """Additional paths for a module set, a master with its data files, or an image with the beamline's side file
+    (its αi and monitors were read from there)."""
     metadata = metadata or {}
+    side = [str(item) for item in metadata.get("side_files") or ()]
     modules = [str(item) for item in metadata.get("module_files") or ()]
     if modules:
-        return modules
+        return [*modules, *side]
     data = [str(item) for item in metadata.get("data_files") or ()]
-    return [str(path), *data] if data else []
+    return [str(path), *data, *side] if data or side else []
 
 
 def frame_references(path, metadata, known=None):

@@ -37,6 +37,9 @@ from .series_display import SeriesDisplayMixin
 from .series_exports import SeriesExportsMixin
 from .series_pick import SeriesPickMixin
 from .series_fit_results import SeriesFitResultsMixin
+from .series_events import SeriesEventsMixin
+from .series_later import SeriesLaterMixin
+from .series_mixed import SeriesMixedMixin
 from .series_timeline import SeriesTimelineMixin
 
 DEFAULT_CURVE = {GISAXS: "horizontal"}
@@ -45,7 +48,8 @@ REDRAW_EVERY = 5
 """Rows added between redraws of the growing map."""
 
 
-class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, SeriesFitResultsMixin, SeriesTimelineMixin):
+class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, SeriesFitResultsMixin, SeriesTimelineMixin,
+                  SeriesMixedMixin, SeriesEventsMixin, SeriesLaterMixin):
     """Needs the Series widgets (``views/series_view.py``), ``view_model``, ``tasks`` and ``_status``."""
 
     def _connect_series(self) -> None:
@@ -68,6 +72,8 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
         self.series_watch_follow_check.toggled.connect(self._watch_series_follow_toggled)
         self.series_empty.actionRequested.connect(self._series_card_action)
         self.series_each_cut_check.toggled.connect(self._series_each_cut_toggled)
+        self._connect_series_mixed()
+        self._connect_series_events()
         for spin in (self.series_first_spin, self.series_last_spin):
             spin.valueChanged.connect(lambda _value: self._series_range_changed())
         self.right_tabs.currentIndexChanged.connect(lambda _index: self._series_show_info())  # (the cut may be another)
@@ -298,8 +304,12 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
             self._series_dropped = True  # ``_series_finished`` then says nothing
             self.cancel_series_map()
         self._batch_live = False
+        self._series_later_forget()  # (a map being stacked is not shown)
+        self._series_live_forget()
         self._series_map, self._series_name = None, None
         self._series_rows = []
+        self._series_forget_angles()
+        self._series_mark_events()  # (no map: no lines; the events file stays chosen)
         self._series_memory = {}
         if not self.batch_running() and not self.tasks.is_busy():
             self.view_model.release_series_spool()
@@ -348,6 +358,7 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
             return
         key = str(path).casefold()
         kept = [row for row in self._series_rows if str(row[4][0]).casefold() != key]
+        self._series_aside = [row for row in self._series_aside if str(row[4][0]).casefold() != key]
         if summed_across:
             self._series_say("Map of the earlier list ({n} frames) — Build Map again without the removed file",
                              n=series.rows)

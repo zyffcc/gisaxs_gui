@@ -38,9 +38,10 @@ STARTS = (("previous", "Each frame starts from the previous frame's result"),
           ("chain", "From the previous frame's result; Predict parameters where the chain breaks (series_chain.py)"))
 TOO_FEW_POINTS = "too few points in the fitting range"
 UNREADABLE = "the curve could not be read"
-STATES = ("ok", "not converged", "stopped", "failed")
+STATES = ("ok", "not converged", "stopped", "failed", "other angle")
 """What became of a frame (``FrameFit.state``): fitted and converged; fitted, but the fit did not converge;
-stopped by the person in the middle of its fit (its values are where the fit was, not a result); no fit."""
+stopped by the person in the middle of its fit (its values are where the fit was, not a result); no fit;
+measured at another incidence angle than the model's, not fitted (``series_incidence``)."""
 POOR_CHI2 = 10.0
 """A converged fit weighted by σ whose χ²ᵣ is above this is a poor fit (``poor_fit``): the model misses the
 curve by far more than its noise — a model that was never set up, another stage of the sample."""
@@ -133,6 +134,8 @@ class FrameFit:
     """Frame number (from 1) of this chain's most recent start or break in the kept pass."""
     chain_reference_chi2: Optional[float] = None
     """Reduced χ² of the fit kept at that frame, when available."""
+    other_angle: str = ""
+    """Why the frame was not fitted: measured at another αi than the model's (English, ``series_incidence``)."""
 
     @property
     def ok(self) -> bool:
@@ -146,6 +149,8 @@ class FrameFit:
     @property
     def state(self) -> str:
         """One of ``STATES``."""
+        if self.other_angle:
+            return "other angle"
         if not self.ok:
             return "failed"
         if not self.fitted:
@@ -155,6 +160,8 @@ class FrameFit:
     @property
     def reason(self) -> str:
         """Why the frame is not ``ok``: the error, or what the fit said when it ended."""
+        if self.other_angle:
+            return self.other_angle
         return self.error if not self.ok else ("" if self.state == "ok" else str(self.result.message or ""))
 
 
@@ -454,7 +461,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
     ordered = sorted(frames, key=lambda item: item.index)
     elapsed = elapsed_times(ordered)
     failed = [{"frame": frame.index + 1, "file": file_name(frame.path, folder), "why": frame.error}
-              for frame in ordered if not frame.ok]
+              for frame in ordered if frame.state == "failed"]
     record = {
         "schema": "gimap_series_fit_v2", "software": SOFTWARE, "software_version": SOFTWARE,
         "saved": saved or datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -468,6 +475,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
         "frames": len(frames), "counts": series_counts(frames), "failed": failed,
         "not_converged": [frame.index + 1 for frame in ordered if frame.state == "not converged"],
         "stopped": [frame.index + 1 for frame in ordered if frame.state == "stopped"],
+        "other_angle": [frame.index + 1 for frame in ordered if frame.state == "other angle"],
         "poor_fit": {"chi2_reduced_above": POOR_CHI2, "frames": [frame.index + 1 for frame in ordered if poor_fit(frame)]},
         "flagged": [{"frame": frame.index + 1, "values": flag_names(frame)} for frame in ordered if flagged_fit(frame)],
         "per_frame": [{"frame": frame.index + 1, "file": file_name(frame.path, folder), "state": frame.state,

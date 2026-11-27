@@ -15,9 +15,16 @@ from .modules import (
     PredictionModule,
     PreprocessSpec,
 )
-from .sequences import build_complete_batches, extract_cbf_index, parse_index_range
+from .sequences import (
+    FRAME_SUFFIXES,
+    build_complete_batches,
+    extract_cbf_index,
+    extract_frame_index,
+    parse_index_range,
+)
 
 __all__ = [
+    "FRAME_SUFFIXES",
     "ModelRuntimeInfo",
     "DistributionAxisSpec",
     "ModelSpec",
@@ -29,6 +36,7 @@ __all__ = [
     "build_complete_batches",
     "coerce_array_to_shape",
     "extract_cbf_index",
+    "extract_frame_index",
     "nearest_resize_nhwc",
     "normalize_input_rank",
     "normalize_parameter_prediction",

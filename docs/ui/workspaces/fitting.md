@@ -173,6 +173,10 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   `domain/joint_fit.py`（共享 / 各曲线自有的非线性值，每条曲线各自的标度用 `fit_engine._Problem` 求解；联合协方差），
   `application/joint_fit.py`（曲线类型与几何、每条曲线的模型、记录、`model_for_page`），窗口 `single/joint_fit_dialog.py`
   与 `views/joint_fit_view.py`，工作区入口 `workspace_joint.py`（拟合 ▸ 多条曲线联合拟合…，`fitting_joint`）。
+- 入射角排序（拟合 ▸ 入射角排序…，`fitting_angles`）：`domain/angle_information.py`（期望计数、带模型误差下限的 Fisher 信息、
+  埋入膜中的颗粒、候选解的区分），`application/angle_choice.py`（由页面的拟合和点打分、`angle_decisions.jsonl` 记录），窗口
+  `single/angle_rank_dialog.py` 与 `views/angle_rank_view.py`，入口 `workspace_joint.py::open_angle_rank`。测试：
+  `tests/test_angle_information.py`。
   竖直圆柱的高度只在有垂直切线时是参数（`Component.heights`）。分析 ▸ 把两条切线都发送到拟合：
   `features/analyze/application/both_cuts.py`（`<stem>_fit_input_qz.dat`，几何写在 `# observation:`），由
   `app/handover.py::_send_both_cuts` 组合。
@@ -261,7 +265,8 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   `*_fit_input.dat`）、Also in subfolders；Frames 第一帧 – 最后一帧、每隔几帧（编号取文件名最后一个
   数字，自然顺序）；Watch for new curves：运行中每 2 秒看一次文件夹，大小和时间两次相同的新文件才拿来拟合，读过之后
   又变了的文件重新排队，文件夹读不了时等它回来（“The folder of the curves cannot be read: waiting for it …”）。
-  列表里每帧前面标 ✓ / ✗ / ·。
+  列表里每帧前面标 ✓ / ✗ / ·；αi 与 Single analysis 模型不同的帧（observation 的 `alpha_i_deg`，Analyze 写入）标 –，
+  状态 `other angle`，不拟合、不进链（`application/series_incidence.py`，`tests/test_fit_series_angles.py`）。
 - **q 的单位**（Curves 步骤，`single/series_units.py`）：每个文件按文件头写明的单位读，没写明的按 Single analysis 的
   *q unit of files without one in their header*（Start 时的值，整次运行不变）。Curves 步骤按单位和来源数出列出的曲线
   （“2 curves: q in Å⁻¹, as their header states” / “… no unit in their header (Single analysis ▸ Curve ▸ File)”），并点名
