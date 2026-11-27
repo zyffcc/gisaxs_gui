@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from src.gimap.app.reproduce import reproduce_record
+from src.gimap.features.fitting.domain.posterior.prediction import LOCAL_MAX
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,28 +69,38 @@ def compare_archive(actual, expected, *, path=()):
     elif isinstance(expected, dict):
         assert actual.keys() == expected.keys(), path
         for k, value in expected.items():
-            # BIC interval widths come from the local least-squares covariance. At a bound
-            # these are platform dependent, as in test_predict_regression. The independently
-            # sampled posterior_summary is still checked, including its quantiles.
-            if k == "intervals" and expected.get("compared_by") == "bic":
-                continue
             compare_archive(actual[k], value, path=(*path, k))
     elif isinstance(expected, list):
         assert len(actual) == len(expected), path
         for i, value in enumerate(expected):
             compare_archive(actual[i], value, path=(*path, i))
     elif isinstance(expected, float):
-        # As in test_predict_regression, use absolute probability errors and relative parameter errors.
-        if any("probability" in str(k) or "bic_weight" in str(k) for k in path):
-            assert actual == pytest.approx(expected, abs=0.05), path
-        elif "q_resolution" in path:
-            # The fitted instrumental width can be at the zero bound (nm^-1).
-            assert actual == pytest.approx(expected, rel=0.01, abs=1e-5), path
-        else:
-            rel = 0.02 if path[-1] in ("low68", "high68", "low95", "high95") else 0.01
-            assert actual == pytest.approx(expected, rel=rel, abs=1e-10), path
+        assert actual == pytest.approx(expected, rel=0.01, abs=1e-10), path
     else:
         assert actual == expected, path
+
+
+def compare_gisaxs(actual, expected):
+    """Another platform's Predict result of a GALAXI frame against the archive's.
+
+    The frame has several solutions of nearly the same probability. Which one ranks first, how many keep 1 %,
+    and whether every pooled composition drew 10 effective samples (else they are compared by BIC) change with
+    the last bits of the processor's and the libraries' arithmetic: on the CI computers the first solution and
+    the method changed, while the best χ² stayed within 5 % of the archive's (full arm 1.089-1.090, positive arm
+    1.171-1.226 against 1.173). The geometry, the choice, the method and the composition counts are exact."""
+    for key in ("angles", "chosen", "method"):
+        compare_archive(actual[key], expected[key], path=(key,))
+    solutions = actual["solutions"]
+    assert 1 <= len(solutions) <= LOCAL_MAX
+    assert {s["composition_count"] for s in solutions} == {s["composition_count"] for s in expected["solutions"]}
+    weights = []
+    for solution in solutions:
+        by_bic = solution["compared_by"] == "bic"
+        assert ("bic_weight" in solution) == by_bic and ("probability" in solution) != by_bic
+        weights.append(solution["bic_weight"] if by_bic else solution["probability"])
+    assert weights == sorted(weights, reverse=True)
+    best = min(s["chi2"] for s in expected["solutions"])
+    assert min(s["chi2"] for s in solutions) == pytest.approx(best, rel=0.10)
 
 
 def export_public_frame(case, folder, *extra_options):
@@ -168,7 +179,10 @@ def test_export_replays_structural_results_on_public_frame(exported, tmp_path, m
     replay = json.loads((tmp_path / "reproduced_report.json").read_text(encoding="utf-8"))
     # Check both ends. The numerical archive is independent of this test run and of the replay comparator.
     for report in (record, replay):
-        compare_archive(structural_results(report), archive["expected"])
+        if ARCHIVE_PLATFORM or case == "p08":
+            compare_archive(structural_results(report), archive["expected"])
+        else:
+            compare_gisaxs(structural_results(report), archive["expected"])
 
 
 def test_p08_replays_with_fibre_normal_assumption(tmp_path, monkeypatch):

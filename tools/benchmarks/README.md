@@ -172,7 +172,8 @@ Omit `--n` for the full named set. `--checkpoint DIR` resumes completed cuts wit
 network, generator and fit settings. An unsuccessful fit is recorded and gives a nonzero exit status.
 `check_case_overlap.py` reads every shipped posterior gzip archive. For earlier posterior runs with
 only a summary in `history/`, it reconstructs case descriptors from the recorded generator, seed and
-count, including the 1,200-cut extended set. The audit labels these reconstructed draws.
+count, including the 1,200-cut extended set. The audit labels these reconstructed draws. It compares the drawn numbers to
+9 significant digits: the same draw made on another computer can differ in the last bits and still counts as the same.
 It counts identical (composition, populations, noise seed) tuples, population records, first-population
 numerical draws and noise seeds. It groups archives with identical indexed draws. Use `--indices` for
 the matching cut pairs. Reuse involving the new set gives exit status 1. `--strict` also fails on
@@ -264,9 +265,17 @@ population each flag identifies. On the historical references, a competing solut
 error near a bound by up to 45%. Least-squares errors and alternative population values are compared on
 the archive platform only.
 
+The comparison branch is not portable for automatic cut 89. Predict compares the compositions by BIC when
+one of them has fewer than 10 effective pooled samples, and the pooled ESS of its two less probable
+compositions is 27 and 71 on the archive platform, 4–6 and about 9.6 on most CI computers (Linux, macOS,
+Windows) and 13 and 71 on one Windows CI computer (AMD EPYC 7763; 2026-11-27). There the test requires the `bic` flag to match the branch and,
+when the branch differs from the archive's, compares the estimates away from a bound but no intervals: BIC
+intervals come from the least-squares errors, evidence intervals from the posterior. The composition, the
+weights (within 0.03) and the estimates (within 1%) agreed on every CI computer.
+
 `python -m pytest -q tests/test_reproduce_automatic.py` runs the public P08 and GALAXI examples through automatic analysis, then replays their JSON exports from copies of the original inputs. The P08 reference uses the notebook incidence as input and applies the measured incidence with zero sample roll. It assigns 11 of 12 peaks. The MAPbI₃ orientation fails the residual check and the single-ring PbI₂ fit passes. The resolved MAPbI₃ reflections (202 and 404) give only one independent constraint on the tetragonal cell. The single PbI₂ peak also leaves its cell undetermined. A second P08 run checks replay with `--assume-fibre-normal` enabled.
 
-The references in `tests/data/automatic_replay/` store the input hashes and the fields selected by `structural_results(report)` in the test. To refresh P08, use the runtime listed in `p08.json` and the test’s `tools.gimap_agent auto` command with one BLAS thread, CRLF copies of the calibration and CIFs, and the frame and phases in the spec. Take the input hashes from `report.json` under `reproduction.inputs` and the expected values from `structural_results` applied to that export. On the archive platform the regression checks the selected structural fields bit for bit. On other platforms it checks assignments and verdicts exactly, probabilities and BIC weights to 0.05 absolute, fitted parameters to 1% and interval endpoints to 2%. The replay command itself always reports exact agreement or differences.
+The references in `tests/data/automatic_replay/` store the input hashes and the fields selected by `structural_results(report)` in the test. To refresh P08, use the runtime listed in `p08.json` and the test’s `tools.gimap_agent auto` command with one BLAS thread, CRLF copies of the calibration and CIFs, and the frame and phases in the spec. Take the input hashes from `report.json` under `reproduction.inputs` and the expected values from `structural_results` applied to that export. On the archive platform the regression checks the selected structural fields bit for bit. On other platforms it checks the P08 assignments and verdicts exactly and its fitted values to 1%. For GALAXI it checks the angles, the chosen solution, the method and the composition counts exactly and the best χ² to 10%: the frame has several solutions of nearly the same probability, and on the CI computers the first of them, their number and the comparison branch changed with the processor, while the best χ² stayed within 5% of the archive's. The replay command itself always reports exact agreement or differences, and the replay of the export on the same computer must agree exactly.
 
 ## The runs the paper quotes
 

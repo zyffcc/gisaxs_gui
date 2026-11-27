@@ -9,6 +9,7 @@ import pytest
 from src.gimap.app.reproduce import reproduce_record
 from tests.test_fit_page import _curve_file, _page, _sphere, _wait
 from tests.test_fit_page_predict import NETWORK, _sphere_file
+from tests.repeatability import assert_replayed
 
 
 def _curve_csv(path):
@@ -143,7 +144,9 @@ def test_joint_fit_replays_file_widths_and_vertical_geometry(tmp_path):
     substrate = substrate_of("Si")
     horizontal = CurveSpec("first", q, np.ones_like(q), dq=dq)
     vertical = CurveSpec("second", q, np.ones_like(q), kind="vertical", alpha_i=.2, wavelength=.1, q_parallel=.3)
-    specs = [replace(spec, intensity=evaluate(curve_model(spec, base, substrate, True), q, dq=spec.dq))
+    # A 2 % ripple keeps the residuals, χ² and errors above the rounding level of the model (``assert_replayed``).
+    ripple = 1 + 0.02 * np.sin(40 * q)
+    specs = [replace(spec, intensity=ripple * evaluate(curve_model(spec, base, substrate, True), q, dq=spec.dq))
              for spec in (horizontal, vertical)]
     result = run_joint_fit(specs, base, substrate, set())
     record = joint_record(result, specs, substrate)
@@ -153,7 +156,7 @@ def test_joint_fit_replays_file_widths_and_vertical_geometry(tmp_path):
     path = tmp_path / "joint.json"
     path.write_text(json.dumps(record, allow_nan=False), encoding="utf-8")
     report = reproduce_record(path, tmp_path / "replayed")
-    assert report["status"] == "identical", report
+    assert_replayed(report)
     assert report["tables"]["curve_1_fit_curve"]["columns"]["dQ_nm^-1"]["status"] == "identical"
 
 

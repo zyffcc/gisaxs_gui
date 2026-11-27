@@ -13,6 +13,7 @@ from src.gimap.features.fitting.domain.posterior import encoding as E
 from src.gimap.features.fitting.domain.posterior import infer, refine
 from src.gimap.features.fitting.domain.posterior.flow import Network
 from src.gimap.features.fitting.domain.substrates import Substrate
+from tests.repeatability import assert_same
 
 GRAZING = dict(wavelength=0.105, alpha_i=0.40, alpha_f=0.145)
 SUBSTRATE = Substrate("Si")
@@ -56,7 +57,7 @@ def test_level_four_refines_noise_free_spheres_and_has_no_fitted_reflection():
     w = v.copy()
     w[-2:] = 0.87, -0.44
     columns = infer.Likelihood(data, SPHERE).columns([v, w])
-    np.testing.assert_array_equal(columns[0], columns[1])
+    assert_same(columns[1], columns[0])
     np.testing.assert_allclose(columns[0, 0], form / form.max(), rtol=1e-4)
 
 
