@@ -173,7 +173,8 @@ def test_export_replays_structural_results_on_public_frame(exported, tmp_path, m
     comparison = replay_export(path, tmp_path, env, monkeypatch)
     assert comparison["kind"] == "automatic"
     assert {ref["sha256"] for ref in comparison["relocated_inputs"].values()} == set(archive["input_sha256"].values())
-    assert comparison["status"] == "identical", comparison.get("sections")
+    assert comparison["status"] == "identical", {
+        key: item for key, item in comparison.get("sections", {}).items() if item["status"] != "identical"}
     if case != "p08":
         assert comparison["sections"]["predict_options"]["status"] == "identical"
     replay = json.loads((tmp_path / "reproduced_report.json").read_text(encoding="utf-8"))

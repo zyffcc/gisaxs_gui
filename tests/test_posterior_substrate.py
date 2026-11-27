@@ -76,7 +76,7 @@ def test_known_upright_height_distribution_agrees_with_manual_fit(coupling):
     if coupling == "da":
         assert np.max(np.abs(distributed - fixed)) > 0.01
     else:
-        np.testing.assert_array_equal(distributed, fixed)
+        assert_same(fixed, distributed)
 
 
 @pytest.mark.parametrize("key", GRAZING)
@@ -148,4 +148,4 @@ def test_posterior_check_replays_height_conventions_and_shared_defaults_after_se
     data = fit_engine.FitData.prepare(Q, cut.intensity, cut.sigma)
     check = posterior_check.target_for(restored, data, solutions=[solution])
     assert (check.target.likelihood.law, check.target.likelihood.coupling) == ("number_gauss", "lma")
-    np.testing.assert_array_equal(check.target.likelihood.columns(v), infer.Likelihood(cut, composition).columns(v))
+    assert_same(check.target.likelihood.columns(v), infer.Likelihood(cut, composition).columns(v))
