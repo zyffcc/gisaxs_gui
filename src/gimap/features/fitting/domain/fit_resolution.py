@@ -12,19 +12,41 @@ from .cut_model.resolution import table_grid, tabulated
 _SPAN = 7.0
 _NORM = math.sqrt(2 * math.pi) * math.erf(_SPAN / math.sqrt(2))
 _RULES = tuple(roots_legendre(n) for n in (8, 16))
+SMEARED_CACHE = 64
+"""Smeared terms kept per grid and resolution during one fit (``constant_forms``)."""
 MISSING_DQ = "Resolution from the file needs a dQ or sigma_q column, or NXcanSAS Qdev."
 INVALID_DQ = "Every fitted point needs a finite, non-negative dQ for resolution from the file."
 
 
+def _form_key(component, geometry) -> tuple:
+    """Everything the term of a component with scale 1 depends on (its scale ``Int`` does not enter)."""
+    return (component.family, component.structure, component.coupling, component.law, component.interference,
+            component.heights, geometry,
+            tuple(sorted((key, float(p.value)) for key, p in component.params.items() if key != "Int")))
+
+
 def constant_forms(model, q, sigma, cache, geometry, component_form, *, grid=None):
-    """The constant-resolution table used for both saved models and Predict."""
+    """The constant-resolution table used for both saved models and Predict. With ``cache`` (one fit's), each
+    component's smeared term is kept by its values: the solve of the scales and the evaluation after it, and the
+    steps of a numerical derivative that leave a component as it was, take it again (the same numbers)."""
     if not model.components:
         return []
     if grid is None:
         grid = table_grid(q, sigma)
     fine = None if cache is None else cache.setdefault(("smearing grid", grid.tobytes()), {})
-    forms = [component_form(component, grid, fine, geometry) for component in model.components]
-    return list(tabulated(q, grid, np.array(forms), sigma))
+    if fine is None:
+        forms = [component_form(component, grid, fine, geometry) for component in model.components]
+        return list(tabulated(q, grid, np.array(forms), sigma))
+    smeared = fine.setdefault(("smeared", float(sigma), np.ascontiguousarray(q, float).tobytes()), {})
+    out = []
+    for component in model.components:
+        key = _form_key(component, geometry)
+        if key not in smeared:
+            if len(smeared) >= SMEARED_CACHE:
+                smeared.clear()
+            smeared[key] = tabulated(q, grid, component_form(component, grid, fine, geometry)[None], sigma)[0]
+        out.append(smeared[key].copy())
+    return out
 
 
 def _peak_edges(component, max_q):

@@ -15,8 +15,11 @@ While it runs, the job reports its stages (``StageReport``): the details of a re
 ``proposals``, ``refinement``, ``starts``, ``search``, ``sampling``), how many of its items are done of how many, the
 seconds since the start and an estimate of the seconds left in the stage; after each solution's posterior is sampled
 (but the last) they also carry ``partial``: the solutions sampled so far, encoded as the result's, their probabilities
-over those alone — what the page keeps when Predict is stopped. The numbers computed are those of a run without
-reports (``refine.predict``), on any number of threads (``parallel.default_threads``).
+over those alone — what the page keeps when Predict is stopped. Whenever a least-squares fit is done they carry
+``preview``: ``latest`` (that fit) and ``best`` (the best so far), each ``{model, chi2}``, for the page's curve; before
+the first fit, ``latest`` is the network's first guess (``chi2`` None). The numbers computed are those of a run without
+reports (``refine.predict``), on any number of threads (``parallel.default_threads``); the least-squares fits run in
+as many worker processes (``posterior_pool``), fewer when the computer's free memory does not hold them.
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ from ...domain import fit_model as fm
 from ...domain.posterior import network as posterior_network
 from ...domain.posterior import parallel
 from ...domain.posterior import refine
+from . import posterior_pool
 from ...application.fit_reproduction import prediction_record
 from ..reproduce_fit import predict_options, prediction_plan
 
@@ -125,6 +129,17 @@ class StageReport:
         except Exception:  # noqa: BLE001 - e.g. a value JSON cannot take: the run goes on without this report
             pass
 
+    def preview(self, latest, best=None) -> None:
+        """The fit just placed and the best so far (``refine.predict``'s ``preview``), each ``(model, χ²ᵣ)``."""
+        try:
+            shown = {key: None if pair is None else {"model": fm.model_to_dict(pair[0]),
+                                                     "chi2": None if pair[1] is None else _number(pair[1])}
+                     for key, pair in (("latest", latest), ("best", best))}
+        except Exception:  # noqa: BLE001 - nothing to show; the run goes on
+            return
+        done, total = self.last
+        self.progress(self.stage or "refinement", done, total, preview=shown)
+
     def partial(self, solutions) -> None:
         """The solutions of those sampled so far (``refine.predict``'s ``partial``, right after a sampling)."""
         try:
@@ -134,6 +149,19 @@ class StageReport:
         done, total = self.last
         self.progress("sampling", done + 1, total, partial=encoded,
                       **({"prediction_plan": self.plan} if self.plan and encoded else {}))
+
+
+def pooled_predict(network, q, intensity, sigma, **options):
+    """``refine.predict`` with its least-squares fits in worker processes (``posterior_pool``) when the computer
+    has room for them; the same solutions as without."""
+    threads = parallel.default_threads()
+    workers = posterior_pool.workers_for(threads) if posterior_pool.available() else 0
+    pool = posterior_pool.FitPool(workers).start() if workers > 1 else None  # they load during the proposals
+    try:
+        return refine.predict(network, q, intensity, sigma, threads=threads, pool=pool, **options)
+    finally:
+        if pool is not None:
+            pool.close()
 
 
 def run_predict(payload: dict, report, cancelled) -> dict:
@@ -149,9 +177,8 @@ def run_predict(payload: dict, report, cancelled) -> dict:
                                       options, posterior_network.path(), network.meta)
     if cancelled():
         raise RuntimeError("Fitting cancelled")
-    solutions = refine.predict(
-        network, payload["q"], payload["intensity"], payload.get("sigma"), **options,
-        progress=stages.progress, partial=stages.partial, threads=parallel.default_threads())
+    solutions = pooled_predict(network, payload["q"], payload["intensity"], payload.get("sigma"), **options,
+                               progress=stages.progress, partial=stages.partial, preview=stages.preview)
     if cancelled():
         raise RuntimeError("Fitting cancelled")
     report(1, 1, "Done")
@@ -306,8 +333,7 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
     cut = batch_geometry(options.get("predict_cut", {})) or dict(
         qz=options.get("cut_qz"), reflected_beam=options.get("reflected_beam"), measured_qz=options.get("measured_qz"))
     settings = predict_options({**cut, **batch_compositions(options["components"])})
-    solutions = refine.predict(network, item["q"], item["observed"], item["sigma"], **settings,
-                               threads=parallel.default_threads())
+    solutions = pooled_predict(network, item["q"], item["observed"], item["sigma"], **settings)
     if cancelled():
         raise RuntimeError("Prediction cancelled")
     q = np.asarray(item["q"], float)
