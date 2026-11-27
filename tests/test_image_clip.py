@@ -67,14 +67,16 @@ def test_the_part_drawn_is_the_whole_picture_drawn_pixel_for_pixel(monkeypatch, 
     whole = view._clip.whole
     rows, columns = whole.shape
     rect = QRectF(0.0, 0.0, columns, rows) if frame else QRectF(*RECT)
-    reference = pg.ImageItem(axisOrder="row-major")
+    # The whole picture in the viewer's own kind of item: pyqtgraph 0.13 draws the NaN of a plain item where they
+    # were at its first down-sampling factor (the viewer's item finds them again at each render).
+    reference = type(view.image_item)(axisOrder="row-major")
     reference.setAutoDownsample(True)
     view.plot.addItem(reference)
     reference.hide()
     reference.setImage(whole, autoLevels=False, levels=view.image_item.getLevels())
     reference.setLookupTable(view.image_item.lut)
     reference.setRect(rect)
-    cut = 0
+    required = 0
     for shown in (rows, rows // 2, 300, 100, 25):
         for top in (rows - shown, (rows - shown) // 2, 0):
             for part in (1.0, 0.3):
@@ -92,10 +94,16 @@ def test_the_part_drawn_is_the_whole_picture_drawn_pixel_for_pixel(monkeypatch, 
                 fx, fy = factors
                 expected = full[low_r // fy: low_r // fy + drawn.shape[0], low_c // fx: low_c // fx + drawn.shape[1]]
                 np.testing.assert_array_equal(drawn, expected)
-                cut += view.image_item.image.size < whole.size
+                # The view and as much again on each side (a block more at each end) leave part of the picture
+                # out: the item holds a part. (How large the view is depends on the window's geometry.)
+                (x0, x1), (y0, y1) = view.view_box.viewRange()
+                seen_rows, seen_columns = (y1 - y0) / rect.height() * rows, (x1 - x0) / rect.width() * columns
+                if 3 * seen_rows + 2 * fy < rows or 3 * seen_columns + 2 * fx < columns:
+                    required += 1
+                    assert view.image_item.image.size < whole.size
     view.dispose()
     view.deleteLater()
-    assert cut >= 10  # (zoomed in, the item held a part)
+    assert required >= 6  # (zoomed in: the views of a small part of the picture)
 
 
 def test_limits_histogram_and_fit_view_are_of_the_whole_picture(view) -> None:
