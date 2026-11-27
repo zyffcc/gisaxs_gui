@@ -64,3 +64,34 @@ def test_multifile_result_widgets_use_feature_python_views() -> None:
     for widget in (heatmap, trend, export, results):
         widget.close()
     app.processEvents()
+
+
+def test_the_counts_of_a_live_batch_are_kept_and_open_figures_follow_at_most_once_a_second() -> None:
+    """The line above the table counts the rows by state as they are added and change state (kept by the table:
+    counting all the rows at every change took 15 ms of the window at 50 000 rows); an open trend is drawn again
+    once for the changes of a second, not at each."""
+    app = _app()
+    results = MultiFilePredictResultsWidget()
+    drawn = []
+    results.refreshParameterTrend = lambda: drawn.append("trend")
+    results._windows_timer.timeout.disconnect()
+    results._windows_timer.timeout.connect(lambda: results.refreshParameterTrend())
+    try:
+        for k in range(6):
+            results.addPredictResult(f"/tmp/spray_{k:04d}.edf")
+        for k, state in ((0, PredictStatus.RUNNING), (0, PredictStatus.COMPLETED), (1, PredictStatus.RUNNING),
+                         (1, PredictStatus.FAILED), (2, PredictStatus.RUNNING)):
+            results.updatePredictResult(k, status=state)
+        counted = {state: sum(1 for result in results.table_model.results if result.status == state)
+                   for state in PredictStatus}
+        kept = {state: n for state, n in results.table_model.counts().items() if n}
+        assert kept == {state: n for state, n in counted.items() if n}
+        assert results.stats_label.text() == "Total: 6, Completed: 1, Failed: 1, Running: 1"
+        assert drawn == [] and results._windows_timer.isActive()
+        results._windows_timer.timeout.emit()
+        assert drawn == ["trend"]
+        results.clearResults()
+        assert results.table_model.counts() == {} and results.stats_label.text() == "Ready"
+    finally:
+        results.close()
+        app.processEvents()

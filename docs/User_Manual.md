@@ -786,7 +786,8 @@ like the frame, or a single `.poni`. If the file fits the frame (frame size and 
 states them, and a wavelength), its geometry is used ahead of a profile matched by name and size,
 since such a profile may come from another experiment with the same detector. **Geometry** then says
 *galaxi_bornagain.poni beside the frame*. A beam centre or geometry you save while that file is in use
-names it, and from then on your saved profile is used.
+names it, and from then on your saved profile is used. A `.poni` put into the folder later is used from the next
+frame read (in a folder of thousands of frames, within a few seconds).
 
 **A profile picked for another detector is not used.** A profile chosen in **Instrument profile** (or
 kept from a project) is set aside for frames of another frame size. Those frames take the `.poni`
@@ -1344,9 +1345,10 @@ one at a time (the frames between are listed, and added to the map, but not show
   status line then asks you to set the model up on a frame and press **Start**.
 
 These choices are remembered between sessions. On a desktop computer, listing, reducing, appending and recording
-a frame of 20,000 pixels takes about 60 ms (`tools/benchmarks/insitu_online.py`). With 18 000 frames in the folder,
-a look at it takes the window about 0.3 s; while frames keep arriving, the folder is looked at again only after as
-long as the look before took, so the watch takes at most half of the time.
+a frame of 20,000 pixels takes about 60 ms (`tools/benchmarks/insitu_online.py`). With 50 000 frames in the folder,
+a look at it takes the window about 0.02 s, the first after the watch starts about 0.15 s (the listing itself,
+on the watch's own thread, about 2 s on a busy computer); while frames keep arriving, the folder is looked at again only after as long as the look before took,
+so the watch takes at most half of the time.
 
 **Rehearsing a run without beamtime** (source checkout). `tools/beamline_sim.py` writes a synthetic spray run as
 ALS 7.3.3 writes it — Pilatus EDF frames with module gaps stored as 0 and `.txt` side files, 0.1 s frames during and
@@ -1989,7 +1991,9 @@ qy 0.05 Å⁻¹); the red arrow beside the map marks it, and it does not make a 
    map drawn before: only the rows that arrived are added, the same map as one put together whole. On a busy test
    computer a map of 50 000 rows of 1 000 points was put together in about 0.25 s instead of 2 s, drawn about once a
    second, the window busy for 0.1–0.25 s each time; it takes about 1.3 GB of memory, also at its peak (put together
-   whole each time: up to 2.3 GB). A map of a curve, halves or Sum chosen is put together whole.
+   whole each time: up to 2.3 GB). Zoomed in on the last 1 000 rows of such a map, a redraw or a zoom step draws only
+   the part in view and around it: about 15 ms instead of 0.45 s, the picture the same. A map of a curve, halves or
+   Sum chosen is put together whole.
 3. Drag the horizontal band to pick a frame: its curve is drawn below; **Open** shows that frame in
    Analyze, with the cut of the series.
 4. Drag the vertical band to pick a q window: further below, against frame, the **Mean intensity** or
@@ -4477,7 +4481,9 @@ it large).
   row to see it in the canvas. While a batch runs, **Show the newest result** (beside the name of the result
   shown, on by default) makes the canvas follow its newest completed prediction, drawn at most once a second and
   without the *Preprocessed* panel (that would read the frame again); the panel in view stays in view. Clicking a
-  row during the run unticks it, so the row you chose stays; tick it again to follow the run.
+  row during the run unticks it, so the row you chose stays; tick it again to follow the run. An open
+  **Distribution Heatmap...** or **Parameter Trend...** window follows the run too, drawn again at most once a
+  second.
 - The **Activity log** is folded at the bottom.
 
 **SEM comparison…** (above the canvas) opens **SEM Particle Analysis** (section 9.3) with the current

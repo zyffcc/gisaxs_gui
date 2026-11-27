@@ -1,8 +1,9 @@
 """Watch for new frames: a folder batch of 2D Prediction that goes on with the frames written into its folder.
 
 Ticked when Predict is pressed, the batch predicts the frames of the folder and then keeps looking at it: as soon as
-the folder changes (``QFileSystemWatcher``; while it keeps changing, every ``SOON_MS``) and at least every ``LOOK_MS``, the listing made
-off the window's thread. A new frame is taken once it is completely written (``FrameWatch``), gets its row in the
+the folder changes (``QFileSystemWatcher``; while it keeps changing, every ``SOON_MS``, or as long after the look
+before as that look took: a folder of tens of thousands of frames takes a while to list, and back to back the looks
+kept a thread busy all the time) and at least every ``LOOK_MS``, the listing made off the window's thread. A new frame is taken once it is completely written (``FrameWatch``), gets its row in the
 results and is predicted after the ones before. Keep up with the detector (``KeepUp``): at most two stacks wait for the
 model; when more arrive, the oldest waiting are left out and counted. Unticking Watch ends the run once the frames
 taken are predicted; Stop ends it at once. An open trend or heatmap window is drawn again at most every ``REFRESH_MS``.
@@ -11,6 +12,7 @@ taken are predicted; Stop ends it at once. An open trend or heatmap window is dr
 from __future__ import annotations
 
 import os
+import time
 from typing import Iterable, Optional, Sequence
 
 from PyQt5.QtCore import QFileSystemWatcher, QTimer
@@ -156,6 +158,7 @@ class FrameWatchMixin:
         if self._watch is None or self._watch_busy:
             return
         self._watch_busy = True
+        self._watch_look_began = time.monotonic()
         folder, files, skip = self._watch_folder, self.prediction_view_model.files, self._watch.known
 
         def failed(_message: str, _details: str) -> None:
@@ -166,6 +169,8 @@ class FrameWatchMixin:
 
         def done(entries) -> None:
             self._watch_busy = False
+            took = time.monotonic() - self._watch_look_began
+            self._watch_soon.setInterval(max(SOON_MS, round(1000 * took)))  # (the next look as long after)
             self._apply_look(entries)
 
         self._watch_tasks.submit("look", lambda: files.look_folder(folder, FRAME_SUFFIXES, skip), on_done=done,

@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from operator import is_
 from pathlib import Path
 
 from src.gimap.app.presentation.components.detector_display import GrowingDisplay
@@ -44,6 +45,12 @@ LATER_ROWS = 1000
 second, and a map that shows every frame the moment it arrives)."""
 LATER_BUILD_S = 0.05
 """A live map whose last stacking took longer than this is stacked on the map's own thread, whatever its rows."""
+
+
+def made_here(series) -> None:
+    """The frame numbers and short sums of every row of ``series`` worked out now, on the thread that made it: the
+    window asks for them at its first drawing (25 ms at 50 000 rows, every redraw of a live map)."""
+    series.numbers, series.short_rows  # noqa: B018 - (cached properties)
 
 
 class LiveStack:
@@ -84,6 +91,7 @@ class LiveStack:
             try:
                 name = self._name(rows)
                 grown = self._map.build(rows, key, built_with={"name": name, **built_with}, **options)
+                made_here(grown.series)
                 valid, shown, sample = self._display.show(grown.picture, grown.same, log)
             except BaseException:
                 self._reset()
@@ -97,7 +105,7 @@ class LiveStack:
 
     def _name(self, rows: list) -> str:
         """``series_name(row_files(rows))``, the files of the rows before kept."""
-        if len(rows) < len(self._rows) or any(row is not before for row, before in zip(rows, self._rows)):
+        if len(rows) < len(self._rows) or not all(map(is_, rows, self._rows)):
             self._rows, self._files, self._stems = [], {}, []
         for row in rows[len(self._rows):]:
             source = row[4][0]
@@ -195,4 +203,4 @@ class SeriesLaterMixin:
         self._series_say(message)
 
 
-__all__ = ["LATER_BUILD_S", "LATER_ROWS", "LiveStack", "SeriesLaterMixin"]
+__all__ = ["LATER_BUILD_S", "LATER_ROWS", "LiveStack", "SeriesLaterMixin", "made_here"]

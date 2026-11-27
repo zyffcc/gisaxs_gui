@@ -38,6 +38,7 @@ from ..series_texts import (
     map_group, map_words, sum_note,
 )
 from ..views.series_view import VIEW_TIPS
+from .series_later import made_here
 from .series_stages import series_name
 
 RING_CURVE = "azimuthal"
@@ -111,8 +112,8 @@ class SeriesDisplayMixin:
         numbers = built.get("numbers")  # (the frame list's cannot change; a dictionary might, while the map is made)
         options = dict(
             view=self._series_view if key == HALVES_CURVE else "both",
-            title=getattr(self, "_series_curve_title", ""), numbers=dict(numbers) if isinstance(numbers, dict) else numbers,
-            group=int(built.get("group") or 1),
+            title=getattr(self, "_series_curve_title", ""),
+            numbers=dict(numbers) if isinstance(numbers, dict) else numbers, group=int(built.get("group") or 1),
         )
         built_with = {
             "listed": built.get("listed"), "every": built.get("every"), "cut": built.get("cut"),
@@ -130,6 +131,7 @@ class SeriesDisplayMixin:
                     return built
             name = series_name(row_files(rows))
             series = build_series_map(rows, key, built_with={"name": name, **built_with}, **options)
+            made_here(series)
             picture, left, width = series.display()
             valid = np.isfinite(picture)
             return series, name, (picture, left, width), (valid, (log, *display_image(picture, valid, log)))

@@ -281,7 +281,7 @@ class DetectorIoFrameSource:
         format, or a file never read: itself."""
         layout = self.describe(path)
         if layout is None:
-            return (Path(path),)
+            return (path if isinstance(path, Path) else Path(path),)
         return tuple(dict.fromkeys([layout.path, *layout.members, *layout.pending, *layout.behind]))
 
     def settled_size(self, path: str | Path) -> int:
@@ -333,7 +333,7 @@ class DetectorIoFrameSource:
         the count of the last time it could. When it never could: the reader's ``OSError`` / ``ValueError``, and
         a ``FrameReadError`` (a ``ValueError``) with a readable sentence for whatever else the library raises
         (``RuntimeError`` for a damaged or half-written file), so that callers handle one kind of failure."""
-        path = Path(path)
+        path = path if isinstance(path, Path) else Path(path)
         if not is_hdf5(path):
             return 1
         try:

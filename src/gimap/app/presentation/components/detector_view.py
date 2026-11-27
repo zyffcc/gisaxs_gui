@@ -27,6 +27,7 @@ from PyQt5.QtWidgets import (
 )
 
 from .detector_display import _colormap, _image_item_class, display_array, display_image, display_levels
+from .image_clip import ImageClip
 from .levels import LevelControl, level_bar
 from .marks import DETECTOR_MARKS, MarkLayers
 from .box_zoom import zoom_button
@@ -118,6 +119,7 @@ class DetectorView(QWidget):
         self.image_item = _image_item_class()(axisOrder="row-major")
         self.image_item.setAutoDownsample(True)
         self.plot.addItem(self.image_item)
+        self._clip = ImageClip(self.image_item, self.view_box)  # a large picture: the part in view (image_clip.py)
         self.color_bar = level_bar(self.image_item)  # a histogram with absolute handles (components/levels.py)
         self.graphics.addItem(self.color_bar, row=0, col=1)
         self.color_bar.edited.levels.connect(lambda low, high: self.levels.edited(low, high, self.log_check.isChecked()))
@@ -239,6 +241,7 @@ class DetectorView(QWidget):
     def clear(self) -> None:
         self._data = None
         self._valid = None
+        self._clip.clear()
         self.image_item.clear()
         self.color_bar.plot.setData([], [])  # no histogram and no tick values of the frame before
         self._axis_values(False)
@@ -294,6 +297,7 @@ class DetectorView(QWidget):
         """
         self._data = None
         self._valid = None
+        self._clip.clear()
         if sip.isdeleted(self.graphics):
             return
         self._mouse_proxy.disconnect()
@@ -308,23 +312,22 @@ class DetectorView(QWidget):
         else:
             shown, self._level_sample = display_image(self._data, self._valid, self.log_check.isChecked())
         levels = self.levels.levels_for(shown, self.log_check.isChecked(), self._level_sample)
-        self.image_item.setImage(shown, autoLevels=False, levels=levels or (0.0, 1.0))
-        if self._rect is not None:
-            self.image_item.setRect(QRectF(*self._rect))
-        else:
-            self.image_item.setRect(QRectF(0.0, 0.0, float(shown.shape[1]), float(shown.shape[0])))
+        rect = QRectF(*self._rect) if self._rect is not None else QRectF(0.0, 0.0, shown.shape[1], shown.shape[0])
+        self._clip.show(shown, rect, levels or (0.0, 1.0))
         if levels is not None:
             self.color_bar.set_levels(levels)
         self.color_bar.set_label("log₁₀ I" if self.log_check.isChecked() else "I")
         if not keep_view:
             self.fit_view()
+            self._clip.follow()
 
     def auto_levels(self) -> None:
         """The rule's limits for the image shown now, kept for the next frames (napari's “once”)."""
-        self.levels.auto_once(self.image_item.image, self.log_check.isChecked(), getattr(self, "_level_sample", None))
+        image = self.image_item.image if self._clip.whole is None else self._clip.whole
+        self.levels.auto_once(image, self.log_check.isChecked(), getattr(self, "_level_sample", None))
 
     def _apply_levels(self) -> None:
-        image = self.image_item.image
+        image = self.image_item.image if self._clip.whole is None else self._clip.whole
         levels = None if image is None else self.levels.levels_for(
             image, self.log_check.isChecked(), getattr(self, "_level_sample", None))
         if levels is not None:
@@ -357,6 +360,8 @@ class DetectorView(QWidget):
         """The whole image — and the beam centre when it is to stay in view (``show_beam_center``)."""
         if getattr(self, "_fit_rect", None) is not None:
             self.view_box.setRange(rect=self._fit_rect, padding=0.02)
+        elif self._clip.cut:  # (the item holds the part in view: the whole picture)
+            self.view_box.setRange(rect=self._clip.rect, padding=0.02)
         else:
             self.view_box.autoRange(items=[self.image_item], padding=0.02)
         if not self._beam_in_view or not (self.marks.wanted(self.beam_target) and self.marks.is_visible("beam")):

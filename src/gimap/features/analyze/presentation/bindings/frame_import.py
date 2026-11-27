@@ -2,6 +2,7 @@
 
 ``show_summed``: frames of another workspace (Sputter ▸ Show in Analyze: the raw frames of one time window) replace
 the frames listed and are shown as one sum, Sum = their number."""
+from operator import is_
 from pathlib import Path
 from threading import Event
 from typing import Optional
@@ -67,14 +68,28 @@ class FrameImportMixin:
             signal.connect(self._frame_list_model_changed)
         self.refresh_frame_list()
 
-    def refresh_frame_list(self):
+    def refresh_frame_list(self, appended=None):
+        """The Data list of the sources listed. ``appended``: the sources just added at the end of the list; when
+        the list was as it is before them at the refresh before, only their rows are added (a folder watch adds a
+        few at every look: listing every source again took the window 0.8 s at 50 000 frames). Any other change of
+        a listed source rewrites its row in the file list, which lists every source again."""
         if self._frame_import_disposed or self._import_applying:
             return
         model = self.view_model
-        spans = [self._frame_list_span(path) for path in model.state.files]
+        files = model.state.files
+        appended = list(appended or ())
+        before = len(files) - len(appended)
+        listed = getattr(self, "_frame_list_listed", None)
+        grown = (bool(appended) and listed is not None and before >= 1 and listed[0] == before
+                 and listed[1] is files[before - 1] and all(map(is_, files[before:], appended)))
+        spans = [self._frame_list_span(path) for path in (appended if grown else files)]
         with QSignalBlocker(self.frame_list.selectionModel()):
-            self.frame_listing_model.reset_sources(spans)
+            if grown:
+                self.frame_listing_model.append_sources(spans)
+            else:
+                self.frame_listing_model.reset_sources(spans)
             self._sync_frame_list()
+        self._frame_list_listed = (len(files), files[-1]) if files else None
         self._show_imported()
         self.choose_frames_button.setEnabled(bool(model.state.files) and not self._importing)
         self._show_file_position()

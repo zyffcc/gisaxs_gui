@@ -251,6 +251,7 @@ def test_a_folder_that_changes_all_the_time_is_not_listed_again_for_every_frame(
     key = str(tmp_path).casefold()
     when, changed, found, _took = geometry_files._PONI_LISTINGS[key]
     geometry_files._PONI_LISTINGS[key] = (when, changed, found, 60.0)  # as if listing the folder took a minute
+    geometry_files._PONI_ENTRIES[key] = 36_000  # (… of a long run: a folder of a few files is listed again at once)
     (tmp_path / "run7.poni").write_text("x", encoding="utf-8")  # the folder changed meanwhile
     assert sibling_poni(frame).name == "LaB6.poni"  # the listing before is still taken
     geometry_files._PONI_LISTINGS[key] = (when - 601.0, changed, found, 60.0)  # ten listings' time later

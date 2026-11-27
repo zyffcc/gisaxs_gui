@@ -83,6 +83,7 @@ Files per prediction 和 Watch for new frames / Keep up with the detector，并�
 Watch：`bindings/frame_watch.py` 在批量跑完已有帧后继续看文件夹（`QFileSystemWatcher` 加每秒一次，列目录在 `TaskRunner` 里），
 新帧写完整后（`application/frame_watch.FrameWatch`：EDF 看文件头的 Size，其他文件看两次相同）追加一行并交给
 `batch_manager.MultiFilePredictManager`（队列，`follow` 时等待新帧）；Keep up（`KeepUp`）最多让两叠等待模型（`can_take` 时一次给一叠），更早的计数跳过。
+文件夹变化后的下一次查看至少隔上一次查看所用的时间（`_watch_soon` 的间隔，至少 `SOON_MS`）：几万帧的文件夹列一次要零点几秒，一次接一次地看会让一个线程一直忙、与窗口争解释器；`adapters/fabio_images.look` 用 `_suffix` 和先拼好的文件夹前缀代替 `os.path.splitext` / `os.path.join`（52 000 个文件 0.13 s → 0.05 s）。批量结果按状态计数（`result_models.counts`，加行和改状态时增量维护），打开的趋势和分布窗口至多每 `WINDOWS_MS` 重画一次（`results_widget`）：5 万行时加一行 14.6 → 0.2 ms，改一次状态 17.6 → 约 2 ms，`tests/test_prediction_multifile_presentation.py`。
 Show the newest result（Batch results 里、当前结果名称旁，默认勾选）：`bindings/live_canvas.py` 在任何文件夹批量运行时把最新完成的结果
 画到画布（`_display_prediction(live=True)`：不写日志、保留正在看的子面板、不抢主 tab，只有一轮的第一个结果切到 Prediction result），
 至多每 `SHOW_MS` 一次；页面不可见时不画；运行中用户点了某行就取消勾选。只有结果、没有 Input preview 时画布也离开空状态。

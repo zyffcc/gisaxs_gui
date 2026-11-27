@@ -170,7 +170,7 @@ def level_bar(image_item):
                 try:
                     levels = image.getLevels()
                     window = {}
-                    data = image.image
+                    data = image.image if getattr(image, "full_image", None) is None else image.full_image
                     if levels is not None and np.size(levels) == 2 and float(levels[1]) > float(levels[0]) \
                             and data is not None and data.ndim == 2:
                         # No wider than the limits and their span on each side: a linear frame whose brightest

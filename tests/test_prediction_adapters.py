@@ -260,3 +260,14 @@ def test_au_preprocessing_rejects_missing_mask_and_unknown_steps(tmp_path):
         )
     with pytest.raises(ValueError, match="unknown preprocessing step"):
         preprocessing.run(image, {"steps": ["typo"], "params": {}})
+
+
+def test_the_suffix_of_a_watched_file_is_that_of_os_path_splitext() -> None:
+    """A watch takes the suffix of every file of its folder at every look without ``os.path.splitext``'s cost."""
+    import os
+
+    from src.gimap.features.prediction.infrastructure.adapters.fabio_images import _suffix
+
+    for name in ("frame_0001.edf", ".edf", "..edf", ".hidden.edf", "noext", "a.b.c", "a.", "...", "x.EDF",
+                 ".frame_0002.edf.part"):
+        assert _suffix(name) == os.path.splitext(name)[1], name

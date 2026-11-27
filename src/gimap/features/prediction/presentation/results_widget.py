@@ -10,7 +10,7 @@ import datetime
 from typing import List, Optional
 
 
-from PyQt5.QtCore import pyqtSignal, Qt, QModelIndex
+from PyQt5.QtCore import pyqtSignal, Qt, QModelIndex, QTimer
 
 
 from PyQt5.QtWidgets import (
@@ -53,6 +53,10 @@ from .result_models import (
     PredictResultsTableModel,
 )
 
+WINDOWS_MS = 1000
+"""An open distribution heatmap or parameter trend is drawn again at most this often while results arrive (every
+change of a row's state drew the whole figure again: a live batch makes two a frame)."""
+
 
 class MultiFilePredictResultsWidget(QWidget, MultiFileResultsWidgetView):
     """多文件预测结果Widget"""
@@ -66,6 +70,11 @@ class MultiFilePredictResultsWidget(QWidget, MultiFileResultsWidgetView):
         super().__init__(parent)
         self._heatmap_window: Optional[DistributionHeatmapWindow] = None
         self._parameter_trend_window: Optional[ParameterTrendWindow] = None
+        self._windows_timer = QTimer(self)
+        self._windows_timer.setSingleShot(True)
+        self._windows_timer.setInterval(WINDOWS_MS)
+        self._windows_timer.timeout.connect(self.refreshDistributionHeatmap)
+        self._windows_timer.timeout.connect(self.refreshParameterTrend)
         self.setupUi(self)
         self._populate_form_controls()
 
@@ -165,8 +174,8 @@ class MultiFilePredictResultsWidget(QWidget, MultiFileResultsWidgetView):
 
         self.table_model.updateResult(index, result)
         self.updateStats()
-        self.refreshDistributionHeatmap()
-        self.refreshParameterTrend()
+        if not self._windows_timer.isActive():  # (an open heatmap or trend: drawn again at most once a second)
+            self._windows_timer.start()
 
     def updateProgress(self, completed: int, total: int) -> None:
         """更新总体进度"""
@@ -178,16 +187,16 @@ class MultiFilePredictResultsWidget(QWidget, MultiFileResultsWidgetView):
             self.progress_bar.setVisible(False)
 
     def updateStats(self) -> None:
-        """更新统计信息"""
-        results = self.table_model.getAllResults()
-        if not results:
+        """更新统计信息 (the counts the table keeps: ``PredictResultsTableModel.counts``)"""
+        total = len(self.table_model.results)
+        if not total:
             self.stats_label.setText(tr("Ready"))
             return
 
-        total = len(results)
-        completed = sum(1 for r in results if r.status == PredictStatus.COMPLETED)
-        failed = sum(1 for r in results if r.status == PredictStatus.FAILED)
-        running = sum(1 for r in results if r.status == PredictStatus.RUNNING)
+        counts = self.table_model.counts()
+        completed = counts.get(PredictStatus.COMPLETED, 0)
+        failed = counts.get(PredictStatus.FAILED, 0)
+        running = counts.get(PredictStatus.RUNNING, 0)
 
         counts = {"total": total, "completed": completed, "failed": failed, "running": running}
         if running > 0:

@@ -50,6 +50,35 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
     where they are drawn (with all 50 000 rows in view, 0.6 ms instead of 56 ms, at every zoom and pan too): the
     window's own work came to about 0.15 s, most of it drawing. The rows, their order, angle and ticks are the
     same.
+  - A picture of more than 4 million cells (a long Series map; a detector frame of more than 4 megapixels) is given
+    to the image a part at a time: the part in view and as much again around it. pyqtgraph coloured the whole
+    picture at every new picture and every zoom step, however little was in view: zoomed in on 1 000 rows of a map
+    of 50 000 rows of 1 000 points, 0.45 s each time (a live map: every redraw), now about 15 ms. What is drawn is
+    the same, pixel for pixel; the limits, the colour bar's histogram and Fit view still take the whole picture.
+  - A look of Analyze's folder watch adds to what it made before instead of making it again for every frame listed:
+    the Data rows of the new sources are added (not every row listed again), the frame numbers of a list that grew
+    at its end are those before and the new ones, the frames listed are counted for the new sources alone, and the
+    rows of the listed sources are kept. With 50 000 frames in the folder a look took the window about 1.2 s, now
+    about 0.02 s (`tools/benchmarks/live_scale.py`); the rows, numbers and frames found are the same. Starting the watch on such a folder took 4.5 s, now 2.9 s, and its first look no longer groups every
+    listed frame to find an unfinished sum when there is no Sum (3.2 s → 0.25 s). The Data list counts its rows in
+    Qt: the list lays out all its rows whenever rows are added and asks for the row count twice per row, which
+    from Python took 49 ms at 50 000 rows at every look (now about 2 ms; what a row shows, and that no row can be
+    edited, are as before). The look itself, on the watch's own thread, marks the files not as they were reported;
+    the window passes by the others (one loop over all of them: 18 ms at 50 000 files, 0.23 s at 500 000; now
+    under 0.1 ms), and finds, reports and remembers what looking at each one gives (also for looks applied out of
+    order or begun before another was applied).
+  - A `.poni` put beside the frames is used from the next frame read. The `.poni` files of a folder were listed
+    again only when the folder's modification time changed, which Windows does not always do at once when a file
+    is added (in a test, half the time): a `.poni` dropped into a quiet folder could go unseen. A folder of few
+    entries is now listed at every frame (well under a millisecond), one of thousands at most every ten times its
+    listing took.
+  - 2D Prediction's watch looks at its folder again no sooner than its look before took (back to back, listing a
+    folder of 26 000 frames kept a thread busy all the time, and the window waited for it), and each look takes
+    half as long (0.13 s → 0.05 s for 52 000 files).
+  - 2D Prediction's batch results count their rows by state as rows are added and change state, instead of
+    counting all of them at each change: adding 50 000 rows took 6 minutes of the window (each one 15 ms at the
+    end), now 4 s; a change of state 18 ms at 50 000 rows, now about 3 ms whatever the number of rows. An open
+    Distribution Heatmap or Parameter Trend is drawn again at most once a second, not at every change of a row.
   - The stages of a growing map are looked for one map at a time; the map shown when a search ends is searched next.
     Every redraw had started one more search (10–30 s for a few thousand frames on a busy computer): while a watch
     caught up after the detector stopped, a dozen ran at once, the window waited for them, and the memory grew by

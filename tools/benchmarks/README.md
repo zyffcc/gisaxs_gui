@@ -731,6 +731,32 @@ timed separately in the same process and ran once per detector. The times cover 
 generation, watch polling, process startup, screen redraws and export are outside the stopwatch.
 The JSON gives each frame's timings, settings and the network checksum. Running the script without
 `--synthetic-mpx` times the watched folder on crops of the public GALAXI frame.
+
+### Long runs: the window's work at N frames
+
+`live_scale.py --frames 50000` links crops of the public GALAXI frame 50 000 times into a temporary folder (hard
+links, at most 1 000 of one file), lists the folder in Analyze, starts the watch and times the window's part of
+looks that each find ten new frames (the look at the folder itself runs on the watch's own thread and is not
+timed). It also times the watch's applying of a look to 50 000 listed files (`take_s`: a listing in memory, with
+the marks the look made on its own thread, and looking at every file as before them), one redraw of a 50 000 × 1 000
+Series map zoomed in on its last 1 000 rows, given to the image whole and cut to the view
+(`components/image_clip.py`), and a change of state of a row of 2D Prediction's batch results when they hold 50 000
+rows. Runs on a busy Intel Core i9-13900HX, 2026-11-27: the first with other programs using most of its processors;
+the second after the Data list counted its rows in Qt and the window applied the looks' marks, with all processors
+busy (another test run: listing and the map redraw of the whole picture took about twice as long as in the first):
+
+| Run | Listing | Starting the watch | First look | Later looks (median) | Applying a look, marked / every file | Zoomed map redraw, whole / cut | Prediction rows: listing 50 000 / one change |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| first | 4.45 s | 2.64 s | 0.127 s | 0.049 s | — / (in the look) | 0.369 s / 0.015 s | 5.94 s / 0.03 ms |
+| second | 8.51 s | 4.34 s | 0.158 s | 0.016 s | 0.05 ms / 17.6 ms | 0.508 s / 0.019 s | 14.3 s / 0.07 ms |
+
+At 500 000 files, applying a look takes 0.07 ms marked and 232 ms looking at every file. The Data list alone (a
+list view of 50 000 rows, ten added and the last scrolled to): 49 ms with the row count answered from Python, 1.8 ms
+from Qt's string list.
+
+The looks find, number and list the same frames as before they were made incremental; the map is drawn the same,
+pixel for pixel (`tests/test_watch_scale.py`, `tests/test_image_clip.py`).
+
 ## Geometry Calibration against pyFAI, and the coverage of its 1σ
 
 Run `calibration_check.py --part all --cases 300 --workers 3` with pyFAI installed.

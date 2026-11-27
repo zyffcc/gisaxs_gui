@@ -30,9 +30,26 @@ def _image_item_class():
         import pyqtgraph as pg
 
         class NanSafeImageItem(pg.ImageItem):
+            full_image = None
+            """The whole picture when the item holds a part of it (``image_clip.ImageClip``)."""
+            full_image_nans = False
+            """The whole picture has NaN (pyqtgraph colours such a picture through another path)."""
+
             def render(self):
                 self._imageNanLocations = None
+                if self.full_image is not None and self._imageHasNans is None:
+                    self._imageHasNans = self.full_image_nans  # (the part coloured as the whole picture is)
                 super().render()
+
+            def getHistogram(self, *args, **kwargs):  # noqa: N802 - pyqtgraph API
+                """Of the whole picture, also when the item holds the part in view."""
+                if self.full_image is None:
+                    return super().getHistogram(*args, **kwargs)
+                part, self.image = self.image, self.full_image
+                try:
+                    return super().getHistogram(*args, **kwargs)
+                finally:
+                    self.image = part
 
         _IMAGE_ITEM_CLASS = NanSafeImageItem
     return _IMAGE_ITEM_CLASS

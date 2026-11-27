@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import math
 import weakref
+from operator import is_
 from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
@@ -363,7 +364,10 @@ class FramesModelMixin(ImportSelectionMixin):
         return self._lazy_groups().summary()
 
     def batch_tail(self) -> tuple[FrameRef, ...]:
-        """Only the final physically consecutive unfinished sum, for watching its completion."""
+        """Only the final physically consecutive unfinished sum, for watching its completion. Without a Sum there
+        is none (grouping every listed frame to find so took a watch of 50 000 frames 5 s at its first look)."""
+        if int(self.state.sum_count) <= 1:
+            return ()
         return self._lazy_groups().tail(self.state.sum_count)
 
     def batch_group_index(self, path, frame_index):
@@ -379,10 +383,15 @@ class FramesModelMixin(ImportSelectionMixin):
         millisecond: the same path objects). Not kept while a count could not be read (it is asked again)."""
         files, counts = self.state.files, self._frame_counts
         kept = getattr(self, "_numbers_kept", None)
-        if kept is not None and kept[0] == files and kept[1] == counts:
+        same = (kept is not None and len(kept[0]) <= len(files) and all(map(is_, files, kept[0]))
+                and kept[1].items() <= counts.items())  # (the files before, in their places, with their counts)
+        if same and len(kept[0]) == len(files):
             return kept[2]
-        numbers = FrameNumbers((path, self.known_frame_count(path)) for path in files)
-        read = all(source_key(path) in self._frame_counts for path in files)
+        new = files[len(kept[0]):] if same else files
+        made = ((path, self.known_frame_count(path)) for path in new)
+        # A list that grew at its end: the numbers before, then the new sources (50 000 files: 0.2 s of every look).
+        numbers = FrameNumbers.extended(kept[2], made) if same else FrameNumbers(made)
+        read = all(source_key(path) in self._frame_counts for path in new)
         self._numbers_kept = (list(files), dict(self._frame_counts), numbers) if read else None
         return numbers
 

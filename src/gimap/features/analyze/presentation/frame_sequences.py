@@ -82,6 +82,18 @@ class FrameNumbers(Mapping):
     def __init__(self, paths_counts):
         self.sources = {}
         self.total = 0
+        self._add(paths_counts)
+
+    @classmethod
+    def extended(cls, before: "FrameNumbers", paths_counts) -> "FrameNumbers":
+        """The numbers of the sources of ``before`` followed by ``paths_counts``: those of the whole list, made from
+        the new sources alone (a list that grew at its end)."""
+        numbers = cls(())
+        numbers.sources, numbers.total = dict(before.sources), before.total
+        numbers._add(paths_counts)
+        return numbers
+
+    def _add(self, paths_counts) -> None:
         for path, count in paths_counts:
             count = max(0, int(count))
             self.sources[str(path).casefold()] = self.total, count
