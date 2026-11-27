@@ -12,6 +12,7 @@ import pytest
 
 from src.gimap.app.reproduce import reproduce_record
 from src.gimap.features.fitting.domain.posterior.prediction import LOCAL_MAX
+from tests.repeatability import SAME_BITS, assert_columns_replayed
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -173,8 +174,14 @@ def test_export_replays_structural_results_on_public_frame(exported, tmp_path, m
     comparison = replay_export(path, tmp_path, env, monkeypatch)
     assert comparison["kind"] == "automatic"
     assert {ref["sha256"] for ref in comparison["relocated_inputs"].values()} == set(archive["input_sha256"].values())
-    assert comparison["status"] == "identical", {
-        key: item for key, item in comparison.get("sections", {}).items() if item["status"] != "identical"}
+    different = {key: item for key, item in comparison["sections"].items() if item["status"] != "identical"}
+    if SAME_BITS or case == "p08":
+        assert comparison["status"] == "identical", different
+    else:
+        # Apple silicon: the replayed Predict can give other GALAXI solutions (tests/repeatability.py; macOS CI, the
+        # positive arm). Everything before the fit repeats, and the replayed fit is compared with the archive below.
+        assert set(different) <= {"fit"}, different
+        assert_columns_replayed(comparison.get("tables", {}))
     if case != "p08":
         assert comparison["sections"]["predict_options"]["status"] == "identical"
     replay = json.loads((tmp_path / "reproduced_report.json").read_text(encoding="utf-8"))
