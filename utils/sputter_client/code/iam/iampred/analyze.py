@@ -29,7 +29,7 @@ FAMILIES = {("Au", "Si"): ("si_p3h", None), ("Ag", "Si"): ("si_p3h", None),
             **{("Ag", s): ("polyag_p3", "ref04" if s == "PNO" else "ref05") for s in FILMS}}
 
 
-ALTERNATIVES = {"polyag_p3": ["polyag_v5", "polyag_u1"], "si_p3h": ["si_v6", "si_u1"], "cu_p5": ["cu_v4", "cu_u1"],
+ALTERNATIVES = {"polyag_p3": ["polyag_u1"], "si_p3h": ["si_v6", "si_u1"], "cu_p5": ["cu_v4", "cu_u1"],
                 "tio2_u1": ["tio2_v2"]}
 
 
@@ -47,7 +47,7 @@ def growth_prior_used(setting, metal, substrate):
     return setting == "on" or (setting == "auto" and (metal, substrate) in PRIOR_DEFAULT_ON)
 
 
-VARIANT_FAMILIES = ("cu_p5", "cu_u1", "cu_v4", "polyag_p3", "polyag_v5", "polyag_u1")
+VARIANT_FAMILIES = ("cu_p5", "cu_u1", "cu_v4", "polyag_p3", "polyag_u1")
 VARIANT_ARGS = ["--variant", "lnRP=1.791759,lnAP=0", "--variant", "fb=0.9,lnR=1.1,lnRP=1.791759,lnAP=0",
                 "--variant-refine", 15, "--monotone", "lnh_mass,lnt_film"]
 

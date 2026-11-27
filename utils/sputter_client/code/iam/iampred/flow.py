@@ -27,9 +27,30 @@ def make_masks(npar, layers, seed=0):
     return np.array(out, np.float32)
 
 
-def build(n_in_ch, n_scalar, npar, nrep, k, masks, width=32, hidden=128, ctx=64):
+def avg_matrix(n, m):
+    "(m, n) matrix of PyTorch's adaptive average pooling of n cells into m bins (start floor(i n / m), end"
+    P = np.zeros((m, n), np.float32)
+    for i in range(m):
+        a, b = (i * n) // m, -((-(i + 1) * n) // m)
+        P[i, a:b] = 1.0 / (b - a)
+    return P
+
+
+def build(n_in_ch, n_scalar, npar, nrep, k, masks, width=32, hidden=128, ctx=64, det_pool=False):
+    "det_pool (2026-11-27, results/iam/det_eval_20261127 B5; train_flow / train_render --torch-det): the encoder's"
     import torch
     from torch import nn
+
+    class FixedAvg(nn.Module):
+        def __init__(self, oh, ow):
+            super().__init__()
+            self.oh, self.ow = oh, ow
+
+        def forward(self, x):
+            h, w = x.shape[-2:]
+            ph = torch.tensor(avg_matrix(h, self.oh), dtype=x.dtype, device=x.device)
+            pw = torch.tensor(avg_matrix(w, self.ow), dtype=x.dtype, device=x.device)
+            return torch.matmul(torch.matmul(ph, x), pw.t())
 
     def blk(i, o):
         return nn.Sequential(nn.Conv2d(i, o, 3, padding=1), nn.BatchNorm2d(o), nn.ReLU(),
@@ -40,7 +61,7 @@ def build(n_in_ch, n_scalar, npar, nrep, k, masks, width=32, hidden=128, ctx=64)
             super().__init__()
             w = width
             self.f = nn.Sequential(blk(n_in_ch, w), nn.MaxPool2d(2), blk(w, 2 * w), nn.MaxPool2d(2), blk(2 * w, 4 * w),
-                                   nn.AdaptiveAvgPool2d((3, 6)), nn.Flatten())
+                                   FixedAvg(3, 6) if det_pool else nn.AdaptiveAvgPool2d((3, 6)), nn.Flatten())
             self.s = nn.Sequential(nn.Linear(2 * n_scalar, 64), nn.ReLU())
             self.h = nn.Sequential(nn.Linear(4 * w * 18 + 64, 512), nn.ReLU(), nn.Dropout(0.1), nn.Linear(512, 512), nn.ReLU())
             self.base = nn.Linear(512, k * (1 + 2 * npar))
