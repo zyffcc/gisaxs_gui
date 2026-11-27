@@ -10,6 +10,7 @@ from src.gimap.features.fitting.domain.cut_model import model as cut
 from src.gimap.features.fitting.domain.posterior import encoding as E
 from src.gimap.features.fitting.domain.posterior import infer, parallel, refine
 from src.gimap.features.fitting.domain.posterior.flow import Network
+from tests.repeatability import assert_same
 
 DATA = Path(__file__).resolve().parent / "data" / "ml1d"
 SPHERE = E.composition_index([("sphere", True)])
@@ -37,7 +38,7 @@ def test_the_chunked_likelihood_is_the_single_call(law):
     alone = likelihood(samples)
     shared = parallel.evaluate(likelihood, samples, threads=4)
     for a, b in zip(alone, shared):
-        assert np.array_equal(a, b, equal_nan=True)
+        assert_same(b, a)
 
 
 def test_predict_on_four_threads_returns_the_solutions_of_one():

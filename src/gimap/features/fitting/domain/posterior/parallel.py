@@ -51,10 +51,32 @@ def one_blas_thread(function):
     return run
 
 
-def evaluate(likelihood, values, threads: int = 1) -> tuple[np.ndarray, ...]:
-    """``likelihood(values)`` (a tuple of arrays, each with one row per sample) on ``threads`` threads."""
+def worker_start() -> None:
+    """The start of a worker process of a pool (``infrastructure/adapters/posterior_pool``): BLAS on one thread, as
+    ``one_blas_thread`` sets it, and Predict's code loaded before the first item."""
+    from threadpoolctl import threadpool_limits
+
+    threadpool_limits(limits=1, user_api="blas")
+    from . import prediction  # noqa: F401
+
+
+def worker_pid() -> int:
+    return os.getpid()
+
+
+def _evaluated(likelihood, values):
+    return likelihood(values)
+
+
+def evaluate(likelihood, values, threads: int = 1, pool=None) -> tuple[np.ndarray, ...]:
+    """``likelihood(values)`` (a tuple of arrays, each with one row per sample) on ``threads`` threads, or in the
+    worker processes of ``pool`` (``ordered`` and ``workers``; the likelihood goes with every chunk)."""
     values = np.atleast_2d(values)
     count = values.shape[0]
+    if pool is not None and count >= 2 * CHUNK:
+        chunks = np.array_split(np.arange(count), min(count // CHUNK, 2 * max(1, pool.workers)))
+        parts = list(pool.ordered(_evaluated, [(likelihood, values[rows]) for rows in chunks]))
+        return tuple(np.concatenate([part[k] for part in parts]) for k in range(len(parts[0])))
     if threads <= 1 or count < 2 * CHUNK:
         return likelihood(values)
     chunks = np.array_split(np.arange(count), min(count // CHUNK, 4 * threads))
@@ -81,4 +103,5 @@ def ordered(function, items, threads: int = 1):
         pool.shutdown(wait=True, cancel_futures=True)
 
 
-__all__ = ["CHUNK", "ENVIRONMENT", "THREADS_MAX", "default_threads", "evaluate", "one_blas_thread", "ordered"]
+__all__ = ["CHUNK", "ENVIRONMENT", "THREADS_MAX", "default_threads", "evaluate", "one_blas_thread", "ordered",
+           "worker_pid", "worker_start"]

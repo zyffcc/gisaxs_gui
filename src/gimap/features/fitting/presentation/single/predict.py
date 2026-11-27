@@ -19,7 +19,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 from ...application.single_predict import PARTICLES, network_available, predict_request, predicted
 from ...application.substrate_level import prediction_model
 from ..predict_substrate import ON_SUBSTRATE, PredictSubstrateDialog
-from .predict_progress import PredictProgressMixin, as_solutions
+from .predict_progress import PredictProgressMixin, as_solutions, preview_grid
 from .predict_texts import solution_lines
 
 LOG = logging.getLogger(__name__)
@@ -82,6 +82,7 @@ class PredictPageMixin(PredictProgressMixin):
                 request.payload["measured_qz"] = self.measured_qz.value()
         self._predict_job_id = request.job_id
         self._predict_selection = selection
+        self._predict_grid = preview_grid(data.q)  # where the fits are drawn while Predict runs
         given = request.payload.get("compositions")
         self._predict_started(None if given is None else len(given))
         self.tasks.submit("fit", lambda: self._run_predict_job(request),

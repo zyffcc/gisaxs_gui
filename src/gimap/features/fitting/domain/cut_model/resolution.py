@@ -7,6 +7,7 @@ points. Points of the fold sit at ±step/2, ±3step/2 …, so q = 0 itself is ne
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Callable
 
 import numpy as np
@@ -81,8 +82,16 @@ def predict_sharp_limit(q):
 
 
 def predict_grid(q, sigma):
-    """Common table for the whole Predict prior, independent of the other samples in a batch."""
-    return table_grid(q, max(float(sigma), PREDICT_MAX_RELATIVE * float(np.max(q))), PREDICT_TABLE_POINTS)
+    """Common table for the whole Predict prior, independent of the other samples in a batch. A fit asks for it
+    at every evaluation: it is kept for the last points and widths (a copy each time)."""
+    q = np.ascontiguousarray(q, dtype=float)
+    return _predict_grid(q.tobytes(), float(sigma)).copy()
+
+
+@lru_cache(maxsize=16)
+def _predict_grid(q_bytes: bytes, sigma: float) -> np.ndarray:
+    q = np.frombuffer(q_bytes, dtype=float)
+    return table_grid(q, max(sigma, PREDICT_MAX_RELATIVE * float(np.max(q))), PREDICT_TABLE_POINTS)
 
 
 def table_grid(q, sigma: float, points: int = TABLE_POINTS) -> np.ndarray:

@@ -3,6 +3,8 @@
 Windows with Python 3.10.18 checks every numerical field exactly, including alternatives.
 Other platforms compare the leading composition and branch exactly, the weights to 0.05
 absolute, the leading population estimates to 1% relative and their interval ends to 2%.
+Where a platform compares the compositions by BIC and the archive by evidence (or the
+reverse), the intervals are of another kind: only the estimates away from a bound are compared.
 The benchmark README documents the observed platform differences behind these tolerances.
 """
 import gzip
@@ -35,20 +37,37 @@ def _portable_flags(flags):
             or flag.startswith("qzR_")}
 
 
-def _check_populations(actual, expected):
+_POPULATION_KEYS = {"R": "R", "sigma_R": "sR", "D": "D", "sigma_nn": "s_nn"}
+
+
+def _at_bound(flags):
+    """(population number, key) of every population value flagged at a bound (``at_bound:sigma_R_2``)."""
+    found = set()
+    for flag in flags:
+        kind, _, name = flag.partition(":")
+        stem, _, number = name.rpartition("_")
+        if kind == "at_bound" and stem in _POPULATION_KEYS and number.isdigit():
+            found.add((int(number), _POPULATION_KEYS[stem]))
+    return found
+
+
+def _check_populations(actual, expected, skip=None):
+    """``skip``: None to compare every value and interval end, else the at-bound values to leave out with the
+    interval ends (another comparison method on this platform)."""
     for index, (population, reference) in enumerate(zip(actual, expected, strict=True), 1):
         assert population.keys() == reference.keys()
         for key, value in reference.items():
-            if key.endswith("_err"):
+            interval = key.endswith(("_68", "_95"))
+            if key.endswith("_err") or (skip is not None and (interval or (index, key) in skip)):
                 continue
-            rel = 2e-2 if key.endswith(("_68", "_95")) else 1e-2
+            rel = 2e-2 if interval else 1e-2
             assert population[key] == pytest.approx(value, rel=rel, abs=0), (index, key)
 
 
-def _check_solution(actual, expected):
+def _check_solution(actual, expected, skip=None):
     assert actual["families"] == expected["families"]
     assert actual["probability"] == pytest.approx(expected["probability"], abs=0.05)
-    _check_populations(actual["populations"], expected["populations"])
+    _check_populations(actual["populations"], expected["populations"], skip)
 
 
 def _run(archive, stage, index):
@@ -69,12 +88,20 @@ def test_predict_reproduces_archived_fit(archive, stage, index):
     expected = record["results"][f"{archive}/{stage}/{index}"]
     actual = _run(archive, stage, index)
     expected_flags = set(expected["flags"])
-    assert _portable_flags(actual["flags"]) == _portable_flags(expected_flags)
-    for key in ("composition", "composition_index", "compared_by", "in_set"):
+    # Compositions are compared by BIC when one of them drew fewer than 10 effective samples (ESS_FAILED). The
+    # pooled ESS of the less probable compositions is not portable: for cut 89 it is 27 and 71 on the archive
+    # platform, 4-6 and about 9.6 on most CI computers, 13 and 71 on one Windows CI computer. The flag follows.
+    assert ("bic" in actual["flags"]) == (actual["compared_by"] == "bic")
+    assert _portable_flags(actual["flags"]) - {"bic"} == _portable_flags(expected_flags) - {"bic"}
+    for key in ("composition", "composition_index", "in_set"):
         assert actual[key] == expected[key], key
     assert actual["composition_weights"] == pytest.approx(expected["composition_weights"], abs=0.05)
-    _check_solution(actual, expected)
-    _check_populations(actual["posterior"], expected["posterior"])
+    if actual["compared_by"] == expected["compared_by"]:
+        _check_solution(actual, expected)
+        _check_populations(actual["posterior"], expected["posterior"])
+    else:
+        # BIC intervals come from the least-squares errors, the evidence's from the sampled posterior.
+        _check_solution(actual, expected, skip=_at_bound(expected_flags))
     # The second of two competing solutions is a different local optimum on another platform (cut 167 on
     # Windows CI: R 3.02 against 3.18 nm), so across platforms only the most probable solution is compared;
     # on the archive platform every alternative is compared bit for bit below.

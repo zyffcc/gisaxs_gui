@@ -13,6 +13,7 @@ from src.gimap.features.fitting.domain.posterior import encoding as E
 from src.gimap.features.fitting.domain.posterior import infer, refine
 from src.gimap.features.fitting.domain.posterior.flow import Network
 from src.gimap.features.fitting.domain.substrates import Substrate
+from tests.repeatability import assert_same
 
 GRAZING = dict(wavelength=0.105, alpha_i=0.40, alpha_f=0.145)
 SUBSTRATE = Substrate("Si")
@@ -56,7 +57,7 @@ def test_level_four_refines_noise_free_spheres_and_has_no_fitted_reflection():
     w = v.copy()
     w[-2:] = 0.87, -0.44
     columns = infer.Likelihood(data, SPHERE).columns([v, w])
-    np.testing.assert_array_equal(columns[0], columns[1])
+    assert_same(columns[1], columns[0])
     np.testing.assert_allclose(columns[0, 0], form / form.max(), rtol=1e-4)
 
 
@@ -75,7 +76,7 @@ def test_known_upright_height_distribution_agrees_with_manual_fit(coupling):
     if coupling == "da":
         assert np.max(np.abs(distributed - fixed)) > 0.01
     else:
-        np.testing.assert_array_equal(distributed, fixed)
+        assert_same(fixed, distributed)
 
 
 @pytest.mark.parametrize("key", GRAZING)
@@ -147,4 +148,4 @@ def test_posterior_check_replays_height_conventions_and_shared_defaults_after_se
     data = fit_engine.FitData.prepare(Q, cut.intensity, cut.sigma)
     check = posterior_check.target_for(restored, data, solutions=[solution])
     assert (check.target.likelihood.law, check.target.likelihood.coupling) == ("number_gauss", "lma")
-    np.testing.assert_array_equal(check.target.likelihood.columns(v), infer.Likelihood(cut, composition).columns(v))
+    assert_same(check.target.likelihood.columns(v), infer.Likelihood(cut, composition).columns(v))

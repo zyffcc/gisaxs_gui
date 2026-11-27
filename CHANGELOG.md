@@ -4,6 +4,10 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- **Predict parameters on another computer** (User Manual, Known limitations): on a cut with several solutions of nearly the same probability, another processor, operating system or NumPy/SciPy build can change which solution comes first and whether the compositions are compared by evidence or by BIC; on Apple silicon the last digits can also change from one run to the next. The benchmark audit of drawn cuts (`tools/benchmarks/check_case_overlap.py`) compares the drawn numbers to 9 significant digits, so a draw repeated on Linux, whose exp differs in the last bits, counts as the same draw.
+
+- **Predict parameters is about five times faster and shows what it does.** Its least-squares fits, its searches of the ranges and the likelihoods of the network's samples now run in worker processes, as many as it has threads (fewer when the computer's memory is short). On threads they had mostly waited for each other: an evaluation of the model is many small steps that only one thread at a time can take. The model also keeps each population's smeared term while only other values change. The numbers are the same as before: on a 794-point GISAXS cut Predict took 48 s instead of 262 s and gave the same solution to the last digit. While it runs, the plot shows the network's first guess, then the fit just refined (grey, dashed) and the best so far (green), each with its χ²ᵣ (User Manual 6.4).
+
 - **Folder watches keep up with long runs.** Analyze's folder watch measures the frames already in its folder from
   one listing of the folder (with their 7.3.3 side files) instead of asking the file system three times for each
   frame, and names them in the folder resolved once: on a test computer a look at a folder of 20 000 EDF frames went

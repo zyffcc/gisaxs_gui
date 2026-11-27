@@ -2910,7 +2910,9 @@ simulated cuts ([README](../tools/benchmarks/README.md)).
    cylinders are slow (20–30 s per least-squares fit). The time grows with the number of points and of compositions
    tried, and depends on the computer. Sizes *Gaussian, by intensity* take several times longer than *Gaussian, by
    number*, whose averages come from tables. Predict uses half the computer's logical processors, at most 12 (the
-   environment variable `GIMAP_PREDICT_THREADS` sets another number); the results are the same with any number.
+   environment variable `GIMAP_PREDICT_THREADS` sets another number), in as many worker processes, fewer when the
+   computer's memory is short; the results are the same with any number. While it runs, the plot shows the
+   network's first guess, then the fit just refined (grey, dashed) and the best so far (green), each with its χ²ᵣ.
    Other programs that compute at the same time slow it down. When the computer's memory runs out, Predict stops
    with *The computer ran out of memory*: close other programs and run it again.
 
@@ -4713,7 +4715,7 @@ Version 0.2.0 is a pre-release. For the assumptions of each method, see [Physics
 | **Correlated radii and heights can bias cylinder heights in both fit ranges.** | The joint fit assumes a dilute layer with independent radii and heights. Compare heights from the two ranges and check the vertical cut’s reduced χ² (§6.6). |
 | **The substrate table covers Si, SiO₂, plate glass and Au from 4.9 to 30 keV.** | Enter δ and β for other substrates. At level 4 (smooth interfaces, particles in air), enter a known oxide or polymer film’s thickness, δ and β under **Top layer** (§6.4). |
 | **A posterior check can miss a distant solution.** | Compare Predict’s other solutions even when both MCMC ensembles agree (§6.2). Allow hours for a check with random cylinders. |
-| **Predict results vary slightly across numerical library builds.** | To reproduce solution probabilities, interval endpoints, standard errors and flags near bounds, keep the cut and settings. Record the operating system and Python, NumPy and SciPy versions. |
+| **Predict results can differ between computers.** Another processor, operating system or NumPy/SciPy build changes the last digits. On a cut with several solutions of nearly the same probability this can change which solution comes first and whether the compositions are compared by evidence or by BIC. On Apple silicon the last digits can also change from one run to the next. | Keep the cut and settings, record the operating system and the Python, NumPy and SciPy versions, and reproduce a result on the same kind of computer. |
 | **Surface reflection affects sphere radii above q₊R ≈ 1.7.** | Without both incidence and exit angles, Predict uses the Born term at the cut’s q_z or the effective interface. Give both angles above this threshold (R ≈ 3 nm at α_i = 0.4°, 12 keV) and use level 4 (four-term DWBA) for a known substrate. [Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters) |
 | **Weak reflection leaves the sphere radius ambiguous.** | With both angles and an unknown substrate, a smaller sphere with a larger \|r\| can give the same two-path fit. Far above the critical angle, compare `refl_amp` in Model with the substrate value and fix it to that value before refining if they differ substantially. |
 | **XRR exports raw intensities.** | Check the ROI and valid-pixel counts because XRR skips Analyze masks and bad-pixel detection. Apply monitor, footprint, background, resolution and θ-offset corrections to the exported curve as needed (§9.2). |
