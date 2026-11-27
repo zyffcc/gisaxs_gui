@@ -53,7 +53,11 @@ run_predict() {
 | `posterior_r18_amplitude100` | `--workers 5 --set fit1d --n 200 --constant infer.AMPLITUDE_RANGE=100 --seed0 41261125` | `posterior_r18_amplitude100_summary.json` | `per_cut/posterior_r18_amplitude100.json.gz` |
 | `posterior_r18_timing` | `--workers 1 --set fit1d --n 24 --seed0 41261125` | `posterior_r18_timing_summary.json` | `per_cut/posterior_r18_timing.json.gz` |
 
-Run the 24-cut timing row alone on an idle machine. The runs write per-cut records to `results/NAME.json`.
+Run the 24-cut timing row alone on an idle machine. On a processor with performance and efficiency cores, keep
+the run and its pool worker on the performance cores with Windows power throttling off (`SetProcessAffinityMask`,
+and `SetProcessInformation` with `ProcessPowerThrottling`); the r18 row ran so on logical processors 0–15 of an
+Intel Core i9-13900HX. Started as a background process without a window and left to Windows, the same row took
+about 2.5 times longer. The runs write per-cut records to `results/NAME.json`.
 Gzip those files into `per_cut/NAME.json.gz` for the archive. After the DWBA and first-set runs finish,
 derive the two paired comparisons from the same indexed cuts.
 
